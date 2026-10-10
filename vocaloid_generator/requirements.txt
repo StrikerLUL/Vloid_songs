@@ -1,0 +1,14 @@
+pretty_midi
+midiutil
+pyfluidsynth
+pydub
+librosa
+scipy
+soundfile
+requests
+music21
+numpy
+pyworld
+pyttsx3
+pedalboard
+customtkinter

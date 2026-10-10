@@ -1,0 +1,13 @@
+# Third-party engine & voice library (too large for GitHub, own license) - install via setup_neutrino.py
+NEUTRINO-windows-v3.1/
+めろう（NEUTRINO-Library）-v3.1/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Generated audio (regenerable)
+output/*.wav
+vocaloid_generator/output/*.wav
+vocaloid_generator/*.wav

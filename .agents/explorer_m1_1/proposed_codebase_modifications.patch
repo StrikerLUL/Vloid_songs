@@ -1,0 +1,133 @@
+diff --git a/vocaloid_generator/config.py b/vocaloid_generator/config.py
+--- a/vocaloid_generator/config.py
++++ b/vocaloid_generator/config.py
+@@ -10,6 +10,7 @@
+ MODE  = "minor"                    # Skala:  minor | major | dorian | phrygian
+ STYLE = "J-Pop"                    # Genre: J-Pop | Rock | EDM | Lo-Fi
++STRICT_SCALE_LOCKING = False       # Setzt striktes Einhalten der Skala (deaktiviert chromatische Töne)
+ 
+ # ── Akkord-Stil ───────────────────────────────────────────────────────────────
+ # classic_minor | jpop | dramatic | happy | emotional
+diff --git a/vocaloid_generator/mixer.py b/vocaloid_generator/mixer.py
+--- a/vocaloid_generator/mixer.py
++++ b/vocaloid_generator/mixer.py
+@@ -18,6 +18,18 @@
+-def midi_zu_wav(midi_pfad: str, wav_pfad: str, is_drum: bool = False, instrument_type: str = "piano") -> None:
++def midi_zu_wav(midi_pfad: str, wav_pfad: str, is_drum: bool = False, instrument_type: str = "piano", vst_pfad: str = None) -> None:
+     """
+     Konvertiert MIDI zu WAV. Nutzt Fluidsynth mit dem SOUNDFONT_PFAD aus der Config
+     und mappt instrument_type auf ein General-MIDI-Programm. Fallback auf den
+     internen Basic-Synth mit Pedalboard-Effekten (Chorus & Reverb).
+     """
++    # VST Pfad Typecheck und Fehlerbehandlung
++    if vst_pfad is not None:
++        if not isinstance(vst_pfad, str):
++            print(f"[Warnung] VST-Pfad muss ein String oder None sein, erhalten: {type(vst_pfad)}. Nutze Standard-Synthese.")
++            vst_pfad = None
++        elif not os.path.exists(vst_pfad):
++            print(f"[Warnung] VST-Pfad '{vst_pfad}' existiert nicht. Nutze Standard-Synthese.")
++            vst_pfad = None
++        else:
++            plugin = _lade_vst(vst_pfad)
++            if plugin is None:
++                print(f"[Warnung] VST-Plugin '{vst_pfad}' konnte nicht geladen werden. Nutze Standard-Synthese.")
++
+     # 1. Mapping von instrument_type auf General-MIDI-Programme (0-127)
+diff --git a/vocaloid_generator/vocal_synthesizer.py b/vocaloid_generator/vocal_synthesizer.py
+--- a/vocaloid_generator/vocal_synthesizer.py
++++ b/vocaloid_generator/vocal_synthesizer.py
+@@ -118,6 +118,7 @@
+     silben_idx = 0
+     final_audio = []
+     temp_wav = os.path.join(tempfile.gettempdir(), "temp_tts.wav")
++    last_pitch = None  # Track pitch of last syllable to apply legato glide
+     
+     for pitch, dauer in melodie_daten:
+@@ -172,6 +173,19 @@
+             
+-            # 4. Pitch-Shift (Vocoding: Sprechstimme exakt auf den MIDI-Ton zwingen)
+-            target_hz = 440.0 * (2.0 ** ((pitch - 69.0) / 12.0))
+-            # Behalte die F0>0 Maske bei, damit stimmlose Laute (wie "S", "K") nicht gepitcht werden!
+-            f0_vocoded = np.where(f0_stretched > 0, target_hz, 0.0).astype(np.float64)
++            # 4. Pitch-Shift (Vocoding: Sprechstimme exakt auf den MIDI-Ton zwingen)
++            target_hz = 440.0 * (2.0 ** ((pitch - 69.0) / 12.0))
++            
++            # Base F0: force voiced parts to target_hz
++            f0_vocoded = np.where(f0_stretched > 0, target_hz, 0.0).astype(np.float64)
++            
++            # Smooth legato pitch transition if there was a previous active pitch
++            if last_pitch is not None and last_pitch != pitch:
++                last_hz = 440.0 * (2.0 ** ((last_pitch - 69.0) / 12.0))
++                # Glide over 16 frames (approx 80ms) or half the duration
++                glide_frames = min(16, len(f0_vocoded) // 2)
++                if glide_frames > 0:
++                    active_indices = np.where(f0_vocoded > 0)[0]
++                    if len(active_indices) > 0:
++                        glide_indices = active_indices[:glide_frames]
++                        glide_hz = np.linspace(last_hz, target_hz, len(glide_indices))
++                        f0_vocoded[glide_indices] = glide_hz
++            
++            last_pitch = pitch
+diff --git a/vocaloid_generator/melody_generator.py b/vocaloid_generator/melody_generator.py
+--- a/vocaloid_generator/melody_generator.py
++++ b/vocaloid_generator/melody_generator.py
+@@ -6,3 +6,3 @@
+-from config import VOCAL_MAX_PITCH, VOCAL_MIN_PITCH, KEY, MODE, SWING
++from config import VOCAL_MAX_PITCH, VOCAL_MIN_PITCH, KEY, MODE, SWING, STRICT_SCALE_LOCKING
+ 
+ # ── Skalenaufbau ───────────────────────────────────────────────────────────────
+@@ -282,6 +282,6 @@
+-            # Chromatischer Passing Tone (5% Chance bei Halbtonschritt)
+-            passing_pitch = None
+-            if n_idx > 0 and random.random() < 0.08 and abs(cur_idx - prev_idx) == 2:
+-                pp = chromatic_passing(skala, prev_idx, cur_idx)
+-                if pp is not None:
+-                    passing_pitch = pp
++            # Chromatischer Passing Tone (5% Chance bei Halbtonschritt)
++            passing_pitch = None
++            if not STRICT_SCALE_LOCKING and n_idx > 0 and random.random() < 0.08 and abs(cur_idx - prev_idx) == 2:
++                pp = chromatic_passing(skala, prev_idx, cur_idx)
++                if pp is not None:
++                    passing_pitch = pp
+diff --git a/vocaloid_generator/chord_generator.py b/vocaloid_generator/chord_generator.py
+--- a/vocaloid_generator/chord_generator.py
++++ b/vocaloid_generator/chord_generator.py
+@@ -5,3 +5,3 @@
+-from config import KEY, MODE, CHORD_STYLE
++from config import KEY, MODE, CHORD_STYLE, STRICT_SCALE_LOCKING
+ 
+ # ── Akkord-Definitionen ────────────────────────────────────────────────────────
+@@ -160,11 +160,14 @@
+     elif section_type in ("Chorus", "PreChorus"):
+         # Energetischer Lauf: Root → Quinte → Oktave → Quarte
++        passing_tone = bass_root - 2
++        if STRICT_SCALE_LOCKING:
++            passing_tone = bass_root
+         pattern = [
+             (0,         bass_root,  118),
+             (1 * achtel, bass_root,  105),
+             (2 * achtel, bass_fifth, 112),
+             (3 * achtel, bass_root,  100),
+             (4 * achtel, bass_oct,   108),
+             (5 * achtel, bass_fifth, 100),
+             (6 * achtel, bass_root,  112),
+-            (7 * achtel, bass_root - 2, 95),  # kleiner chromatischer Passing Ton
++            (7 * achtel, passing_tone, 95),  # passing tone disabled in strict mode
+         ]
+         legato = 0.82
+@@ -182,10 +185,13 @@
+     elif section_type == "Verse":
+         # Synkopierter Groove-Bass (Vocaloid-typisch)
++        passing_tone = bass_root - 1
++        if STRICT_SCALE_LOCKING:
++            passing_tone = bass_root
+         pattern = [
+             (0,            bass_root,  112),
+             (1.5 * achtel, bass_root,  95),
+             (3 * achtel,   bass_fifth, 105),
+             (4.5 * achtel, bass_root,  98),
+             (6 * achtel,   bass_root,  108),
+-            (7 * achtel,   bass_root - 1, 88),
++            (7 * achtel,   passing_tone, 88),  # passing tone disabled in strict mode
+         ]
+         legato = 0.83

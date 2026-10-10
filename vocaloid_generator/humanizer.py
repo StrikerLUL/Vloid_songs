@@ -2,10 +2,11 @@
 import pretty_midi
 import random
 
-def humanize_note(note: pretty_midi.Note, genre: str, instrument_type: str, bpm: float, swing: float = None) -> pretty_midi.Note:
+def humanize_note(note: pretty_midi.Note, genre: str, instrument_type: str, bpm: float, swing: float = None, jitter_scale: float = 1.0) -> pretty_midi.Note:
     """
     Applies timing offsets, velocity randomization, swing, and pocket shift
     to a pretty_midi.Note object based on the genre and instrument type.
+    jitter_scale multiplies the genre's micro-timing jitter (0 = on the grid, 1 = genre default).
     """
     genre_lower = genre.lower()
     inst_lower = instrument_type.lower()
@@ -57,7 +58,8 @@ def humanize_note(note: pretty_midi.Note, genre: str, instrument_type: str, bpm:
         jitter = random.uniform(-0.015, 0.025)
     else:
         jitter = 0.0
-        
+    jitter *= jitter_scale
+
     note.start += jitter
     note.end += jitter
 
@@ -90,12 +92,12 @@ def humanize_note(note: pretty_midi.Note, genre: str, instrument_type: str, bpm:
     
     return note
 
-def humanize_notes(notes: list, genre: str, instrument_type: str, bpm: float, swing: float = None) -> list:
+def humanize_notes(notes: list, genre: str, instrument_type: str, bpm: float, swing: float = None, jitter_scale: float = 1.0) -> list:
     """
     Applies humanization to a list of pretty_midi.Note objects.
     """
     for note in notes:
-        humanize_note(note, genre, instrument_type, bpm, swing)
+        humanize_note(note, genre, instrument_type, bpm, swing, jitter_scale)
         
     inst_type_lower = instrument_type.lower()
     if inst_type_lower in ("melody", "vocal") and notes:
@@ -140,10 +142,10 @@ def humanize_notes(notes: list, genre: str, instrument_type: str, bpm: float, sw
                 
     return notes
 
-def humanize_ensemble(tracks: dict, genre: str, bpm: float, swing: float = None) -> dict:
+def humanize_ensemble(tracks: dict, genre: str, bpm: float, swing: float = None, jitter_scale: float = 1.0) -> dict:
     # 1. Humanize "drums" track first via humanize_notes
     if "drums" in tracks and tracks["drums"]:
-        humanize_notes(tracks["drums"], genre, "drums", bpm, swing)
+        humanize_notes(tracks["drums"], genre, "drums", bpm, swing, jitter_scale)
         drum_starts = [n.start for n in tracks["drums"]]
     else:
         drum_starts = []
@@ -153,16 +155,16 @@ def humanize_ensemble(tracks: dict, genre: str, bpm: float, swing: float = None)
     for track_name in target_tracks:
         if track_name in tracks and tracks[track_name]:
             notes = tracks[track_name]
-            humanize_notes(notes, genre, track_name, bpm, swing)
+            humanize_notes(notes, genre, track_name, bpm, swing, jitter_scale)
             
             if drum_starts:
                 for note in notes:
                     closest_drum_start = min(drum_starts, key=lambda d_start: abs(note.start - d_start))
                     if abs(note.start - closest_drum_start) < 0.100:
                         if track_name in ["bass", "guitar"]:
-                            jitter = random.uniform(-0.002, 0.002)
+                            jitter = random.uniform(-0.002, 0.002) * jitter_scale
                         else:  # piano, strings, brass
-                            jitter = random.uniform(-0.005, 0.005)
+                            jitter = random.uniform(-0.005, 0.005) * jitter_scale
                         
                         note_dur = note.end - note.start
                         note.start = closest_drum_start + jitter
@@ -174,6 +176,6 @@ def humanize_ensemble(tracks: dict, genre: str, bpm: float, swing: float = None)
                             
     # 3. Also humanize synth track if present
     if "synth" in tracks and tracks["synth"]:
-        humanize_notes(tracks["synth"], genre, "synth", bpm, swing)
+        humanize_notes(tracks["synth"], genre, "synth", bpm, swing, jitter_scale)
         
     return tracks

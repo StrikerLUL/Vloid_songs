@@ -1,7 +1,9 @@
 # view/tabs.py - Tab Views for Vocaloid Generator Pro MVC
 import tkinter as tk
 import customtkinter as ctk
-from .widgets import HoverTooltip
+from settings import STYLE_OPTIONS
+
+from .widgets import HoverTooltip, VSTDropArea
 
 class SongTab(ctk.CTkFrame):
     """Song Tab: Key, mode, BPM inputs, structure reordering, preview player, progress bar."""
@@ -125,6 +127,7 @@ class SongTab(ctk.CTkFrame):
         btn_add.pack(side="left")
         
         self.on_structure_changed = None # Set by controller
+        self.get_preview_path = None # Set by controller: returns the path of final_mix.wav
         self.structure_data = [] # Local copy of active sections structure list
 
     def _preset_changed(self, val):
@@ -196,31 +199,20 @@ class SongTab(ctk.CTkFrame):
 
     def play_wav(self):
         import os
-        import winsound
-        # Search for final_mix.wav in various directories
-        possible_paths = [
-            os.path.join("output", "final_mix.wav"),
-            os.path.join("vocaloid_generator", "output", "final_mix.wav"),
-            "final_mix.wav"
-        ]
-        wav_path = None
-        for p in possible_paths:
-            if os.path.exists(p):
-                wav_path = p
-                break
-        
-        if wav_path:
-            try:
-                winsound.PlaySound(wav_path, winsound.SND_FILENAME | winsound.SND_ASYNC)
-            except Exception as e:
-                pass
-        else:
-            # File not found
-            pass
-            
-    def stop_wav(self):
-        import winsound
+        from tkinter import messagebox
+        wav_path = self.get_preview_path() if self.get_preview_path else None
+        if not wav_path or not os.path.exists(wav_path):
+            messagebox.showinfo("Vorschau", "Noch kein Song vorhanden. Erst generieren, dann abspielen.")
+            return
         try:
+            import winsound
+            winsound.PlaySound(wav_path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+        except Exception as e:
+            messagebox.showerror("Vorschau", f"Abspielen nicht möglich: {e}")
+
+    def stop_wav(self):
+        try:
+            import winsound
             winsound.PlaySound(None, winsound.SND_PURGE)
         except Exception:
             pass
@@ -353,17 +345,8 @@ class InstrumenteTab(ctk.CTkFrame):
             
         instruments = ["Piano", "Bass", "Guitar", "Strings", "Synth", "Brass", "Drums", "Melody"]
         
-        # Styles list per instrument
-        self.style_options = {
-            "Piano": ["default", "chords", "stabs", "jazz_ch"],
-            "Bass": ["default", "root", "driving", "sync", "wobble", "sub_pulse", "lazy"],
-            "Guitar": ["default", "chill_riff", "strummed", "palm_mute", "power_chords"],
-            "Strings": ["default", "legato", "build", "pizzicato"],
-            "Synth": ["default", "pad", "riser", "staccato_pluck", "wide_saw", "pluck"],
-            "Brass": ["default", "stabs", "accents"],
-            "Drums": ["default", "standard", "half_time", "double_time"],
-            "Melody": ["default", "main_melody", "harmony"]
-        }
+        # Spielweisen pro Instrument kommen aus dem Einstellungs-Modell
+        self.style_options = {inst: list(STYLE_OPTIONS[inst.lower()]) for inst in instruments}
         
         self.controls = {}
         
@@ -547,7 +530,7 @@ class MixerTab(ctk.CTkFrame):
 
 class SettingsTab(ctk.CTkFrame):
     """Settings Tab: Configure file paths and Humanizer swing/jitter parameters."""
-    def __init__(self, master, **kwargs):
+    def __init__(self, master, on_vst_selected=None, **kwargs):
         super().__init__(master, fg_color="#1a1a2e", **kwargs)
         
         container = ctk.CTkFrame(self, fg_color="#16213e", border_color="#533483", border_width=1, corner_radius=8)
@@ -603,11 +586,18 @@ class SettingsTab(ctk.CTkFrame):
         self.swing_slider.grid(row=4, column=1, padx=20, pady=12, sticky="w")
         
         # 5. Humanizer Jitter
-        lbl_jitter = ctk.CTkLabel(container, text="Humanizer Jitter (ms):", text_color="#a8a8b3", font=("Segoe UI", 10, "bold"))
+        lbl_jitter = ctk.CTkLabel(container, text="Timing-Streuung (0.02 = Genre-Standard):", text_color="#a8a8b3", font=("Segoe UI", 10, "bold"))
         lbl_jitter.grid(row=5, column=0, padx=20, pady=12, sticky="e")
         self.jitter_var = tk.DoubleVar(value=0.02)
         self.jitter_slider = ctk.CTkSlider(container, from_=0.0, to=0.1, variable=self.jitter_var, width=280, button_color="#00f5d4", progress_color="#533483")
         self.jitter_slider.grid(row=5, column=1, padx=20, pady=12, sticky="w")
+
+        # 6. Eigener VST3-Synth für Synth- und Melodie-Spur
+        lbl_vst = ctk.CTkLabel(container, text="Eigener VST3-Synth:", text_color="#a8a8b3", font=("Segoe UI", 10, "bold"))
+        lbl_vst.grid(row=6, column=0, padx=20, pady=12, sticky="ne")
+        self.vst_area = VSTDropArea(container, on_vst_selected or (lambda path: None))
+        self.vst_area.grid(row=6, column=1, padx=20, pady=12, sticky="w")
+        HoverTooltip(self.vst_area, "Wird für die Synth- und Melodie-Spur genutzt, z. B. Surge XT.")
 
     def _browse_neutrino(self):
         from tkinter import filedialog

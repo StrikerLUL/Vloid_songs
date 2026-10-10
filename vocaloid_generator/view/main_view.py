@@ -91,7 +91,7 @@ class VocaloidMainView(ctk.CTk):
         self.lyrics_tab = LyricsTab(self.content_container)
         self.instrumente_tab = InstrumenteTab(self.content_container)
         self.mixer_tab = MixerTab(self.content_container)
-        self.settings_tab = SettingsTab(self.content_container)
+        self.settings_tab = SettingsTab(self.content_container, on_vst_selected=self.on_vst_selected)
 
     def _build_bottom_panel(self):
         """Build Bottom Panel for generation controllers, progress bar, and log text window."""

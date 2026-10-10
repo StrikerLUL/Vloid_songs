@@ -1,4 +1,5 @@
 # mixer.py – Professioneller Vocaloid-Mix mit Pedalboard (VST3 & Studio-Effekte)
+import logging
 import os
 import numpy as np
 import soundfile as sf
@@ -8,20 +9,23 @@ from pedalboard import Pedalboard, Reverb, Compressor, Limiter, HighpassFilter, 
 from config import VST3_SYNTH_PFAD, VST3_DRUMS_PFAD, SOUNDFONT_PFAD
 import soundfont_renderer
 
+log = logging.getLogger(__name__)
+
 def _lade_vst(pfad):
     if pfad and os.path.exists(pfad):
         try:
             return load_plugin(pfad)
         except Exception as e:
-            print(f"[Warnung] VST3 {pfad} konnte nicht geladen werden: {e}")
+            log.warning(f"VST3 {pfad} konnte nicht geladen werden: {e}")
     return None
 
-def midi_zu_wav(midi_pfad: str, wav_pfad: str, is_drum: bool = False, instrument_type: str = "piano", vst_pfad: str = None) -> None:
+def midi_zu_wav(midi_pfad: str, wav_pfad: str, is_drum: bool = False, instrument_type: str = "piano", vst_pfad: str = None, soundfont_pfad: str = None) -> None:
     """
-    Konvertiert MIDI zu WAV. Nutzt Fluidsynth mit dem SOUNDFONT_PFAD aus der Config
+    Konvertiert MIDI zu WAV. Nutzt Fluidsynth mit soundfont_pfad (Standard: SOUNDFONT_PFAD aus der Config)
     und mappt instrument_type auf ein General-MIDI-Programm. Fallback auf den
     internen Basic-Synth mit Pedalboard-Effekten (Chorus & Reverb).
     """
+    soundfont_pfad = soundfont_pfad or SOUNDFONT_PFAD
     # 1. Mapping von instrument_type auf General-MIDI-Programme (0-127)
     inst_type_lower = instrument_type.lower()
     
@@ -64,21 +68,21 @@ def midi_zu_wav(midi_pfad: str, wav_pfad: str, is_drum: bool = False, instrument
     vst_loaded = None
     if vst_pfad is not None:
         if not isinstance(vst_pfad, str):
-            print(f"[Warnung] VST-Pfad '{vst_pfad}' ist kein gültiger String.")
+            log.warning(f"VST-Pfad '{vst_pfad}' ist kein gültiger String.")
         elif not os.path.exists(vst_pfad):
-            print(f"[Warnung] VST-Pfad '{vst_pfad}' existiert nicht als Datei.")
+            log.warning(f"VST-Pfad '{vst_pfad}' existiert nicht als Datei.")
         else:
             try:
                 vst_loaded = _lade_vst(vst_pfad)
                 if vst_loaded is None:
-                    print(f"[Warnung] VST-Pfad '{vst_pfad}' konnte nicht via _lade_vst geladen werden.")
+                    log.warning(f"VST-Pfad '{vst_pfad}' konnte nicht via _lade_vst geladen werden.")
             except Exception as e:
-                print(f"[Warnung] VST-Laden fehlgeschlagen für '{vst_pfad}': {e}")
+                log.warning(f"VST-Laden fehlgeschlagen für '{vst_pfad}': {e}")
 
     # Attempt VST rendering if plugin successfully loaded
     if vst_loaded is not None:
         try:
-            print(f"[VST] Rendere {os.path.basename(midi_pfad)} mit VST {vst_pfad}...")
+            log.info(f"[VST] Rendere {os.path.basename(midi_pfad)} mit VST {vst_pfad}...")
             import mido
             mid = mido.MidiFile(midi_pfad)
             messages = []
@@ -93,23 +97,23 @@ def midi_zu_wav(midi_pfad: str, wav_pfad: str, is_drum: bool = False, instrument
             # Create input silence
             input_audio = np.zeros((2, num_samples), dtype=np.float32)
             audio = vst_loaded(input_audio, sample_rate, midi_messages=messages)
-            print(f"[VST] VST-Rendering erfolgreich für {midi_pfad}.")
+            log.info(f"[VST] VST-Rendering erfolgreich für {midi_pfad}.")
         except Exception as e:
-            print(f"[Warnung] VST-Rendering fehlgeschlagen: {e}. Fallback auf Standard-Synthese...")
+            log.warning(f"VST-Rendering fehlgeschlagen: {e}. Fallback auf Standard-Synthese...")
             audio = None
 
     # 2. Fluidsynth-Rendering versuchen (priorisiert soundfont_renderer)
     if audio is None:
         try:
-            if os.path.exists(SOUNDFONT_PFAD):
-                print(f"[FluidSynth] Rendere {os.path.basename(midi_pfad)} mit soundfont_renderer...")
+            if os.path.exists(soundfont_pfad):
+                log.info(f"[FluidSynth] Rendere {os.path.basename(midi_pfad)} mit soundfont_renderer...")
                 # Map instruments to correct channels and set program numbers
                 midi_data = soundfont_renderer.prepare_midi_for_soundfont(
                     midi_data,
                     filename_hint=os.path.basename(midi_pfad),
                     instrument_type_hint=instrument_type
                 )
-                audio_mono = midi_data.fluidsynth(fs=sample_rate, sf2_path=SOUNDFONT_PFAD)
+                audio_mono = midi_data.fluidsynth(fs=sample_rate, sf2_path=soundfont_pfad)
                 
                 # Padding oder Abschneiden
                 pad_len = num_samples - len(audio_mono)
@@ -120,9 +124,9 @@ def midi_zu_wav(midi_pfad: str, wav_pfad: str, is_drum: bool = False, instrument
                 
                 audio = np.vstack((audio_mono, audio_mono)).astype(np.float32)
             else:
-                raise FileNotFoundError(f"SoundFont nicht gefunden unter {SOUNDFONT_PFAD}")
+                raise FileNotFoundError(f"SoundFont nicht gefunden unter {soundfont_pfad}")
         except Exception as e:
-            print(f"[Warnung] Fluidsynth-Rendering via soundfont_renderer failed: {e}. Fallback auf basic synthesis...")
+            log.warning(f"Fluidsynth-Rendering via soundfont_renderer failed: {e}. Fallback auf basic synthesis...")
             audio = None
 
     # 3. Fallback auf pretty_midi.synthesize() + Chorus & Reverb Pedalboard
@@ -148,7 +152,7 @@ def midi_zu_wav(midi_pfad: str, wav_pfad: str, is_drum: bool = False, instrument
         audio = audio / peak * 0.7  # Headroom
 
     sf.write(wav_pfad, audio.T, sample_rate)
-    print(f"Konvertiert: {midi_pfad} -> {wav_pfad}")
+    log.info(f"Konvertiert: {midi_pfad} -> {wav_pfad}")
 
 
 def lade_und_padde(pfad: str, ziel_samples: int) -> np.ndarray:
@@ -262,7 +266,7 @@ def mische_spuren(
             valid_paths.append(pfad)
             
     if max_samples == 0:
-        print("[FEHLER] Kein Mix erstellt – keine Spuren geladen.")
+        log.error("Kein Mix erstellt – keine Spuren geladen.")
         return
 
     # Check if any track is soloed
@@ -423,7 +427,7 @@ def mische_spuren(
             bass_key = k
 
     if drum_key and bass_key:
-        print(f"[Sidechain] Ducke Bass ({bass_key}) zu Drums ({drum_key})...")
+        log.info(f"[Sidechain] Ducke Bass ({bass_key}) zu Drums ({drum_key})...")
         tracks[bass_key] = apply_kick_sidechain(tracks[bass_key], tracks[drum_key], sample_rate)
 
     # 5. Summe bilden
@@ -432,7 +436,7 @@ def mische_spuren(
         final_mix += audio
 
     # 6. Mastering Chain
-    print("Wende Mastering an...")
+    log.info("Wende Mastering an...")
     final_mix *= 0.30  # Headroom
     
     master_board = Pedalboard([
@@ -449,4 +453,4 @@ def mische_spuren(
     
     # Export
     sf.write(output_pfad, final_mix.T, sample_rate)
-    print(f"[OK] Professioneller Mix: {output_pfad}")
+    log.info(f"[OK] Professioneller Mix: {output_pfad}")

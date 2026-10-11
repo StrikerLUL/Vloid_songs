@@ -39,6 +39,7 @@ class SongResult:
     wav_files: dict = field(default_factory=dict)
     vocals_wav: Optional[str] = None
     harmony_wav: Optional[str] = None
+    choir_wav: Optional[str] = None            # Chor im letzten Refrain
     mix_wav: Optional[str] = None
     mp3: Optional[str] = None
     settings: Optional[SongSettings] = None    # die benutzten Einstellungen, mit Seed
@@ -125,6 +126,10 @@ def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None,
     if result.vocals_wav and os.path.exists(harmony):
         result.harmony_wav = harmony
         stems.append(harmony)
+    choir = os.path.join(out, "vocals_chor.wav")
+    if result.vocals_wav and os.path.exists(choir):
+        result.choir_wav = choir
+        stems.append(choir)
     if not stems:
         raise RuntimeError("Keine Audiospuren zum Mischen vorhanden.")
 
@@ -150,6 +155,7 @@ def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None,
         bpm=settings.bpm,
         sidechain_depth=0.45 if profile.name == "Kawaii Chiptune" else 0.25,
         double_windows=_chorus_windows(tracks.get("plan")),
+        throw_windows=_throw_windows(settings, tracks) if result.vocals_wav else None,
         target_lufs=settings.master_lufs,
         **_reference_targets(settings, tracks, out, has_vocals=result.vocals_wav is not None),
     )
@@ -208,9 +214,14 @@ def generate_variants(settings: SongSettings, count: int, parts: tuple = (),
     return results
 
 
+VOCAL_FILES = ("vocals.wav", "vocals_duett_1.wav", "vocals_duett_2.wav", "vocals_harmony.wav", "vocals_chor.wav")
+# Welche Engine singt, wenn die gewählte fehlt; ganz zuletzt die lokale Vorschau-Stimme
+ENGINE_ORDER = {"NEUTRINO": ("NEUTRINO", "VOICEVOX"), "VOICEVOX": ("VOICEVOX", "NEUTRINO"), "Vorschau": ()}
+
+
 def _synthesize_vocals(settings: SongSettings, tracks: dict, out: str) -> Optional[str]:
     vocals_wav = os.path.join(out, "vocals.wav")
-    for name in ("vocals.wav", "vocals_duett_1.wav", "vocals_duett_2.wav"):
+    for name in VOCAL_FILES:
         _remove(os.path.join(out, name))
     melody_data = tracks.get("melody_data", [])
     silben = tracks.get("silben", [])
@@ -221,41 +232,206 @@ def _synthesize_vocals(settings: SongSettings, tracks: dict, out: str) -> Option
         log.warning("Keine Melodie oder keine Silben vorhanden, überspringe den Gesang.")
         return None
 
-    from vocal_synthesizer import erstelle_musicxml, generiere_lokale_vocals, neutrino_info, neutrino_synthese, stimmlage
+    from vocal_synthesizer import erstelle_musicxml, stimmlage
     _, _, transpose = stimmlage(settings.singer)
     xml = erstelle_musicxml(melody_data, silben, settings.bpm, os.path.join(out, "vocals.xml"), transpose)
-    harmony_wav = os.path.join(out, "vocals_harmony.wav")
-    _remove(harmony_wav)
 
-    if settings.vocal_engine == "NEUTRINO" and xml:
-        neutrino_dir = settings.neutrino_dir()
-        model_dir = os.path.join(neutrino_dir, "model", settings.singer)
-        duet = _duet_partner(settings, neutrino_dir)
-        log.info("%s; singe mit %s", neutrino_info(neutrino_dir), settings.singer + (f" und {duet}" if duet else ""))
+    engines = {"NEUTRINO": _sing_neutrino, "VOICEVOX": _sing_voicevox}
+    sung = False
+    for name in ENGINE_ORDER.get(settings.vocal_engine, ENGINE_ORDER["NEUTRINO"]):
         try:
-            if duet:
-                _sing_duet(settings, tracks, out, neutrino_dir, duet, vocals_wav)
-            else:
-                neutrino_synthese(xml, vocals_wav, neutrino_dir, model_dir, style_shift=settings.style_shift)
-            if (settings.harmonies or duet) and tracks.get("harmony_data"):
-                # im Duett singt die zweite Stimme die zweite Stimme im Refrain
-                singer = duet or settings.singer
-                _sing_harmony(settings, tracks, out, neutrino_dir, os.path.join(neutrino_dir, "model", singer),
-                              stimmlage(singer)[2], harmony_wav)
-            return vocals_wav
-        except Exception as e:
-            log.warning("NEUTRINO fehlgeschlagen: %s", e)
-        log.warning("NEUTRINO nicht verfügbar, nutze die lokale Vorschau-Stimme.")
+            engines[name](settings, tracks, out, vocals_wav, xml)
+            sung = True
+            break
+        except Exception as e:  # noqa: BLE001 – dann singt die nächste Engine
+            log.warning("%s nicht verfügbar: %s", name, e)
+            for leftover in VOCAL_FILES:
+                _remove(os.path.join(out, leftover))
+    if not sung:
+        if settings.vocal_engine != "Vorschau":
+            log.warning("Weder NEUTRINO noch VOICEVOX singen, nutze die lokale Vorschau-Stimme.")
+        if not _sing_preview(settings, tracks, vocals_wav):
+            return None
+    _liven(settings, tracks, out, vocals_wav)
+    return vocals_wav
 
+
+def _sing_preview(settings: SongSettings, tracks: dict, vocals_wav: str) -> bool:
+    from vocal_synthesizer import generiere_lokale_vocals
     try:
         generiere_lokale_vocals(
-            melody_data, silben, settings.bpm, vocals_wav,
-            breathiness=settings.breathiness, shimmer=settings.shimmer,
+            tracks["melody_data"], tracks["silben"], settings.bpm, vocals_wav,
+            breathiness=settings.breathiness, shimmer=settings.shimmer, vibrato=settings.vibrato,
+            glide=settings.glide,
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         log.error("Lokale Stimme fehlgeschlagen, der Song entsteht ohne Gesang: %s", e)
+        return False
+    return os.path.exists(vocals_wav)
+
+
+def _liven(settings: SongSettings, tracks: dict, out: str, vocals_wav: str) -> None:
+    """Was jede Engine bekommt: Chor im letzten Refrain (aus der eigenen Stimme, wenn die Engine keinen gesungen
+    hat) und Atmer vor den Phrasen."""
+    import voice_fx
+    choir = os.path.join(out, "vocals_chor.wav")
+    window = _final_chorus(tracks.get("plan"))
+    if settings.final_choir and window and not os.path.exists(choir):
+        spb = 60.0 / settings.bpm
+        try:
+            if voice_fx.choir_from_lead(vocals_wav, choir, (window[0] * spb, window[1] * spb)):
+                log.info("Chor im letzten Refrain aus der eigenen Stimme")
+        except Exception as e:  # noqa: BLE001
+            log.warning("Chor im letzten Refrain fehlgeschlagen: %s", e)
+    if settings.breaths:
+        count = voice_fx.add_breaths(vocals_wav, voice_fx.timeline(tracks["melody_data"], settings.bpm),
+                                     seed=settings.seed or 0)
+        log.info("%d Atmer vor den Phrasen", count)
+
+
+def _final_chorus(plan) -> Optional[tuple]:
+    """(Start, Ende) des letzten Refrains in Schlägen; bei leisem Anfang (Breakdown) ab dem vollen Teil."""
+    choruses = [sec for sec in plan.sections if sec.kind == "Chorus" and sec.has_vocals] if plan else []
+    if not choruses:
         return None
-    return vocals_wav if os.path.exists(vocals_wav) else None
+    sec = choruses[-1]
+    return (sec.resume if sec.feel == "breakdown" and sec.resume is not None else sec.start), sec.end
+
+
+# ── NEUTRINO ────────────────────────────────────────────────────────────────────
+def _sing_neutrino(settings: SongSettings, tracks: dict, out: str, vocals_wav: str, xml: str) -> None:
+    from vocal_synthesizer import neutrino_info, stimmlage
+    if not xml:
+        raise RuntimeError("ohne music21 gibt es keine Noten für NEUTRINO")
+    neutrino_dir = settings.neutrino_dir()
+    duet = _duet_partner(settings, neutrino_dir)
+    log.info("%s; singe mit %s", neutrino_info(neutrino_dir), settings.singer + (f" und {duet}" if duet else ""))
+    if duet:
+        _sing_duet(settings, tracks, out, neutrino_dir, duet, vocals_wav)
+    else:
+        _neutrino_lead(settings, tracks["melody_data"], xml, vocals_wav, neutrino_dir, settings.singer)
+    harmony_wav = os.path.join(out, "vocals_harmony.wav")
+    if (settings.harmonies or duet) and tracks.get("harmony_data"):
+        # im Duett singt die zweite Stimme die zweite Stimme im Refrain
+        singer = duet or settings.singer
+        _sing_harmony(settings, tracks, out, neutrino_dir, os.path.join(neutrino_dir, "model", singer),
+                      stimmlage(singer)[2], harmony_wav)
+    if settings.final_choir:
+        _neutrino_choir(settings, tracks, out, neutrino_dir, duet)
+
+
+def _neutrino_lead(settings: SongSettings, data: list, xml: str, wav: str, neutrino_dir: str, singer: str) -> None:
+    """Eine Hauptstimme mit NEUTRINO: bei mehreren Fassungen die sauberste, danach Vibrato und Übergänge."""
+    import voice_fx
+    from vocal_synthesizer import neutrino_synthese, stimmlage
+    transpose = stimmlage(singer)[2]
+    model_dir = os.path.join(neutrino_dir, "model", singer)
+    notes = voice_fx.timeline(data, settings.bpm, transpose)
+    shifts = voice_fx.take_shifts(settings.style_shift, settings.vocal_takes)
+    if len(shifts) == 1:
+        neutrino_synthese(xml, wav, neutrino_dir, model_dir, style_shift=shifts[0])
+    else:
+        takes = []
+        for k, shift in enumerate(shifts):
+            take = wav[:-4] + f"_fassung_{k + 1}.wav"
+            try:
+                neutrino_synthese(xml, take, neutrino_dir, model_dir, style_shift=shift)
+            except Exception as e:  # noqa: BLE001 – eine misslungene Fassung ist kein Grund aufzuhören
+                if k == 0:
+                    raise
+                log.warning("Fassung %d nicht gesungen: %s", k + 1, e)
+                continue
+            score = voice_fx.pitch_error(take, notes)
+            log.info("Fassung %d (StyleShift %+d): %.0f Cent neben den Noten", k + 1, shift, score)
+            takes.append((score, k, take, shift))
+        _, k, best, shift = min(takes)
+        os.replace(best, wav)
+        for _, _, take, _ in takes:
+            _remove(take)
+        log.info("%s: Fassung %d klingt am saubersten (StyleShift %+d)", singer, k + 1, shift)
+    voice_fx.reshape(wav, notes, settings.vibrato, settings.glide)
+
+
+def _neutrino_choir(settings: SongSettings, tracks: dict, out: str, neutrino_dir: str, duet: Optional[str]) -> None:
+    """Im letzten Refrain singen zwei weitere Stimmen die Melodie mit (andere installierte Stimmen, sonst dieselbe
+    heller und dunkler)."""
+    import soundfile as sf
+    import voice_fx
+    from vocal_synthesizer import erstelle_musicxml, installed_singers, neutrino_synthese, stimmlage
+    window = _final_chorus(tracks.get("plan"))
+    if window is None:
+        return
+    data, silben = voice_fx.excerpt(tracks["melody_data"], tracks["silben"], *window)
+    if not data:
+        return
+    singers = [n for n in installed_singers(neutrino_dir) if n != settings.singer
+               and os.path.isdir(os.path.join(neutrino_dir, "model", n))]
+    singers.sort(key=lambda n: n != duet)
+    voices = [(n, settings.style_shift) for n in singers[:2]] or [
+        (settings.singer, max(-6, settings.style_shift - 2)), (settings.singer, min(6, settings.style_shift + 2))]
+    sung, rate = [], 48000
+    for k, (singer, shift) in enumerate(voices):
+        xml = os.path.join(out, f"vocals_chor_{k + 1}.xml")
+        wav = os.path.join(out, f"vocals_chor_{k + 1}.wav")
+        try:
+            erstelle_musicxml(data, silben, settings.bpm, xml, stimmlage(singer)[2])
+            neutrino_synthese(xml, wav, neutrino_dir, os.path.join(neutrino_dir, "model", singer), style_shift=shift)
+            audio, rate = sf.read(wav, dtype="float32", always_2d=True)
+            sung.append(audio.mean(axis=1))
+        except Exception as e:  # noqa: BLE001
+            log.warning("Chorstimme %s fehlgeschlagen: %s", singer, e)
+        finally:
+            _remove(wav)
+            _remove(xml)
+    if sung:
+        voice_fx.write_choir(os.path.join(out, "vocals_chor.wav"), sung, rate, window[0] * 60.0 / settings.bpm)
+        log.info("Chor im letzten Refrain: %s", ", ".join(f"{n} ({s:+d})" for n, s in voices))
+
+
+# ── VOICEVOX ────────────────────────────────────────────────────────────────────
+def _sing_voicevox(settings: SongSettings, tracks: dict, out: str, vocals_wav: str, xml: str = "") -> None:
+    import voice_fx
+    import voicevox
+    url = settings.voicevox_url or voicevox.URL
+    singer, name = voicevox.pick_singer(url, settings.voicevox_singer)
+    log.info("Singe mit VOICEVOX: %s", name)
+    notes = voice_fx.timeline(tracks["melody_data"], settings.bpm)
+    shape = None
+    if abs(settings.vibrato - 1.0) > 1e-3 or abs(settings.glide - 1.0) > 1e-3:
+        def shape(f0, frame, offset):
+            return voice_fx.shape_pitch(f0, frame, notes, settings.vibrato, settings.glide, offset)
+    voicevox.sing(tracks["melody_data"], tracks["silben"], settings.bpm, vocals_wav, url, singer, pitch=shape)
+    if settings.harmonies and tracks.get("harmony_data"):
+        try:
+            voicevox.sing(tracks["harmony_data"], tracks["harmony_silben"], settings.bpm,
+                          os.path.join(out, "vocals_harmony.wav"), url, singer)
+            log.info("Zweite Stimme im Refrain gesungen.")
+        except Exception as e:  # noqa: BLE001
+            log.warning("Zweite Stimme fehlgeschlagen, der Song bekommt nur die Hauptstimme: %s", e)
+    window = _final_chorus(tracks.get("plan"))
+    if settings.final_choir and window:
+        _voicevox_choir(settings, tracks, out, url, singer, window)
+
+
+def _voicevox_choir(settings: SongSettings, tracks: dict, out: str, url: str, singer: int, window: tuple) -> None:
+    import soundfile as sf
+    import voice_fx
+    import voicevox
+    data, silben = voice_fx.excerpt(tracks["melody_data"], tracks["silben"], *window)
+    voices, rate = [], 24000
+    for k, other in enumerate(voicevox.others(url, singer)):
+        wav = os.path.join(out, f"vocals_chor_{k + 1}.wav")
+        try:
+            voicevox.sing(data, silben, settings.bpm, wav, url, other)
+            audio, rate = sf.read(wav, dtype="float32", always_2d=True)
+            voices.append(audio.mean(axis=1))
+        except Exception as e:  # noqa: BLE001
+            log.warning("Chorstimme fehlgeschlagen: %s", e)
+        finally:
+            _remove(wav)
+    if voices:
+        voice_fx.write_choir(os.path.join(out, "vocals_chor.wav"), voices, rate, window[0] * 60.0 / settings.bpm)
+        log.info("Chor im letzten Refrain mit %d weiteren VOICEVOX-Stimmen", len(voices))
 
 
 def _duet_partner(settings: SongSettings, neutrino_dir: str) -> Optional[str]:
@@ -276,15 +452,14 @@ def _sing_duet(settings: SongSettings, tracks: dict, out: str, neutrino_dir: str
     """Beide Stimmen singen ihre Teile (melody_writer.duet_voice); zusammen ergeben sie vocals.wav."""
     import soundfile as sf
     from melody_writer import split_for_duet
-    from vocal_synthesizer import erstelle_musicxml, neutrino_synthese, stimmlage
+    from vocal_synthesizer import erstelle_musicxml, stimmlage
     parts = split_for_duet(tracks["plan"], tracks["melody_data"], tracks["silben"])
     audio, rate = [], None
     for k, (singer, (data, silben)) in enumerate(zip((settings.singer, partner), parts)):
         wav = os.path.join(out, f"vocals_duett_{k + 1}.wav")
         xml = erstelle_musicxml(data, silben, settings.bpm, os.path.join(out, f"vocals_duett_{k + 1}.xml"),
                                 stimmlage(singer)[2])
-        neutrino_synthese(xml, wav, neutrino_dir, os.path.join(neutrino_dir, "model", singer),
-                          style_shift=settings.style_shift)
+        _neutrino_lead(settings, data, xml, wav, neutrino_dir, singer)
         data_k, rate = sf.read(wav, dtype="float32", always_2d=True)
         mono = data_k.mean(axis=1)
         angle = (1 + (-DUET_PAN if k == 0 else DUET_PAN)) * np.pi / 4
@@ -388,6 +563,17 @@ def _section_energies(plan) -> list:
     from orchestrator import _pieces
     spb = plan.seconds_per_beat
     return [(p.start * spb, p.end * spb, p.energy) for sec in plan.sections for p in _pieces(sec)]
+
+
+def _throw_windows(settings: SongSettings, tracks: dict) -> list:
+    """Wo das Echo auf dem letzten Wort einer Phrase liegt (Sekunden)."""
+    if not settings.echo_throws or not tracks.get("melody_data"):
+        return []
+    import voice_fx
+    plan = tracks.get("plan")
+    sections = [(sec.start * plan.seconds_per_beat, sec.end * plan.seconds_per_beat, sec.kind)
+                for sec in plan.sections] if plan else []
+    return voice_fx.throw_windows(voice_fx.timeline(tracks["melody_data"], settings.bpm), settings.bpm, sections)
 
 
 def _chorus_windows(plan) -> list:

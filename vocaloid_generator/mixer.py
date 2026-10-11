@@ -19,12 +19,16 @@ MIX_REFERENCE_LUFS = -18.0   # Pegel des Mixes vor dem Master-Kompressor
 # Ziel-Lautheit der einzelnen Spuren (LUFS), falls der Stil nichts anderes sagt
 DEFAULT_LEVELS = {"drums": -17.0, "bass": -19.5, "piano": -22.0, "guitar": -23.0, "strings": -24.5,
                   "synth": -24.0, "brass": -24.0, "bells": -28.0, "choir": -27.0, "counter": -24.5,
-                  "perc": -28.5, "melody": -21.0, "fx": -27.0, "vocals": -17.0, "harmony": -24.0}
+                  "perc": -28.5, "melody": -21.0, "fx": -27.0, "vocals": -17.0, "harmony": -24.0, "gang": -23.0}
 DEFAULT_REVERB = {"drums": 0.06, "bass": 0.0, "piano": 0.16, "guitar": 0.12, "strings": 0.28,
                   "synth": 0.2, "brass": 0.15, "bells": 0.35, "choir": 0.4, "counter": 0.24,
-                  "perc": 0.08, "melody": 0.2, "fx": 0.3, "vocals": 0.18, "harmony": 0.26}
+                  "perc": 0.08, "melody": 0.2, "fx": 0.3, "vocals": 0.18, "harmony": 0.26, "gang": 0.32}
 # Gesangsdoppelung im Refrain: zwei leicht verstimmte, verzögerte Kopien links und rechts
 DOUBLE_CENTS, DOUBLE_DELAYS, DOUBLE_DB = 12, (0.017, 0.026), -9.0
+# Gesangsspuren: Hauptstimme, zweite Stimme und der Chor im letzten Refrain („gang“); sie hören auf den Kanal Gesang
+VOCAL_KEYS = ("vocals", "harmony", "gang")
+# Echo auf dem letzten Wort: Pegel des Sends, Rückkopplung und Länge in Schlägen (punktierte Achtel)
+THROW_DB, THROW_FEEDBACK, THROW_BEATS = -2.0, 0.45, 0.75
 
 
 # ── Rendern ──────────────────────────────────────────────────────────────────────
@@ -146,6 +150,8 @@ def _basic_synth(midi: pretty_midi.PrettyMIDI) -> np.ndarray:
 # ── Mischen ──────────────────────────────────────────────────────────────────────
 def _track_key(path: str) -> str:
     name = os.path.splitext(os.path.basename(path))[0].lower()
+    if "vocals_chor" in name:
+        return "gang"
     if "harmon" in name:
         return "harmony"
     if "vocal" in name or "stimme" in name:
@@ -197,6 +203,8 @@ def _channel_chain(key: str) -> Pedalboard:
                     Compressor(threshold_db=-22, ratio=3, attack_ms=8, release_ms=120)],
         "harmony": [HighpassFilter(220), PeakFilter(300, -3.0, 1.0), PeakFilter(3000, 1.0, 1.0),
                     HighShelfFilter(10000, 1.5), Compressor(threshold_db=-22, ratio=4, attack_ms=5, release_ms=100)],
+        "gang":    [HighpassFilter(200), PeakFilter(350, -3.0, 1.0), PeakFilter(2500, 1.0, 1.0),
+                    HighShelfFilter(9000, 1.0), Compressor(threshold_db=-24, ratio=4, attack_ms=8, release_ms=120)],
     }
     return Pedalboard(chains.get(key, [HighpassFilter(80)]))
 
@@ -265,6 +273,24 @@ def _pan(audio: np.ndarray, pan: float) -> np.ndarray:
     return np.vstack([audio[0] * np.cos(angle) * np.sqrt(2), audio[1] * np.sin(angle) * np.sqrt(2)])
 
 
+def _echo_throws(vocals: np.ndarray, windows: list, bpm: float) -> np.ndarray:
+    """Echo nur auf den Fenstern (z. B. dem letzten Wort einer Phrase): punktierte Achtel, abwechselnd rechts
+    und links (Ping-Pong), ohne Bass und ohne scharfe Höhen."""
+    mask = _window_mask(vocals.shape[1], windows, fade=0.02)
+    if not mask.any():
+        return np.zeros_like(vocals)
+    send = (vocals.mean(axis=0) * mask * 10 ** (THROW_DB / 20))[None].astype(np.float32)
+    send = Pedalboard([HighpassFilter(350), LowpassFilter(5000)])(send, SAMPLE_RATE)
+    step = THROW_BEATS * 60.0 / bpm
+    # links Echos bei 2, 4, 6 ... Schritten, rechts bei 1, 3, 5: dieselbe Kette, um einen Schritt früher
+    left = Delay(delay_seconds=2 * step, feedback=THROW_FEEDBACK, mix=1.0)(send, SAMPLE_RATE)[0]
+    shift = int(step * SAMPLE_RATE)
+    right = np.zeros_like(left)
+    right[:len(left) - shift] = left[shift:]
+    left = left * np.sqrt(THROW_FEEDBACK)
+    return np.vstack([left, right]).astype(np.float32)
+
+
 def _kick_envelope(drums: np.ndarray) -> np.ndarray:
     from scipy.signal import butter, lfilter, sosfilt
     mono = drums.mean(axis=0)
@@ -291,6 +317,7 @@ def mische_spuren(
     bpm: float = 120.0,
     sidechain_depth: float = 0.25,
     double_windows: list = None,
+    throw_windows: list = None,
     reference: str = None,
     target_lufs: float = MASTER_LUFS,
     sections: list = None,
@@ -303,6 +330,7 @@ def mische_spuren(
     EQ und Kompressor pro Spur, gemeinsamer Hall und ein Delay für die Stimme, Bass duckt unter der Kick,
     dann Master-Kompressor, Lautheit auf target_lufs (Standard MASTER_LUFS) und Limiter.
     double_windows: Zeitbereiche (Sekunden), in denen der Gesang gedoppelt klingt, z. B. die Refrains.
+    throw_windows: Zeitbereiche (Sekunden), deren Gesang ein deutliches Echo bekommt, z. B. das letzte Wort einer Phrase.
     reference: Vorbild-Song (WAV, MP3, FLAC); das Mastering gleicht Klangfarbe und Lautheit an ihn an.
     sections, energy_contrast_db: [(Start, Ende in Sekunden, Energie)] und der Abstand zwischen lauten und leisen
     Stellen, den die Vorbilder haben; die Band wird in ruhigen Sektionen entsprechend leiser oder lauter.
@@ -323,23 +351,24 @@ def mische_spuren(
     tracks = {}
     for path in paths:
         key = _track_key(path)
-        audible = (solos.get(key, False) if any_solo else True) and not mutes.get(key, False)
+        channel = "vocals" if key in VOCAL_KEYS else key
+        audible = (solos.get(channel, False) if any_solo else True) and not mutes.get(channel, False)
         if not audible:
             continue
         audio = _load(path, length)
         loud = _loudness(audio)
         if loud == float("-inf"):
             continue
-        fader = volumes.get(key, DEFAULT_VOLUMES.get(key, 1.0)) / max(DEFAULT_VOLUMES.get(key, 1.0), 1e-6)
+        fader = volumes.get(channel, DEFAULT_VOLUMES.get(channel, 1.0)) / max(DEFAULT_VOLUMES.get(channel, 1.0), 1e-6)
         audio *= 10 ** ((levels.get(key, -22.0) - loud) / 20) * fader
-        if key in ("vocals", "harmony"):
+        if key in VOCAL_KEYS:
             audio = _deess(audio)
         audio = _channel_chain(key)(audio, SAMPLE_RATE)
         if key == "vocals" and double_windows:
             audio = _double(audio, double_windows)
         elif key == "harmony":
             audio = _widen(audio)
-        audio = _pan(audio, panning.get(key, 0.0))
+        audio = _pan(audio, panning.get(channel, 0.0))
         tracks[path] = (key, audio)
 
     if not tracks:
@@ -364,8 +393,13 @@ def mische_spuren(
     for key, audio in tracks.values():
         mix += audio
         send += audio * reverb.get(key, 0.1)
-        if key in ("vocals", "harmony"):
+        if key in VOCAL_KEYS:
             vocal_send += audio * 0.18
+    lead = [audio for key, audio in tracks.values() if key == "vocals"]
+    if throw_windows and lead:
+        throws = _echo_throws(lead[0], throw_windows, bpm)
+        mix += throws
+        send += throws * 0.3
 
     hall = Pedalboard([HighpassFilter(250), Reverb(room_size=0.78, damping=0.45, wet_level=1.0, dry_level=0.0, width=1.0),
                        LowpassFilter(9000)])
@@ -384,7 +418,6 @@ def mische_spuren(
     log.info("Mix fertig: %s (%.1f LUFS)", output_pfad, _loudness(mix))
 
 
-VOCAL_KEYS = ("vocals", "harmony")
 MAX_REFERENCE_DB = 6.0       # so weit dürfen die Vorbilder einen Pegel höchstens verschieben
 
 

@@ -3,7 +3,7 @@ import logging
 import os
 from collections.abc import Awaitable, Callable
 
-from nicegui import ui
+from nicegui import run, ui
 
 import vorlagen
 from gui import labels
@@ -113,7 +113,6 @@ REFERENCE_SWITCHES = (
 def reference_editor(s: SongSettings, pick: PickFn, apply_template: Callable[[SongSettings], None]) -> None:
     """Mehrere Vorbilder mit Gewicht, aus Datei oder Bibliothek, dazu was sie bestimmen dürfen."""
     import reference
-    from nicegui import run
 
     from settings import ReferenceTrack
     found = {"summary": None}
@@ -308,9 +307,20 @@ def band_panel(s: SongSettings) -> None:
 
 
 # ── Gesang ──────────────────────────────────────────────────────────────────────
+LIVELY_SWITCHES = (
+    ("breaths", "Atmer vor den Phrasen", "Vor jeder Zeile ist ein leises Einatmen zu hören"),
+    ("echo_throws", "Echo auf dem letzten Wort", "Am Ende jeder Sektion und jeder zweiten Refrain-Zeile hallt das "
+                                                 "letzte Wort links und rechts nach"),
+    ("final_choir", "Chor im letzten Refrain", "Mit NEUTRINO oder VOICEVOX singen zwei weitere Stimmen mit, "
+                                               "sonst wird die eigene Stimme zum Chor vervielfacht"),
+)
+
+
 def voice_panel(s: SongSettings, singers: list) -> tuple:
     """Rückgabe: die Auswahl der Stimme und die der Duett-Stimme, damit die Seite ihre Listen erneuern kann."""
-    ui.select(labels.ENGINES, label="Gesang mit").bind_value(s, "vocal_engine").classes("w-full")
+    ui.select(labels.ENGINES, label="Gesang mit").bind_value(s, "vocal_engine").classes("w-full").mark("engine")
+    hint("Fehlt die gewählte Engine, singt die andere; fehlen beide, die Vorschau-Stimme.")
+    section_title("NEUTRINO")
     options = sorted(set(singers) | {s.singer})
     singer = ui.select(options, label="Stimme").bind_value(s, "singer").classes("w-full").mark("singer")
     hint("Die Stimmen aus dem Ordner model von NEUTRINO. Die Melodie passt sich ihrem Tonumfang an.")
@@ -323,12 +333,56 @@ def voice_panel(s: SongSettings, singers: list) -> tuple:
         ui.label("StyleShift").classes("w-28")
         ui.slider(min=-6, max=6, step=1).bind_value(s, "style_shift").props("label markers").classes("col")
     hint("Plus = heller und jünger, minus = dunkler. Braucht NEUTRINO mit StyleShift.")
-    section_title("Vorschau-Stimme (wenn NEUTRINO fehlt)")
+    ui.select({1: "1 (am schnellsten)", 2: "2", 3: "3"}, label="Fassungen").bind_value(s, "vocal_takes") \
+        .classes("w-full").mark("vocal-takes")
+    hint("NEUTRINO singt den Song so oft, eine Stufe heller und dunkler; in den Song kommt die Fassung, die die Töne "
+         "am besten trifft und keine Aussetzer hat. Jede Fassung dauert so lange wie die erste.")
+    section_title("VOICEVOX")
+    voicevox_editor(s)
+    section_title("Lebendiger Gesang")
+    for attr, text, tip in LIVELY_SWITCHES:
+        ui.switch(text).bind_value(s, attr).props("dense").tooltip(tip).mark(f"switch-{attr}")
+    for text, attr in (("Vibrato", "vibrato"), ("Übergänge", "glide")):
+        with ui.row().classes("w-full items-center gap-4"):
+            ui.label(text).classes("w-28")
+            ui.slider(min=0, max=2, step=0.1).bind_value(s, attr).props("label markers").classes("col") \
+                .mark(f"slider-{attr}")
+    hint("1 = wie die Stimme singt. Vibrato 0 = gerade Töne, 2 = doppelt so viel; Übergänge 0 = die Töne springen "
+         "(wie Autotune), 2 = die Stimme gleitet doppelt so lange. Bei NEUTRINO wird die Aufnahme dafür neu "
+         "berechnet (WORLD), das klingt eine Spur rauer.")
+    section_title("Vorschau-Stimme (wenn NEUTRINO und VOICEVOX fehlen)")
     with ui.row().classes("w-full items-center gap-4"):
         ui.label("Hauchigkeit").classes("w-28")
         ui.slider(min=0, max=0.2, step=0.002).bind_value(s, "breathiness").props("label").classes("col")
     ui.switch("Schimmer").bind_value(s, "shimmer")
     return singer, duet
+
+
+def voicevox_editor(s: SongSettings) -> None:
+    """Singstimme von VOICEVOX; die Liste kommt von der laufenden VOICEVOX-App."""
+    import voicevox
+
+    def options(found: dict) -> dict:
+        names = {0: "die erste Singstimme", **found}
+        if s.voicevox_singer not in names:
+            names[s.voicevox_singer] = f"Stimme {s.voicevox_singer}"
+        return names
+
+    with ui.row().classes("w-full items-center no-wrap gap-2"):
+        select = ui.select(options({}), label="VOICEVOX-Stimme").bind_value(s, "voicevox_singer").classes("col") \
+            .mark("voicevox-singer")
+        reload_button = ui.button(icon="refresh").props("flat round dense").tooltip("Stimmen neu laden") \
+            .mark("voicevox-reload")
+    status = ui.label().classes("text-caption text-grey-5").mark("voicevox-status")
+
+    async def load() -> None:
+        found = await run.io_bound(voicevox.singers, s.voicevox_url or voicevox.URL)
+        select.set_options(options(found), value=s.voicevox_singer)
+        status.set_text(f"VOICEVOX läuft, {len(found)} Singstimmen." if found else
+                        "VOICEVOX läuft nicht. Kostenlos unter voicevox.hiroshiba.jp; App starten, dann neu laden.")
+
+    reload_button.on_click(load)
+    ui.timer(0.2, load, once=True)
 
 
 def duet_options(singers: list, s: SongSettings) -> dict:
@@ -368,6 +422,9 @@ def paths_panel(s: SongSettings, pick: PickFn, status: Callable[[], None]) -> No
                 .bind_value(s, attr).classes("col").props("dense stack-label").mark(f"path-{attr}") \
                 .on("blur", lambda: status())
             pick_button(pick, s, attr, folder=folder, file_types=types, then=status)
+    import voicevox
+    ui.input("Adresse von VOICEVOX", placeholder=f"leer = {voicevox.URL}").bind_value(s, "voicevox_url") \
+        .classes("w-full").props("dense stack-label").mark("path-voicevox_url")
     ui.switch("Bessere Klänge aus den zusätzlichen SoundFonts (setup_soundfonts.py)") \
         .bind_value(s, "sound_library").mark("sound-library-switch") \
         .tooltip("Flügel, Streicher, Bläser, E-Gitarren und echte Schlagzeuge; gilt nur ohne eigenen SoundFont")

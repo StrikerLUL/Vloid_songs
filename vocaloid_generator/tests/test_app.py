@@ -275,3 +275,22 @@ async def test_reference_suggestions_can_be_switched_off(user, monkeypatch):
     user.find(marker="switch-ref_tempo_key").elements.pop().set_value(False)
     await user.should_not_see(marker="reference-take-tempo")
     await until(lambda: SongSettings.load().ref_tempo_key is False)
+
+
+async def test_lively_singing_can_be_switched_and_voicevox_singers_are_listed(user, monkeypatch):
+    import voicevox
+    monkeypatch.setattr(voicevox, "singers", lambda url=None, timeout=None: {3002: "四国めたん (ノーマル)"})
+    await user.open("/")
+    await user.should_see("VOICEVOX läuft, 1 Singstimmen.")
+    select = user.find(marker="voicevox-singer").elements.pop()
+    assert select.options[3002] == "四国めたん (ノーマル)"
+    select.set_value(3002)
+    user.find(marker="switch-final_choir").elements.pop().set_value(False)
+    user.find(marker="slider-vibrato").elements.pop().set_value(0.4)
+    await until(lambda: (SongSettings.load().voicevox_singer, SongSettings.load().final_choir,
+                         SongSettings.load().vibrato) == (3002, False, 0.4))
+
+
+async def test_without_voicevox_the_app_says_how_to_get_it(user):
+    await user.open("/")
+    await user.should_see("VOICEVOX läuft nicht. Kostenlos unter voicevox.hiroshiba.jp; App starten, dann neu laden.")

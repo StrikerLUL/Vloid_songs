@@ -48,3 +48,11 @@ def test_failure_returns_exit_code_1(monkeypatch):
         raise RuntimeError("Keine Audiospuren zum Mischen vorhanden.")
     monkeypatch.setattr(main, "generate_song", boom)
     assert main.main([]) == 1
+
+
+def test_vocal_options(captured):
+    assert main.main(["--engine", "VOICEVOX", "--voicevox-stimme", "3002", "--fassungen", "3", "--vibrato", "0",
+                      "--uebergaenge", "1.5", "--ohne-atmer", "--ohne-chor"]) == 0
+    s = captured["settings"]
+    assert (s.vocal_engine, s.voicevox_singer, s.vocal_takes, s.vibrato, s.glide) == ("VOICEVOX", 3002, 3, 0.0, 1.5)
+    assert (s.breaths, s.echo_throws, s.final_choir) == (False, True, False)

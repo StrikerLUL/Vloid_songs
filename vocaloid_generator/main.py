@@ -22,6 +22,15 @@ def parse_args(argv=None):
     p.add_argument("--output", help="Ausgabeordner")
     p.add_argument("--stimme", metavar="NAME", help="NEUTRINO-Stimme, z. B. MERROW")
     p.add_argument("--duett", metavar="NAME", help="zweite NEUTRINO-Stimme fürs Duett ('' = kein Duett)")
+    p.add_argument("--engine", choices=["NEUTRINO", "VOICEVOX", "Vorschau"], help="wer singt")
+    p.add_argument("--voicevox-stimme", type=int, metavar="ID", help="VOICEVOX-Singstimme (Stil-ID)")
+    p.add_argument("--fassungen", type=int, choices=[1, 2, 3], help="NEUTRINO singt so oft, die sauberste zählt")
+    p.add_argument("--vibrato", type=float, metavar="X", help="0 = gerade Töne, 1 = wie gesungen, 2 = doppelt")
+    p.add_argument("--uebergaenge", type=float, metavar="X",
+                   help="Übergänge zwischen Tönen: 0 = springen, 1 = wie gesungen, 2 = doppelt so lang")
+    p.add_argument("--ohne-atmer", action="store_true", help="kein Einatmen vor den Phrasen")
+    p.add_argument("--ohne-echo", action="store_true", help="kein Echo auf dem letzten Wort")
+    p.add_argument("--ohne-chor", action="store_true", help="kein Chor im letzten Refrain")
     p.add_argument("--vorbild", action="append", metavar="DATEI",
                    help="Vorbild-Song (mehrfach möglich); ersetzt die Vorbilder aus den Einstellungen")
     p.add_argument("--vom-vorbild", action="store_true",
@@ -61,7 +70,11 @@ def main(argv=None) -> int:
     if args.vom_vorbild:
         settings = from_references(settings)
     overrides = {"seed": args.seed, "bpm": args.bpm, "style": args.style, "key": args.key, "scale": args.scale,
-                 "singer": args.stimme, "duet_singer": args.duett, "master_lufs": args.lautheit}
+                 "singer": args.stimme, "duet_singer": args.duett, "master_lufs": args.lautheit,
+                 "vocal_engine": args.engine, "voicevox_singer": args.voicevox_stimme, "vocal_takes": args.fassungen,
+                 "vibrato": args.vibrato, "glide": args.uebergaenge,
+                 "breaths": False if args.ohne_atmer else None, "echo_throws": False if args.ohne_echo else None,
+                 "final_choir": False if args.ohne_chor else None}
     settings = settings.with_updates(**{k: v for k, v in overrides.items() if v is not None})
     parts = tuple(args.neu or ())
 

@@ -15,7 +15,8 @@ PART_HINTS = {
     "chords": "Neue Akkorde und neuer Ablauf; alles, was auf den Akkorden spielt, ändert sich mit.",
 }
 SCALES = {"minor": "Moll", "major": "Dur", "dorian": "Dorisch", "phrygian": "Phrygisch"}
-ENGINES = {"NEUTRINO": "NEUTRINO", "Vorschau": "Vorschau-Stimme (ohne NEUTRINO)"}
+ENGINES = {"NEUTRINO": "NEUTRINO", "VOICEVOX": "VOICEVOX (kostenlos, läuft als App)",
+           "Vorschau": "Vorschau-Stimme (ohne NEUTRINO und VOICEVOX)"}
 SECTIONS = {
     "Intro": "Intro", "Build-up": "Build-up", "Verse": "Strophe", "PreChorus": "Pre-Chorus", "Chorus": "Refrain",
     "Bridge": "Bridge", "Drop": "Drop", "Outro": "Outro",

@@ -32,6 +32,13 @@ def isolated_references(tmp_path, monkeypatch):
     monkeypatch.setattr(reference, "CACHE", str(tmp_path / "vorbild_messungen.json"))
 
 
+@pytest.fixture(autouse=True)
+def without_voicevox(monkeypatch):
+    """Ein VOICEVOX, das zufällig auf dem Rechner läuft, singt in den Tests nicht mit."""
+    import voicevox
+    monkeypatch.setattr(voicevox, "running", lambda url=None, timeout=None: False)
+
+
 @pytest.fixture(scope="session")
 def jpop_song(tmp_path_factory):
     """Ein kompletter J-Pop-Song mit Drop und Tonartwechsel, fest gesät."""

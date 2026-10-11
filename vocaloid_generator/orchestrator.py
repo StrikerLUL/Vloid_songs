@@ -51,7 +51,7 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
     log.info("Komponiere: Stil %s, %s BPM, %s-%s", profile.name, bpm, key, mode)
 
     sung = {**_default_lyrics(), **(lyrics or {})}
-    min_bars = {kind: required_bars(kind, len(sung.get(kind, [])), section_config.get(kind, {}).get("bars", 4))
+    min_bars = {kind: required_bars(len(sung.get(kind, [])))
                 for kind in set(structure) if section_config.get(kind, {}).get("has_vocals", True)}
     plan = build_plan(profile, bpm, structure, key, mode, section_config, rng, min_bars)
     vocal_notes = write_vocal_melody(plan, sung, rng)

@@ -182,6 +182,12 @@ def test_long_lyrics_make_the_section_longer(tmp_path):
     assert tracks["silben"].count("ら") >= 200
 
 
+def test_slow_songs_use_half_as_many_bars(tmp_path):
+    tracks = compose(tmp_path, style="Ballade", bpm=78)
+    verse = next(s for s in tracks["plan"].sections if s.kind == "Verse")
+    assert verse.bars == SHORT_CONFIG["Verse"]["bars"] // 2
+
+
 def test_intro_plays_the_chorus_hook(jpop_song):
     tracks = jpop_song.tracks
     plan = tracks["plan"]

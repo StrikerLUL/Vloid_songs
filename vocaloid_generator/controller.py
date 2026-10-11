@@ -5,6 +5,9 @@ import queue
 import threading
 from tkinter import messagebox, TclError
 
+from settings import CHANNELS, INSTRUMENTS
+from vocal_synthesizer import installed_singers
+
 
 class _QueueLogHandler(logging.Handler):
     """Forwards engine log records from the worker thread into the GUI queue."""
@@ -48,13 +51,13 @@ class VocaloidController:
         
         self.view.lyrics_tab.set_lyrics(self.model.lyrics)
         
-        for inst in ["piano", "bass", "guitar", "strings", "synth", "brass", "drums", "melody"]:
+        for inst in INSTRUMENTS:
             ctrls = self.view.instrumente_tab.controls[inst]
             ctrls["volume"].set(getattr(self.model, f"volume_{inst}"))
             ctrls["style"].set(getattr(self.model, f"style_{inst}"))
             ctrls["enabled"].set(getattr(self.model, f"enabled_{inst}"))
             
-        for chan in ["piano", "bass", "guitar", "strings", "synth", "brass", "drums", "melody", "vocals", "master"]:
+        for chan in CHANNELS:
             ctrls = self.view.mixer_tab.channels_controls[chan]
             ctrls["volume"].set(getattr(self.model, f"volume_{chan}"))
             ctrls["pan"].set(getattr(self.model, f"pan_{chan}"))
@@ -71,6 +74,9 @@ class VocaloidController:
         self.view.settings_tab.swing_var.set(self.model.swing)
         self.view.settings_tab.jitter_var.set(self.model.jitter)
         self.view.settings_tab.vst_area.set_vst_path(self.model.vst_path)
+        self.view.settings_tab.singer_var.set(self.model.singer)
+        self.view.settings_tab.set_singers(installed_singers(self.model.neutrino_pfad))
+        self.view.settings_tab.harmonies_var.set(self.model.harmonies)
 
     def setup_bindings(self):
         """Bind tkinter variable trace events and direct edit hooks."""
@@ -84,14 +90,14 @@ class VocaloidController:
         self.view.lyrics_tab.on_lyrics_changed = self.on_view_lyrics_changed
         
         # Instrumente Tab
-        for inst in ["piano", "bass", "guitar", "strings", "synth", "brass", "drums", "melody"]:
+        for inst in INSTRUMENTS:
             ctrls = self.view.instrumente_tab.controls[inst]
             ctrls["volume"].trace_add("write", lambda *a, i=inst: self.on_view_instrument_volume_changed(i))
             ctrls["style"].trace_add("write", lambda *a, i=inst: self.on_view_instrument_style_changed(i))
             ctrls["enabled"].trace_add("write", lambda *a, i=inst: self.on_view_instrument_enabled_changed(i))
             
         # Mixer Tab
-        for chan in ["piano", "bass", "guitar", "strings", "synth", "brass", "drums", "melody", "vocals", "master"]:
+        for chan in CHANNELS:
             ctrls = self.view.mixer_tab.channels_controls[chan]
             ctrls["volume"].trace_add("write", lambda *a, c=chan: self.on_view_mixer_volume_changed(c))
             ctrls["pan"].trace_add("write", lambda *a, c=chan: self.on_view_mixer_pan_changed(c))
@@ -109,6 +115,8 @@ class VocaloidController:
         self.view.settings_tab.output_dir_var.trace_add("write", lambda *a: self.on_view_output_dir_changed())
         self.view.settings_tab.swing_var.trace_add("write", lambda *a: self.on_view_swing_changed())
         self.view.settings_tab.jitter_var.trace_add("write", lambda *a: self.on_view_jitter_changed())
+        self.view.settings_tab.singer_var.trace_add("write", lambda *a: self.on_view_singer_changed())
+        self.view.settings_tab.harmonies_var.trace_add("write", lambda *a: self.on_view_harmonies_changed())
 
     # View modification handlers -> Model updates
     def on_view_bpm_changed(self):
@@ -226,6 +234,21 @@ class VocaloidController:
             self.model.neutrino_pfad = val
             self.model.save_settings()
 
+    def on_view_singer_changed(self):
+        val = self.view.settings_tab.singer_var.get().strip()
+        if val and self.model.singer != val:
+            self.model.singer = val
+            self.model.save_settings()
+
+    def on_view_harmonies_changed(self):
+        try:
+            val = bool(self.view.settings_tab.harmonies_var.get())
+        except (ValueError, TclError):
+            return
+        if self.model.harmonies != val:
+            self.model.harmonies = val
+            self.model.save_settings()
+
     def on_view_soundfont_path_changed(self):
         val = self.view.settings_tab.soundfont_path_var.get()
         if self.model.soundfont_pfad != val:
@@ -338,6 +361,13 @@ class VocaloidController:
             elif property_name == "neutrino_pfad":
                 if self.view.settings_tab.neutrino_path_var.get() != value:
                     self.view.settings_tab.neutrino_path_var.set(value)
+                self.view.settings_tab.set_singers(installed_singers(value))
+            elif property_name == "singer":
+                if self.view.settings_tab.singer_var.get() != value:
+                    self.view.settings_tab.singer_var.set(value)
+            elif property_name == "harmonies":
+                if self.view.settings_tab.harmonies_var.get() != value:
+                    self.view.settings_tab.harmonies_var.set(value)
             elif property_name == "soundfont_pfad":
                 if self.view.settings_tab.soundfont_path_var.get() != value:
                     self.view.settings_tab.soundfont_path_var.set(value)

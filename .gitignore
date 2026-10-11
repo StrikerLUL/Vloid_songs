@@ -2,6 +2,9 @@
 NEUTRINO-windows-v3.1/
 めろう（NEUTRINO-Library）-v3.1/
 
+# FluidSynth für Windows, kommt über setup_fluidsynth.py
+tools/
+
 # Python
 __pycache__/
 *.pyc

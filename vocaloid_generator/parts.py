@@ -2,14 +2,15 @@
 #
 # Jede Spielweise bekommt eine Sektion und liefert Ereignisse in Schlägen. Akkorde kommen aus dem
 # Bauplan, Griffe werden mit Stimmführung verbunden (ctx merkt sich den letzten Griff pro Instrument).
+import math
 import random
 from dataclasses import dataclass
 
 from song_plan import BEATS_PER_BAR, Section, SongPlan
-from theory import Chord, nearest_pitch, pitches_in_range, voice_chord
+from theory import Chord, nearest_pitch, pitches_in_range, scale_pcs, voice_chord
 
 # Unterspuren mit eigenem Klang (General-MIDI-Programm)
-LAYER_PROGRAMS = {"pad": 89, "pizz": 45}
+LAYER_PROGRAMS = {"pad": 89, "pizz": 45, "saw": 81, "oohs": 53}
 
 
 @dataclass
@@ -319,6 +320,11 @@ def synth(pattern: str, sec: Section, plan: SongPlan, rng: random.Random, ctx: d
         for slot in sec.chords:
             v = _voicing(ctx, "synth", slot.chord, 60, 84, 4)
             out += [Ev(slot.start, slot.dur * 0.98, p, _vel(sec, 0.65)) for p in v]
+    elif pattern == "supersaw":
+        # breite Akkordfläche im Refrain, oben mit der Oktave des Spitzentons
+        for slot in sec.chords:
+            v = _voicing(ctx, "saw", slot.chord, 60, 79, 4)
+            out += [Ev(slot.start, slot.dur * 0.98, p, _vel(sec, 0.6), layer="saw") for p in v + [v[-1] + 12]]
     return out
 
 
@@ -337,6 +343,186 @@ def brass(pattern: str, sec: Section, plan: SongPlan, rng: random.Random, ctx: d
             if b % 4 == 0:
                 v = _voicing(ctx, "brass", _chord_for(sec, bar_start), 58, 79, 3, ext=False)
                 out += [Ev(bar_start, 1.0, p, _vel(sec, 0.85)) for p in v]
+    return out
+
+
+# ── Glocken: Glockenspiel, Celesta, Spieluhr oder Vibraphon über der Band ───────
+def bells(pattern: str, sec: Section, plan: SongPlan, rng: random.Random, ctx: dict) -> list:
+    out = []
+    if pattern in ("sparkle", "sparkle16"):
+        step = 0.5 if pattern == "sparkle" else 0.25
+        order = [0, 2, 1, 3, 2, 4, 3, 1]
+        k = 0
+        for slot in sec.chords:
+            tones = pitches_in_range(slot.chord.triad_pcs, 76, 96)
+            t = slot.start
+            while t < slot.start + slot.dur - 1e-6:
+                accent = 1.0 if abs(t - round(t)) < 1e-6 else 0.7
+                out.append(Ev(t, step * 1.5, tones[order[k % 8] % len(tones)], _vel(sec, 0.6 * accent)))
+                t += step
+                k += 1
+    elif pattern == "hook_octave":
+        # verdoppelt die Gesangsmelodie eine Oktave höher, wie das Glockenspiel im Schlussrefrain
+        for n in _vocal_in(sec, ctx):
+            p = n.pitch + 12
+            while p < 74:
+                p += 12
+            out.append(Ev(n.start, min(n.dur, 1.5), p, _vel(sec, 0.7)))
+    elif pattern == "accents":
+        for slot in sec.chords:
+            tones = pitches_in_range(slot.chord.triad_pcs, 76, 93)
+            out += [Ev(slot.start, 2.0, p, _vel(sec, 0.6)) for p in tones[-2:]]
+    elif pattern == "music_box":
+        figure = [0, 2, 1, 3]
+        for slot in sec.chords:
+            tones = pitches_in_range(slot.chord.triad_pcs, 72, 91)
+            for i in range(int(slot.dur)):
+                out.append(Ev(slot.start + i, 1.4, tones[figure[i % 4] % len(tones)], _vel(sec, 0.62)))
+    return out
+
+
+# ── Chor: Aahs und Oohs als Fläche ───────────────────────────────────────────────
+def choir(pattern: str, sec: Section, plan: SongPlan, rng: random.Random, ctx: dict) -> list:
+    out = []
+    if pattern in ("aahs", "oohs"):
+        layer, accent = ("", 0.62) if pattern == "aahs" else ("oohs", 0.55)
+        for slot in sec.chords:
+            v = _voicing(ctx, "choir", slot.chord, 57, 76, 4, ext=False)
+            out += [Ev(slot.start, slot.dur, p, _vel(sec, accent), layer=layer) for p in v]
+    return out
+
+
+# ── Gegenstimme: antwortet in den Gesangspausen, Leitton-Linie oder Solo ─────────
+HELD_NOTE, HELD_NOTE_LANDING = 1.5, 0.5   # ab dieser Länge (Schläge) darf die Gegenstimme nach der Landung einsetzen
+def _vocal_in(sec: Section, ctx: dict) -> list:
+    return [n for n in ctx.get("vocal", []) if sec.start <= n.start < sec.end]
+
+
+def _ladder(sec: Section, chord: Chord, lo: int, hi: int) -> list:
+    """Töne, die über chord gut klingen: Akkordtöne und Leitertöne ohne Halbton-Reibung mit dem Akkord."""
+    scale = set(scale_pcs(sec.tonic, sec.mode))
+    foreign = set(chord.pcs) - scale                 # z. B. das Gis im E-Dur-Akkord von a-Moll
+    pcs = {pc for pc in scale if (pc - 1) % 12 not in chord.pcs and (pc + 1) % 12 not in foreign}
+    pcs |= set(chord.pcs)
+    return [p for p in range(lo, hi + 1) if p % 12 in pcs]
+
+
+def _fit(p: int, ladder: list, direction: int) -> int:
+    """p, oder der nächste Ton der Leiter in Laufrichtung, falls p dort nicht vorkommt."""
+    if p in ladder:
+        return p
+    return min(ladder, key=lambda q: (abs(q - p), -direction * (q - p)))
+
+
+def _gaps(sec: Section, vocal: list, min_len: float) -> list:
+    """
+    Stellen, an denen eine Gegenstimme antworten kann: Pausen im Gesang und lange Schlusstöne, sobald
+    der Gesang auf ihnen angekommen ist. Mindestens min_len Schläge lang.
+    """
+    edges, t = [], sec.start
+    for n in sorted(vocal, key=lambda n: n.start):
+        if n.start - t >= min_len:
+            edges.append((t, n.start))
+        busy = n.start + (HELD_NOTE_LANDING if n.dur >= HELD_NOTE else n.dur)
+        t = max(t, busy)
+    if sec.end - t >= min_len:
+        edges.append((t, sec.end))
+    return edges
+
+
+ANSWER_RHYTHMS = ([0.25, 0.25, 0.5], [0.5, 0.5], [0.25, 0.25, 0.25, 0.25], [0.5, 0.5, 1.0],
+                  [0.25, 0.25, 0.5, 1.0], [0.5, 0.25, 0.25, 0.5, 1.0], [0.75, 0.25, 1.0], [0.25, 0.25, 0.25, 0.25, 1.0])
+
+
+def counter(pattern: str, sec: Section, plan: SongPlan, rng: random.Random, ctx: dict) -> list:
+    out = []
+    vocal = _vocal_in(sec, ctx)
+    center = plan.style.vocal_center
+    if pattern == "solo" and vocal:
+        pattern = "answer"          # ein Solo nur, wenn niemand singt
+    if pattern == "answer":
+        prev = ctx.get("counter", center + 5)
+        for lo, hi in _gaps(sec, vocal, 1.25):
+            start = math.ceil(lo * 4 - 1e-6) / 4
+            room = hi - 0.25 - start
+            fitting = [r for r in ANSWER_RHYTHMS if sum(r) <= room]
+            if not fitting:
+                continue
+            longest = max(sum(r) for r in fitting)
+            rhythm = rng.choice([r for r in fitting if sum(r) >= longest - 1.0])
+            end_chord = sec.chord_at(start + sum(rhythm) - rhythm[-1])
+            ladder = _ladder(sec, end_chord, center - 3, center + 14)
+            target = min((p for p in ladder if p % 12 in end_chord.triad_pcs), key=lambda p: abs(p - prev))
+            steps = len(rhythm) - 1
+            direction = 1 if rng.random() < 0.5 else -1
+            i_target = ladder.index(target)
+            i = max(0, min(len(ladder) - 1, i_target - direction * steps))
+            t = start
+            for k, d in enumerate(rhythm):
+                if k == len(rhythm) - 1:
+                    p = target
+                else:
+                    # Durchgangstöne laufen auf das Ziel zu, passen aber zum Akkord, der gerade klingt
+                    p = ladder[max(0, min(len(ladder) - 1, i + direction * k))]
+                    p = _fit(p, _ladder(sec, sec.chord_at(t), center - 3, center + 14), direction)
+                out.append(Ev(t, d * 0.92, p, _vel(sec, 0.78 if k == 0 else 0.7)))
+                t += d
+            prev = target
+        ctx["counter"] = prev
+    elif pattern == "guide":
+        # Terzen und Septimen der Akkorde, schrittweise verbunden, unter dem Gesang
+        prev = ctx.get("guide", center - 7)
+        for slot in sec.chords:
+            guide = [slot.chord.pcs[1]] + ([slot.chord.pcs[3]] if len(slot.chord.pcs) > 3 else [slot.chord.fifth_pc])
+            halves = [slot.dur] if slot.dur < 4 else [slot.dur / 2, slot.dur / 2]
+            t = slot.start
+            for h, length in enumerate(halves):
+                options = pitches_in_range([guide[h % len(guide)]], center - 14, center - 1)
+                p = min(options, key=lambda q: (abs(q - prev), q))
+                out.append(Ev(t, length * 0.97, p, _vel(sec, 0.66)))
+                prev, t = p, t + length
+        ctx["guide"] = prev
+    elif pattern == "solo":
+        rhythms = ([0.5] * 8, [0.25] * 4 + [0.5] * 6, [1.0, 0.5, 0.5, 0.25, 0.25, 0.5, 1.0], [0.75, 0.25] * 4)
+        prev = ctx.get("counter", center + 5)
+        for b, bar_start in _bars(sec):
+            last_bar = b == sec.bars - 1
+            rhythm = [4.0] if last_bar else rng.choice(rhythms)
+            t, direction = bar_start, rng.choice((-1, 1))
+            for k, d in enumerate(rhythm):
+                chord = sec.chord_at(t)
+                ladder = _ladder(sec, chord, center - 3, center + 17)
+                if k == 0 or abs(t - round(t)) < 1e-6 and int(round(t)) % 2 == 0:
+                    p = min((q for q in ladder if q % 12 in chord.triad_pcs), key=lambda q: abs(q - prev))
+                else:
+                    i = min(range(len(ladder)), key=lambda j: abs(ladder[j] - prev))
+                    if not 0 <= i + direction < len(ladder):
+                        direction = -direction
+                    p = ladder[i + direction]
+                out.append(Ev(t, d * 0.9, p, _vel(sec, 0.8 if k == 0 else 0.7)))
+                prev, t = p, t + d
+        ctx["counter"] = prev
+    return out
+
+
+# ── Percussion: Shaker, Claps, Tamburin, Congas, Cowbell ─────────────────────────
+SHAKER, CLAPS, TAMB, COWBELL, CONGA_MUTE, CONGA_OPEN, CONGA_LOW = 82, 39, 54, 56, 62, 63, 64
+PERC_PATTERNS = {
+    "shaker": [(s, SHAKER, 0.62 if s % 4 == 2 else 0.42 if s % 2 == 0 else 0.3) for s in range(16)],
+    "claps": [(4, CLAPS, 0.85), (12, CLAPS, 0.85)],
+    "tambourine": [(s, TAMB, 0.7 if s in (4, 12) else 0.45) for s in range(0, 16, 2)],
+    "congas": [(0, CONGA_LOW, 0.8), (3, CONGA_OPEN, 0.65), (6, CONGA_MUTE, 0.55), (8, CONGA_LOW, 0.7),
+               (10, CONGA_OPEN, 0.7), (11, CONGA_OPEN, 0.5), (14, CONGA_MUTE, 0.55)],
+    "cowbell": [(s, COWBELL, 0.6 if s % 8 == 0 else 0.45) for s in range(0, 16, 4)],
+}
+
+
+def perc(pattern: str, sec: Section, plan: SongPlan, rng: random.Random, ctx: dict) -> list:
+    out = []
+    steps = PERC_PATTERNS.get(pattern, [])
+    for _, bar_start in _bars(sec):
+        for step, pitch, accent in steps:
+            out.append(Ev(bar_start + step / 4, 0.2, pitch, _vel(sec, accent)))
     return out
 
 
@@ -363,4 +549,5 @@ def lead_hook(sec: Section, plan: SongPlan, vocal_notes: list) -> list:
     return out
 
 
-PARTS = {"piano": piano, "bass": bass, "guitar": guitar, "strings": strings, "synth": synth, "brass": brass}
+PARTS = {"piano": piano, "bass": bass, "guitar": guitar, "strings": strings, "synth": synth, "brass": brass,
+         "bells": bells, "choir": choir, "counter": counter, "perc": perc}

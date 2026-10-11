@@ -29,6 +29,28 @@ def tiny_midi(tmp_path):
     return str(path)
 
 
+class FakeInstrument:
+    """Wie ein VST3-Instrument in pedalboard: bekommt MIDI mit Zeiten in Sekunden und liefert Audio."""
+    is_instrument = True
+
+    def __call__(self, messages, duration, sample_rate, num_channels=2):
+        self.messages, self.duration = messages, duration
+        return np.full((num_channels, int(duration * sample_rate)), 0.1, dtype=np.float32)
+
+
+def test_vst_instrument_gets_midi_in_seconds(tmp_path, tiny_midi, monkeypatch):
+    import mixer
+    fake = FakeInstrument()
+    monkeypatch.setattr(mixer, "load_plugin", lambda path: fake)
+    plugin = tmp_path / "Surge XT.vst3"
+    plugin.write_text("")
+    wav = str(tmp_path / "out.wav")
+    midi_zu_wav(tiny_midi, wav, instrument_type="synth", vst_pfad=str(plugin))
+    assert [(m.type, m.note, m.time) for m in fake.messages] == [("note_on", 60, 0.0), ("note_off", 60, 1.0)]
+    audio, _ = sf.read(wav)
+    assert abs(audio).max() > 0.05
+
+
 @pytest.mark.parametrize("vst", [None, "gibtsnicht.vst3", 12345])
 def test_rendering_survives_a_missing_or_broken_vst(tmp_path, tiny_midi, vst):
     wav = str(tmp_path / "test.wav")

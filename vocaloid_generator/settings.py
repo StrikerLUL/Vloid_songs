@@ -10,8 +10,10 @@ import config
 
 log = logging.getLogger(__name__)
 
-INSTRUMENTS = ("piano", "bass", "guitar", "strings", "synth", "brass", "drums", "melody")
-CHANNELS = INSTRUMENTS + ("vocals", "master")
+INSTRUMENTS = ("piano", "bass", "guitar", "strings", "synth", "brass", "bells", "choir", "counter", "perc",
+               "drums", "melody")
+# fx: Riser, Becken-Swells und Impacts an den Übergängen (Audio, kein MIDI)
+CHANNELS = INSTRUMENTS + ("fx", "vocals", "master")
 CHANNEL_FIELDS = ("volume", "pan", "enabled", "mute", "solo")
 # Wählbare Spielweisen pro Instrument; "default" nimmt das Muster des Genres
 STYLE_OPTIONS = {
@@ -19,8 +21,12 @@ STYLE_OPTIONS = {
     "bass": ("default", "root", "driving", "sync", "octaves", "wobble", "sub_pulse", "lazy"),
     "guitar": ("default", "chill_riff", "strummed", "palm_mute", "power_chords", "cutting"),
     "strings": ("default", "legato", "build", "pizzicato", "staccato"),
-    "synth": ("default", "pad", "riser", "staccato_pluck", "wide_saw", "pluck", "arp"),
+    "synth": ("default", "pad", "riser", "staccato_pluck", "wide_saw", "pluck", "arp", "supersaw"),
     "brass": ("default", "stabs", "accents"),
+    "bells": ("default", "sparkle", "sparkle16", "hook_octave", "accents", "music_box"),
+    "choir": ("default", "aahs", "oohs"),
+    "counter": ("default", "answer", "guide", "solo"),
+    "perc": ("default", "shaker", "claps", "tambourine", "congas", "cowbell"),
     # Drums folgen dem Stil, die Lead-Stimme spielt den Refrain-Hook im Intro und Outro
     "drums": ("default",),
     "melody": ("default",),
@@ -58,11 +64,13 @@ DEFAULT_LYRICS = (
 
 DEFAULT_VOLUMES = {
     "drums": 1.0, "bass": 0.9, "piano": 0.8, "guitar": 0.8, "strings": 0.7,
-    "synth": 0.7, "brass": 0.7, "melody": 0.8, "vocals": 1.0, "master": 1.0,
+    "synth": 0.7, "brass": 0.7, "bells": 0.7, "choir": 0.7, "counter": 0.7, "perc": 0.7,
+    "melody": 0.8, "fx": 0.7, "vocals": 1.0, "master": 1.0,
 }
 _DEFAULT_PANS = {
     "drums": 0.0, "bass": 0.0, "piano": -0.25, "guitar": 0.0, "strings": -0.40,
-    "synth": 0.0, "brass": 0.20, "melody": -0.15, "vocals": 0.0, "master": 0.0,
+    "synth": 0.0, "brass": 0.20, "bells": 0.35, "choir": 0.0, "counter": 0.30, "perc": -0.35,
+    "melody": -0.15, "fx": 0.0, "vocals": 0.0, "master": 0.0,
 }
 
 
@@ -100,6 +108,7 @@ class SongSettings(BaseModel):
 
     singer: str = "MERROW"
     vocal_engine: str = "NEUTRINO"
+    harmonies: bool = True             # zweite Stimme im Refrain (nur mit NEUTRINO)
     vst_path: str = ""
     breathiness: float = Field(0.028, ge=0.0, le=0.2)
     shimmer: bool = True

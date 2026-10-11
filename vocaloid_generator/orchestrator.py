@@ -7,25 +7,29 @@ import pretty_midi
 
 from drums import CRASH, KICK, OPEN_HAT, HAT, PEDAL_HAT, RIDE, TAMBOURINE, TOMS, drum_section
 from lyrics import parse_lyrics
-from melody_writer import melody_data, required_bars, write_vocal_melody
+from melody_writer import harmony_line, melody_data, required_bars, write_vocal_melody
 from parts import LAYER_PROGRAMS, PARTS, Ev, lead_hook
 from song_plan import BEATS_PER_BAR, build_plan
 from styles import get_style
 
 log = logging.getLogger(__name__)
 
-INSTRUMENTS = ("piano", "bass", "guitar", "strings", "synth", "brass", "drums", "melody")
+INSTRUMENTS = ("piano", "bass", "guitar", "strings", "synth", "brass", "bells", "choir", "counter", "perc",
+               "drums", "melody")
 TRACK_NAMES = {
     "piano": "Piano", "bass": "Bass", "guitar": "Guitar", "strings": "Strings", "synth": "Synth",
-    "brass": "Brass", "drums": "Drums", "melody": "Lead",
+    "brass": "Brass", "bells": "Bells", "choir": "Choir", "counter": "Counter", "perc": "Percussion",
+    "drums": "Drums", "melody": "Lead",
 }
+DRUM_TRACKS = ("drums", "perc")
 # Stereobild: Unterspuren mit eigenem Panorama (MIDI-CC 10, 64 = Mitte)
 LAYER_PAN = {"left": 22, "right": 106, "hats": 30, "cymbals": 98, "toms": 72}
 DOUBLE_TRACKED = {"strummed", "palm_mute", "power_chords"}
 
 # Zeitliche Ungenauigkeit wie bei echten Musikern, in Sekunden (bei jitter_scale = 1)
 TIMING_SPREAD = {"drums": 0.003, "bass": 0.004, "piano": 0.006, "guitar": 0.006, "strings": 0.008,
-                 "synth": 0.002, "brass": 0.006, "melody": 0.004}
+                 "synth": 0.002, "brass": 0.006, "melody": 0.004, "bells": 0.003, "choir": 0.01,
+                 "counter": 0.006, "perc": 0.006}
 SWING_MAX = 1 / 6                       # Swing 0.5 schiebt die zweite Sechzehntel um 1/12 Schlag
 
 
@@ -36,14 +40,17 @@ def _default_lyrics() -> dict:
 
 def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: str, section_config: dict,
                      output_dir: str = None, lyrics: dict = None, swing: float = None,
-                     jitter_scale: float = 1.0, instrument_styles: dict = None, style: str = None) -> dict:
+                     jitter_scale: float = 1.0, instrument_styles: dict = None, style: str = None,
+                     vocal_range: tuple = None) -> dict:
     """
     Komponiert den kompletten Song und schreibt eine MIDI-Datei pro Instrument nach output_dir.
 
     style: Name des Stils (z. B. "Dark Vocaloid"); ohne Angabe entscheidet genre.
     lyrics: {Sektion: [Silben]}; Sektionen ohne Text singen den Standardtext.
     instrument_styles: {Instrument: Spielweise}; "default" nimmt die Spielweise des Stils.
-    Rückgabe: {Instrument: [pretty_midi.Note]}, dazu "melody_data", "silben", "vocal_melody" und "plan".
+    vocal_range: (tiefster, höchster Ton) der Gesangsmelodie, passend zur Stimme.
+    Rückgabe: {Instrument: [pretty_midi.Note]}, dazu "melody_data", "silben", "vocal_melody", die zweite
+    Stimme für den Refrain ("harmony_data", "harmony_silben") und "plan".
     """
     profile = get_style(style or genre)
     rng = random.Random(random.getrandbits(32))
@@ -54,16 +61,19 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
     min_bars = {kind: required_bars(len(sung.get(kind, [])))
                 for kind in set(structure) if section_config.get(kind, {}).get("has_vocals", True)}
     plan = build_plan(profile, bpm, structure, key, mode, section_config, rng, min_bars)
+    if vocal_range:
+        plan.vocal_range = tuple(vocal_range)
     vocal_notes = write_vocal_melody(plan, sung, rng)
 
     events = {inst: [] for inst in INSTRUMENTS}
-    contexts = {}
+    contexts = {inst: {"vocal": vocal_notes} for inst in PARTS}
     for sec in plan.sections:
         for inst, part in PARTS.items():
-            pattern = _pattern(profile, sec.kind, inst, instrument_styles)
-            if pattern:
-                events[inst] += part(pattern, sec, plan, rng, contexts.setdefault(inst, {}))
-        if profile.part(sec.kind, "melody") == "hook":
+            pattern = _pattern(profile, sec, inst, instrument_styles)
+            for single in (pattern or "").split("+"):
+                if single:
+                    events[inst] += part(single, sec, plan, rng, contexts[inst])
+        if _pattern(profile, sec, "melody") == "hook":
             events["melody"] += lead_hook(sec, plan, vocal_notes)
         events["drums"] += drum_section(sec, profile.groove(sec.kind), rng)
 
@@ -83,6 +93,7 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
     _write_simple_midi(os.path.join(out_dir, "vocal_melody.mid"), vocal_track, profile.programs["melody"], bpm)
 
     data, syllables = melody_data(vocal_notes)
+    tracks["harmony_data"], tracks["harmony_silben"] = melody_data(harmony_line(plan, vocal_notes))
     tracks["vocal_melody"] = vocal_track
     tracks["melody_data"] = data
     tracks["silben"] = syllables
@@ -100,16 +111,16 @@ def _default_output() -> str:
 FULL_BAND = ("Intro", "PreChorus", "Chorus", "Outro")
 
 
-def _pattern(profile, kind: str, inst: str, overrides: dict = None):
+def _pattern(profile, sec, inst: str, overrides: dict = None):
     """Spielweise eines Instruments in einer Sektion: die vom Stil, oder die in der App gewählte."""
-    pattern = profile.part(kind, inst)
+    pattern = profile.part(sec.kind, inst, sec.occurrence, sec.is_last_of_kind)
     chosen = (overrides or {}).get(inst)
     if not chosen or chosen == "default":
         return pattern
     if pattern:
         return chosen
     unused_by_style = not any(parts.get(inst) for parts in profile.parts.values())
-    return chosen if unused_by_style and kind in FULL_BAND else None
+    return chosen if unused_by_style and sec.kind in FULL_BAND else None
 
 
 def _breaks_before_chorus(plan, events: dict) -> None:
@@ -142,9 +153,11 @@ def _final_chord(plan, events: dict) -> None:
         for e in evs:
             if e.start > downbeat + 0.02:
                 continue
-            if abs(e.start - downbeat) <= 0.02 and inst != "drums":
+            if abs(e.start - downbeat) <= 0.02 and inst not in DRUM_TRACKS:
                 e.dur = BEATS_PER_BAR
             kept.append(e)
+        if inst == "perc":
+            kept = [e for e in kept if e.start < downbeat - 1e-6]
         if inst == "drums":
             kept = [e for e in kept if e.start < downbeat - 1e-6 or e.pitch in (KICK, CRASH)]
             if not any(abs(e.start - downbeat) <= 0.02 and e.pitch == CRASH for e in kept):
@@ -164,7 +177,7 @@ def _spread_stereo(plan, profile, events: dict, overrides: dict = None) -> None:
     doubled = []
     for e in events["guitar"]:
         sec = plan.section_at(e.start)
-        if _pattern(profile, sec.kind, "guitar", overrides) in DOUBLE_TRACKED:
+        if _pattern(profile, sec, "guitar", overrides) in DOUBLE_TRACKED:
             e.layer = "left"
             doubled.append(Ev(e.start, e.dur, e.pitch, max(1, e.vel - 6), "right"))
     events["guitar"] += doubled
@@ -199,8 +212,10 @@ def _write_midi(path: str, inst: str, evs: list, notes: list, profile, bpm: floa
     for layer, layer_notes in layers.items():
         if inst == "drums":
             program, is_drum = profile.drum_kit, True
+        elif inst == "perc":
+            program, is_drum = profile.program("perc"), True
         else:
-            program, is_drum = LAYER_PROGRAMS.get(layer, profile.programs[inst]), False
+            program, is_drum = LAYER_PROGRAMS.get(layer, profile.program(inst)), False
         name = TRACK_NAMES[inst] + (f" {layer}" if layer else "")
         track = pretty_midi.Instrument(program=program, is_drum=is_drum, name=name)
         track.notes = layer_notes

@@ -9,12 +9,12 @@ import random
 from dataclasses import dataclass
 from typing import Optional
 
-from song_plan import BEATS_PER_BAR, Section, SongPlan
+from song_plan import BEATS_PER_BAR, VOCAL_RANGE, Section, SongPlan
 from theory import Chord, scale_pcs
 
 STEPS_PER_BEAT = 4
 BAR_STEPS = STEPS_PER_BEAT * BEATS_PER_BAR
-VOCAL_LO, VOCAL_HI = 57, 79       # A3 bis G5
+VOCAL_LO, VOCAL_HI = VOCAL_RANGE   # Standardlage; ein Song kann eine engere haben (plan.vocal_range)
 
 # Einsätze in Sechzehnteln innerhalb eines Takts, nach Anzahl der Silben im Takt
 BODY_RHYTHMS = {
@@ -145,9 +145,11 @@ class SectionMelodyWriter:
         self.sec = section
         self.rng = rng
         self.kind = section.kind if section.kind in ROLE_SEQUENCES else "Verse"
-        self.center = plan.style.vocal_center + KIND_OFFSET.get(self.kind, 0)
-        self.lo = max(VOCAL_LO, self.center - 7)
-        self.hi = min(VOCAL_HI, self.center + 8)
+        lo, hi = plan.vocal_range
+        center = plan.style.vocal_center + KIND_OFFSET.get(self.kind, 0)
+        self.center = max(lo + 7, min(hi - 8, center))
+        self.lo = max(lo, self.center - 7)
+        self.hi = min(hi, self.center + 8)
         self.motifs = {}
         self.gestures = {}
 
@@ -467,9 +469,34 @@ def _fit_to_chords(plan: SongPlan, notes: list) -> None:
         sec = plan.section_at(n.start)
         if n.pitch % 12 in _local_scale(sec.tonic, sec.mode, chord) and not (n.strong and n.dur >= 1 and n.pitch % 12 not in chord.pcs):
             continue
-        candidates = [p for p in range(n.pitch - 3, n.pitch + 4) if p % 12 in chord.pcs and VOCAL_LO <= p <= VOCAL_HI]
+        lo, hi = plan.vocal_range
+        candidates = [p for p in range(n.pitch - 3, n.pitch + 4) if p % 12 in chord.pcs and lo <= p <= hi + 1]
         if candidates:
             n.pitch = min(candidates, key=lambda p: (abs(p - n.pitch), p))
+
+
+def harmony_line(plan: SongPlan, notes: list, kinds: tuple = ("Chorus",)) -> list:
+    """
+    Zweite Stimme für den Refrain: die Terz über der Melodie aus der Tonleiter; auf langen Tönen ein
+    Akkordton. Passt sie nicht mehr in die Stimmlage, singt sie darunter.
+    """
+    lo, hi = plan.vocal_range
+    out = []
+    for n in notes:
+        sec = plan.section_at(n.start)
+        if sec.kind not in kinds:
+            continue
+        chord = sec.chord_at(n.start)
+        scale = sorted(set(scale_pcs(sec.tonic, sec.mode)) | set(chord.pcs))
+        ladder = [p for p in range(n.pitch - 12, n.pitch + 13) if p % 12 in scale]
+        i = ladder.index(n.pitch) if n.pitch in ladder else min(range(len(ladder)), key=lambda j: abs(ladder[j] - n.pitch))
+        above, below = ladder[min(i + 2, len(ladder) - 1)], ladder[max(i - 2, 0)]
+        if n.dur >= 1.0:
+            above = next((p for p in range(n.pitch + 3, n.pitch + 8) if p % 12 in chord.pcs), above)
+            below = next((p for p in range(n.pitch - 3, n.pitch - 10, -1) if p % 12 in chord.pcs), below)
+        pitch = above if above <= hi + 2 else below
+        out.append(MelNote(n.start, n.dur, max(pitch, lo - 2), n.syllable, n.strong))
+    return out
 
 
 def melody_data(notes: list) -> tuple:

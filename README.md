@@ -21,7 +21,7 @@ Ohne uv geht es auch mit pip (Python 3.10 bis 3.12). Auch dann in einer eigenen 
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r vocaloid_generator\requirements.txt
-python vocaloid_generator\gui_mvc.py
+python vocaloid_generator\app.py
 ```
 
 ### Gesang mit NEUTRINO
@@ -33,7 +33,7 @@ Die App ruft NEUTRINO so auf, wie es die `Run.bat` der installierten Version vor
 
 Damit der Gesang natürlich klingt, bereitet die App die Noten für NEUTRINO vor: ein Takt Vorlauf, kurze Pausen innerhalb einer Phrase werden an die Note davor gebunden, und die Melodie bleibt im Tonumfang der gewählten Stimme. Männliche Stimmen (NAKUMO, SOMA, RUNO) singen eine Oktave tiefer. Im Refrain singt NEUTRINO eine zweite Stimme dazu, der Hauptgesang wird gedoppelt, und ein De-Esser nimmt scharfe S-Laute zurück.
 
-Im Einstellungen-Tab wählst du die Stimme, ob im Refrain eine zweite Stimme mitsingt, und die Klangfarbe (StyleShift): plus klingt heller, minus dunkler. StyleShift braucht eine NEUTRINO-Version, die die Option `-k` kennt; sonst singt NEUTRINO ohne. Zu Beginn jedes Songs steht im Protokoll, welche NEUTRINO-Version und welche Stimmen gefunden wurden.
+Im Tab „Gesang“ wählst du die Stimme, ob im Refrain eine zweite Stimme mitsingt, und die Klangfarbe (StyleShift): plus klingt heller, minus dunkler. StyleShift braucht eine NEUTRINO-Version, die die Option `-k` kennt; sonst singt NEUTRINO ohne. Zu Beginn jedes Songs steht im Protokoll, welche NEUTRINO-Version und welche Stimmen gefunden wurden.
 
 Schlägt NEUTRINO fehl, steht die Meldung im Protokoll, und die App nutzt die lokale Vorschau-Stimme (Windows-Sprachausgabe plus Tonhöhen-Korrektur). Ohne NEUTRINO nimmt sie diese Stimme sofort.
 
@@ -51,11 +51,11 @@ Supersaw, Pluck, Pad, Lead und Chiptune-Klänge erzeugt die App selbst (`synth_e
 
 ### Vorbild-Song
 
-Im Song-Tab kannst du für jeden Song einen Vorbild-Song wählen (WAV, MP3 oder FLAC). Das Mastering gleicht dann Frequenzgang, Lautheit und Stereobreite an ihn an; das erledigt [matchering](https://github.com/sergree/matchering). Ohne Vorbild-Song mastert die App wie bisher auf -12 LUFS.
+Im Tab „Song“ kannst du für jeden Song einen Vorbild-Song wählen (WAV, MP3 oder FLAC). Das Mastering gleicht dann Frequenzgang, Lautheit und Stereobreite an ihn an; das erledigt [matchering](https://github.com/sergree/matchering). Ohne Vorbild-Song mastert die App wie bisher auf -12 LUFS.
 
 ### Liedtext
 
-Im Lyrics-Tab steht der Text pro Sektion. Japanisch darf ganz normal geschrieben werden, mit Kanji und ohne Leerzeichen: `夜の街を歩いてた` wird zu よ る の ま ち お あ る い て た. Die Lesung der Kanji kommt aus dem Wörterbuch von fugashi (UniDic). Liest es ein Wort falsch, steht die richtige Lesung in eckigen Klammern dahinter: `君[きみ]`. Partikel singt die App so, wie man sie spricht (は als わ), und ー wird als langer Vokal gesungen.
+Im Tab „Text“ steht der Text pro Sektion; rechts daneben zeigt die App, welche Silben gesungen werden. Japanisch darf ganz normal geschrieben werden, mit Kanji und ohne Leerzeichen: `夜の街を歩いてた` wird zu よ る の ま ち お あ る い て た. Die Lesung der Kanji kommt aus dem Wörterbuch von fugashi (UniDic). Liest es ein Wort falsch, steht die richtige Lesung in eckigen Klammern dahinter: `君[きみ]`. Partikel singt die App so, wie man sie spricht (は als わ), und ー wird als langer Vokal gesungen.
 
 ### MP3-Export
 
@@ -66,8 +66,22 @@ Für die MP3 braucht `pydub` das Programm ffmpeg (`winget install Gyan.FFmpeg`).
 Oberfläche:
 
 ```powershell
-uv run vocaloid_generator\gui_mvc.py
+uv run vocaloid_generator\app.py
 ```
+
+Die App öffnet sich in einem eigenen Fenster. Geht das Fenster nicht auf (es braucht die Microsoft-Edge-WebView2-Laufzeit, die auf Windows 10 und 11 meist schon da ist), startet `uv run vocaloid_generator\app.py --browser` dieselbe Oberfläche im Browser unter http://127.0.0.1:8090.
+
+- **Song erzeugen** (oben rechts) macht einen neuen Song. Daneben wählst du, wie viele Fassungen am Stück entstehen; alle landen im Verlauf.
+- **Player:** Der fertige Song spielt mit Wellenform; ein Klick in die Wellenform springt an diese Stelle. Unter „Anhören“ hörst du jede Spur einzeln, an derselben Stelle im Song.
+- **Noten:** die Piano-Roll aller Spuren mit Tonhöhe, sie läuft beim Abspielen mit. Ein Klick auf eine Spur in der Legende blendet sie aus, ein Klick in die Noten springt im Player dorthin.
+- **Neu würfeln:** Ein Knopf pro Teil (Melodie, Akkorde, Schlagzeug, jedes Instrument). Nur dieser Teil wird neu, der Rest des Songs bleibt.
+- **Seed festhalten:** Danach macht „Song erzeugen“ wieder diesen Song, mit allem, was du inzwischen geändert hast (Mix, Gesang, Text). Das Seed-Feld im Tab „Song“ leeren, dann gibt es wieder jedes Mal einen neuen Song.
+- **Als ZIP für die DAW:** alle Spuren als WAV und MIDI, siehe unten.
+- **Tabs rechts:** Song (Stil, Tempo, Tonart, Ablauf, Vorbild-Song, eigene Vorlagen), Text (mit Vorschau, wie gesungen wird), Band (Spielweise, Lautstärke, Panorama, Mute/Solo pro Spur), Gesang, Mix, Verlauf und Pfade.
+
+Alle Einstellungen speichert die App sofort. Eigene Vorlagen (Tab „Song“) merken sich Stil, Tempo, Tonart, Ablauf, Band, Gesang und Mix, aber nicht den Text; sie liegen in `vocaloid_generator\vorlagen\`.
+
+Die alte Oberfläche (`uv run vocaloid_generator\gui_mvc.py`) startet noch, kennt aber Verlauf, Neu-Würfeln und Player nicht und fällt bald weg.
 
 Kommandozeile, nutzt dieselben Einstellungen wie die Oberfläche:
 
@@ -122,7 +136,7 @@ Jeder Stil bringt eigene Instrumente, Spielweisen, Schlagzeug-Grooves und Akkord
 
 Keine Sektion klingt zweimal gleich: Die zweite Strophe bekommt eine Gegenstimme, der letzte Refrain Chor und Glockenspiel in der Oktave der Hook, und im Refrain spielen mehrere Synth-Schichten zusammen.
 
-Im Instrumente-Tab lässt sich pro Instrument eine andere Spielweise wählen. „default“ nimmt die des Stils.
+Im Tab „Band“ lässt sich pro Instrument eine andere Spielweise wählen. „wie der Stil“ nimmt die des Stils.
 
 ## So entsteht ein Song
 
@@ -164,5 +178,7 @@ uv run pytest -m "not slow"   # ohne den Test, der echtes Audio rendert
 | `vocal_synthesizer.py` | MusicXML, NEUTRINO und die lokale Vorschau-Stimme |
 | `mixer.py`, `exporter.py` | Mischen, Mastern, MP3- und ZIP-Export |
 | `history.py` | der Verlauf: jeder Song mit Seed und Einstellungen |
-| `gui_mvc.py`, `model.py`, `view/`, `controller.py` | die Oberfläche |
+| `app.py`, `gui/` | die Oberfläche (NiceGUI): Seite, Einstellungen, Player mit wavesurfer.js, Piano-Roll |
+| `vorlagen.py` | eigene Vorlagen speichern und laden |
+| `gui_mvc.py`, `model.py`, `view/`, `controller.py` | die alte Oberfläche (CustomTkinter) |
 | `main.py` | die Kommandozeile |

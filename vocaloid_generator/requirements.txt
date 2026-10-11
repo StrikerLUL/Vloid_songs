@@ -4,6 +4,7 @@ librosa
 matchering
 mido
 music21
+nicegui
 numpy
 pedalboard
 pretty_midi
@@ -12,6 +13,7 @@ pydub
 pyfluidsynth
 pyloudnorm
 pyttsx3
+pywebview
 pyworld
 scipy
 setuptools<81

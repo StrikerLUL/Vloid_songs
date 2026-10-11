@@ -30,6 +30,10 @@ Ohne NEUTRINO nutzt die App automatisch die lokale Vorschau-Stimme (Windows-Spra
 
 Die Instrumente werden mit dem SoundFont `soundfont.sf2` gerendert. Dafür braucht `pyfluidsynth` die FluidSynth-Bibliothek. Fehlt sie, steht im Protokoll der App „Fallback auf basic synthesis“ und die Instrumente klingen nach einfachen Sinustönen. FluidSynth gibt es unter <https://github.com/FluidSynth/fluidsynth/releases>; den `bin`-Ordner aus dem Download in den `PATH` aufnehmen.
 
+### MP3-Export
+
+Für die MP3 braucht `pydub` das Programm ffmpeg (`winget install Gyan.FFmpeg`). Ohne ffmpeg entsteht der Song nur als `final_mix.wav`, und im Protokoll steht „MP3-Export übersprungen“.
+
 ## Starten
 
 Oberfläche:

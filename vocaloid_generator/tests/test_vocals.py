@@ -1,6 +1,9 @@
 # test_vocals.py – Rendern mit/ohne VST, MusicXML für NEUTRINO und die lokale Vorschau-Stimme
 import importlib.util
+import json
 import os
+import subprocess
+import sys
 
 import numpy as np
 import pretty_midi
@@ -8,7 +11,7 @@ import pytest
 import soundfile as sf
 
 from mixer import midi_zu_wav
-from vocal_synthesizer import erstelle_musicxml, generiere_lokale_vocals
+from vocal_synthesizer import erstelle_musicxml
 
 BPM = 120
 MELODY = [(69, 1.0), (71, 1.0), (None, 0.5), (72, 1.5), (74, 1.0), (72, 2.0)]
@@ -43,17 +46,31 @@ def test_musicxml_carries_notes_and_lyrics(tmp_path):
 
 
 # ── Lokale Vorschau-Stimme (braucht eine Sprachausgabe, also Windows mit pyttsx3) ─
+APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+TTS_TIMEOUT = 120  # Sekunden; ohne angemeldeten Benutzer wartet die Windows-Sprachausgabe sonst ewig
+
+_RUN_VOCALS = """
+import json, sys
+from vocal_synthesizer import generiere_lokale_vocals
+melody, silben, bpm, wav = json.loads(sys.argv[1])
+generiere_lokale_vocals(melody, silben, bpm, wav, breathiness=0.03, shimmer=True)
+"""
+
+
 @pytest.fixture(scope="module")
 def local_vocals(tmp_path_factory):
     if importlib.util.find_spec("pyttsx3") is None:
         pytest.skip("pyttsx3 ist nicht installiert")
     wav = str(tmp_path_factory.mktemp("vocals") / "vocals.wav")
+    payload = json.dumps([MELODY, SILBEN, BPM, wav])
     try:
-        generiere_lokale_vocals(MELODY, SILBEN, BPM, wav, breathiness=0.03, shimmer=True)
-    except Exception as e:  # keine Stimme auf diesem Rechner
-        pytest.skip(f"Sprachausgabe nicht verfügbar: {e}")
-    if not os.path.exists(wav):
-        pytest.skip("Sprachausgabe hat keine Datei erzeugt")
+        run = subprocess.run([sys.executable, "-c", _RUN_VOCALS, payload], cwd=APP_DIR, timeout=TTS_TIMEOUT,
+                             capture_output=True, encoding="utf-8", errors="replace",
+                             env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+    except subprocess.TimeoutExpired:
+        pytest.skip(f"Sprachausgabe antwortet nicht innerhalb von {TTS_TIMEOUT} s")
+    if run.returncode != 0 or not os.path.exists(wav):
+        pytest.skip(f"Sprachausgabe nicht verfügbar: {run.stderr.strip().splitlines()[-1:]}")
     audio, sr = sf.read(wav)
     return (audio[:, 0] if audio.ndim > 1 else audio), sr
 

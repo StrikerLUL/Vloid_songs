@@ -487,19 +487,28 @@ def _scale_shift(scale: list, pitch: int, steps: int) -> Optional[int]:
 
 
 # ── Ganzer Song ──────────────────────────────────────────────────────────────────
-def write_vocal_melody(plan: SongPlan, lyrics: dict, rng: random.Random) -> list:
+def write_vocal_melody(plan: SongPlan, lyrics: dict, rng: random.Random, rerolls: Optional[dict] = None,
+                       imported: Optional[dict] = None) -> list:
     """
     Melodie für alle Sektionen mit Gesang. Jede Sektionsart wird einmal komponiert; spätere Vorkommen
     singen dieselbe Melodie (im Schlussrefrain höher, wenn der Song die Tonart wechselt).
+    Jede Sektionsart würfelt für sich; rerolls {Sektionsart: Zufall} schreibt nur ihre Melodie neu.
+    imported {Sektionsart: Melodie aus melody_import.load}: dort singt die eigene Melodie, Ton für Ton.
     """
+    seed = rng.getrandbits(64)
+    rerolls, imported = rerolls or {}, imported or {}
     written = {}
     notes = []
     for sec in plan.sections:
         if not sec.has_vocals:
             continue
         if sec.kind not in written:
-            writer = SectionMelodyWriter(plan, sec, rng)
-            sec_notes = writer.write(lyrics.get(sec.kind, []))
+            if imported.get(sec.kind):
+                from melody_import import fit
+                sec_notes = fit(imported[sec.kind], plan, sec, lyrics.get(sec.kind, []))
+            else:
+                kind_rng = rerolls.get(sec.kind) or random.Random(f"{seed}:{sec.kind}")
+                sec_notes = SectionMelodyWriter(plan, sec, kind_rng).write(lyrics.get(sec.kind, []))
             written[sec.kind] = (sec, sec_notes)
         else:
             first, first_notes = written[sec.kind]
@@ -507,7 +516,7 @@ def write_vocal_melody(plan: SongPlan, lyrics: dict, rng: random.Random) -> list
             sec_notes = [MelNote(n.start - first.start + sec.start, n.dur, n.pitch + shift, n.syllable, n.strong)
                          for n in first_notes]
         notes.extend(sec_notes)
-    _fit_to_chords(plan, notes)
+    _fit_to_chords(plan, [n for n in notes if not imported.get(plan.section_at(n.start).kind)])
     return notes
 
 

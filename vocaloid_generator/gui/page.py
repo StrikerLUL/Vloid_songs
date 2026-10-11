@@ -157,15 +157,24 @@ def build() -> None:
                     legend = ui.row().classes("gap-1")
                 roll = PianoRoll().classes("w-full")
             with ui.card().classes("w-full bg-grey-9"):
-                ui.label("Neu würfeln: nur dieser Teil wird neu, der Rest bleibt").classes("text-subtitle1")
+                with ui.row().classes("w-full items-center no-wrap"):
+                    ui.label("Neu würfeln: nur dieser Teil wird neu, der Rest bleibt").classes("text-subtitle1")
+                    ui.space()
+                    where = ui.select({"": "im ganzen Song", **{k: f"nur {t}" for k, t in labels.SECTIONS.items()}},
+                                      value="").props("dense outlined dark").classes("w-40").mark("reroll-where")
                 with ui.row().classes("gap-1"):
                     reroll_buttons = {}
                     for part, text in labels.PARTS.items():
-                        button = ui.button(text, icon="casino", on_click=lambda _, p=part: generate(p)) \
+                        button = ui.button(text, icon="casino", on_click=lambda _, p=part: reroll(p)) \
                             .props("outline no-caps dense").mark(f"reroll-{part}")
                         if part in labels.PART_HINTS:
                             button.tooltip(labels.PART_HINTS[part])
                         reroll_buttons[part] = button
+                with ui.row().classes("w-full items-center gap-1 q-mt-sm"):
+                    hooks_button = ui.button("3 Refrain-Melodien zur Auswahl", icon="queue_music",
+                                             on_click=lambda: hooks()).props("outline no-caps dense").mark("hooks") \
+                        .tooltip("Drei neue Melodien für den Refrain, kurz zum Anhören; der Rest des Songs bleibt")
+                    hook_row = ui.row().classes("items-center gap-1")
                 with ui.row().classes("gap-2 q-mt-sm"):
                     zip_button = ui.button("Als ZIP für die DAW", icon="archive", on_click=lambda: export_zip()) \
                         .props("flat no-caps").mark("zip")
@@ -203,7 +212,15 @@ def build() -> None:
                     panels.paths_panel(settings, picker, lambda: show_status())
 
     # ── Song erzeugen ──────────────────────────────────────────────────────────────
-    async def generate(part: Optional[str] = None) -> None:
+    async def reroll(part: str) -> None:
+        kind = where.value
+        result = state["result"]
+        if kind and result is not None and kind not in result.settings.active_sections:
+            ui.notify(f"Im Song gibt es keine Sektion {labels.SECTIONS.get(kind, kind)}.", type="warning")
+            return
+        await generate(f"{part}:{kind}" if kind else part)
+
+    async def generate(part: Optional[str] = None, n: Optional[int] = None) -> None:
         if job.running:
             return
         current = settings.model_copy(deep=True)
@@ -218,7 +235,7 @@ def build() -> None:
         save_settings()
         job.start()
         set_busy(True)
-        n = int(count.value or 1)
+        n = n or int(count.value or 1)
         try:
             if n > 1 or part:
                 results = await run.io_bound(pipeline.generate_variants, current, n, (part,) if part else (),
@@ -242,6 +259,47 @@ def build() -> None:
         if len(results) > 1:
             panel_box.set_value("Verlauf")
             ui.notify(f"{len(results)} Fassungen im Verlauf: anhören und die beste behalten", type="positive")
+
+    async def hooks() -> None:
+        if job.running:
+            return
+        current = settings.model_copy(deep=True)
+        result = state["result"]
+        if result is not None:
+            current = current.with_updates(seed=result.seed, variations=result.settings.variations)
+        job.start()
+        set_busy(True)
+        try:
+            choices = await run.io_bound(pipeline.hook_choices, current, 3, job.report)
+        except ValueError as e:
+            ui.notify(str(e), type="warning")
+            choices = None
+        except Exception as e:  # noqa: BLE001 – jeder Fehler gehört ins Protokoll und auf den Schirm
+            log.error("Refrain-Melodien fehlgeschlagen: %s", e)
+            ui.notify(f"Fehler: {e}", type="negative", multi_line=True)
+            choices = None
+        finally:
+            job.running = False
+            set_busy(False)
+        if not choices:
+            return
+        hook_row.clear()
+        with hook_row:
+            for choice in choices:
+                with ui.button_group().props("outline"):
+                    ui.button(f"Refrain {choice.number}", icon="play_arrow",
+                              on_click=lambda _, c=choice: play(f"Refrain {c.number}", c.preview)) \
+                        .props("outline no-caps dense").mark(f"hook-play-{choice.number}")
+                    ui.button("nehmen", icon="check", on_click=lambda _, c=choice: take(c)) \
+                        .props("outline no-caps dense color=secondary").mark(f"hook-take-{choice.number}")
+        await play("Refrain 1", choices[0].preview)
+
+    async def take(choice) -> None:
+        """Den ganzen Song mit dieser Refrain-Melodie erzeugen."""
+        settings.seed = choice.settings.seed
+        settings.variations = choice.settings.variations
+        hook_row.clear()
+        await generate(n=1)
 
     async def show_result(result) -> None:
         song_label.set_text(describe(result.settings))
@@ -309,7 +367,7 @@ def build() -> None:
 
     # ── Fortschritt, Protokoll, Speichern ──────────────────────────────────────────
     def set_busy(busy: bool) -> None:
-        for button in (generate_button, zip_button, *reroll_buttons.values()):
+        for button in (generate_button, zip_button, hooks_button, *reroll_buttons.values()):
             button.set_enabled(not busy)
         show_steps()
 
@@ -398,9 +456,16 @@ def build() -> None:
 
 
 def describe(s: SongSettings) -> str:
-    rerolled = ", ".join(f"{labels.PARTS.get(p, p)} {n}×" for p, n in sorted(s.variations.items()))
+    rerolled = ", ".join(f"{_part_name(p)} {n}×" for p, n in sorted(s.variations.items()))
     return (f"{s.style} · {s.bpm} BPM · {s.key} {labels.SCALES.get(s.scale, s.scale)} · Seed {s.seed}"
             + (f" · neu gewürfelt: {rerolled}" if rerolled else ""))
+
+
+def _part_name(key: str) -> str:
+    """Name zum Anzeigen: melody:Chorus → Melodie (Refrain)."""
+    part, _, kind = key.partition(":")
+    name = labels.PARTS.get(part, part)
+    return f"{name} ({labels.SECTIONS.get(kind, kind)})" if kind else name
 
 
 def _singers(settings: SongSettings) -> list:

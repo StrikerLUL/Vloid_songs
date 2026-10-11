@@ -100,7 +100,7 @@ CADENCES = {
 # ── Energie pro Sektion (0 = still, 1 = volle Band) ──────────────────────────────
 SECTION_ENERGY = {
     "Intro": 0.75, "Build-up": 0.6, "Verse": 0.45, "PreChorus": 0.65,
-    "Chorus": 0.9, "Bridge": 0.4, "Drop": 0.7, "Outro": 0.6,
+    "Chorus": 0.9, "Bridge": 0.4, "Drop": 0.7, "Solo": 0.85, "Outro": 0.6,
 }
 
 INSTRUMENT_PARTS = ("piano", "bass", "guitar", "strings", "synth", "brass", "bells", "choir", "counter", "perc", "melody")
@@ -141,6 +141,10 @@ class StyleProfile:
         """
         if feel == "breakdown":
             return self.parts.get("breakdown", {}).get(instrument)
+        if section == "Solo" and "Solo" not in self.parts:
+            # Solo: die Band spielt wie im Refrain, die Lead-Stimme improvisiert über die Hook
+            parts = {**self.parts.get("Chorus", {}), "melody": "solo", "counter": None}
+            return parts.get(instrument)
         parts = dict(self.parts.get(section, self.parts.get("Verse", {})))
         if occurrence >= 2:
             parts.update(self.parts.get(f"{section}:2", {}))
@@ -152,6 +156,8 @@ class StyleProfile:
         return self.programs.get(instrument, DEFAULT_PROGRAMS.get(instrument, 0))
 
     def groove(self, section: str) -> str:
+        if section == "Solo" and section not in self.grooves:
+            section = "Chorus"
         return self.grooves.get(section, self.grooves.get("Verse", "verse"))
 
 
@@ -167,7 +173,7 @@ STYLES = {
     "J-Pop Energy": StyleProfile(
         name="J-Pop Energy",
         programs={"piano": 0, "bass": 33, "guitar": 29, "strings": 48, "synth": 81, "brass": 61, "melody": 81,
-                  "bells": 9, "choir": 52, "counter": 48},
+                  "bells": 9, "choir": 52, "counter": 48, "solo": 29},
         drum_kit=0,
         parts={
             "Intro":       {"piano": "eighths", "bass": "driving", "guitar": "strummed", "synth": "arp", "melody": "hook",
@@ -195,7 +201,7 @@ STYLES = {
     "Dark Vocaloid": StyleProfile(
         name="Dark Vocaloid",
         programs={"piano": 0, "bass": 34, "guitar": 30, "strings": 48, "synth": 81, "brass": 61, "melody": 30,
-                  "bells": 10, "choir": 52, "counter": 40},
+                  "bells": 10, "choir": 52, "counter": 40, "solo": 30},
         drum_kit=16,
         parts={
             "Intro":       {"piano": "arpeggio16", "bass": "driving", "guitar": "power_chords", "strings": "staccato",
@@ -223,7 +229,7 @@ STYLES = {
     "Kawaii Chiptune": StyleProfile(
         name="Kawaii Chiptune",
         programs={"piano": 8, "bass": 38, "guitar": 27, "strings": 50, "synth": 80, "brass": 62, "melody": 80,
-                  "bells": 9, "choir": 54, "counter": 80},
+                  "bells": 9, "choir": 54, "counter": 80, "solo": 80},
         drum_kit=25,
         parts={
             "Intro":       {"piano": "stabs", "bass": "wobble", "synth": "arp", "melody": "hook", "bells": "sparkle16"},
@@ -243,13 +249,14 @@ STYLES = {
                  "Chorus": "four_floor", "Bridge": "halftime", "Drop": "four_floor", "Outro": "four_floor"},
         mix={**_MIX_POP, "synth": -22.5, "piano": -24.0}, reverb=_REVERB_POP,
         vocal_center=69, key_changes=(1, 2), breakdown_chance=0.3, halftime_chance=0.2, melisma=0.4,
-        voices={"synth": {"": "chip", "saw": "supersaw", "pad": "pad"}, "melody": {"": "chip"}, "counter": {"": "chip"}},
+        voices={"synth": {"": "chip", "saw": "supersaw", "pad": "pad"}, "melody": {"": "chip", "solo": "chip"},
+                "counter": {"": "chip"}},
         sidechain=0.45,
     ),
     "Rock": StyleProfile(
         name="Rock",
         programs={"piano": 0, "bass": 34, "guitar": 30, "strings": 48, "synth": 89, "brass": 61, "melody": 29,
-                  "counter": 29},
+                  "counter": 29, "solo": 29},
         drum_kit=16,
         parts={
             "Intro":       {"bass": "driving", "guitar": "power_chords", "melody": "hook"},
@@ -273,7 +280,7 @@ STYLES = {
     "Ballade": StyleProfile(
         name="Ballade",
         programs={"piano": 0, "bass": 33, "guitar": 25, "strings": 49, "synth": 89, "brass": 60, "melody": 73,
-                  "bells": 8, "choir": 52, "counter": 42},
+                  "bells": 8, "choir": 52, "counter": 42, "solo": 40},
         drum_kit=8,
         parts={
             "Intro":       {"piano": "ballad_arp", "strings": "legato", "melody": "hook", "bells": "music_box"},
@@ -301,7 +308,7 @@ STYLES = {
     "City Pop": StyleProfile(
         name="City Pop",
         programs={"piano": 5, "bass": 33, "guitar": 27, "strings": 49, "synth": 89, "brass": 61, "melody": 65,
-                  "bells": 11, "choir": 53, "counter": 66},
+                  "bells": 11, "choir": 53, "counter": 66, "solo": 66},
         drum_kit=0,
         parts={
             "Intro":       {"piano": "jazz_ch", "bass": "octaves", "guitar": "cutting", "brass": "stabs", "melody": "hook",
@@ -329,7 +336,7 @@ STYLES = {
     "Future Bass": StyleProfile(
         name="Future Bass",
         programs={"piano": 0, "bass": 38, "guitar": 27, "strings": 49, "synth": 81, "brass": 61, "melody": 81,
-                  "bells": 9, "choir": 54, "counter": 81},
+                  "bells": 9, "choir": 54, "counter": 81, "solo": 81},
         drum_kit=25,
         parts={
             "Intro":       {"synth": "fb_chords", "melody": "hook", "bells": "sparkle"},
@@ -350,12 +357,13 @@ STYLES = {
         mix={**_MIX_POP, "synth": -21.5, "bass": -19.0, "piano": -24.0}, reverb={**_REVERB_POP, "synth": 0.24},
         chord_color="add9", vocal_center=68, melisma=0.8, key_changes=(0, 0, 1), breakdown_chance=0.5,
         halftime_chance=0.0, drum_machine="808", sidechain=0.55,
-        voices={"synth": {"": "pluck", "saw": "fb_chord", "pad": "pad"}, "bass": {"": "sub"}, "melody": {"": "lead"}},
+        voices={"synth": {"": "pluck", "saw": "fb_chord", "pad": "pad"}, "bass": {"": "sub"},
+                "melody": {"": "lead", "solo": "lead"}},
     ),
     "Drum and Bass": StyleProfile(
         name="Drum and Bass",
         programs={"piano": 4, "bass": 38, "guitar": 27, "strings": 49, "synth": 89, "brass": 61, "melody": 81,
-                  "bells": 11, "choir": 52, "counter": 73},
+                  "bells": 11, "choir": 52, "counter": 73, "solo": 81},
         drum_kit=8,
         parts={
             "Intro":       {"piano": "arpeggio", "synth": "pad", "melody": "hook", "bells": "accents"},
@@ -375,12 +383,12 @@ STYLES = {
                  "Chorus": "dnb", "Bridge": "halftime", "Drop": "dnb", "Outro": "dnb"},
         mix={**_MIX_POP, "drums": -16.0, "bass": -19.0, "piano": -23.0}, reverb=_REVERB_POP,
         chord_color="seventh", key_changes=(0, 0, 1), breakdown_chance=0.5, halftime_chance=0.0, sidechain=0.3,
-        voices={"bass": {"": "reese"}, "synth": {"": "pluck", "pad": "pad"}},
+        voices={"bass": {"": "reese"}, "synth": {"": "pluck", "pad": "pad"}, "melody": {"solo": "lead"}},
     ),
     "Lo-Fi": StyleProfile(
         name="Lo-Fi",
         programs={"piano": 4, "bass": 33, "guitar": 26, "strings": 49, "synth": 89, "brass": 65, "melody": 11,
-                  "bells": 11, "choir": 52, "counter": 73},
+                  "bells": 11, "choir": 52, "counter": 73, "solo": 65},
         drum_kit=0,
         parts={
             "Intro":       {"piano": "jazz_ch", "melody": "hook"},
@@ -407,7 +415,7 @@ STYLES = {
     "Idol-Pop": StyleProfile(
         name="Idol-Pop",
         programs={"piano": 0, "bass": 33, "guitar": 27, "strings": 48, "synth": 81, "brass": 61, "melody": 81,
-                  "bells": 9, "choir": 52, "counter": 61},
+                  "bells": 9, "choir": 52, "counter": 61, "solo": 29},
         drum_kit=0,
         parts={
             "Intro":       {"piano": "eighths", "bass": "octaves", "guitar": "cutting", "brass": "stabs", "synth": "arp",

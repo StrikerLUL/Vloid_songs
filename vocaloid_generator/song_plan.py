@@ -1,15 +1,18 @@
 # song_plan.py – Der Bauplan eines Songs: Sektionen, Tonarten, Akkorde und Energie, alles in Schlägen
+import logging
 import random
 from dataclasses import dataclass, field
 from typing import Optional
 
 from styles import CADENCES, SECTION_ENERGY, StyleProfile, progressions_for
-from theory import Chord, is_minor, key_pc, parse_roman
+from theory import Chord, is_minor, key_pc, parse_chord_name, parse_roman
+
+log = logging.getLogger(__name__)
 
 BEATS_PER_BAR = 4
 SLOW_BPM = 100
 VOCAL_RANGE = (57, 79)       # A3 bis G5: Lage, in der die Melodie geschrieben wird
-SHARED_PROGRESSION = {"Intro": "Chorus", "Outro": "Chorus", "Drop": "Chorus", "Build-up": "PreChorus"}
+SHARED_PROGRESSION = {"Intro": "Chorus", "Outro": "Chorus", "Drop": "Chorus", "Solo": "Chorus", "Build-up": "PreChorus"}
 
 
 @dataclass
@@ -95,6 +98,36 @@ def _parse_progression(text: str) -> list:
     return [bar.split() for bar in text.split("|") if bar.strip()]
 
 
+def parse_custom(text: str) -> list:
+    """
+    Eigene Akkorde: Takte durch "|" getrennt ("F | G | Em Am"), ohne "|" ist jeder Akkord ein Takt ("F G Em Am").
+    Erlaubt sind Akkordnamen (Fmaj7, C/E, Bb) und Stufen (IV, vi7, bVII). Wirft ValueError bei Unbekanntem.
+    """
+    bars = _parse_progression(text) if "|" in text else [[token] for token in text.split()]
+    for bar in bars:
+        for token in bar:
+            custom_chord(token, 0, 0)
+    return bars
+
+
+def check_custom(text: str) -> str:
+    """Fehlermeldung zu eigenen Akkorden, leer wenn alles stimmt."""
+    try:
+        parse_custom(text)
+    except ValueError as e:
+        return str(e)
+    return ""
+
+
+def custom_chord(token: str, home: int, tonic: int) -> Chord:
+    """Ein eigener Akkord in einer Sektion mit Grundton tonic. Akkordnamen gelten in der Tonart home und rücken
+    mit, wenn der Schlussrefrain höher liegt; Stufen beziehen sich immer auf tonic."""
+    try:
+        return parse_roman(token, tonic)
+    except ValueError:
+        return parse_chord_name(token).transposed(tonic - home)
+
+
 def _colorize(chord: Chord, symbol: str, color: str, kind: str) -> Chord:
     """Klangfarbe des Stils: Septakkorde (City Pop) oder add9 (Ballade) statt reiner Dreiklänge."""
     if chord.quality not in ("maj", "min") or color == "triad":
@@ -124,24 +157,33 @@ def _section_bars(kind: str, bars: int, progression: list, mode_class: str, next
 
 
 def build_plan(style: StyleProfile, bpm: float, structure: list, key: str, mode: str, section_config: dict,
-               rng: random.Random, min_bars: Optional[dict] = None) -> SongPlan:
+               rng: random.Random, min_bars: Optional[dict] = None, custom_chords: Optional[dict] = None,
+               rerolls: Optional[dict] = None) -> SongPlan:
     """
     Legt Tonart, Akkorde und Energie jeder Sektion fest. Gleiche Sektionsarten bekommen dieselbe
     Akkordfolge (der zweite Refrain klingt wie der erste). Der letzte Refrain kann einen oder zwei
     Halbtöne höher liegen, wie im J-Pop üblich; dazu würfelt arrange() Breakdowns und Halftime-Teile.
     min_bars: {Sektionsart: Takte}, damit lange Liedtexte hineinpassen.
+    custom_chords: {Sektionsart: eigene Akkorde (parse_custom)}; sie gelten genau so, ohne Schlusskadenz.
+    rerolls: {Sektionsart: eigener Zufall}, um nur die Akkordfolge dieser Sektion neu zu würfeln (Intro, Outro
+    und Solo teilen sie mit dem Refrain).
     """
     tonic = key_pc(key)
     mode_class = "minor" if is_minor(mode) else "major"
     min_bars = min_bars or {}
+    custom = _own_chords(custom_chords or {})
 
     # Intro, Outro und Drop spielen den Refrain an, der Build-up baut wie der Pre-Chorus auf
     chosen, progressions = {}, {}
     for kind in dict.fromkeys(structure):
         bank = SHARED_PROGRESSION.get(kind, kind)
         if bank not in chosen:
-            chosen[bank] = rng.choice(progressions_for(style.name, mode_class, bank))
-        progressions[kind] = chosen[bank]
+            options = progressions_for(style.name, mode_class, bank)
+            chosen[bank] = rng.choice(options)
+            other = next((r for k, r in (rerolls or {}).items() if SHARED_PROGRESSION.get(k, k) == bank), None)
+            if other is not None and len(options) > 1:
+                chosen[bank] = other.choice([p for p in options if p != chosen[bank]])
+        progressions[kind] = custom.get(kind, custom.get(SHARED_PROGRESSION.get(kind, kind), (chosen[bank],)))[0]
 
     n_chorus = structure.count("Chorus")
     last_chorus_idx = max((i for i, k in enumerate(structure) if k == "Chorus"), default=-1)
@@ -170,11 +212,18 @@ def build_plan(style: StyleProfile, bpm: float, structure: list, key: str, mode:
             prev_kind=structure[idx - 1] if idx > 0 else None,
             is_last_of_kind=kind not in structure[idx + 1:],
         )
-        prog = _parse_progression(progressions[kind])
-        for b, symbols in enumerate(_section_bars(kind, bars, prog, mode_class, sec.next_kind)):
+        own = custom.get(kind) or custom.get(SHARED_PROGRESSION.get(kind, kind))
+        if own:
+            bar_symbols = [own[1][b % len(own[1])] for b in range(bars)]
+        else:
+            bar_symbols = _section_bars(kind, bars, _parse_progression(progressions[kind]), mode_class, sec.next_kind)
+        for b, symbols in enumerate(bar_symbols):
             dur = BEATS_PER_BAR / len(symbols)
             for j, sym in enumerate(symbols):
-                chord = _colorize(parse_roman(sym, sec.tonic), sym, style.chord_color, kind)
+                if own:
+                    chord = custom_chord(sym, tonic, sec.tonic)
+                else:
+                    chord = _colorize(parse_roman(sym, sec.tonic), sym, style.chord_color, kind)
                 sec.chords.append(ChordSlot(beat + b * BEATS_PER_BAR + j * dur, dur, chord))
         sections.append(sec)
         beat += sec.beats
@@ -189,6 +238,19 @@ def build_plan(style: StyleProfile, bpm: float, structure: list, key: str, mode:
     arrange(sections, style, rng)
     return SongPlan(bpm=bpm, style=style, tonic=tonic, mode=mode, sections=sections, progressions=progressions,
                     key_change=modulation)
+
+
+def _own_chords(custom_chords: dict) -> dict:
+    """{Sektionsart: (Text, Takte)} der eigenen Akkorde, die sich lesen lassen; die anderen spielen wie der Stil."""
+    own = {}
+    for kind, text in custom_chords.items():
+        if not text.strip():
+            continue
+        try:
+            own[kind] = (text.strip(), parse_custom(text))
+        except ValueError as e:
+            log.warning("Eigene Akkorde für %s nicht verstanden (%s), es spielen die Akkorde des Stils", kind, e)
+    return own
 
 
 def arrange(sections: list, style: StyleProfile, rng: random.Random) -> None:

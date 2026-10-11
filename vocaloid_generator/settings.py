@@ -14,7 +14,8 @@ INSTRUMENTS = ("piano", "bass", "guitar", "strings", "synth", "brass", "bells", 
                "drums", "melody")
 # fx: Riser, Becken-Swells und Impacts an den Übergängen (Audio, kein MIDI)
 CHANNELS = INSTRUMENTS + ("fx", "vocals", "master")
-# Teile, die sich einzeln neu würfeln lassen ("melody" ist die Gesangsmelodie, "chords" Akkorde und Ablauf)
+# Teile, die sich einzeln neu würfeln lassen ("melody" ist die Gesangsmelodie, "chords" Akkorde und Ablauf),
+# im ganzen Song ("bass") oder nur in einer Sektionsart ("melody:Chorus")
 REROLLABLE = ("chords",) + INSTRUMENTS
 CHANNEL_FIELDS = ("volume", "pan", "enabled", "mute", "solo")
 # Wählbare Spielweisen pro Instrument; "default" nimmt das Muster des Genres
@@ -101,6 +102,12 @@ class ReferenceTrack(BaseModel):
     enabled: bool = True
 
 
+def is_rerollable(key: str) -> bool:
+    """Ein Teil aus REROLLABLE, wahlweise mit Sektionsart: "bass" oder "bass:Chorus"."""
+    part, _, kind = key.partition(":")
+    return part in REROLLABLE and (not kind or kind in config.SECTION_CONFIG)
+
+
 def _default_channels() -> dict:
     return {ch: ChannelSettings(volume=DEFAULT_VOLUMES[ch], pan=_DEFAULT_PANS[ch]) for ch in CHANNELS}
 
@@ -115,8 +122,13 @@ class SongSettings(BaseModel):
     key: str = "A"
     scale: Literal["minor", "major", "dorian", "phrygian"] = "minor"
     seed: Optional[int] = Field(None, ge=0)
-    # Wie oft ein Teil bei gleichem Seed neu gewürfelt wurde; ohne Eintrag bleibt er, wie der Seed ihn macht
+    # Wie oft ein Teil bei gleichem Seed neu gewürfelt wurde; ohne Eintrag bleibt er, wie der Seed ihn macht.
+    # Schlüssel: Teil ("bass") oder Teil in einer Sektionsart ("melody:Chorus")
     variations: dict[str, int] = Field(default_factory=dict)
+    # Eigene Akkorde pro Sektionsart ("F G Em Am" oder "IV V iii vi"); leer = die Akkorde des Stils
+    custom_chords: dict[str, str] = Field(default_factory=dict)
+    melody_midi: str = ""              # eigene Melodie als MIDI-Datei (leer = komponiert)
+    melody_midi_section: str = "Chorus"    # in dieser Sektionsart singt die eigene Melodie
 
     active_sections: list[str] = Field(default_factory=lambda: [
         "Intro", "Verse", "PreChorus", "Chorus", "Verse", "PreChorus", "Chorus", "Bridge", "Chorus", "Outro"
@@ -199,7 +211,20 @@ class SongSettings(BaseModel):
     @field_validator("variations", mode="before")
     @classmethod
     def _check_variations(cls, value: dict) -> dict:
-        return {part: int(n) for part, n in (value or {}).items() if part in REROLLABLE and int(n) > 0}
+        return {part: int(n) for part, n in (value or {}).items() if is_rerollable(part) and int(n) > 0}
+
+    @field_validator("custom_chords", mode="before")
+    @classmethod
+    def _check_custom_chords(cls, value: dict) -> dict:
+        return {kind: str(text) for kind, text in (value or {}).items()
+                if kind in config.SECTION_CONFIG and str(text).strip()}
+
+    @field_validator("melody_midi_section")
+    @classmethod
+    def _check_melody_section(cls, value: str) -> str:
+        if value not in config.SECTION_CONFIG:
+            raise ValueError(f"Unbekannte Sektion: {value}")
+        return value
 
     @field_validator("channels", mode="before")
     @classmethod
@@ -232,8 +257,8 @@ class SongSettings(BaseModel):
         return {inst: self.channels[inst].style for inst in INSTRUMENTS}
 
     def rerolled(self, part: str) -> "SongSettings":
-        """Gleicher Song, nur dieser Teil wird neu gewürfelt."""
-        if part not in REROLLABLE:
+        """Gleicher Song, nur dieser Teil wird neu gewürfelt ("bass" im ganzen Song, "bass:Chorus" nur im Refrain)."""
+        if not is_rerollable(part):
             raise ValueError(f"Unbekannter Teil: {part}")
         return self.with_updates(variations={**self.variations, part: self.variations.get(part, 0) + 1})
 

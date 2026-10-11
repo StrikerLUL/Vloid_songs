@@ -93,8 +93,30 @@ def compose(settings: SongSettings, seed: Optional[int] = None):
         style=settings.style,
         vocal_range=(lo, hi),
         variations=settings.variations,
+        custom_chords=settings.custom_chords,
+        imported_melody=_own_melody(settings),
     )
     return tracks, seed
+
+
+def _own_melody(settings: SongSettings) -> dict:
+    """{Sektionsart: Melodie} aus der eigenen MIDI-Datei; ohne Datei oder wenn sie nicht passt, komponiert."""
+    if not settings.melody_midi:
+        return {}
+    import melody_import
+    if not os.path.exists(settings.melody_midi):
+        log.warning("Eigene Melodie nicht gefunden: %s. Die Melodie wird komponiert.", settings.melody_midi)
+        return {}
+    try:
+        melody = melody_import.load(settings.melody_midi)
+    except ValueError as e:
+        log.warning("Eigene Melodie nicht benutzt: %s. Die Melodie wird komponiert.", e)
+        return {}
+    if settings.melody_midi_section not in settings.active_sections:
+        log.warning("Eigene Melodie für %s, aber der Song hat keine solche Sektion", settings.melody_midi_section)
+    log.info("Eigene Melodie aus %s (%d Töne) im %s", os.path.basename(settings.melody_midi), len(melody),
+             settings.melody_midi_section)
+    return {settings.melody_midi_section: melody}
 
 
 def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None, seed: Optional[int] = None,
@@ -219,6 +241,84 @@ def generate_variants(settings: SongSettings, count: int, parts: tuple = (),
             report((i + fraction) / count, f"Variante {i + 1}/{count}: {message}" if count > 1 else message)
         results.append(generate_song(settings, progress=step))
     return results
+
+
+HOOK_BARS = 8           # so lang ist die Vorschau einer Refrain-Melodie
+HOOK_FOLDER = "refrains"
+
+
+@dataclass
+class HookChoice:
+    number: int
+    settings: SongSettings     # mit Seed und Zähler: damit entsteht der ganze Song mit dieser Melodie
+    preview: str               # kurze WAV: die Melodie als Synth über den Akkorden
+
+
+def hook_choices(settings: SongSettings, count: int = 3, progress: Optional[ProgressFn] = None) -> list:
+    """
+    count neue Refrain-Melodien zum Anhören, der Rest des Songs bleibt. Jede ist eine kurze Vorschau (Melodie
+    als Synth über Flächen und Bass), das dauert Sekunden statt Minuten. Ohne festen Seed bekommt der Song einen.
+    Wirft ValueError, wenn der Song keinen Gesang hat oder der Refrain die eigene MIDI-Melodie singt.
+    """
+    report = progress or (lambda fraction, message: None)
+    kind = hook_kind(settings)
+    if settings.melody_midi and settings.melody_midi_section == kind:
+        raise ValueError(f"Im {kind} singt deine eigene MIDI-Melodie; dort gibt es nichts zu würfeln.")
+    if settings.seed is None:
+        settings = settings.with_updates(seed=new_seed())
+    folder = os.path.join(settings.output_dir(), HOOK_FOLDER)
+    choices = []
+    for i in range(count):
+        report(i / count, f"Refrain-Melodie {i + 1}/{count}...")
+        settings = settings.rerolled(f"melody:{kind}")
+        target = os.path.join(folder, str(i + 1))
+        os.makedirs(target, exist_ok=True)
+        tracks, _ = compose(settings.with_updates(output_ordner=target))
+        preview = os.path.join(target, "refrain.wav")
+        _hook_preview(tracks, kind, preview)
+        choices.append(HookChoice(i + 1, settings, preview))
+    report(1.0, "Fertig")
+    return choices
+
+
+def hook_kind(settings: SongSettings) -> str:
+    """Der Refrain, ohne Refrain die erste Sektion mit Gesang."""
+    sung = [k for k in settings.active_sections if config.SECTION_CONFIG.get(k, {}).get("has_vocals", True)]
+    if not sung:
+        raise ValueError("Der Song hat keine Sektion mit Gesang.")
+    return "Chorus" if "Chorus" in sung else sung[0]
+
+
+def _hook_preview(tracks: dict, kind: str, path: str) -> None:
+    """Die ersten HOOK_BARS Takte der Sektion: Melodie als Lead-Synth, dazu Akkorde als Fläche und Bass."""
+    import pretty_midi
+    import soundfile as sf
+    from song_plan import BEATS_PER_BAR
+    from synth_engine import SAMPLE_RATE, render_notes
+    from theory import voice_chord
+    plan = tracks["plan"]
+    sec = next(s for s in plan.sections if s.kind == kind)
+    spb = plan.seconds_per_beat
+    t0, t1 = sec.start * spb, min(sec.end, sec.start + HOOK_BARS * BEATS_PER_BAR) * spb
+
+    def note(velocity: int, pitch: int, start: float, end: float) -> pretty_midi.Note:
+        return pretty_midi.Note(velocity=velocity, pitch=pitch, start=start - t0, end=min(end, t1) - t0)
+
+    lead = [note(105, n.pitch, n.start, n.end) for n in tracks["vocal_melody"] if t0 <= n.start < t1]
+    pad, bass, previous = [], [], None
+    for slot in sec.chords:
+        start, end = slot.start * spb, (slot.start + slot.dur) * spb
+        if start >= t1:
+            break
+        previous = voice_chord(slot.chord, 52, 72, 4, previous)
+        pad += [note(70, p, start, end) for p in previous]
+        root = slot.chord.root if slot.chord.bass is None else slot.chord.bass
+        bass.append(note(90, 36 + root, start, end))
+    length = int((t1 - t0 + 1.0) * SAMPLE_RATE)
+    mix = (render_notes(lead, "lead", length) + 0.45 * render_notes(pad, "pad", length)
+           + 0.6 * render_notes(bass, "sub", length))
+    peak = float(np.max(np.abs(mix))) or 1.0
+    sf.write(path, (mix * (0.89 / peak)).T, SAMPLE_RATE)
 
 
 VOCAL_FILES = ("vocals.wav", "vocals_duett_1.wav", "vocals_duett_2.wav", "vocals_harmony.wav", "vocals_chor.wav")

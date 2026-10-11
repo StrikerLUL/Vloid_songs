@@ -62,11 +62,13 @@ def test_final_chorus_adds_choir_and_bells_double_the_hook(song):
 
 
 def test_countermelody_only_answers_in_gaps(song):
-    """Die Gegenstimme spielt nie gleichzeitig mit einer kurzen Gesangsnote."""
+    """Die Gegenstimme spielt nie gleichzeitig mit einer kurzen Gesangsnote (bis auf die Ungenauigkeit beim Spielen)."""
+    from orchestrator import TIMING_SPREAD
+    loose = 2.5 * TIMING_SPREAD["counter"] + 1e-3
     for n in song["counter"]:
         for m in song["vocal_melody"]:
             short = (m.end - m.start) < 1.5 * 60.0 / song["plan"].bpm
-            assert not (short and m.start < n.end - 1e-3 and n.start < m.end - 1e-3)
+            assert not (short and m.start < n.end - loose and n.start < m.end - loose)
 
 
 def test_countermelody_stays_in_key(song):

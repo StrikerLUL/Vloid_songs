@@ -5,10 +5,28 @@ import logging
 import sys
 
 import history
-from pipeline import from_references, generate_song, generate_variants
-from settings import KEYS, REROLLABLE, ReferenceTrack, SongSettings
+from pipeline import from_references, generate_song, generate_variants, hook_choices, hook_kind
+from settings import KEYS, REROLLABLE, ReferenceTrack, SongSettings, is_rerollable
 
 log = logging.getLogger("vocaloid")
+
+
+def _rerollable(text: str) -> str:
+    if not is_rerollable(text):
+        raise argparse.ArgumentTypeError(f"unbekannter Teil: {text}")
+    return text
+
+
+def _custom_chords(text: str) -> tuple:
+    import config
+    from song_plan import check_custom
+    kind, sep, chords = text.partition("=")
+    if not sep or kind not in config.SECTION_CONFIG:
+        raise argparse.ArgumentTypeError(f"erwartet SEKTION=AKKORDE, z. B. 'Chorus=F G Em Am': {text}")
+    error = check_custom(chords) if chords.strip() else ""
+    if error:
+        raise argparse.ArgumentTypeError(error)
+    return kind, chords
 
 
 def parse_args(argv=None):
@@ -45,9 +63,19 @@ def parse_args(argv=None):
     p.add_argument("--verlauf", action="store_true", help="die letzten Songs auflisten und beenden")
     p.add_argument("--aus-verlauf", type=int, metavar="NR",
                    help="Einstellungen und Seed eines Songs aus dem Verlauf nehmen (1 = der neueste)")
-    p.add_argument("--neu", action="append", choices=REROLLABLE, metavar="TEIL",
+    p.add_argument("--neu", action="append", type=_rerollable, metavar="TEIL[:SEKTION]",
                    help="nur diesen Teil neu würfeln, der Rest bleibt (mehrfach möglich): " + ", ".join(REROLLABLE)
-                   + ". Ohne --seed und --aus-verlauf gilt der letzte Song.")
+                   + "; mit :SEKTION nur dort, z. B. melody:Chorus. Ohne --seed und --aus-verlauf gilt der letzte Song.")
+    p.add_argument("--refrains", type=int, metavar="N",
+                   help="N neue Refrain-Melodien als kurze Vorschau (WAV) schreiben, ohne den ganzen Song")
+    p.add_argument("--refrain", type=int, metavar="NR",
+                   help="den ganzen Song mit dieser Refrain-Melodie erzeugen (Nummer aus der Ausgabe von --refrains, "
+                        "mit demselben --seed)")
+    p.add_argument("--akkorde", action="append", type=_custom_chords, metavar="SEKTION=AKKORDE",
+                   help="eigene Akkorde, z. B. 'Chorus=F G Em Am' oder 'Verse=vi IV I V' (mehrfach möglich, "
+                        "'Chorus=' nimmt wieder die des Stils)")
+    p.add_argument("--melodie-midi", metavar="DATEI", help="eigene Melodie als MIDI-Datei ('' = komponieren)")
+    p.add_argument("--melodie-sektion", metavar="SEKTION", help="dort singt die eigene Melodie (Standard: Chorus)")
     p.add_argument("--varianten", type=int, default=1, metavar="N",
                    help="N Songs am Stück erzeugen; mit --neu N Fassungen der gewählten Teile")
     p.add_argument("--zip", metavar="DATEI", help="den Song mit allen Spuren als ZIP für eine DAW exportieren")
@@ -82,7 +110,12 @@ def main(argv=None) -> int:
                  "breaths": False if args.ohne_atmer else None, "echo_throws": False if args.ohne_echo else None,
                  "final_choir": False if args.ohne_chor else None,
                  "guitar_amp": False if args.ohne_verstaerker else None, "cabinet_ir": args.box,
-                 "lofi_texture": False if args.ohne_lofi_klang else None}
+                 "lofi_texture": False if args.ohne_lofi_klang else None,
+                 "melody_midi": args.melodie_midi, "melody_midi_section": args.melodie_sektion}
+    if args.akkorde:
+        overrides["custom_chords"] = {**settings.custom_chords, **dict(args.akkorde)}
+    if args.refrain:
+        overrides["variations"] = {**settings.variations, f"melody:{hook_kind(settings)}": args.refrain}
     if args.schlagzeug:
         channels = {ch: data.model_dump() for ch, data in settings.channels.items()}
         channels["drums"]["style"] = args.schlagzeug
@@ -97,6 +130,8 @@ def main(argv=None) -> int:
     def progress(f, msg):
         log.info("[%3d%%] %s", round(f * 100), msg)
 
+    if args.refrains:
+        return _hooks(settings, args.refrains, progress)
     try:
         if args.varianten > 1 or parts:
             results = generate_variants(settings, args.varianten, parts, progress=progress)
@@ -111,6 +146,19 @@ def main(argv=None) -> int:
     if args.zip:
         from exporter import exportiere_projekt
         log.info("ZIP: %s", exportiere_projekt(results[-1], args.zip))
+    return 0
+
+
+def _hooks(settings: SongSettings, count: int, progress) -> int:
+    try:
+        choices = hook_choices(settings, count, progress)
+    except ValueError as e:
+        log.error("%s", e)
+        return 1
+    key = f"melody:{hook_kind(settings)}"
+    for choice in choices:
+        log.info("Refrain %d: %s  (ganzer Song: --seed %d --refrain %d)", choice.number, choice.preview,
+                 choice.settings.seed, choice.settings.variations[key])
     return 0
 
 

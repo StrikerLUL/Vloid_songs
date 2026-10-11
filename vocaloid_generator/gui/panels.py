@@ -60,6 +60,12 @@ def song_panel(s: SongSettings, pick: PickFn, apply_template: Callable[[SongSett
     section_title("Ablauf")
     structure_editor(s)
 
+    section_title("Eigene Akkorde")
+    chords_editor(s)
+
+    section_title("Eigene Melodie")
+    melody_editor(s, pick)
+
     section_title("Vorbild-Songs")
     reference_editor(s, pick, apply_template)
 
@@ -98,6 +104,33 @@ def structure_editor(s: SongSettings) -> None:
         chips.refresh()
 
     chips()
+
+
+CHORD_KINDS = ("Verse", "PreChorus", "Chorus", "Bridge")
+
+
+def chords_editor(s: SongSettings) -> None:
+    from song_plan import check_custom
+    hint("Akkordnamen (F G Em Am, C/E, Bbmaj7) oder Stufen (IV V iii vi). Mit | trennst du Takte "
+         "(„F | G | Em Am“), sonst ist jeder Akkord ein Takt. Leer = die Akkorde des Stils. "
+         "Intro, Outro und Solo spielen die des Refrains.")
+    for kind in CHORD_KINDS:
+        ui.input(labels.SECTIONS[kind], placeholder="wie der Stil", validation=lambda v: check_custom(v or "") or None) \
+            .bind_value(s, "custom_chords", forward=lambda v, k=kind: {**s.custom_chords, k: v or ""},
+                        backward=lambda chords, k=kind: chords.get(k, "")) \
+            .classes("w-full").props("dense stack-label clearable").mark(f"chords-{kind}")
+
+
+def melody_editor(s: SongSettings, pick: PickFn) -> None:
+    import config
+    sung = {k: labels.SECTIONS.get(k, k) for k, cfg in config.SECTION_CONFIG.items() if cfg.get("has_vocals", True)}
+    with ui.row().classes("w-full items-center no-wrap"):
+        ui.input("MIDI-Datei mit deiner Melodie", placeholder="leer = die Melodie wird komponiert") \
+            .bind_value(s, "melody_midi").classes("col").props("dense stack-label clearable").mark("melody-midi")
+        pick_button(pick, s, "melody_midi", file_types=("MIDI (*.mid;*.midi)",))
+    ui.select(sung, label="Singt in").bind_value(s, "melody_midi_section").classes("w-48").mark("melody-section")
+    hint("Die Spur mit den meisten Tönen zählt, auf Sechzehntel gerundet; sie wiederholt sich, bis die Sektion "
+         "voll ist, und rückt in die Stimmlage. Schreib sie in der Tonart des Songs.")
 
 
 REFERENCE_SWITCHES = (

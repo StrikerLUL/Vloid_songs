@@ -126,6 +126,12 @@ Im Tab „Mix“ wählst du, wie laut der fertige Song wird: Standard -12 LUFS, 
 
 Im Tab „Text“ steht der Text pro Sektion; rechts daneben zeigt die App, welche Silben gesungen werden. Japanisch darf ganz normal geschrieben werden, mit Kanji und ohne Leerzeichen: `夜の街を歩いてた` wird zu よ る の ま ち お あ る い て た. Die Lesung der Kanji kommt aus dem Wörterbuch von fugashi (UniDic). Liest es ein Wort falsch, steht die richtige Lesung in eckigen Klammern dahinter: `君[きみ]`. Partikel singt die App so, wie man sie spricht (は als わ), und ー wird als langer Vokal gesungen.
 
+### Eigene Akkorde und eigene Melodie
+
+Im Tab „Song“ stehen unter „Eigene Akkorde“ Felder für Strophe, Pre-Chorus, Refrain und Bridge. Dort gehen Akkordnamen (`F G Em Am`, `C/E`, `Bbmaj7`) oder Stufen (`IV V iii vi`); ohne `|` ist jeder Akkord ein Takt, mit `|` trennst du Takte (`F | G | Em Am`). Die Folge wiederholt sich, bis die Sektion voll ist, und klingt genau so, ohne die Schlusswendung des Stils. Intro, Outro und Solo spielen die Akkorde des Refrains. Steigt der letzte Refrain, steigen Akkordnamen mit. Leere Felder nehmen die Akkorde des Stils, Tippfehler zeigt das Feld sofort an.
+
+Unter „Eigene Melodie“ wählst du eine MIDI-Datei, zum Beispiel aus einer DAW oder von einem Keyboard eingespielt, und die Sektion, in der sie gesungen wird (Standard: Refrain). Die Spur mit den meisten Tönen zählt, auf Sechzehntel gerundet; bei Akkorden singt der höchste Ton. Die Melodie wiederholt sich, bis die Sektion voll ist (eine längere Melodie macht die Sektion länger, höchstens 16 Takte), und rückt in ganzen Oktaven in die Stimmlage. Sie wird nicht in die Tonart umgerechnet: Schreib sie in der Tonart des Songs. Der Text wird Silbe für Silbe auf die Töne gelegt. Feld leeren, dann wird wieder komponiert.
+
 ### MP3-Export
 
 Für die MP3 braucht `pydub` das Programm ffmpeg (`winget install Gyan.FFmpeg`). Ohne ffmpeg entsteht der Song nur als `final_mix.wav`, und im Protokoll steht „MP3-Export übersprungen“.
@@ -143,7 +149,8 @@ Oder einfach `Vloid Songs starten.bat` im Projektordner doppelklicken. Die App �
 - **Song erzeugen** (oben rechts) macht einen neuen Song. Daneben wählst du, wie viele Fassungen am Stück entstehen; alle landen im Verlauf.
 - **Player:** Der fertige Song spielt mit Wellenform; ein Klick in die Wellenform springt an diese Stelle. Unter „Anhören“ hörst du jede Spur einzeln, an derselben Stelle im Song.
 - **Noten:** die Piano-Roll aller Spuren mit Tonhöhe, sie läuft beim Abspielen mit. Ein Klick auf eine Spur in der Legende blendet sie aus, ein Klick in die Noten springt im Player dorthin.
-- **Neu würfeln:** Ein Knopf pro Teil (Melodie, Akkorde, Schlagzeug, jedes Instrument). Nur dieser Teil wird neu, der Rest des Songs bleibt.
+- **Neu würfeln:** Ein Knopf pro Teil (Melodie, Akkorde, Schlagzeug, jedes Instrument). Nur dieser Teil wird neu, der Rest des Songs bleibt. Rechts darüber wählst du, wo: im ganzen Song oder nur in einer Sektion, etwa nur die Melodie im Refrain oder nur das Schlagzeug in der Strophe.
+- **3 Refrain-Melodien zur Auswahl:** drei neue Melodien für den Refrain als kurze Vorschau (Melodie als Synth über den Akkorden, in Sekunden fertig). Anhören, „nehmen“ drücken, und der ganze Song entsteht mit dieser Melodie.
 - **Seed festhalten:** Danach macht „Song erzeugen“ wieder diesen Song, mit allem, was du inzwischen geändert hast (Mix, Gesang, Text). Das Seed-Feld im Tab „Song“ leeren, dann gibt es wieder jedes Mal einen neuen Song.
 - **Als ZIP für die DAW:** alle Spuren als WAV und MIDI, siehe unten.
 - **Tabs rechts:** Song (Stil, Tempo, Tonart, Ablauf, Vorbild-Songs, eigene Vorlagen), Text (mit Vorschau, wie gesungen wird), Band (Spielweise, Lautstärke, Panorama, Mute/Solo pro Spur, Klang von Schlagzeug, Gitarren und VST-Instrument), Gesang, Mix, Verlauf und Pfade.
@@ -162,7 +169,10 @@ uv run vocaloid_generator\main.py --style Rock --bpm 140 --key E --scale minor -
 | `--bpm`, `--style`, `--key`, `--scale` | überschreiben die gespeicherten Einstellungen für diesen Lauf |
 | `--output` | Ausgabeordner |
 | `--settings` | eine andere Einstellungsdatei verwenden |
-| `--neu TEIL` | nur diesen Teil des letzten Songs neu würfeln, der Rest bleibt; mehrfach möglich |
+| `--neu TEIL[:SEKTION]` | nur diesen Teil des letzten Songs neu würfeln, der Rest bleibt; mit `:Chorus` nur im Refrain; mehrfach möglich |
+| `--refrains N`, `--refrain NR` | N Refrain-Melodien als kurze Vorschau schreiben; mit `--refrain` und demselben `--seed` entsteht der ganze Song mit einer davon |
+| `--akkorde SEKTION=AKKORDE` | eigene Akkorde, z. B. `"Chorus=F G Em Am"`; mehrfach möglich, `"Chorus="` nimmt wieder die des Stils |
+| `--melodie-midi DATEI`, `--melodie-sektion SEKTION` | eigene Melodie aus einer MIDI-Datei, gesungen im Refrain oder in der angegebenen Sektion |
 | `--varianten N` | N Songs am Stück erzeugen; mit `--neu` N Fassungen der gewählten Teile |
 | `--verlauf` | die letzten Songs auflisten |
 | `--aus-verlauf NR` | Einstellungen und Seed eines Songs aus dem Verlauf nehmen (1 = der neueste) |
@@ -187,16 +197,19 @@ Die fertigen Dateien landen in `vocaloid_generator\output\` (oder im Ordner aus 
 
 Jeder fertige Song landet zusätzlich im Unterordner `verlauf\`: die MP3 und daneben eine JSON-Datei mit allen Einstellungen und dem Seed. Die 30 neuesten Songs bleiben dort, als Favorit markierte immer.
 
-Gefällt dir alles außer einem Teil, wird nur dieser neu gewürfelt. Teile sind `chords` (Akkorde und Ablauf), `melody` (Gesangsmelodie) und jedes Instrument: `piano`, `bass`, `guitar`, `strings`, `synth`, `brass`, `bells`, `choir`, `counter`, `perc`, `drums`.
+Gefällt dir alles außer einem Teil, wird nur dieser neu gewürfelt. Teile sind `chords` (Akkorde und Ablauf), `melody` (Gesangsmelodie, im Solo das Solo) und jedes Instrument: `piano`, `bass`, `guitar`, `strings`, `synth`, `brass`, `bells`, `choir`, `counter`, `perc`, `drums`. Mit einer Sektion dahinter (`melody:Chorus`, `drums:Verse`, `chords:Bridge`) wird der Teil nur dort neu; Sektionen sind `Intro`, `Build-up`, `Verse`, `PreChorus`, `Chorus`, `Bridge`, `Drop`, `Solo` und `Outro`.
 
 ```powershell
 uv run vocaloid_generator\main.py --neu melody                  # der letzte Song mit neuer Melodie
 uv run vocaloid_generator\main.py --neu drums --varianten 3     # drei Schlagzeug-Fassungen zur Auswahl
+uv run vocaloid_generator\main.py --neu melody:Chorus          # nur die Refrain-Melodie neu
+uv run vocaloid_generator\main.py --seed 42 --refrains 3       # drei Refrain-Melodien zum Anhören
+uv run vocaloid_generator\main.py --seed 42 --refrain 2        # der ganze Song mit der zweiten
 uv run vocaloid_generator\main.py --varianten 3                 # drei ganz neue Songs
 uv run vocaloid_generator\main.py --aus-verlauf 2 --zip song.zip
 ```
 
-Neue Akkorde ändern auch alles, was auf den Akkorden spielt; eine neue Melodie ändert die Gegenstimme mit, weil sie der Melodie antwortet.
+Neue Akkorde ändern auch alles, was auf den Akkorden spielt; eine neue Melodie ändert die Gegenstimme mit, weil sie der Melodie antwortet. Die Refrain-Melodie spielt auch im Intro, Outro und Solo, also werden sie mit ihr neu.
 
 Die ZIP-Datei enthält den Mix, jede Spur als WAV (`Spuren\`) und MIDI (`MIDI\`), die Gesangsnoten als MusicXML und UST (`Gesang\`), `einstellungen.json` und `song.txt` mit Tempo und Tonart. Alle Spuren starten bei 0:00 und lassen sich so in jede DAW ziehen.
 
@@ -223,6 +236,8 @@ Auch der Ablauf ändert sich von Song zu Song. Je nach Stil und Zufall steigt de
 
 Im Tab „Band“ lässt sich pro Instrument eine andere Spielweise wählen, beim Schlagzeug der Klang. „wie der Stil“ nimmt die des Stils.
 
+Die Sektion „Solo“ (im Tab „Song“ unter „Ablauf“ anhängen) ist ein Instrumental-Solo über den Akkorden des Refrains: Die Band spielt wie im Refrain, die Lead-Stimme spielt in Frage und Antwort, die Fragen zitieren die Hook, die Antworten werden zum Ende dichter und höher, und am Schluss läuft sie hinauf zum Grundton. Je nach Stil spielt das Solo eine verzerrte Gitarre (J-Pop, Rock, Dark, Idol-Pop), ein Chip-Synth (Kawaii), eine Geige (Ballade), ein Saxofon (City Pop, Lo-Fi) oder ein Synth-Lead (Future Bass, Drum and Bass).
+
 `--style Lo-Fi` war bisher ein anderer Name für City Pop und ist jetzt ein eigener Stil.
 
 ## So entsteht ein Song
@@ -238,7 +253,7 @@ Ohne Gesang (kein NEUTRINO, kein VOICEVOX, keine Vorschau-Stimme oder Gesang aus
 
 Die App speichert alles in `vocaloid_generator\user_settings.json`. Die alte `settings.json` wird noch gelesen, solange es keine `user_settings.json` gibt. Ungültige Werte (zum Beispiel ein Pfad, den es auf diesem Rechner nicht gibt) werden beim Laden durch Standardwerte ersetzt und im Protokoll gemeldet.
 
-Jeder erzeugte Song meldet im Protokoll seinen Seed. Mit diesem Seed lässt sich derselbe Song später noch einmal erzeugen. Seit dem Neu-Würfeln pro Teil hat jeder Teil seinen eigenen Zufall; ein Seed aus einer älteren Version ergibt deshalb einen anderen Song als damals.
+Jeder erzeugte Song meldet im Protokoll seinen Seed. Mit diesem Seed lässt sich derselbe Song später noch einmal erzeugen. Seit dem Neu-Würfeln pro Teil und pro Sektion hat jeder Teil in jeder Sektion seinen eigenen Zufall; ein Seed aus einer älteren Version ergibt deshalb einen anderen Song als damals.
 
 ## Tests
 
@@ -257,7 +272,8 @@ uv run pytest -m "not slow"   # ohne den Test, der echtes Audio rendert
 | `styles.py` | die Stile: Instrumente, Spielweisen pro Sektion, Akkordfolgen, Mix |
 | `song_plan.py` | Bauplan: Sektionen, Tonarten, Akkorde und Energie |
 | `melody_writer.py` | Gesangsmelodie mit Motiven, Refrain-Hook, Wortakzent, Melisma und Duett-Aufteilung |
-| `parts.py`, `drums.py` | Begleitung, Gegenstimme, Percussion und Schlagzeug |
+| `melody_import.py` | eigene Melodie aus einer MIDI-Datei lesen und in eine Sektion legen |
+| `parts.py`, `drums.py` | Begleitung, Gegenstimme, Solo, Percussion und Schlagzeug |
 | `orchestrator.py` | setzt alles zusammen und schreibt die MIDI-Spuren |
 | `renderer.py` | rendert MIDI mit dem SoundFont (FluidSynth oder tinysoundfont) |
 | `sound_library.py`, `setup_soundfonts.py` | welches Instrument aus welchem zusätzlichen SoundFont spielt, und deren Download |

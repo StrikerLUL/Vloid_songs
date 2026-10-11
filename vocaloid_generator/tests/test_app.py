@@ -314,3 +314,71 @@ async def test_sound_switches_and_a_vst_sound_per_part(user, monkeypatch, tmp_pa
     assert user.find(marker="vst-status-bass").elements.pop().text == "eigener Klang"
     user.find(marker="vst-forget-bass").click()
     await until(lambda: SongSettings.load().vst_sounds == {})
+
+
+async def test_rerolling_only_in_one_section(user, fake_generation):
+    await user.open("/")
+    user.find(marker="generate").click()
+    await user.should_see("Seed 1000", retries=50)
+    user.find(marker="reroll-where").elements.pop().set_value("Chorus")
+    user.find(marker="reroll-melody").click()
+    await user.should_see("Melodie (Refrain) 1×", retries=50)
+    assert fake_generation[-1].seed == 1000 and fake_generation[-1].variations == {"melody:Chorus": 1}
+
+    # Eine Sektion, die der Song nicht hat, würfelt nichts
+    user.find(marker="reroll-where").elements.pop().set_value("Solo")
+    user.find(marker="reroll-drums").click()
+    await user.should_see("keine Sektion Solo")
+    assert len(fake_generation) == 2
+
+
+async def test_choosing_one_of_three_chorus_melodies(user, fake_generation, monkeypatch, tmp_path):
+    asked = []
+
+    def fake_hooks(settings, count=3, progress=None):
+        asked.append(settings)
+        choices = []
+        for n in range(1, count + 1):
+            preview = tmp_path / f"refrain{n}.wav"
+            sf.write(str(preview), np.zeros((2205, 2), dtype=np.float32), 22050)
+            choices.append(pipeline.HookChoice(n, settings.with_updates(seed=55, variations={"melody:Chorus": n}),
+                                               str(preview)))
+        return choices
+
+    monkeypatch.setattr(pipeline, "hook_choices", fake_hooks)
+    await user.open("/")
+    user.find(marker="hooks").click()
+    await user.should_see(marker="hook-take-3", retries=50)
+    [player] = user.find(WavePlayer).elements
+    assert player.title == "Refrain 1"
+    user.find(marker="hook-play-2").click()
+    await until(lambda: player.title == "Refrain 2")
+    user.find(marker="hook-take-2").click()
+    await until(lambda: len(fake_generation) == 1)
+    assert fake_generation[0].seed == 55 and fake_generation[0].variations == {"melody:Chorus": 2}
+    await user.should_see("Melodie (Refrain) 2×", retries=50)
+
+
+async def test_hooks_that_cannot_be_made_explain_why(user, monkeypatch):
+    def refuse(settings, count=3, progress=None):
+        raise ValueError("Im Chorus singt deine eigene MIDI-Melodie")
+
+    monkeypatch.setattr(pipeline, "hook_choices", refuse)
+    await user.open("/")
+    user.find(marker="hooks").click()
+    await user.should_see("eigene MIDI-Melodie", retries=50)
+
+
+async def test_own_chords_and_melody_are_saved(user):
+    await user.open("/")
+    user.find(marker="chords-Chorus").type("F G Em Am")
+    user.find(marker="chords-Verse").type("vi IV I V")
+    await until(lambda: SongSettings.load().custom_chords == {"Chorus": "F G Em Am", "Verse": "vi IV I V"})
+    user.find(marker="chords-Chorus").clear()
+    await until(lambda: SongSettings.load().custom_chords == {"Verse": "vi IV I V"})
+    user.find(marker="chords-Bridge").type("F Fxyz")
+    await user.should_see("Unbekannter Akkord: Fxyz")
+    user.find(marker="melody-midi").type("C:/melodie.mid")
+    user.find(marker="melody-section").elements.pop().set_value("Verse")
+    await until(lambda: (SongSettings.load().melody_midi, SongSettings.load().melody_midi_section)
+                == ("C:/melodie.mid", "Verse"))

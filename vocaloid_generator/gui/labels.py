@@ -19,7 +19,7 @@ ENGINES = {"NEUTRINO": "NEUTRINO", "VOICEVOX": "VOICEVOX (kostenlos, läuft als 
            "Vorschau": "Vorschau-Stimme (ohne NEUTRINO und VOICEVOX)"}
 SECTIONS = {
     "Intro": "Intro", "Build-up": "Build-up", "Verse": "Strophe", "PreChorus": "Pre-Chorus", "Chorus": "Refrain",
-    "Bridge": "Bridge", "Drop": "Drop", "Outro": "Outro",
+    "Bridge": "Bridge", "Drop": "Drop", "Solo": "Solo", "Outro": "Outro",
 }
 STRUCTURES = {
     "Kurz": ["Intro", "Verse", "PreChorus", "Chorus", "Outro"],

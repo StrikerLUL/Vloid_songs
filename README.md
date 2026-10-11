@@ -92,7 +92,7 @@ Oberfläche:
 uv run vocaloid_generator\app.py
 ```
 
-Die App öffnet sich in einem eigenen Fenster. Geht das Fenster nicht auf (es braucht die Microsoft-Edge-WebView2-Laufzeit, die auf Windows 10 und 11 meist schon da ist), startet `uv run vocaloid_generator\app.py --browser` dieselbe Oberfläche im Browser unter http://127.0.0.1:8090.
+Oder einfach `Vloid Songs starten.bat` im Projektordner doppelklicken. Die App öffnet sich in einem eigenen Fenster. Geht das Fenster nicht auf (es braucht die Microsoft-Edge-WebView2-Laufzeit, die auf Windows 10 und 11 meist schon da ist), startet `uv run vocaloid_generator\app.py --browser` dieselbe Oberfläche im Browser unter http://127.0.0.1:8090.
 
 - **Song erzeugen** (oben rechts) macht einen neuen Song. Daneben wählst du, wie viele Fassungen am Stück entstehen; alle landen im Verlauf.
 - **Player:** Der fertige Song spielt mit Wellenform; ein Klick in die Wellenform springt an diese Stelle. Unter „Anhören“ hörst du jede Spur einzeln, an derselben Stelle im Song.

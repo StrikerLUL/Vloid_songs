@@ -6,8 +6,13 @@ NEUTRINO-windows-v3.1/
 __pycache__/
 *.pyc
 .pytest_cache/
+.ruff_cache/
+.venv/
 
-# Generated audio (regenerable)
-output/*.wav
-vocaloid_generator/output/*.wav
+# Erzeugte Songs und Spuren (lassen sich jederzeit neu erzeugen)
+output/
+vocaloid_generator/output/
 vocaloid_generator/*.wav
+
+# Persönliche Einstellungen der App
+vocaloid_generator/user_settings.json

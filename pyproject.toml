@@ -1,0 +1,50 @@
+[project]
+name = "vocaloid-generator"
+version = "0.2.0"
+description = "Erzeugt komplette Vocaloid-Songs: Komposition, Gesang, Mix und MP3"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "customtkinter>=5.2",
+    "librosa>=0.10",
+    "mido>=1.3",
+    "music21>=9",
+    "numpy>=1.24",
+    "pedalboard>=0.9",
+    "pretty_midi>=0.2.10",
+    "pydantic>=2.5",
+    "pydub>=0.25",
+    "pyfluidsynth>=1.3",
+    "pyttsx3>=2.90",
+    "pyworld>=0.3.4",
+    "scipy>=1.10",
+    # pyworld braucht pkg_resources, das ab setuptools 81 fehlt
+    "setuptools<81",
+    "soundfile>=0.12",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+]
+
+[tool.uv]
+# Die App läuft direkt aus dem Ordner vocaloid_generator/, sie wird nicht als Paket installiert
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["vocaloid_generator/tests"]
+pythonpath = ["vocaloid_generator"]
+markers = [
+    "slow: rendert echtes Audio (abwählen mit -m 'not slow')",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+src = ["vocaloid_generator"]
+
+[tool.ruff.lint]
+# Erst einmal nur echte Fehler (Syntax, undefinierte Namen); Stilregeln folgen mit dem Umbau
+select = ["E9", "F63", "F7", "F82"]

@@ -1,5 +1,6 @@
 # vocal_synthesizer.py – Vocaloid Synthesizer v4.0 (KI-Engine API Wrapper)
 # Unterstützt NEUTRINO, OpenUTAU und DiffSinger via CLI/Project-Files
+import logging
 import os
 import subprocess
 import shutil
@@ -7,6 +8,8 @@ import pretty_midi
 import numpy as np
 import soundfile as sf
 import json
+
+log = logging.getLogger(__name__)
 
 SAMPLERATE = 44100
 
@@ -17,12 +20,12 @@ def openutau_synthese(xml_pfad, output_wav_pfad, openutau_cli_pfad=r"C:\OpenUtau
     OpenUTAU unterstützt DiffSinger, VCCV, etc.
     """
     if not os.path.exists(openutau_cli_pfad):
-        print(f"[Warnung] OpenUTAU CLI nicht gefunden unter {openutau_cli_pfad}.")
+        log.warning(f"OpenUTAU CLI nicht gefunden unter {openutau_cli_pfad}.")
         return False
         
     try:
         # OpenUtau.Cli.exe kann MusicXML (.musicxml) lesen und rendern
-        print(f"[OpenUTAU] Rendere {xml_pfad}...")
+        log.info(f"[OpenUTAU] Rendere {xml_pfad}...")
         subprocess.run([
             openutau_cli_pfad,
             "render",
@@ -31,14 +34,14 @@ def openutau_synthese(xml_pfad, output_wav_pfad, openutau_cli_pfad=r"C:\OpenUtau
         ], check=True, capture_output=True, timeout=60)
         
         if os.path.exists(output_wav_pfad):
-            print(f"[OK] OpenUTAU Vocals: {output_wav_pfad}")
+            log.info(f"[OK] OpenUTAU Vocals: {output_wav_pfad}")
             return True
         return False
     except subprocess.TimeoutExpired:
-        print("[Fehler] OpenUTAU CLI hat nicht rechtzeitig geantwortet (Timeout). Nutze Fallback.")
+        log.error("OpenUTAU CLI hat nicht rechtzeitig geantwortet (Timeout). Nutze Fallback.")
         return False
     except Exception as e:
-        print(f"[Fehler] OpenUTAU Rendering fehlgeschlagen: {e}")
+        log.error(f"OpenUTAU Rendering fehlgeschlagen: {e}")
         return False
 
 # ── API für DiffSinger (OpenVPI) ─────────────────────────────────────────────
@@ -78,12 +81,13 @@ def diffsinger_synthese(melodie_daten, silben, bpm, output_wav_pfad):
     with open(ds_pfad, "w", encoding="utf-8") as f:
         json.dump(ds_data, f, indent=4, ensure_ascii=False)
         
-    print(f"[DiffSinger] Projektdatei erstellt: {ds_pfad}")
-    print("[DiffSinger] (Auto-Rendering erfordert lokale DiffSinger Python-Umgebung. Bitte .ds Datei manuell rendern oder CLI konfigurieren.)")
+    log.info(f"[DiffSinger] Projektdatei erstellt: {ds_pfad}")
+    log.info("[DiffSinger] (Auto-Rendering erfordert lokale DiffSinger Python-Umgebung. Bitte .ds Datei manuell rendern oder CLI konfigurieren.)")
     return False
 
 # ── Fallback (Pedalboard Synth) ─────────────────────────────────────────────
 def generiere_lokale_vocals(melodie_daten, silben, bpm, output_wav_pfad, **kwargs):
+    """Lokale Vorschau-Stimme (TTS + pyworld). kwargs: breathiness (0.0-0.12), shimmer (Chorus an/aus)."""
     import tempfile
     import pyttsx3
     import pyworld as pw
@@ -94,6 +98,8 @@ def generiere_lokale_vocals(melodie_daten, silben, bpm, output_wav_pfad, **kwarg
     
     SAMPLERATE = 44100
     quarter_sec = 60.0 / bpm
+    breath_level = float(kwargs.get("breathiness", 0.04)) / 10.0
+    shimmer = bool(kwargs.get("shimmer", True))
     silben_idx = 0
     final_audio = []
     temp_wav = os.path.join(tempfile.gettempdir(), "temp_tts_voc.wav")
@@ -120,7 +126,7 @@ def generiere_lokale_vocals(melodie_daten, silben, bpm, output_wav_pfad, **kwarg
         
         if pitch is None:
             noise_len = target_frames_len
-            breath = np.random.normal(0, 0.004, noise_len)
+            breath = np.random.normal(0, breath_level, noise_len) if breath_level > 0 else np.zeros(noise_len)
             b, a = butter(2, 800 / (SAMPLERATE / 2), btype='low')
             breath = filtfilt(b, a, breath)
             final_audio.append(breath.astype(np.float64))
@@ -223,7 +229,7 @@ def generiere_lokale_vocals(melodie_daten, silben, bpm, output_wav_pfad, **kwarg
             final_audio.append(sung_syllable)
             
         except Exception as e:
-            print(f"[Warnung] Vocoder Fehler für '{lyric}': {e}")
+            log.warning(f"Vocoder Fehler für '{lyric}': {e}")
             final_audio.append(np.zeros(target_frames_len, dtype=np.float64))
             prev_pitch_hz = None
     
@@ -233,12 +239,14 @@ def generiere_lokale_vocals(melodie_daten, silben, bpm, output_wav_pfad, **kwarg
     
     final_audio_np = np.concatenate(final_audio) if final_audio else np.zeros(SAMPLERATE)
     
-    board = Pedalboard([
+    effects = [
         Delay(delay_seconds=0.012, feedback=0.0, mix=0.15),
         Compressor(threshold_db=-20.0, ratio=3.0, attack_ms=5.0, release_ms=80.0),
-        Chorus(rate_hz=1.2, depth=0.08, mix=0.12),
-        Reverb(room_size=0.35, damping=0.7, wet_level=0.08, dry_level=0.95)
-    ])
+    ]
+    if shimmer:
+        effects.append(Chorus(rate_hz=1.2, depth=0.08, mix=0.12))
+    effects.append(Reverb(room_size=0.35, damping=0.7, wet_level=0.08, dry_level=0.95))
+    board = Pedalboard(effects)
     
     audio_stereo = np.vstack((final_audio_np, final_audio_np)).astype(np.float32)
     audio_stereo = board(audio_stereo, SAMPLERATE)
@@ -248,7 +256,7 @@ def generiere_lokale_vocals(melodie_daten, silben, bpm, output_wav_pfad, **kwarg
         audio_stereo = audio_stereo / peak * 0.88
     
     sf.write(output_wav_pfad, audio_stereo.T, SAMPLERATE)
-    print(f"[OK] Verbesserte KI-Vocals generiert: {output_wav_pfad}")
+    log.info(f"[OK] Verbesserte KI-Vocals generiert: {output_wav_pfad}")
 
 
 # ── MusicXML & NEUTRINO ──────────────────────────────────────────────────────
@@ -260,7 +268,7 @@ def erstelle_musicxml(melodie_daten, liedtext_silben, bpm, output_xml_pfad):
     try:
         from music21 import stream, note, tempo, meter, expressions, dynamics
     except ImportError:
-        print("[Warnung] music21 nicht installiert. MusicXML kann nicht generiert werden.")
+        log.warning("music21 nicht installiert. MusicXML kann nicht generiert werden.")
         return ""
         
     s = stream.Stream()
@@ -285,7 +293,7 @@ def erstelle_musicxml(melodie_daten, liedtext_silben, bpm, output_xml_pfad):
                 silben_index += 1
                 
     pfad = s.write("musicxml", fp=output_xml_pfad)
-    print(f"[OK] MusicXML: {pfad}")
+    log.info(f"[OK] MusicXML: {pfad}")
     return str(pfad)
 
 def extract_data_from_musicxml(xml_pfad):
@@ -328,7 +336,7 @@ def extract_data_from_musicxml(xml_pfad):
         if len(melody_data) > 0:
             return melody_data, silben, bpm
     except Exception as e:
-        print(f"[Fallback Parser] music21 parsing failed: {e}. Trying ElementTree parser...")
+        log.error(f"[Fallback Parser] music21 parsing failed: {e}. Trying ElementTree parser...")
         
     # ElementTree backup parser
     import xml.etree.ElementTree as ET
@@ -382,7 +390,7 @@ def extract_data_from_musicxml(xml_pfad):
             silben = ["a"]
         return melody_data, silben, bpm
     except Exception as ex:
-        print(f"[Fallback XML Parser] Failed to parse: {ex}")
+        log.error(f"[Fallback XML Parser] Failed to parse: {ex}")
         return [], [], bpm
 
 def neutrino_synthese(xml_pfad, output_wav_pfad, neutrino_pfad, model_pfad):
@@ -414,13 +422,13 @@ def neutrino_synthese(xml_pfad, output_wav_pfad, neutrino_pfad, model_pfad):
             tmp_w    = os.path.join(td, "temp_vocals_out.wav")
             
             # 1. MusicXML zu Label (Phoneme)
-            print("[NEUTRINO] Generating label files...")
+            log.info("[NEUTRINO] Generating label files...")
             subprocess.run(
                 [ml_exe, os.path.abspath(xml_pfad), os.path.abspath(full_l), os.path.abspath(mono_l)],
                 check=True, cwd=neutrino_pfad, capture_output=True, timeout=120)
                 
             # 2. NEUTRINO v3 generiert Akustik-Parameter
-            print("[NEUTRINO] Running neutrino.exe...")
+            log.info("[NEUTRINO] Running neutrino.exe...")
             subprocess.run(
                 [neu_exe, os.path.abspath(full_l), os.path.abspath(tim_l), os.path.abspath(f0_f),
                  os.path.abspath(mel_f), os.path.abspath(tmp_w), model_pfad, "-n", "4", "-t"],
@@ -433,11 +441,11 @@ def neutrino_synthese(xml_pfad, output_wav_pfad, neutrino_pfad, model_pfad):
             # Verify if neutrino.exe writes a wav directly (which it won't with 5 positional arguments, but let's check)
             if os.path.exists(tmp_w):
                 shutil.move(tmp_w, output_wav_pfad)
-                print(f"[OK] NEUTRINO Vocals (direct WAV): {output_wav_pfad}")
+                log.info(f"[OK] NEUTRINO Vocals (direct WAV): {output_wav_pfad}")
                 return True
                 
             # Since it doesn't write wav directly, use pyworld to synthesize the wav file from the f0 and melspec data.
-            print("[NEUTRINO] Synthesizing WAV using local vocoder (pyworld) from f0/melspec...")
+            log.info("[NEUTRINO] Synthesizing WAV using local vocoder (pyworld) from f0/melspec...")
             
             # Load f0 and melspec
             f0 = np.fromfile(f0_f, dtype=np.float32).astype(np.float64)
@@ -489,22 +497,22 @@ def neutrino_synthese(xml_pfad, output_wav_pfad, neutrino_pfad, model_pfad):
             
             os.makedirs(os.path.dirname(os.path.abspath(output_wav_pfad)), exist_ok=True)
             sf.write(output_wav_pfad, synthesized_stereo, SAMPLERATE)
-            print(f"[OK] NEUTRINO Vocals (synthesized): {output_wav_pfad}")
+            log.info(f"[OK] NEUTRINO Vocals (synthesized): {output_wav_pfad}")
             return True
             
     except Exception as e:
-        print(f"[NEUTRINO Engine Failed] Error: {e}. Executing robust fallback to local vocals...")
+        log.error(f"[NEUTRINO Engine Failed] Error: {e}. Executing robust fallback to local vocals...")
         try:
             melody_data, silben, bpm = extract_data_from_musicxml(xml_pfad)
             if len(melody_data) > 0:
                 generiere_lokale_vocals(melody_data, silben, bpm, output_wav_pfad)
-                print(f"[Fallback OK] Rendered local vocals to {output_wav_pfad}")
+                log.info(f"[Fallback OK] Rendered local vocals to {output_wav_pfad}")
                 return True
             else:
-                print("[Fallback Failed] No melody data parsed from MusicXML.")
+                log.error("[Fallback Failed] No melody data parsed from MusicXML.")
                 return False
         except Exception as ex:
-            print(f"[Fallback Failed] Critical error rendering local vocals fallback: {ex}")
+            log.error(f"[Fallback Failed] Critical error rendering local vocals fallback: {ex}")
             return False
 
 

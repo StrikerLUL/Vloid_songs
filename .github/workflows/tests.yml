@@ -1,0 +1,21 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - name: Abhängigkeiten installieren
+        run: uv sync --locked
+      - name: Ruff
+        run: uv run ruff check .
+      - name: Tests
+        run: uv run pytest -rs

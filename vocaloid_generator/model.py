@@ -1,113 +1,16 @@
 # model.py - Model for Vocaloid Music AI Generator Pro MVC
-import os
-import json
+import logging
+
+from settings import SongSettings
+
+log = logging.getLogger(__name__)
 
 class VocaloidModel:
+    """Hält die Einstellungen für die Oberfläche und meldet jede Änderung an die Beobachter.
+    Gespeichert und geprüft wird über settings.SongSettings."""
     def __init__(self):
-        # Default configuration values
-        self._bpm = 160
-        self._style = "J-Pop Energy"
-        self._energy = "Hoch"
-        self._key = "A"
-        self._scale = "minor"
-        self._singer = "MERROW"
-        self._vocal_engine = "NEUTRINO"
-        self._vst_path = ""
-        self._breathiness = 0.028
-        self._swing = 0.12
-        self._jitter = 0.02
-        self._shimmer = True
-        self._active_sections = ["Intro", "Build-up", "Verse", "PreChorus", "Chorus", "Bridge", "Outro"]
-        
-        # Default structured lyrics
-        self._lyrics = (
-            "[Verse]\nほ し が き れ い な よ る に き み の こ え が き こ え る よ う な き が し た\n\n"
-            "[Pre-Chorus]\nと ど か な い て を の ば し て も き み は と お い どこ か へ き え て し ま う\n\n"
-            "[Chorus]\nら ら ら う た お う よ き み に と ど け こ の き も ち ず っ と わ す れ な い で い て\n\n"
-            "[Bridge]\nも う す こ し だ け そ ば に い て ね わ す れ な い で き み の こ と だ け"
-        )
         self._log_text = ""
-
-        # Paths
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        self._neutrino_pfad = r"C:\Users\cilli\OneDrive\Desktop\vocaloid_musik\NEUTRINO-windows-v3.1\NEUTRINO"
-        self._soundfont_pfad = os.path.join(base_dir, "soundfont.sf2")
-        self._output_ordner = os.path.join(base_dir, "output")
-        
-        # Master FX
-        self._compressor_threshold = -20.0
-        self._compressor_ratio = 2.0
-        self._limiter_threshold = -0.3
-        
-        # Instrument volumes (default)
-        self._volume_drums = 1.0
-        self._volume_bass = 0.9
-        self._volume_piano = 0.8
-        self._volume_guitar = 0.8
-        self._volume_strings = 0.7
-        self._volume_synth = 0.7
-        self._volume_brass = 0.7
-        self._volume_melody = 0.8
-        self._volume_vocals = 1.0
-        self._volume_master = 1.0
-        
-        # Instrument panning (default)
-        self._pan_drums = 0.0
-        self._pan_bass = 0.0
-        self._pan_piano = -0.25
-        self._pan_guitar = 0.30
-        self._pan_strings = -0.40
-        self._pan_synth = 0.0
-        self._pan_brass = 0.20
-        self._pan_melody = -0.15
-        self._pan_vocals = 0.0
-        self._pan_master = 0.0
-        
-        # Instrument enableds
-        self._enabled_drums = True
-        self._enabled_bass = True
-        self._enabled_piano = True
-        self._enabled_guitar = True
-        self._enabled_strings = True
-        self._enabled_synth = True
-        self._enabled_brass = True
-        self._enabled_melody = True
-        self._enabled_vocals = True
-        self._enabled_master = True
-        
-        # Instrument mutes
-        self._mute_drums = False
-        self._mute_bass = False
-        self._mute_piano = False
-        self._mute_guitar = False
-        self._mute_strings = False
-        self._mute_synth = False
-        self._mute_brass = False
-        self._mute_melody = False
-        self._mute_vocals = False
-        self._mute_master = False
-        
-        # Instrument solos
-        self._solo_drums = False
-        self._solo_bass = False
-        self._solo_piano = False
-        self._solo_guitar = False
-        self._solo_strings = False
-        self._solo_synth = False
-        self._solo_brass = False
-        self._solo_melody = False
-        self._solo_vocals = False
-        self._solo_master = False
-        
-        # Instrument styles
-        self._style_drums = "default"
-        self._style_bass = "default"
-        self._style_piano = "default"
-        self._style_guitar = "default"
-        self._style_strings = "default"
-        self._style_synth = "default"
-        self._style_brass = "default"
-        self._style_melody = "default"
+        self._apply_flat(SongSettings().to_flat())
 
         # Observer callback list (callbacks are functions with signature callback(property_name, new_value))
         self._observers = []
@@ -568,61 +471,28 @@ class VocaloidModel:
     @style_melody.setter
     def style_melody(self, v): self._style_melody = str(v); self._notify("style_melody", str(v))
 
+    def _apply_flat(self, flat):
+        for k, v in flat.items():
+            setattr(self, f"_{k}", v)
+
+    def to_settings(self) -> SongSettings:
+        """Aktueller Stand als geprüfte SongSettings (für die Pipeline)."""
+        flat = {k: getattr(self, f"_{k}") for k in SongSettings().to_flat()}
+        return SongSettings.from_flat(flat)
+
     def save_settings(self):
-        """Persist all model settings to JSON."""
-        settings = {
-            "bpm": self._bpm,
-            "style": self._style,
-            "energy": self._energy,
-            "key": self._key,
-            "scale": self._scale,
-            "singer": self._singer,
-            "vocal_engine": self._vocal_engine,
-            "vst_path": self._vst_path,
-            "breathiness": self._breathiness,
-            "swing": self._swing,
-            "jitter": self._jitter,
-            "shimmer": self._shimmer,
-            "active_sections": self._active_sections,
-            "lyrics": self._lyrics,
-            "neutrino_pfad": self._neutrino_pfad,
-            "soundfont_pfad": self._soundfont_pfad,
-            "output_ordner": self._output_ordner,
-            "compressor_threshold": self._compressor_threshold,
-            "compressor_ratio": self._compressor_ratio,
-            "limiter_threshold": self._limiter_threshold,
-        }
-        for inst in ["piano", "bass", "guitar", "strings", "synth", "brass", "drums", "melody", "vocals", "master"]:
-            settings[f"volume_{inst}"] = getattr(self, f"_volume_{inst}")
-            settings[f"pan_{inst}"] = getattr(self, f"_pan_{inst}")
-            settings[f"enabled_{inst}"] = getattr(self, f"_enabled_{inst}")
-            settings[f"mute_{inst}"] = getattr(self, f"_mute_{inst}")
-            settings[f"solo_{inst}"] = getattr(self, f"_solo_{inst}")
-            if inst not in ["vocals", "master"]:
-                settings[f"style_{inst}"] = getattr(self, f"_style_{inst}")
-        
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        settings_path = os.path.join(base_dir, "settings.json")
+        """Speichert alle Einstellungen als JSON."""
         try:
-            with open(settings_path, "w", encoding="utf-8") as f:
-                json.dump(settings, f, indent=4, ensure_ascii=False)
-        except Exception:
-            pass
+            self.to_settings().save()
+        except Exception as e:
+            log.warning("Einstellungen konnten nicht gespeichert werden: %s", e)
 
     def load_settings(self):
-        """Load settings from JSON if it exists."""
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        settings_path = os.path.join(base_dir, "settings.json")
-        if not os.path.exists(settings_path):
-            return
-        
-        try:
-            with open(settings_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            
-            for k, v in data.items():
-                private_k = f"_{k}"
-                if hasattr(self, private_k):
-                    setattr(self, private_k, v)
-        except Exception:
-            pass
+        """Lädt gespeicherte Einstellungen (oder die alte settings.json).
+        Pfade werden aufgelöst, damit die Oberfläche die tatsächlich genutzten Ordner zeigt."""
+        settings = SongSettings.load()
+        flat = settings.to_flat()
+        flat["neutrino_pfad"] = settings.neutrino_dir()
+        flat["soundfont_pfad"] = settings.soundfont_file()
+        flat["output_ordner"] = settings.output_dir()
+        self._apply_flat(flat)

@@ -1,9 +1,21 @@
 # controller.py - Controller for Vocaloid Music AI Generator Pro MVC
+import logging
+import os
 import queue
 import threading
-import time
-import os
 from tkinter import messagebox, TclError
+
+
+class _QueueLogHandler(logging.Handler):
+    """Forwards engine log records from the worker thread into the GUI queue."""
+    def __init__(self, target_queue):
+        super().__init__(level=logging.INFO)
+        self.target_queue = target_queue
+        self.setFormatter(logging.Formatter("%(message)s"))
+
+    def emit(self, record):
+        prefix = {logging.WARNING: "[WARN] ", logging.ERROR: "[FEHLER] ", logging.CRITICAL: "[FEHLER] "}.get(record.levelno, "")
+        self.target_queue.put(("log", prefix + self.format(record)))
 
 
 class VocaloidController:
@@ -13,6 +25,10 @@ class VocaloidController:
         self.view = view
         self.queue = queue.Queue()
         self.generation_in_progress = False
+        self.last_song_path = None
+
+        # Preview player plays the mix from the configured output folder
+        self.view.song_tab.get_preview_path = lambda: os.path.join(self.model.output_ordner, "final_mix.wav")
 
         # Bind View events to Controller callbacks
         self.model.add_observer(self.model_changed)
@@ -54,6 +70,7 @@ class VocaloidController:
         self.view.settings_tab.output_dir_var.set(self.model.output_ordner)
         self.view.settings_tab.swing_var.set(self.model.swing)
         self.view.settings_tab.jitter_var.set(self.model.jitter)
+        self.view.settings_tab.vst_area.set_vst_path(self.model.vst_path)
 
     def setup_bindings(self):
         """Bind tkinter variable trace events and direct edit hooks."""
@@ -242,6 +259,7 @@ class VocaloidController:
     # VST Path update callback (legacy support)
     def handle_vst_selected(self, path):
         self.model.vst_path = path
+        self.model.save_settings()
         self.model.log_text = f"VST-Pfad geladen: {path}"
 
     # Arrangement Tab callbacks / Preset Manager integration
@@ -332,6 +350,8 @@ class VocaloidController:
             elif property_name == "jitter":
                 if self.view.settings_tab.jitter_var.get() != value:
                     self.view.settings_tab.jitter_var.set(value)
+            elif property_name == "vst_path":
+                self.view.settings_tab.vst_area.set_vst_path(value)
             elif property_name == "log_text":
                 self.view.append_log(value)
         except Exception:
@@ -365,214 +385,37 @@ class VocaloidController:
         self.view.after(100, self.poll_queue)
 
     def _run_generation_task(self):
-        """Executes the actual background generation process and pushes progress and logs to the thread queue."""
-        import os
-        from orchestrator import orchestrate_song
-        from vocal_synthesizer import erstelle_musicxml, neutrino_synthese, generiere_lokale_vocals
-        from mixer import midi_zu_wav, mische_spuren
-        from exporter import exportiere_song
-        
+        """Runs the shared pipeline in the worker thread and forwards progress and engine logs to the GUI queue."""
+        from pipeline import generate_song
+
+        handler = _QueueLogHandler(self.queue)
+        root_logger = logging.getLogger()
+        root_logger.addHandler(handler)
+        previous_level = root_logger.level
+        root_logger.setLevel(logging.INFO)
         try:
-            # 1. Read parameters from model
-            bpm = self.model.bpm
-            key = self.model.key
-            mode = self.model.scale
-            style = self.model.style
-            active_sections = self.model.active_sections
-            lyrics_text = self.model.lyrics
-            vocal_engine = self.model.vocal_engine
-            singer = self.model.singer
-            
-            # Paths
-            neutrino_path = self.model.neutrino_pfad
-            soundfont_path = self.model.soundfont_pfad
-            output_folder = self.model.output_ordner
-            
-            # Make output folder
-            os.makedirs(output_folder, exist_ok=True)
-            
-            # Put start queue status/logs
-            self.queue.put(("status", "Orchestriere Song..."))
-            self.queue.put(("log", "[10%] Starte Song-Orchestrierung..."))
-            self.queue.put(("progress", 0.1))
-            
-            # Section config template from config.py
-            import config
-            section_config = getattr(config, "SECTION_CONFIG", {})
-            
-            # 2. Orchestrate song
-            tracks = orchestrate_song(
-                genre=style,
-                bpm=bpm,
-                structure=active_sections,
-                key=key,
-                mode=mode,
-                section_config=section_config
-            )
-            
-            self.queue.put(("status", "Generiere Vocals..."))
-            self.queue.put(("log", "[30%] Song-Orchestrierung abgeschlossen. Starte Vocal-Synthese..."))
-            self.queue.put(("progress", 0.3))
-            
-            # 3. Vocals synthesis
-            melody_data = tracks.get("melody_data", [])
-            
-            # Parse syllables from lyrics
-            lyrics_sections = {"Verse": "", "Chorus": "", "PreChorus": "", "Bridge": ""}
-            current_sec = None
-            for line in lyrics_text.splitlines():
-                line_strip = line.strip()
-                if line_strip.lower() == "[verse]":
-                    current_sec = "Verse"
-                elif line_strip.lower() == "[chorus]":
-                    current_sec = "Chorus"
-                elif line_strip.lower() in ["[prechorus]", "[pre-chorus]"]:
-                    current_sec = "PreChorus"
-                elif line_strip.lower() == "[bridge]":
-                    current_sec = "Bridge"
-                elif line_strip.startswith("[") and line_strip.endswith("]"):
-                    current_sec = None
-                else:
-                    if current_sec:
-                        if lyrics_sections[current_sec]:
-                            lyrics_sections[current_sec] += "\n" + line
-                        else:
-                            lyrics_sections[current_sec] = line
-            
-            # Reconstruct syllables sequence based on active_sections
-            gesamte_silben = []
-            for sec in active_sections:
-                sec_type = "PreChorus" if sec in ["PreChorus", "Pre-Chorus"] else sec
-                if sec_type in lyrics_sections and lyrics_sections[sec_type]:
-                    sec_silben = [s for s in lyrics_sections[sec_type].split() if s]
-                    gesamte_silben.extend(sec_silben)
-            
-            # Fallback if no syllables generated
-            if not gesamte_silben:
-                default_kana = "ほ し が き れ い な よ る に き み の こ え が き こ え る よ う な き が し た"
-                gesamte_silben = default_kana.split()
-                
-            xml_pfad_vorgabe = os.path.join(output_folder, "vocals.xml")
-            vocals_wav_path = os.path.join(output_folder, "vocals.wav")
-            
-            if len(melody_data) > 0 and len(gesamte_silben) > 0:
-                xml_pfad = erstelle_musicxml(melody_data, gesamte_silben, bpm, xml_pfad_vorgabe)
-                
-                # Check vocal engine
-                if vocal_engine == "NEUTRINO":
-                    try:
-                        self.queue.put(("log", "[40%] Synthetisiere mit NEUTRINO..."))
-                        model_path = os.path.join(neutrino_path, "model", singer)
-                        success = neutrino_synthese(xml_pfad, vocals_wav_path, neutrino_path, model_path)
-                        if not success or not os.path.exists(vocals_wav_path):
-                            raise Exception("NEUTRINO synthesis returned False or output file missing")
-                    except Exception as e:
-                        self.queue.put(("log", f"[WARN] NEUTRINO synthesis failed: {e}. Falling back to local synthesis..."))
-                        generiere_lokale_vocals(melody_data, gesamte_silben, bpm, vocals_wav_path)
-                else:
-                    self.queue.put(("log", "[45%] Synthetisiere mit local TTS..."))
-                    generiere_lokale_vocals(melody_data, gesamte_silben, bpm, vocals_wav_path)
-            else:
-                self.queue.put(("log", "[WARN] No melody data or syllables found. Skipping vocals synthesis."))
-                if os.path.exists(vocals_wav_path):
-                    try:
-                        os.remove(vocals_wav_path)
-                    except Exception:
-                        pass
-                        
-            # 4. Instrument Rendering MIDI -> WAV
-            self.queue.put(("status", "Rendere MIDI-Spuren..."))
-            self.queue.put(("log", "[60%] Starte Rendering der MIDI-Spuren zu WAV..."))
-            self.queue.put(("progress", 0.6))
-            
-            instruments = ["piano", "bass", "guitar", "strings", "synth", "brass", "drums", "melody"]
-            spur_pfade = []
-            lautstaerken = []
-            
-            volumes_map = {}
-            panning_map = {}
-            solos_map = {}
-            mutes_map = {}
-            
-            for inst in instruments + ["vocals", "master"]:
-                volumes_map[inst] = getattr(self.model, f"volume_{inst}")
-                panning_map[inst] = getattr(self.model, f"pan_{inst}")
-                solos_map[inst] = getattr(self.model, f"solo_{inst}")
-                mutes_map[inst] = getattr(self.model, f"mute_{inst}")
-            
-            # Render active instruments
-            for inst in instruments:
-                mid_file = f"{inst}.mid"
-                wav_file = f"{inst}.wav"
-                mid_path = os.path.join(output_folder, mid_file)
-                wav_path = os.path.join(output_folder, wav_file)
-                
-                is_enabled = getattr(self.model, f"enabled_{inst}", True)
-                
-                if is_enabled and inst in tracks and len(tracks[inst]) > 0:
-                    self.queue.put(("log", f"[70%] Rendere {inst.upper()} zu WAV..."))
-                    is_drum = (inst == "drums")
-                    import config
-                    config.SOUNDFONT_PFAD = soundfont_path
-                    
-                    midi_zu_wav(mid_path, wav_path, is_drum=is_drum, instrument_type=inst)
-                    if os.path.exists(wav_path):
-                        spur_pfade.append(wav_path)
-                        lautstaerken.append(1.0)
-                else:
-                    if os.path.exists(wav_path):
-                        try:
-                            os.remove(wav_path)
-                        except Exception:
-                            pass
-                            
-            if os.path.exists(vocals_wav_path) and getattr(self.model, "enabled_vocals", True):
-                spur_pfade.append(vocals_wav_path)
-                lautstaerken.append(1.0)
-                
-            # 5. Mix & Master
-            self.queue.put(("status", "Mische und Mastere..."))
-            self.queue.put(("log", "[85%] Mische Spuren und wende Mastering an..."))
-            self.queue.put(("progress", 0.85))
-            
-            final_mix_path = os.path.join(output_folder, "final_mix.wav")
-            final_song_path = os.path.join(output_folder, "final_song.mp3")
-            
-            if len(spur_pfade) > 0:
-                mische_spuren(
-                    spur_pfade=spur_pfade,
-                    lautstaerken=lautstaerken,
-                    output_pfad=final_mix_path,
-                    volumes=volumes_map,
-                    panning=panning_map,
-                    mutes=mutes_map,
-                    solos=solos_map,
-                    compressor_threshold=self.model.compressor_threshold,
-                    compressor_ratio=self.model.compressor_ratio,
-                    limiter_threshold=self.model.limiter_threshold
-                )
-                
-                # Export final song to mp3
-                self.queue.put(("status", "Exportiere Song..."))
-                self.queue.put(("log", "[95%] Exportiere fertigen Song zu MP3..."))
-                self.queue.put(("progress", 0.95))
-                
-                exportiere_song(
-                    wav_pfad=final_mix_path,
-                    mp3_pfad=final_song_path
-                )
-                
-                self.queue.put(("log", "\n✦ Generierung erfolgreich abgeschlossen! ✦"))
-                self.queue.put(("log", f"Gespeichert in: {final_song_path}"))
-                self.queue.put(("status", "Fertig"))
-                self.queue.put(("done", True))
-            else:
-                raise Exception("Keine Audiospuren zum Mischen vorhanden.")
-                
+            settings = self.model.to_settings()
+
+            def report(fraction, message):
+                self.queue.put(("status", message))
+                self.queue.put(("progress", fraction))
+
+            result = generate_song(settings, progress=report)
+            song_path = result.mp3 or result.mix_wav
+            self.last_song_path = song_path
+            self.queue.put(("log", "\n✦ Generierung erfolgreich abgeschlossen! ✦"))
+            self.queue.put(("log", f"Seed: {result.seed}"))
+            self.queue.put(("log", f"Gespeichert in: {song_path}"))
+            self.queue.put(("status", "Fertig"))
+            self.queue.put(("done", True))
         except Exception as e:
-            self.queue.put(("log", f"\nERROR in background process: {str(e)}"))
+            logging.getLogger(__name__).exception("Generierung fehlgeschlagen")
+            self.queue.put(("log", f"\nFEHLER: {e}"))
             self.queue.put(("status", "Fehler"))
             self.queue.put(("done", False))
+        finally:
+            root_logger.removeHandler(handler)
+            root_logger.setLevel(previous_level)
 
     def poll_queue(self):
         """Checks the queue for incoming updates from the worker thread and updates the GUI."""
@@ -599,7 +442,7 @@ class VocaloidController:
             self.generation_in_progress = False
             self.view.generate_btn.configure(state="normal", text="▶  SONG GENERIEREN")
             if success:
-                messagebox.showinfo("✦ Erfolg ✦", "Song wurde erfolgreich generiert!\n→ output/final_song.mp3")
+                messagebox.showinfo("✦ Erfolg ✦", f"Song wurde erfolgreich generiert!\n→ {self.last_song_path}")
             else:
                 messagebox.showerror("Fehler", "Generierung fehlgeschlagen. Siehe Log.")
         else:

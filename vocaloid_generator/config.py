@@ -73,13 +73,15 @@ ENERGY_CURVE = {
 
 # ── Dateipfade ────────────────────────────────────────────────────────────────
 BASE_DIR        = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT       = os.path.dirname(BASE_DIR)
 SOUNDFONT_PFAD  = os.path.join(BASE_DIR, "soundfont.sf2")
 VST3_SYNTH_PFAD = r"C:\Program Files\Common Files\VST3\Surge XT.vst3"
 VST3_DRUMS_PFAD = r"C:\Program Files\Common Files\VST3\Sitala.vst3"
 OUTPUT_ORDNER   = os.path.join(BASE_DIR, "output")
 
 # ── VOCAL ENGINE ───────────────────────────────────────────────────────────────
-NEUTRINO_PFAD       = r"C:\Users\cilli\OneDrive\Desktop\vocaloid_musik\NEUTRINO-windows-v3.1\NEUTRINO"
+# Standard: der Ordner, den setup_neutrino.py im Projektordner anlegt
+NEUTRINO_PFAD       = os.path.join(REPO_ROOT, "NEUTRINO-windows-v3.1", "NEUTRINO")
 NEUTRINO_MODEL      = "MERROW"
 NEUTRINO_MODEL_PFAD = os.path.join(NEUTRINO_PFAD, "model", NEUTRINO_MODEL)
 

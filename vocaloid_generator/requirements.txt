@@ -1,5 +1,7 @@
 customtkinter
+fugashi
 librosa
+matchering
 mido
 music21
 numpy
@@ -15,3 +17,4 @@ scipy
 setuptools<81
 soundfile
 tinysoundfont
+unidic-lite

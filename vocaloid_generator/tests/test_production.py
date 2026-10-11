@@ -16,7 +16,7 @@ from orchestrator import orchestrate_song
 from pipeline import seed_everything
 from styles import get_style
 from synth_engine import VOICES, render_notes
-from vocal_synthesizer import VORLAUF_SCHLAEGE, erstelle_musicxml, neutrino_synthese, stimmlage
+from vocal_synthesizer import VORLAUF_SCHLAEGE, erstelle_musicxml, neutrino_info, neutrino_synthese, stimmlage
 
 STRUCTURE = ["Intro", "Verse", "PreChorus", "Chorus", "Verse", "PreChorus", "Chorus", "Bridge", "Chorus", "Outro"]
 
@@ -293,6 +293,22 @@ def test_neutrino_v3_takes_its_options_from_run_bat(tmp_path):
     assert args[0].endswith("full.lab") and args[1].endswith("timing.lab") and args[4].endswith(".wav")
     assert args[5].rstrip("/\\").endswith("REINA")
     assert args[6:] == ["-n", "5", "-k", "0", "-d", "3", "-t"]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="die Attrappen sind Python-Skripte, keine Windows-Programme")
+def test_style_shift_reaches_neutrino(tmp_path):
+    root = tmp_path / "NEUTRINO-windows-v3.2.5" / "NEUTRINO"
+    (root / "bin").mkdir(parents=True)
+    (root / "model" / "MERROW").mkdir(parents=True)
+    for name, body in (("musicXMLtoLabel.exe", FAKE_LABEL), ("NEUTRINO.exe", FAKE_NEUTRINO)):
+        exe = root / "bin" / name
+        exe.write_text(textwrap.dedent(body).format(python=sys.executable))
+        exe.chmod(exe.stat().st_mode | stat.S_IEXEC)
+    xml = erstelle_musicxml([(64, 4.0)], ["ら"], 240, str(tmp_path / "v.xml"))
+    neutrino_synthese(xml, str(tmp_path / "vocals.wav"), str(root), str(root / "model" / "MERROW"), style_shift=2)
+    args = eval((root / "bin" / "NEUTRINO.exe.args").read_text())
+    assert args[args.index("-k") + 1] == "2"
+    assert neutrino_info(str(root)) == "NEUTRINO v3 (v3.2.5), Stimmen: MERROW"
 
 
 def test_neutrino_failure_raises_instead_of_faking_a_voice(tmp_path):

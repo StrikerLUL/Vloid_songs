@@ -142,6 +142,24 @@ class VocaloidModel:
             self._notify("shimmer", val)
 
     @property
+    def style_shift(self): return self._style_shift
+    @style_shift.setter
+    def style_shift(self, val):
+        val = int(round(float(val)))
+        if self._style_shift != val:
+            self._style_shift = val
+            self._notify("style_shift", val)
+
+    @property
+    def reference_track(self): return self._reference_track
+    @reference_track.setter
+    def reference_track(self, val):
+        val = str(val)
+        if self._reference_track != val:
+            self._reference_track = val
+            self._notify("reference_track", val)
+
+    @property
     def harmonies(self): return self._harmonies
     @harmonies.setter
     def harmonies(self, val):

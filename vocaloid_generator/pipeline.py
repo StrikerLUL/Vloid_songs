@@ -136,6 +136,7 @@ def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None,
         bpm=settings.bpm,
         sidechain_depth=0.45 if profile.name == "Kawaii Chiptune" else 0.25,
         double_windows=_chorus_windows(tracks.get("plan")),
+        reference=settings.reference_track or None,
     )
 
     report(0.95, "Exportiere MP3...")
@@ -160,7 +161,7 @@ def _synthesize_vocals(settings: SongSettings, tracks: dict, out: str) -> Option
         log.warning("Keine Melodie oder keine Silben vorhanden, überspringe den Gesang.")
         return None
 
-    from vocal_synthesizer import erstelle_musicxml, generiere_lokale_vocals, neutrino_synthese, stimmlage
+    from vocal_synthesizer import erstelle_musicxml, generiere_lokale_vocals, neutrino_info, neutrino_synthese, stimmlage
     _, _, transpose = stimmlage(settings.singer)
     xml = erstelle_musicxml(melody_data, silben, settings.bpm, os.path.join(out, "vocals.xml"), transpose)
     harmony_wav = os.path.join(out, "vocals_harmony.wav")
@@ -169,8 +170,9 @@ def _synthesize_vocals(settings: SongSettings, tracks: dict, out: str) -> Option
     if settings.vocal_engine == "NEUTRINO" and xml:
         neutrino_dir = settings.neutrino_dir()
         model_dir = os.path.join(neutrino_dir, "model", settings.singer)
+        log.info("%s; singe mit %s", neutrino_info(neutrino_dir), settings.singer)
         try:
-            neutrino_synthese(xml, vocals_wav, neutrino_dir, model_dir)
+            neutrino_synthese(xml, vocals_wav, neutrino_dir, model_dir, style_shift=settings.style_shift)
             if settings.harmonies and tracks.get("harmony_data"):
                 _sing_harmony(settings, tracks, out, neutrino_dir, model_dir, transpose, harmony_wav)
             return vocals_wav
@@ -195,7 +197,7 @@ def _sing_harmony(settings, tracks, out, neutrino_dir, model_dir, transpose, har
     xml = erstelle_musicxml(tracks["harmony_data"], tracks["harmony_silben"], settings.bpm,
                             os.path.join(out, "vocals_harmony.xml"), transpose)
     try:
-        neutrino_synthese(xml, harmony_wav, neutrino_dir, model_dir)
+        neutrino_synthese(xml, harmony_wav, neutrino_dir, model_dir, style_shift=settings.style_shift)
         log.info("Zweite Stimme im Refrain gesungen.")
     except Exception as e:
         log.warning("Zweite Stimme fehlgeschlagen, der Song bekommt nur die Hauptstimme: %s", e)

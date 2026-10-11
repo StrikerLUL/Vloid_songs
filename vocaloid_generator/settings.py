@@ -109,6 +109,8 @@ class SongSettings(BaseModel):
     singer: str = "MERROW"
     vocal_engine: str = "NEUTRINO"
     harmonies: bool = True             # zweite Stimme im Refrain (nur mit NEUTRINO)
+    style_shift: int = Field(0, ge=-6, le=6)   # NEUTRINO StyleShift: + heller, - dunkler
+    reference_track: str = ""          # Vorbild-Song fürs Mastering (leer = normales Mastering)
     vst_path: str = ""
     breathiness: float = Field(0.028, ge=0.0, le=0.2)
     shimmer: bool = True

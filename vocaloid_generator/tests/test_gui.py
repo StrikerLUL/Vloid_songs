@@ -206,8 +206,11 @@ class TestVocaloidGeneratorMVC(unittest.TestCase):
                 self.assertIn("REINA", view.settings_tab.singer_menu.cget("values"))
                 view.settings_tab.singer_var.set("REINA")
                 view.settings_tab.harmonies_var.set(False)
+                view.settings_tab.style_shift_var.set(2)
+                view.song_tab.reference_var.set("C:/Musik/vorbild.mp3")
                 settings = model.to_settings()
                 self.assertEqual((settings.singer, settings.harmonies), ("REINA", False))
+                self.assertEqual((settings.style_shift, settings.reference_track), (2, "C:/Musik/vorbild.mp3"))
                 view.destroy()
         finally:
             root.destroy()

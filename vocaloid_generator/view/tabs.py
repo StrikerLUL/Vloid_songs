@@ -71,7 +71,22 @@ class SongTab(ctk.CTkFrame):
             fg_color="#0d1b2a", button_color="#533483", button_hover_color="#ff2a5f",
             dropdown_fg_color="#16213e", dropdown_text_color="#eaeaea", dropdown_hover_color="#533483", text_color="#eaeaea"
         )
-        self.preset_opt.pack(anchor="w", pady=(0, 15))
+        self.preset_opt.pack(anchor="w", pady=(0, 10))
+
+        # Vorbild-Song: das Mastering gleicht Klangfarbe und Lautheit an ihn an
+        lbl_ref = ctk.CTkLabel(left_panel, text="Vorbild-Song (Mastering):", text_color="#a8a8b3", font=("Segoe UI", 10, "bold"))
+        lbl_ref.pack(anchor="w", pady=(5, 2))
+        ref_frame = ctk.CTkFrame(left_panel, fg_color="transparent")
+        ref_frame.pack(anchor="w", pady=(0, 15))
+        self.reference_var = tk.StringVar(value="")
+        self.reference_entry = ctk.CTkEntry(ref_frame, textvariable=self.reference_var, width=170, placeholder_text="keiner",
+                                            fg_color="#0d1b2a", text_color="#eaeaea", border_color="#533483")
+        self.reference_entry.pack(side="left")
+        ctk.CTkButton(ref_frame, text="Wählen", width=60, fg_color="#533483", hover_color="#ff2a5f",
+                      command=self._browse_reference).pack(side="left", padx=(5, 0))
+        ctk.CTkButton(ref_frame, text="✕", width=28, fg_color="#3a3e59", hover_color="#ff2a5f",
+                      command=lambda: self.reference_var.set("")).pack(side="left", padx=(5, 0))
+        HoverTooltip(self.reference_entry, "Ein Song, wie deiner klingen soll (WAV, MP3, FLAC). Leer = normales Mastering.")
         
         # Preview Player Frame
         play_frame = ctk.CTkFrame(left_panel, fg_color="#0d1b2a", border_color="#533483", border_width=1, corner_radius=6)
@@ -132,6 +147,13 @@ class SongTab(ctk.CTkFrame):
 
     def _preset_changed(self, val):
         self.on_preset_clicked(val)
+
+    def _browse_reference(self):
+        from tkinter import filedialog
+        path = filedialog.askopenfilename(title="Vorbild-Song auswählen",
+                                          filetypes=[("Audio", "*.wav *.mp3 *.flac *.ogg"), ("Alle Dateien", "*.*")])
+        if path:
+            self.reference_var.set(path)
 
     def _add_section(self):
         sec = self.add_section_var.get()
@@ -274,9 +296,10 @@ class LyricsTab(ctk.CTkFrame):
             self.on_lyrics_changed(rebuilt)
 
     def _update_syllables(self):
-        text = self.lyrics_box.get("1.0", "end-1c").strip()
-        syllables = len([s for s in text.split() if s]) if text else 0
-        self.info_lbl.configure(text=f"Silbenanzahl (Syllable Count): {syllables}")
+        from lyrics import syllables
+        text = self.lyrics_box.get("1.0", "end-1c")
+        count = sum(len(syllables(line)) for line in text.splitlines())
+        self.info_lbl.configure(text=f"Silben: {count}")
 
     def _rebuild_lyrics(self):
         text = ""
@@ -611,6 +634,14 @@ class SettingsTab(ctk.CTkFrame):
         self.harmonies_box = ctk.CTkCheckBox(container, text="Zweite Stimme im Refrain", variable=self.harmonies_var,
                                              text_color="#eaeaea", fg_color="#533483", border_color="#00f5d4")
         self.harmonies_box.grid(row=8, column=1, padx=20, pady=(0, 12), sticky="w")
+
+        lbl_shift = ctk.CTkLabel(container, text="Klangfarbe der Stimme (StyleShift):", text_color="#a8a8b3", font=("Segoe UI", 10, "bold"))
+        lbl_shift.grid(row=9, column=0, padx=20, pady=10, sticky="e")
+        self.style_shift_var = tk.IntVar(value=0)
+        self.style_shift_slider = ctk.CTkSlider(container, from_=-6, to=6, number_of_steps=12, variable=self.style_shift_var,
+                                                width=280, button_color="#00f5d4", progress_color="#533483")
+        self.style_shift_slider.grid(row=9, column=1, padx=20, pady=10, sticky="w")
+        HoverTooltip(self.style_shift_slider, "Plus = heller und jünger, minus = dunkler. 0 = so, wie die Stimme gebaut ist. Braucht NEUTRINO mit StyleShift.")
 
     def set_singers(self, names: list) -> None:
         """Stimmen für die Auswahl; die gewählte bleibt in der Liste, auch wenn ihr Ordner fehlt."""

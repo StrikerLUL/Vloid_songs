@@ -6,17 +6,22 @@ Läuft unter Windows.
 
 ## Installation
 
-Empfohlen mit [uv](https://docs.astral.sh/uv/), das Python und alle Bibliotheken passend installiert:
+Empfohlen mit [uv](https://docs.astral.sh/uv/). Im Projektordner (dort, wo `pyproject.toml` liegt) ausführen:
 
 ```powershell
 winget install astral-sh.uv
 uv sync
 ```
 
-Ohne uv geht es auch mit pip (Python 3.10 bis 3.12):
+`uv sync` legt im Projektordner einen eigenen Ordner `.venv` mit allen Bibliotheken an. Die Python-Installation auf dem Rechner und andere Projekte bleiben unberührt.
+
+Ohne uv geht es auch mit pip (Python 3.10 bis 3.12). Auch dann in einer eigenen Umgebung installieren, damit pip keine Versionen anderer Projekte ändert:
 
 ```powershell
+python -m venv .venv
+.venv\Scripts\activate
 pip install -r vocaloid_generator\requirements.txt
+python vocaloid_generator\gui_mvc.py
 ```
 
 ### Gesang mit NEUTRINO

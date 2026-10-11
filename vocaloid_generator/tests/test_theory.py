@@ -65,13 +65,20 @@ def test_repeated_sections_share_their_chords():
     assert [c.chord for c in choruses[0].chords] == [c.chord for c in choruses[1].chords]
 
 
-def test_final_chorus_goes_up_a_semitone():
-    plan = plan_for("J-Pop Energy", "A", "minor")
+@pytest.mark.parametrize("seed", range(8))
+def test_final_chorus_changes_key_as_the_plan_says(seed):
+    plan = plan_for("J-Pop Energy", "A", "minor", seed=seed)
+    up = plan.key_change
+    assert up in get_style("J-Pop Energy").key_changes
     choruses = [s for s in plan.sections if s.kind == "Chorus"]
-    assert [s.tonic for s in choruses] == [A, A, (A + 1) % 12]
-    assert plan.sections[-1].tonic == (A + 1) % 12   # das Outro bleibt in der neuen Tonart
+    assert [s.tonic for s in choruses] == [A, A, (A + up) % 12]
+    assert plan.sections[-1].tonic == (A + up) % 12   # das Outro bleibt in der neuen Tonart
     bridge = plan.sections[choruses[-1].index - 1]
-    assert bridge.chords[-1].chord.root == (A + 1 + 7) % 12   # Dominante der neuen Tonart
+    assert bridge.chords[-1].chord.root == (A + up + 7) % 12   # Dominante der neuen Tonart
+
+
+def test_key_changes_differ_between_songs():
+    assert {plan_for("J-Pop Energy", seed=s).key_change for s in range(20)} == {0, 1, 2}
 
 
 def test_rock_stays_in_key():

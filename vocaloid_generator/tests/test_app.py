@@ -88,6 +88,7 @@ async def test_generating_shows_the_song_and_its_tracks(user, fake_generation):
     [player] = user.find(WavePlayer).elements
     assert player.title == "Mix" and player.url.startswith("/datei?pfad=")
     [roll] = user.find(PianoRoll).elements
+    await until(lambda: roll.tracks)       # die Noten liest ein Hintergrund-Thread
     assert roll.tracks[0]["name"] == "Klavier"
 
     # Der Player bekommt die Datei über die eigene Route
@@ -235,3 +236,11 @@ async def test_typical_values_of_a_style(user):
     saved = SongSettings.load()
     assert saved.active_sections == PRESETS["Ballade"]["active_sections"]
     assert saved.channels["piano"].volume == PRESETS["Ballade"]["volumes"]["piano"]
+
+
+async def test_paths_tab_tells_whether_the_extra_soundfonts_are_there(user):
+    await user.open("/")
+    user.find(marker="tab-Pfade").click()
+    await user.should_see("setup_soundfonts.py ausführen")
+    user.find(marker="sound-library-switch").elements.pop().set_value(False)
+    await until(lambda: SongSettings.load().sound_library is False)

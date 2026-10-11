@@ -8,6 +8,7 @@ nicegui
 numpy
 pedalboard
 pretty_midi
+py7zr
 pydantic
 pydub
 pyfluidsynth

@@ -22,9 +22,9 @@ STYLE_OPTIONS = {
     "piano": ("default", "chords", "eighths", "stabs", "arpeggio", "arpeggio16", "ballad_arp", "jazz_ch"),
     "bass": ("default", "root", "driving", "sync", "octaves", "wobble", "sub_pulse", "lazy"),
     "guitar": ("default", "chill_riff", "strummed", "palm_mute", "power_chords", "cutting"),
-    "strings": ("default", "legato", "build", "pizzicato", "staccato"),
+    "strings": ("default", "legato", "build", "pizzicato", "staccato", "harp"),
     "synth": ("default", "pad", "riser", "staccato_pluck", "wide_saw", "pluck", "arp", "supersaw"),
-    "brass": ("default", "stabs", "accents"),
+    "brass": ("default", "stabs", "accents", "horns"),
     "bells": ("default", "sparkle", "sparkle16", "hook_octave", "accents", "music_box"),
     "choir": ("default", "aahs", "oohs"),
     "counter": ("default", "answer", "guide", "solo"),
@@ -116,6 +116,7 @@ class SongSettings(BaseModel):
     style_shift: int = Field(0, ge=-6, le=6)   # NEUTRINO StyleShift: + heller, - dunkler
     reference_track: str = ""          # Vorbild-Song fürs Mastering (leer = normales Mastering)
     vst_path: str = ""
+    sound_library: bool = True         # bessere Klänge aus tools/soundfonts (setup_soundfonts.py), wenn vorhanden
     breathiness: float = Field(0.028, ge=0.0, le=0.2)
     shimmer: bool = True
     swing: float = Field(0.12, ge=0.0, le=0.5)

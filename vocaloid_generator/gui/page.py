@@ -257,6 +257,8 @@ def build() -> None:
         if found:
             await play(*next(iter(found.items())))
         data = await run.io_bound(media.piano_roll, result)
+        if data is None:        # die App wird gerade beendet
+            return
         roll.show(data)
         legend.clear()
         with legend:
@@ -268,8 +270,10 @@ def build() -> None:
         if not os.path.exists(path):
             ui.notify("Die Datei gibt es nicht mehr.", type="warning")
             return
-        peaks, duration = await run.io_bound(media.peaks, path)
-        player.show(file_url(path), name, peaks, duration)
+        loaded = await run.io_bound(media.peaks, path)
+        if loaded is None:      # die App wird gerade beendet
+            return
+        player.show(file_url(path), name, *loaded)
 
     def toggle_track(chip, index: int) -> None:
         hidden = set(roll.hidden)
@@ -298,6 +302,8 @@ def build() -> None:
         name = f"song_{result.settings.style.replace(' ', '-')}_{result.seed}.zip"
         target = os.path.join(result.output_dir, "export", name)
         path = await run.io_bound(exportiere_projekt, result, target)
+        if path is None:        # die App wird gerade beendet
+            return
         ui.notify(f"ZIP gespeichert: {path}", type="positive", multi_line=True)
         ui.download.file(path)
 
@@ -336,12 +342,14 @@ def build() -> None:
             log.warning("Einstellungen nicht gespeichert: %s", e)
 
     def show_status() -> None:
+        import sound_library
         from renderer import engine_name
         from vocal_synthesizer import neutrino_info
         paths_status.clear()
         with paths_status:
             ui.label(neutrino_info(settings.neutrino_dir())).classes("text-caption").mark("neutrino-info")
             ui.label(f"Instrumente mit {engine_name()}").classes("text-caption")
+            ui.label(sound_library.status()).classes("text-caption").mark("sound-library")
         singer_select.set_options(sorted(set(_singers(settings)) | {settings.singer}), value=settings.singer)
         show_history()
 

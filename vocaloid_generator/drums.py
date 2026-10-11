@@ -119,3 +119,10 @@ def drum_section(sec: Section, groove: str, rng: random.Random) -> list:
             if not any(e.pitch == KICK and abs(e.start - bar_start) < 1e-6 for e in out):
                 out.append(Ev(bar_start, 0.2, KICK, _vel(sec.energy, 1.0)))
     return out
+
+
+def lead_in(sec: Section, rng: random.Random) -> list:
+    """Breakdown ohne Schlagzeug: erst im letzten Takt holt ein Snare-Wirbel die Band zurück."""
+    if sec.bars < 1:
+        return []
+    return _fill("roll", sec.end - BEATS_PER_BAR, max(sec.energy, 0.6), rng)[0]

@@ -263,7 +263,9 @@ def _chorus_windows(plan) -> list:
     if plan is None:
         return []
     spb = plan.seconds_per_beat
-    return [(sec.start * spb, sec.end * spb) for sec in plan.sections if sec.kind == "Chorus"]
+    # im leisen Anfang eines Refrains (Breakdown) bleibt der Gesang einfach
+    return [((sec.resume if sec.feel == "breakdown" else sec.start) * spb, sec.end * spb)
+            for sec in plan.sections if sec.kind == "Chorus"]
 
 
 def _render_fx(settings: SongSettings, tracks: dict, out: str, seed: int) -> Optional[str]:
@@ -287,7 +289,11 @@ def _render_instruments(settings: SongSettings, tracks: dict, out: str, report: 
     from renderer import engine_name
     from styles import get_style
     voices = get_style(settings.style).voices
+    import sound_library
     log.info("Instrumente aus dem SoundFont mit %s", engine_name())
+    extra = sound_library.installed() if settings.sound_library and not settings.soundfont_pfad else []
+    if extra:
+        log.info("Zusätzliche SoundFonts: %s", ", ".join(extra))
     wav_files = {}
     active = [inst for inst in INSTRUMENTS if settings.channels[inst].enabled and tracks.get(inst)]
     for inst in INSTRUMENTS:
@@ -303,6 +309,7 @@ def _render_instruments(settings: SongSettings, tracks: dict, out: str, report: 
             vst_pfad=settings.vst_path if (settings.vst_path and inst in VST_TRACKS) else None,
             soundfont_pfad=settings.soundfont_file(),
             voices=voices.get(inst),
+            library=settings.sound_library and not settings.soundfont_pfad,
         )
         if os.path.exists(wav):
             wav_files[inst] = wav

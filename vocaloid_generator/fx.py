@@ -76,14 +76,17 @@ def render_fx(plan: SongPlan, seed: int = 0) -> np.ndarray:
         end = min(total, start + audio.shape[1])
         out[:, start:end] += audio[:, :end - start] * gain
 
-    for sec in plan.sections:
-        if sec.next_kind not in ("Chorus", "Drop") or sec.index == len(plan.sections) - 1:
+    for sec, nxt in zip(plan.sections, plan.sections[1:]):
+        if nxt.kind not in ("Chorus", "Drop"):
             continue
-        hit = sec.end * spb
+        # beginnt der Refrain leise (Breakdown), kommt der Übergang erst, wenn die Band wieder einsetzt
+        quiet = nxt.feel == "breakdown"
+        hit = (nxt.resume if quiet else sec.end) * spb
+        lead = (nxt.resume - nxt.start) * spb if quiet else sec.beats * spb
         swell = min(bar, 2.2)
         place(cymbal_swell(swell, rng), hit - swell, 0.6 if level == "soft" else 0.8)
         if level == "full":
-            rise = min(2 * bar, sec.beats * spb)
+            rise = min(2 * bar, lead)
             place(riser(rise, rng), hit - rise, 0.7)
             place(impact(2.5, rng), hit, 0.9)
             place(downlifter(min(2 * bar, 4.0), rng), hit, 0.45)

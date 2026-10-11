@@ -34,6 +34,10 @@ class Section:
     next_kind: Optional[str] = None
     prev_kind: Optional[str] = None
     is_last_of_kind: bool = False
+    # Abwechslung im Ablauf: "breakdown" (nur wenige Instrumente, kein Schlagzeug) oder "halftime" bis zum
+    # Schlag resume, danach spielt die Sektion wie gewohnt
+    feel: str = ""
+    resume: Optional[float] = None
 
     @property
     def beats(self) -> float:
@@ -66,6 +70,7 @@ class SongPlan:
     sections: list
     progressions: dict       # Sektionsart → gewählte Akkordfolge (Stufen)
     vocal_range: tuple = VOCAL_RANGE
+    key_change: int = 0      # Halbtöne, um die der letzte Refrain höher liegt
 
     @property
     def total_beats(self) -> float:
@@ -122,8 +127,8 @@ def build_plan(style: StyleProfile, bpm: float, structure: list, key: str, mode:
                rng: random.Random, min_bars: Optional[dict] = None) -> SongPlan:
     """
     Legt Tonart, Akkorde und Energie jeder Sektion fest. Gleiche Sektionsarten bekommen dieselbe
-    Akkordfolge (der zweite Refrain klingt wie der erste). Der letzte Refrain kann einen Halbton
-    höher liegen, wie im J-Pop üblich.
+    Akkordfolge (der zweite Refrain klingt wie der erste). Der letzte Refrain kann einen oder zwei
+    Halbtöne höher liegen, wie im J-Pop üblich; dazu würfelt arrange() Breakdowns und Halftime-Teile.
     min_bars: {Sektionsart: Takte}, damit lange Liedtexte hineinpassen.
     """
     tonic = key_pc(key)
@@ -140,7 +145,7 @@ def build_plan(style: StyleProfile, bpm: float, structure: list, key: str, mode:
 
     n_chorus = structure.count("Chorus")
     last_chorus_idx = max((i for i, k in enumerate(structure) if k == "Chorus"), default=-1)
-    modulation = style.modulate_final_chorus if n_chorus >= 2 else 0
+    modulation = rng.choice(style.key_changes) if n_chorus >= 2 else 0
 
     sections, counts, beat = [], {}, 0.0
     for idx, kind in enumerate(structure):
@@ -181,4 +186,35 @@ def build_plan(style: StyleProfile, bpm: float, structure: list, key: str, mode:
         if last.chord.root == (before.tonic + 7) % 12:
             last.chord = last.chord.transposed(modulation)
 
-    return SongPlan(bpm=bpm, style=style, tonic=tonic, mode=mode, sections=sections, progressions=progressions)
+    arrange(sections, style, rng)
+    return SongPlan(bpm=bpm, style=style, tonic=tonic, mode=mode, sections=sections, progressions=progressions,
+                    key_change=modulation)
+
+
+def arrange(sections: list, style: StyleProfile, rng: random.Random) -> None:
+    """
+    Würfelt, wo der Song vom Gewohnten abweicht, jeweils für die erste Hälfte einer Sektion:
+    der letzte Refrain beginnt leise (Ochisabi), die Bridge als Breakdown, die zweite Strophe im Halftime.
+    """
+    choruses = [s for s in sections if s.kind == "Chorus"]
+    candidates = []
+    if len(choruses) >= 2:
+        candidates.append((choruses[-1], "breakdown", style.breakdown_chance))
+    candidates += [(s, "breakdown", style.bridge_breakdown_chance) for s in sections if s.kind == "Bridge"]
+    candidates += [(s, "halftime", style.halftime_chance) for s in sections if s.kind == "Verse" and s.occurrence >= 2]
+    for sec, feel, chance in candidates:
+        if rng.random() < chance and sec.bars >= 4:
+            sec.feel = feel
+            sec.resume = sec.start + (sec.bars // 2) * BEATS_PER_BAR
+
+
+def describe_arrangement(plan: SongPlan) -> list:
+    """Was an diesem Song besonders ist, in Worten (fürs Protokoll)."""
+    out = [f"Schlussrefrain {plan.key_change} Halbton höher" if plan.key_change == 1 else
+           f"Schlussrefrain {plan.key_change} Halbtöne höher"] if plan.key_change else []
+    for sec in plan.sections:
+        if sec.feel == "breakdown":
+            out.append("leiser Anfang im letzten Refrain" if sec.kind == "Chorus" else f"{sec.kind} als Breakdown")
+        elif sec.feel == "halftime":
+            out.append(f"{sec.occurrence}. {sec.kind} beginnt im Halftime")
+    return out

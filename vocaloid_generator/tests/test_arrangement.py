@@ -122,7 +122,8 @@ def test_every_chorus_sings_the_same_hook(jpop_song):
     first, second, final = chorus_melodies(jpop_song.tracks)
     assert first == second
     assert [t for t, _ in final] == [t for t, _ in first]
-    assert all(b - a == 1 for (_, a), (_, b) in zip(first, final)), "Schlussrefrain einen Halbton höher"
+    up = jpop_song.tracks["plan"].key_change
+    assert all(b - a == up for (_, a), (_, b) in zip(first, final)), "Schlussrefrain in der neuen Tonart"
 
 
 def test_chorus_repeats_its_opening_phrase(jpop_song):
@@ -203,7 +204,8 @@ def test_chorus_starts_with_a_crash_and_kick(jpop_song):
     tracks = jpop_song.tracks
     for sec in tracks["plan"].sections:
         if sec.kind == "Chorus":
-            t0 = seconds(tracks, sec.start)
+            # beginnt der Refrain leise, setzt das Schlagzeug erst zur zweiten Hälfte ein
+            t0 = seconds(tracks, sec.resume if sec.feel == "breakdown" else sec.start)
             hits = {n.pitch for n in tracks["drums"] if abs(n.start - t0) < 0.03}
             assert {CRASH, KICK} <= hits
 

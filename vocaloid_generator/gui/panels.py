@@ -245,6 +245,9 @@ def paths_panel(s: SongSettings, pick: PickFn, status: Callable[[], None]) -> No
                 .bind_value(s, attr).classes("col").props("dense stack-label").mark(f"path-{attr}") \
                 .on("blur", lambda: status())
             pick_button(pick, s, attr, folder=folder, file_types=types, then=status)
+    ui.switch("Bessere Klänge aus den zusätzlichen SoundFonts (setup_soundfonts.py)") \
+        .bind_value(s, "sound_library").mark("sound-library-switch") \
+        .tooltip("Flügel, Streicher, Bläser, E-Gitarren und echte Schlagzeuge; gilt nur ohne eigenen SoundFont")
 
 
 def pick_button(pick: PickFn, s: SongSettings, attr: str, folder: bool = False, file_types: tuple = (),

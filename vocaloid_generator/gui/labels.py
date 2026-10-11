@@ -39,6 +39,7 @@ PLAYING = {
     "hook_octave": "Hook in der Oktave", "music_box": "Spieluhr", "aahs": "Aahs", "oohs": "Oohs",
     "answer": "antwortet dem Gesang", "guide": "begleitet den Gesang", "solo": "Solo", "shaker": "Shaker",
     "claps": "Claps", "tambourine": "Tamburin", "congas": "Congas", "cowbell": "Kuhglocke",
+    "harp": "Harfe", "timpani": "Pauken", "horns": "Hörner",
 }
 # Farben der Spuren in der Piano-Roll
 COLORS = {

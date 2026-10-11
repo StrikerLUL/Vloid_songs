@@ -17,6 +17,13 @@ def isolated_settings(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "LEGACY_SETTINGS_PATH", str(tmp_path / "settings.json"))
 
 
+@pytest.fixture(autouse=True)
+def without_sound_library(tmp_path, monkeypatch):
+    """Tests klingen gleich, ob setup_soundfonts.py gelaufen ist oder nicht: ohne zusätzliche SoundFonts."""
+    import sound_library
+    monkeypatch.setattr(sound_library, "FOLDER", str(tmp_path / "soundfonts"))
+
+
 @pytest.fixture(scope="session")
 def jpop_song(tmp_path_factory):
     """Ein kompletter J-Pop-Song mit Drop und Tonartwechsel, fest gesät."""

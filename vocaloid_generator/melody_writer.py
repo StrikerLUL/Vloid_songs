@@ -478,14 +478,14 @@ def _fit_to_chords(plan: SongPlan, notes: list) -> None:
 def harmony_line(plan: SongPlan, notes: list, kinds: tuple = ("Chorus",)) -> list:
     """
     Zweite Stimme für den Refrain: die Terz über der Melodie aus der Tonleiter; auf langen Tönen ein
-    Akkordton. Passt sie nicht mehr in die Stimmlage, singt sie darunter.
+    Akkordton. Passt sie nicht mehr in die Stimmlage, singt sie darunter. Im Breakdown schweigt sie.
     """
     lo, hi = plan.vocal_range
     out = []
     for n in notes:
         sec = plan.section_at(n.start)
-        if sec.kind not in kinds:
-            continue
+        if sec.kind not in kinds or (sec.feel == "breakdown" and n.start < sec.resume):
+            continue    # im leisen Teil singt die Stimme allein
         chord = sec.chord_at(n.start)
         scale = sorted(set(scale_pcs(sec.tonic, sec.mode)) | set(chord.pcs))
         ladder = [p for p in range(n.pitch - 12, n.pitch + 13) if p % 12 in scale]

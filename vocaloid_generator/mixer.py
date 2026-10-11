@@ -29,12 +29,14 @@ DOUBLE_CENTS, DOUBLE_DELAYS, DOUBLE_DB = 12, (0.017, 0.026), -9.0
 
 # ── Rendern ──────────────────────────────────────────────────────────────────────
 def midi_zu_wav(midi_pfad: str, wav_pfad: str, is_drum: bool = False, instrument_type: str = "piano",
-                vst_pfad: str = None, soundfont_pfad: str = None, voices: dict = None) -> None:
+                vst_pfad: str = None, soundfont_pfad: str = None, voices: dict = None,
+                library: bool = True) -> None:
     """
     MIDI → Stereo-WAV. Reihenfolge: eigenes VST3-Instrument (wenn angegeben), SoundFont über
     FluidSynth oder tinysoundfont, zuletzt eine einfache eingebaute Klangerzeugung. Die Spur wird nicht normalisiert,
     damit die Dynamik erhalten bleibt; die Pegel setzt erst der Mixer.
     voices: {Unterspur: Stimme aus synth_engine}; diese Unterspuren spielen die eigenen Synths.
+    library: bessere Klänge aus den zusätzlichen SoundFonts (sound_library), soweit vorhanden.
     """
     soundfont_pfad = soundfont_pfad or SOUNDFONT_PFAD
     midi = pretty_midi.PrettyMIDI(midi_pfad)
@@ -56,7 +58,7 @@ def midi_zu_wav(midi_pfad: str, wav_pfad: str, is_drum: bool = False, instrument
     if audio is None and os.path.exists(soundfont_pfad):
         try:
             from renderer import render_midi
-            audio = render_midi(midi, soundfont_pfad)
+            audio = render_midi(midi, soundfont_pfad, library=library)
         except Exception as e:
             log.warning("SoundFont-Rendering fehlgeschlagen (%s), nutze die einfache Klangerzeugung", e)
     elif audio is None:

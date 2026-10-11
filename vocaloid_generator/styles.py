@@ -110,6 +110,7 @@ class StyleProfile:
     breakdown_chance: float = 0.4       # letzter Refrain beginnt leise, nur mit parts["breakdown"]
     bridge_breakdown_chance: float = 0.3
     halftime_chance: float = 0.3        # zweite Strophe beginnt im Halftime
+    melisma: float = 1.0                # wie oft Phrasen mit einem Melisma enden (1 = normal)
     vocal_center: int = 67         # mittlere Gesangslage (MIDI)
     double_time_melody: bool = False
     swing: float = 0.0
@@ -225,7 +226,7 @@ STYLES = {
         grooves={"Intro": "four_floor", "Build-up": "build", "Verse": "edm_verse", "PreChorus": "build",
                  "Chorus": "four_floor", "Bridge": "halftime", "Drop": "four_floor", "Outro": "four_floor"},
         mix={**_MIX_POP, "synth": -22.5, "piano": -24.0}, reverb=_REVERB_POP,
-        vocal_center=69, key_changes=(1, 2), breakdown_chance=0.3, halftime_chance=0.2,
+        vocal_center=69, key_changes=(1, 2), breakdown_chance=0.3, halftime_chance=0.2, melisma=0.4,
         voices={"synth": {"": "chip", "saw": "supersaw", "pad": "pad"}, "melody": {"": "chip"}, "counter": {"": "chip"}},
     ),
     "Rock": StyleProfile(
@@ -250,6 +251,7 @@ STYLES = {
                  "Chorus": "rock_chorus", "Bridge": "halftime", "Drop": "rock_chorus", "Outro": "rock_chorus"},
         mix={**_MIX_POP, "guitar": -20.5, "counter": -23.0}, reverb={**_REVERB_POP, "guitar": 0.08},
         key_changes=(0, 0, 2), breakdown_chance=0.3, bridge_breakdown_chance=0.2, halftime_chance=0.4, fx="soft",
+        melisma=0.7,
     ),
     "Ballade": StyleProfile(
         name="Ballade",
@@ -277,7 +279,7 @@ STYLES = {
         mix={**_MIX_POP, "piano": -19.5, "drums": -20.0, "strings": -22.0, "counter": -24.0},
         reverb={**_REVERB_POP, "piano": 0.24},
         chord_color="add9", halftime_below_bpm=200, voices={"synth": {"pad": "pad"}}, fx="soft",
-        key_changes=(1, 2, 2), breakdown_chance=0.6, bridge_breakdown_chance=0.0, halftime_chance=0.0,
+        key_changes=(1, 2, 2), breakdown_chance=0.6, bridge_breakdown_chance=0.0, halftime_chance=0.0, melisma=1.6,
     ),
     "City Pop": StyleProfile(
         name="City Pop",

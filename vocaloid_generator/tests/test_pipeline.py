@@ -74,13 +74,13 @@ def test_lyrics_from_the_app_are_sung(tmp_path):
     verse, chorus = "あ い う え お か き く け こ".split(), "さ し す せ そ".split()
     lyrics = "[Verse]\n" + " ".join(verse) + "\n[Chorus]\n" + " ".join(chorus)
     tracks, _ = compose(make_settings(tmp_path, lyrics=lyrics, active_sections=["Verse", "Chorus"]), seed=3)
-    sung = tracks["silben"]
+    sung = [s for s in tracks["silben"] if not getattr(s, "melisma", False)]   # ohne Melisma-Vokale
     # Kurze Texte werden wiederholt, bis die Sektion gefüllt ist
     n_verse = len(sung) - sung[::-1].index("こ")
     assert sung[:n_verse] == verse * (n_verse // len(verse))
     assert sung[n_verse:] == chorus * ((len(sung) - n_verse) // len(chorus))
     notes = [d for d in tracks["melody_data"] if d[0] is not None]
-    assert len(notes) == len(sung) == len(tracks["vocal_melody"])
+    assert len(notes) == len(tracks["silben"]) == len(tracks["vocal_melody"])
 
 
 def test_choosing_a_style_changes_the_part(tmp_path):

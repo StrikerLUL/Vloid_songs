@@ -193,7 +193,7 @@ def build() -> None:
                 with ui.tab_panel("Band"):
                     panels.band_panel(settings)
                 with ui.tab_panel("Gesang"):
-                    singer_select = panels.voice_panel(settings, _singers(settings))
+                    singer_select, duet_select = panels.voice_panel(settings, _singers(settings))
                 with ui.tab_panel("Mix"):
                     panels.mix_panel(settings)
                 with ui.tab_panel("Verlauf"):
@@ -351,6 +351,7 @@ def build() -> None:
             ui.label(f"Instrumente mit {engine_name()}").classes("text-caption")
             ui.label(sound_library.status()).classes("text-caption").mark("sound-library")
         singer_select.set_options(sorted(set(_singers(settings)) | {settings.singer}), value=settings.singer)
+        duet_select.set_options(panels.duet_options(_singers(settings), settings), value=settings.duet_singer)
         show_history()
 
     # ── Verlauf ──────────────────────────────────────────────────────────────────────

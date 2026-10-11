@@ -200,11 +200,16 @@ def band_panel(s: SongSettings) -> None:
 
 
 # ── Gesang ──────────────────────────────────────────────────────────────────────
-def voice_panel(s: SongSettings, singers: list) -> ui.select:
+def voice_panel(s: SongSettings, singers: list) -> tuple:
+    """Rückgabe: die Auswahl der Stimme und die der Duett-Stimme, damit die Seite ihre Listen erneuern kann."""
     ui.select(labels.ENGINES, label="Gesang mit").bind_value(s, "vocal_engine").classes("w-full")
     options = sorted(set(singers) | {s.singer})
     singer = ui.select(options, label="Stimme").bind_value(s, "singer").classes("w-full").mark("singer")
     hint("Die Stimmen aus dem Ordner model von NEUTRINO. Die Melodie passt sich ihrem Tonumfang an.")
+    duet = ui.select(duet_options(singers, s), label="Duett mit").bind_value(s, "duet_singer") \
+        .classes("w-full").mark("duet")
+    hint("Im Duett wechseln sich die Stimmen in den Strophen ab, die Bridge singt die zweite, im Refrain singt "
+         "sie die zweite Stimme. Braucht NEUTRINO.")
     ui.switch("Zweite Stimme im Refrain").bind_value(s, "harmonies")
     with ui.row().classes("w-full items-center gap-4"):
         ui.label("StyleShift").classes("w-28")
@@ -215,7 +220,12 @@ def voice_panel(s: SongSettings, singers: list) -> ui.select:
         ui.label("Hauchigkeit").classes("w-28")
         ui.slider(min=0, max=0.2, step=0.002).bind_value(s, "breathiness").props("label").classes("col")
     ui.switch("Schimmer").bind_value(s, "shimmer")
-    return singer
+    return singer, duet
+
+
+def duet_options(singers: list, s: SongSettings) -> dict:
+    names = sorted(set(singers) | ({s.duet_singer} if s.duet_singer else set()))
+    return {"": "kein Duett", **{n: n for n in names}}
 
 
 # ── Mix ─────────────────────────────────────────────────────────────────────────

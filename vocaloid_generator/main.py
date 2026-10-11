@@ -20,6 +20,8 @@ def parse_args(argv=None):
     p.add_argument("--key", choices=KEYS)
     p.add_argument("--scale", choices=["minor", "major", "dorian", "phrygian"])
     p.add_argument("--output", help="Ausgabeordner")
+    p.add_argument("--stimme", metavar="NAME", help="NEUTRINO-Stimme, z. B. MERROW")
+    p.add_argument("--duett", metavar="NAME", help="zweite NEUTRINO-Stimme fürs Duett ('' = kein Duett)")
     p.add_argument("--verlauf", action="store_true", help="die letzten Songs auflisten und beenden")
     p.add_argument("--aus-verlauf", type=int, metavar="NR",
                    help="Einstellungen und Seed eines Songs aus dem Verlauf nehmen (1 = der neueste)")
@@ -49,7 +51,8 @@ def main(argv=None) -> int:
         if settings is None:
             return 1
 
-    overrides = {"seed": args.seed, "bpm": args.bpm, "style": args.style, "key": args.key, "scale": args.scale}
+    overrides = {"seed": args.seed, "bpm": args.bpm, "style": args.style, "key": args.key, "scale": args.scale,
+                 "singer": args.stimme, "duet_singer": args.duett}
     settings = settings.with_updates(**{k: v for k, v in overrides.items() if v is not None})
     parts = tuple(args.neu or ())
 

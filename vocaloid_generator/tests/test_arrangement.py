@@ -171,7 +171,7 @@ def test_melody_data_stays_in_sync_with_the_band(jpop_song):
 
 def test_short_lyrics_are_repeated_to_fill_the_section(tmp_path):
     tracks = compose(tmp_path, lyrics={"Verse": ["ら", "り", "る"], "Chorus": ["あ", "い"], "PreChorus": ["お"]})
-    verse = [s for s in tracks["silben"]][:9]
+    verse = [s for s in tracks["silben"] if not getattr(s, "melisma", False)][:9]   # ohne Melisma-Vokale
     assert verse == ["ら", "り", "る"] * 3
 
 

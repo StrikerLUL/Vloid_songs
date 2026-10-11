@@ -34,8 +34,9 @@ _ZIP_STORED = (".wav", ".mp3")
 
 
 def exportiere_projekt(result, zip_pfad: str) -> str:
-    """Packt den Song für eine DAW: Mix, jede Spur als WAV und MIDI, die Gesangsnoten (MusicXML) und die
-    Einstellungen, mit denen derselbe Song wieder entsteht. result ist ein pipeline.SongResult."""
+    """Packt den Song für eine DAW: Mix, jede Spur als WAV und MIDI, die Gesangsnoten (MusicXML für NEUTRINO,
+    UST für OpenUtau) und die Einstellungen, mit denen derselbe Song wieder entsteht. result ist ein
+    pipeline.SongResult."""
     import json
     import os
     import zipfile
@@ -58,6 +59,8 @@ def exportiere_projekt(result, zip_pfad: str) -> str:
         dateien.append((os.path.join(out, "vocals.xml"), "Gesang/vocals.xml"))
     if result.harmony_wav:
         dateien.append((os.path.join(out, "vocals_harmony.xml"), "Gesang/vocals_harmony.xml"))
+    for name in ("vocals.ust", "vocals_harmony.ust", "vocals_duett_1.ust", "vocals_duett_2.ust"):
+        dateien.append((os.path.join(out, name), f"Gesang/{name}"))
 
     os.makedirs(os.path.dirname(os.path.abspath(zip_pfad)), exist_ok=True)
     with zipfile.ZipFile(zip_pfad, "w") as z:

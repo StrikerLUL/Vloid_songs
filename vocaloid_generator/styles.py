@@ -106,7 +106,11 @@ class StyleProfile:
     mix: dict                      # Instrument → Ziel-Lautheit in LUFS (vor dem Mastering)
     reverb: dict                   # Instrument → Hall-Anteil
     chord_color: str = "triad"     # triad | seventh
-    modulate_final_chorus: int = 1
+    key_changes: tuple = (0, 1, 1, 2)   # Auswahl: um wie viele Halbtöne der letzte Refrain steigt
+    breakdown_chance: float = 0.4       # letzter Refrain beginnt leise, nur mit parts["breakdown"]
+    bridge_breakdown_chance: float = 0.3
+    halftime_chance: float = 0.3        # zweite Strophe beginnt im Halftime
+    melisma: float = 1.0                # wie oft Phrasen mit einem Melisma enden (1 = normal)
     vocal_center: int = 67         # mittlere Gesangslage (MIDI)
     double_time_melody: bool = False
     swing: float = 0.0
@@ -114,11 +118,13 @@ class StyleProfile:
     voices: dict = field(default_factory=dict)   # Instrument → {Unterspur: eigene Synth-Stimme}
     fx: str = "full"               # Übergänge: full (Riser, Impact), soft (nur Becken-Swell), none
 
-    def part(self, section: str, instrument: str, occurrence: int = 1, last: bool = False):
+    def part(self, section: str, instrument: str, occurrence: int = 1, last: bool = False, feel: str = ""):
         """
         Spielweise in einer Sektion. "Verse:2" ergänzt ab dem zweiten Vorkommen, "Chorus:last" im
-        letzten Vorkommen; None nimmt ein Instrument dort heraus.
+        letzten Vorkommen; None nimmt ein Instrument dort heraus. Im Breakdown spielt nur "breakdown".
         """
+        if feel == "breakdown":
+            return self.parts.get("breakdown", {}).get(instrument)
         parts = dict(self.parts.get(section, self.parts.get("Verse", {})))
         if occurrence >= 2:
             parts.update(self.parts.get(f"{section}:2", {}))
@@ -163,11 +169,12 @@ STYLES = {
             "Drop":        {"bass": "wobble", "synth": "arp+supersaw", "perc": "claps"},
             "Outro":       {"piano": "eighths", "bass": "driving", "guitar": "strummed", "strings": "legato", "melody": "hook",
                             "synth": "supersaw", "bells": "sparkle"},
+            "breakdown":   {"piano": "arpeggio", "strings": "legato", "synth": "pad", "bells": "music_box"},
         },
         grooves={"Intro": "pop_chorus", "Build-up": "build", "Verse": "pop_verse", "PreChorus": "pop_pre",
                  "Chorus": "pop_chorus", "Bridge": "halftime", "Drop": "four_floor", "Outro": "pop_chorus"},
         mix=_MIX_POP, reverb=_REVERB_POP,
-        voices={**_SYNTHS, "melody": {"": "lead"}},
+        voices={**_SYNTHS, "melody": {"": "lead"}}, breakdown_chance=0.5,
     ),
     "Dark Vocaloid": StyleProfile(
         name="Dark Vocaloid",
@@ -190,11 +197,12 @@ STYLES = {
             "Drop":        {"bass": "driving", "guitar": "palm_mute", "counter": "solo"},
             "Outro":       {"piano": "arpeggio16", "bass": "driving", "guitar": "power_chords", "strings": "legato",
                             "melody": "hook", "choir": "aahs"},
+            "breakdown":   {"piano": "arpeggio", "strings": "legato", "choir": "oohs"},
         },
         grooves={"Intro": "rock_chorus", "Build-up": "build", "Verse": "rock_verse", "PreChorus": "pop_pre",
                  "Chorus": "double_kick", "Bridge": "halftime", "Drop": "rock_chorus", "Outro": "rock_chorus"},
         mix={**_MIX_POP, "guitar": -22.0, "piano": -22.5}, reverb=_REVERB_POP,
-        vocal_center=66, voices=_SYNTHS,
+        vocal_center=66, voices=_SYNTHS, key_changes=(0, 1, 1), halftime_chance=0.4,
     ),
     "Kawaii Chiptune": StyleProfile(
         name="Kawaii Chiptune",
@@ -213,11 +221,12 @@ STYLES = {
             "Bridge":      {"piano": "arpeggio", "bass": "root", "synth": "pad", "bells": "music_box"},
             "Drop":        {"bass": "wobble", "synth": "arp+supersaw", "counter": "solo"},
             "Outro":       {"piano": "stabs", "bass": "wobble", "synth": "arp", "melody": "hook", "bells": "sparkle16"},
+            "breakdown":   {"piano": "arpeggio", "synth": "pad", "bells": "music_box"},
         },
         grooves={"Intro": "four_floor", "Build-up": "build", "Verse": "edm_verse", "PreChorus": "build",
                  "Chorus": "four_floor", "Bridge": "halftime", "Drop": "four_floor", "Outro": "four_floor"},
         mix={**_MIX_POP, "synth": -22.5, "piano": -24.0}, reverb=_REVERB_POP,
-        vocal_center=69,
+        vocal_center=69, key_changes=(1, 2), breakdown_chance=0.3, halftime_chance=0.2, melisma=0.4,
         voices={"synth": {"": "chip", "saw": "supersaw", "pad": "pad"}, "melody": {"": "chip"}, "counter": {"": "chip"}},
     ),
     "Rock": StyleProfile(
@@ -236,11 +245,13 @@ STYLES = {
             "Bridge":      {"bass": "root", "guitar": "chill_riff", "counter": "solo"},
             "Drop":        {"bass": "driving", "guitar": "palm_mute", "counter": "solo"},
             "Outro":       {"bass": "driving", "guitar": "power_chords", "melody": "hook"},
+            "breakdown":   {"bass": "root", "guitar": "chill_riff"},
         },
         grooves={"Intro": "rock_chorus", "Build-up": "build", "Verse": "rock_verse", "PreChorus": "pop_pre",
                  "Chorus": "rock_chorus", "Bridge": "halftime", "Drop": "rock_chorus", "Outro": "rock_chorus"},
         mix={**_MIX_POP, "guitar": -20.5, "counter": -23.0}, reverb={**_REVERB_POP, "guitar": 0.08},
-        modulate_final_chorus=0, fx="soft",
+        key_changes=(0, 0, 2), breakdown_chance=0.3, bridge_breakdown_chance=0.2, halftime_chance=0.4, fx="soft",
+        melisma=0.7,
     ),
     "Ballade": StyleProfile(
         name="Ballade",
@@ -251,24 +262,28 @@ STYLES = {
             "Intro":       {"piano": "ballad_arp", "strings": "legato", "melody": "hook", "bells": "music_box"},
             "Build-up":    {"piano": "ballad_arp", "strings": "build", "bass": "root"},
             "Verse":       {"piano": "ballad_arp", "bass": "root"},
-            "Verse:2":     {"counter": "guide", "synth": "pad"},
-            "PreChorus":   {"piano": "ballad_arp", "bass": "root", "strings": "legato", "choir": "oohs"},
+            "Verse:2":     {"counter": "guide", "synth": "pad", "strings": "pizzicato"},
+            "PreChorus":   {"piano": "ballad_arp", "bass": "root", "strings": "legato+harp", "choir": "oohs"},
             "Chorus":      {"piano": "chords", "bass": "root", "strings": "legato", "guitar": "chill_riff", "synth": "pad",
                             "choir": "aahs", "bells": "accents", "counter": "guide", "perc": "shaker"},
-            "Chorus:last": {"bells": "hook_octave"},
-            "Bridge":      {"piano": "ballad_arp", "strings": "legato", "synth": "pad", "choir": "oohs", "counter": "guide"},
+            "Chorus:2":    {"brass": "horns"},
+            "Chorus:last": {"bells": "hook_octave", "strings": "legato+timpani"},
+            "Bridge":      {"piano": "ballad_arp", "strings": "legato+harp+timpani", "synth": "pad", "choir": "oohs",
+                            "counter": "guide", "brass": "horns"},
             "Drop":        {"piano": "ballad_arp"},
-            "Outro":       {"piano": "ballad_arp", "strings": "legato", "melody": "hook", "bells": "music_box"},
+            "Outro":       {"piano": "ballad_arp", "strings": "legato+harp", "melody": "hook", "bells": "music_box"},
+            "breakdown":   {"piano": "ballad_arp", "strings": "legato"},
         },
         grooves={"Intro": None, "Build-up": "ballad", "Verse": "ballad_light", "PreChorus": "ballad",
                  "Chorus": "ballad", "Bridge": None, "Drop": None, "Outro": None},
         mix={**_MIX_POP, "piano": -19.5, "drums": -20.0, "strings": -22.0, "counter": -24.0},
         reverb={**_REVERB_POP, "piano": 0.24},
         chord_color="add9", halftime_below_bpm=200, voices={"synth": {"pad": "pad"}}, fx="soft",
+        key_changes=(1, 2, 2), breakdown_chance=0.6, bridge_breakdown_chance=0.0, halftime_chance=0.0, melisma=1.6,
     ),
     "City Pop": StyleProfile(
         name="City Pop",
-        programs={"piano": 4, "bass": 33, "guitar": 27, "strings": 49, "synth": 89, "brass": 61, "melody": 65,
+        programs={"piano": 5, "bass": 33, "guitar": 27, "strings": 49, "synth": 89, "brass": 61, "melody": 65,
                   "bells": 11, "choir": 53, "counter": 66},
         drum_kit=0,
         parts={
@@ -286,11 +301,13 @@ STYLES = {
             "Drop":        {"bass": "octaves", "guitar": "cutting", "counter": "solo", "perc": "congas"},
             "Outro":       {"piano": "jazz_ch", "bass": "octaves", "guitar": "cutting", "brass": "stabs", "melody": "hook",
                             "perc": "congas"},
+            "breakdown":   {"piano": "jazz_ch", "bass": "lazy", "synth": "pad"},
         },
         grooves={"Intro": "citypop", "Build-up": "pop_pre", "Verse": "citypop", "PreChorus": "citypop",
                  "Chorus": "citypop", "Bridge": "halftime", "Drop": "citypop", "Outro": "citypop"},
         mix={**_MIX_POP, "piano": -21.0, "brass": -22.5}, reverb=_REVERB_POP,
         chord_color="seventh", vocal_center=66, voices={"synth": {"pad": "pad"}}, fx="soft",
+        key_changes=(0, 1, 2), breakdown_chance=0.3,
     ),
 }
 # Genre-Namen aus älteren Einstellungen und der Kommandozeile

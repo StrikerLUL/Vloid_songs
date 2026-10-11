@@ -38,16 +38,13 @@ class TestVocaloidGeneratorMVC(unittest.TestCase):
 
     def test_view_contains_five_tabs(self):
         """Verify the view contains the 5 required DAW layout tab sections."""
-        import customtkinter as ctk
         from view.main_view import VocaloidMainView
         from view.tabs import SongTab, LyricsTab, InstrumenteTab, MixerTab, SettingsTab
         
-        root = ctk.CTk()
-        root.withdraw() # Prevent rendering window
-        
         dummy_cb = lambda *a: None
+        view = VocaloidMainView(dummy_cb, dummy_cb, dummy_cb, dummy_cb)
+        view.withdraw()  # Prevent rendering window
         try:
-            view = VocaloidMainView(dummy_cb, dummy_cb, dummy_cb, dummy_cb)
             
             # Assert all 5 tabs are present in main content shell
             self.assertIsNotNone(view.song_tab)
@@ -62,27 +59,22 @@ class TestVocaloidGeneratorMVC(unittest.TestCase):
             self.assertIsInstance(view.instrumente_tab, InstrumenteTab)
             self.assertIsInstance(view.mixer_tab, MixerTab)
             self.assertIsInstance(view.settings_tab, SettingsTab)
-            
-            view.destroy()
         finally:
-            root.destroy()
+            view.destroy()
 
     def test_background_generation_non_blocking(self):
         """Verify generation task executes in background, is non-blocking, and polls successfully."""
-        import customtkinter as ctk
         from model import VocaloidModel
         from view.main_view import VocaloidMainView
         from controller import VocaloidController
         
-        root = ctk.CTk()
-        root.withdraw()
-        
         model = VocaloidModel()
         dummy_cb = lambda *a: None
-        
+        # We instantiate main view (it is the Tk root itself) and bind it to controller
+        view = VocaloidMainView(dummy_cb, dummy_cb, dummy_cb, dummy_cb)
+        view.withdraw()
+
         try:
-            # We instantiate main view and bind it to controller
-            view = VocaloidMainView(dummy_cb, dummy_cb, dummy_cb, dummy_cb)
             controller = VocaloidController(model, view)
             
             # Hook the view buttons to controller actions
@@ -118,10 +110,8 @@ class TestVocaloidGeneratorMVC(unittest.TestCase):
                     self.assertFalse(controller.generation_in_progress)
                     self.assertEqual(view.generate_btn.cget("state"), "normal")
                     mock_info.assert_called_once()
-                
-            view.destroy()
         finally:
-            root.destroy()
+            view.destroy()
 
     def test_tooltip_displays_and_schedules(self):
         """Verify tooltips schedule their opening window display correctly on enter."""
@@ -163,19 +153,16 @@ class TestVocaloidGeneratorMVC(unittest.TestCase):
 
     def test_vst_drag_and_drop_handling(self):
         """Verify VST selection update propagates path info to Model."""
-        import customtkinter as ctk
         from model import VocaloidModel
         from view.main_view import VocaloidMainView
         from controller import VocaloidController
         
-        root = ctk.CTk()
-        root.withdraw()
-        
         model = VocaloidModel()
         dummy_cb = lambda *a: None
-        
+        view = VocaloidMainView(dummy_cb, dummy_cb, dummy_cb, dummy_cb)
+        view.withdraw()
+
         try:
-            view = VocaloidMainView(dummy_cb, dummy_cb, dummy_cb, dummy_cb)
             controller = VocaloidController(model, view)
             
             # Simulate dropping/selecting a vst3 file path
@@ -184,33 +171,31 @@ class TestVocaloidGeneratorMVC(unittest.TestCase):
             
             # Assert state synchronization
             self.assertEqual(model.vst_path, vst_file)
-            
-            view.destroy()
         finally:
-            root.destroy()
+            view.destroy()
 
     def test_singer_and_harmonies_reach_the_settings(self):
         """Stimme und zweite Stimme lassen sich in den Einstellungen wählen und landen in SongSettings."""
-        import customtkinter as ctk
         from model import VocaloidModel
         from view.main_view import VocaloidMainView
         from controller import VocaloidController
 
-        root = ctk.CTk()
-        root.withdraw()
+        view = VocaloidMainView(*[lambda *a: None] * 4)
+        view.withdraw()
         try:
             with patch.object(VocaloidModel, "save_settings"):
                 model = VocaloidModel()
-                view = VocaloidMainView(*[lambda *a: None] * 4)
                 VocaloidController(model, view)
                 self.assertIn("REINA", view.settings_tab.singer_menu.cget("values"))
                 view.settings_tab.singer_var.set("REINA")
                 view.settings_tab.harmonies_var.set(False)
+                view.settings_tab.style_shift_var.set(2)
+                view.song_tab.reference_var.set("C:/Musik/vorbild.mp3")
                 settings = model.to_settings()
                 self.assertEqual((settings.singer, settings.harmonies), ("REINA", False))
-                view.destroy()
+                self.assertEqual((settings.style_shift, settings.reference_track), (2, "C:/Musik/vorbild.mp3"))
         finally:
-            root.destroy()
+            view.destroy()
 
 
 if __name__ == "__main__":

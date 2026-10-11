@@ -3,12 +3,14 @@
 # Jede Sektion besteht aus Phrasen von 2 oder 4 Takten. Takte innerhalb einer Sektion teilen sich
 # einen Rhythmus (Motiv), betonte Töne sind Akkordtöne, dazwischen bewegt sich die Melodie in
 # Tonleiterschritten. Der Refrain wiederholt seine erste Phrase (Hook), wiederkehrende Sektionen
-# singen dieselbe Melodie.
+# singen dieselbe Melodie. Wo der Text es verrät, folgt die Melodie dem Tonhöhenakzent der Wörter, und
+# manche Phrasen enden mit einem Melisma: die letzte Silbe gleitet auf einen zweiten Ton.
 import math
 import random
 from dataclasses import dataclass
 from typing import Optional
 
+from lyrics import Mora, vowel
 from song_plan import BEATS_PER_BAR, VOCAL_RANGE, Section, SongPlan
 from theory import Chord, scale_pcs
 
@@ -87,6 +89,13 @@ GESTURE_DEPTH = {"Chorus": 1.0, "Verse": 0.7, "PreChorus": 0.8, "Bridge": 0.8}
 # Singbare Silben pro Sekunde, an denen sich die Dichte orientiert
 SYLLABLES_PER_SECOND = {"Verse": 3.3, "PreChorus": 3.5, "Chorus": 3.6, "Bridge": 3.0}
 SINGING_SHARE = 0.75
+# Steigt der Akzent im Wort (tief → hoch), soll die Melodie nicht fallen, und umgekehrt
+ACCENT_COST = 1.5
+# ん und っ springen nicht, sie hängen am Ton davor
+SPECIAL_MORAE = ("ん", "っ")
+# Anteil der Phrasen, deren langer Schlusston ein Melisma bekommt (mal melisma des Stils)
+MELISMA_SHARE = {"Chorus": 0.35, "Verse": 0.2, "PreChorus": 0.25, "Bridge": 0.45}
+MELISMA_MIN_STEPS = 6
 
 
 @dataclass
@@ -152,6 +161,7 @@ class SectionMelodyWriter:
         self.hi = min(hi, self.center + 8)
         self.motifs = {}
         self.gestures = {}
+        self.melisma = {}
 
     # ── Silben verteilen ─────────────────────────────────────────────────────────
     def allocate(self, syllables: list) -> tuple:
@@ -269,7 +279,8 @@ class SectionMelodyWriter:
         return [p for p in range(self.lo, self.hi + 1) if p % 12 in pcs]
 
     def _choose(self, slot: _Slot, chord: Chord, target: float, prev: Optional[int], prev_move: int,
-                history: list, ending_pcs: Optional[set] = None) -> int:
+                history: list, ending_pcs: Optional[set] = None, accent: int = 0, special: bool = False) -> int:
+        """accent: +1, wenn die Silbe im Wort höher gesprochen wird als die davor, -1 wenn tiefer."""
         cands = self._candidates(chord, slot.strong)
         if ending_pcs:
             preferred = [p for p in cands if p % 12 in ending_pcs]
@@ -287,6 +298,10 @@ class SectionMelodyWriter:
                     cost += 2.0           # nach einem Sprung in die Gegenrichtung
                 if d == 0 and len(history) >= 2 and history[-1] == history[-2] == p:
                     cost += 3.0
+                if accent and (p - prev) * accent < 0:
+                    cost += ACCENT_COST
+                if special and d > 2:
+                    cost += 1.5
             if p % 12 not in chord.pcs:
                 cost += 0.25
                 if slot.dur >= 4:
@@ -308,8 +323,12 @@ class SectionMelodyWriter:
         return set(chord.triad_pcs)
 
     def phrase_pitches(self, slots: list, phrase_start: float, role: str, prev: Optional[int],
-                       reference: Optional[list] = None) -> list:
-        """Tonhöhen für alle Einsätze. Mit reference werden Takte übernommen, deren Rhythmus gleich ist."""
+                       reference: Optional[list] = None, words: Optional[list] = None) -> list:
+        """Tonhöhen für alle Einsätze. Mit reference werden Takte übernommen, deren Rhythmus gleich ist.
+        words: die Silben der Phrase; ihr Tonhöhenakzent lenkt die Richtung der Melodie."""
+        accents = accent_moves(words or [])
+        accents += [0] * (len(slots) - len(accents))
+        special = [str(w) in SPECIAL_MORAE for w in (words or [])] + [False] * len(slots)
         total = max(slots[-1].step + slots[-1].dur, 1)
         contour = CONTOURS.get(role, CONTOURS["A"])
         out, history, prev_move = [], [], 0
@@ -329,7 +348,7 @@ class SectionMelodyWriter:
                 ending = self._ending_pcs(role, chord) if slot.last else None
                 if ref is not None:
                     target = (target + ref) / 2 - 1
-                pitch = self._choose(slot, chord, target, prev, prev_move, history, ending)
+                pitch = self._choose(slot, chord, target, prev, prev_move, history, ending, accents[i], special[i])
             if prev is not None:
                 prev_move = pitch - prev
             out.append(pitch)
@@ -385,18 +404,48 @@ class SectionMelodyWriter:
                 pitches = [p for _, p in reference]       # die Phrase kehrt genau wieder
             else:
                 pitches = self.phrase_pitches(slots, phrase_start, role, prev,
-                                              reference if same_rhythm else None)
+                                              reference if same_rhythm else None, chunk)
                 if role == "H":
                     pitches = self.sequence_bars(slots, pitches, phrase_start)
             written.setdefault(role, list(zip(slots, pitches)))
             for slot, pitch, syl in zip(slots, pitches, chunk):
-                notes.append(MelNote(
-                    start=phrase_start + slot.step / STEPS_PER_BEAT,
-                    dur=slot.dur / STEPS_PER_BEAT,
-                    pitch=pitch, syllable=syl, strong=slot.strong,
-                ))
+                note = MelNote(start=phrase_start + slot.step / STEPS_PER_BEAT, dur=slot.dur / STEPS_PER_BEAT,
+                               pitch=pitch, syllable=syl, strong=slot.strong)
+                notes += self._melisma(note, role) if slot.last and slot.dur >= MELISMA_MIN_STEPS else [note]
             prev = pitches[-1] if pitches else prev
         return notes
+
+    def _melisma(self, note: MelNote, role: str) -> list:
+        """Der lange Schlusston gleitet auf den nächsten Akkordton darunter (oder darüber), auf demselben Vokal."""
+        if role not in self.melisma:
+            share = MELISMA_SHARE.get(self.kind, 0.2) * self.plan.style.melisma
+            self.melisma[role] = self.rng.random() < share
+        sung = vowel(note.syllable or "")
+        if not self.melisma[role] or sung is None:
+            return [note]
+        first = max(0.5, round(note.dur * 0.6 * 2) / 2)
+        second_start = note.start + first
+        chord = self.sec.chord_at(second_start)
+        below = [p for p in range(note.pitch - 5, note.pitch) if p % 12 in chord.pcs and p >= self.lo]
+        above = [p for p in range(note.pitch + 1, note.pitch + 5) if p % 12 in chord.pcs and p <= self.hi]
+        target = max(below) if below else min(above) if above else None
+        if target is None:
+            return [note]
+        return [MelNote(note.start, first, note.pitch, note.syllable, note.strong),
+                MelNote(second_start, note.dur - first, target, Mora(sung, melisma=True), False)]
+
+
+def accent_moves(words: list) -> list:
+    """Pro Silbe: +1, wenn sie im selben Wort höher gesprochen wird als die davor, -1 wenn tiefer, sonst 0."""
+    out = []
+    for i, w in enumerate(words):
+        before = words[i - 1] if i else None
+        a, b = getattr(before, "tone", None), getattr(w, "tone", None)
+        if a and b and a != b and not getattr(w, "word_start", False):
+            out.append(1 if b == "H" else -1)
+        else:
+            out.append(0)
+    return out
 
 
 def _split_even(items: list, parts: int) -> list:
@@ -441,7 +490,7 @@ def _scale_shift(scale: list, pitch: int, steps: int) -> Optional[int]:
 def write_vocal_melody(plan: SongPlan, lyrics: dict, rng: random.Random) -> list:
     """
     Melodie für alle Sektionen mit Gesang. Jede Sektionsart wird einmal komponiert; spätere Vorkommen
-    singen dieselbe Melodie (im Schlussrefrain einen Halbton höher, wenn der Song moduliert).
+    singen dieselbe Melodie (im Schlussrefrain höher, wenn der Song die Tonart wechselt).
     """
     written = {}
     notes = []
@@ -478,14 +527,14 @@ def _fit_to_chords(plan: SongPlan, notes: list) -> None:
 def harmony_line(plan: SongPlan, notes: list, kinds: tuple = ("Chorus",)) -> list:
     """
     Zweite Stimme für den Refrain: die Terz über der Melodie aus der Tonleiter; auf langen Tönen ein
-    Akkordton. Passt sie nicht mehr in die Stimmlage, singt sie darunter.
+    Akkordton. Passt sie nicht mehr in die Stimmlage, singt sie darunter. Im Breakdown schweigt sie.
     """
     lo, hi = plan.vocal_range
     out = []
     for n in notes:
         sec = plan.section_at(n.start)
-        if sec.kind not in kinds:
-            continue
+        if sec.kind not in kinds or (sec.feel == "breakdown" and n.start < sec.resume):
+            continue    # im leisen Teil singt die Stimme allein
         chord = sec.chord_at(n.start)
         scale = sorted(set(scale_pcs(sec.tonic, sec.mode)) | set(chord.pcs))
         ladder = [p for p in range(n.pitch - 12, n.pitch + 13) if p % 12 in scale]
@@ -496,6 +545,46 @@ def harmony_line(plan: SongPlan, notes: list, kinds: tuple = ("Chorus",)) -> lis
             below = next((p for p in range(n.pitch - 3, n.pitch - 10, -1) if p % 12 in chord.pcs), below)
         pitch = above if above <= hi + 2 else below
         out.append(MelNote(n.start, n.dur, max(pitch, lo - 2), n.syllable, n.strong))
+    return out
+
+
+def duet_voice(sec: Section) -> int:
+    """Wer im Duett singt: 0 = erste Stimme, 1 = zweite. Strophen und Pre-Chorus wechseln sich ab, die Bridge
+    gehört der zweiten Stimme, im Refrain singt die erste die Melodie und die zweite die zweite Stimme."""
+    if sec.kind == "Chorus":
+        return 0
+    if sec.kind == "Bridge":
+        return 1
+    return (sec.occurrence - 1) % 2
+
+
+def split_for_duet(plan: SongPlan, data: list, syllables: list) -> tuple:
+    """Melodie (wie melody_data) in die Teile beider Stimmen: was die andere singt, wird Pause.
+    Rückgabe: ((Daten, Silben) der ersten Stimme, (Daten, Silben) der zweiten)."""
+    parts = [([], []), ([], [])]
+    t, i = 0.0, 0
+    for pitch, dur in data:
+        if pitch is not None:
+            who = duet_voice(plan.section_at(t + 1e-6))
+            for k, (d, s) in enumerate(parts):
+                d.append((pitch, dur) if k == who else (None, dur))
+                if k == who:
+                    s.append(syllables[i] if i < len(syllables) else "ら")
+            i += 1
+        else:
+            for d, _ in parts:
+                d.append((None, dur))
+        t += dur
+    return tuple((_merge_rests(d), s) for d, s in parts)
+
+
+def _merge_rests(data: list) -> list:
+    out = []
+    for pitch, dur in data:
+        if pitch is None and out and out[-1][0] is None:
+            out[-1] = (None, round(out[-1][1] + dur, 4))
+        else:
+            out.append((pitch, dur))
     return out
 
 

@@ -77,6 +77,8 @@ class VocaloidController:
         self.view.settings_tab.singer_var.set(self.model.singer)
         self.view.settings_tab.set_singers(installed_singers(self.model.neutrino_pfad))
         self.view.settings_tab.harmonies_var.set(self.model.harmonies)
+        self.view.settings_tab.style_shift_var.set(self.model.style_shift)
+        self.view.song_tab.reference_var.set(self.model.reference_track)
 
     def setup_bindings(self):
         """Bind tkinter variable trace events and direct edit hooks."""
@@ -117,6 +119,8 @@ class VocaloidController:
         self.view.settings_tab.jitter_var.trace_add("write", lambda *a: self.on_view_jitter_changed())
         self.view.settings_tab.singer_var.trace_add("write", lambda *a: self.on_view_singer_changed())
         self.view.settings_tab.harmonies_var.trace_add("write", lambda *a: self.on_view_harmonies_changed())
+        self.view.settings_tab.style_shift_var.trace_add("write", lambda *a: self.on_view_style_shift_changed())
+        self.view.song_tab.reference_var.trace_add("write", lambda *a: self.on_view_reference_changed())
 
     # View modification handlers -> Model updates
     def on_view_bpm_changed(self):
@@ -249,6 +253,21 @@ class VocaloidController:
             self.model.harmonies = val
             self.model.save_settings()
 
+    def on_view_style_shift_changed(self):
+        try:
+            val = int(round(float(self.view.settings_tab.style_shift_var.get())))
+        except (ValueError, TclError):
+            return
+        if self.model.style_shift != val:
+            self.model.style_shift = val
+            self.model.save_settings()
+
+    def on_view_reference_changed(self):
+        val = self.view.song_tab.reference_var.get().strip()
+        if self.model.reference_track != val:
+            self.model.reference_track = val
+            self.model.save_settings()
+
     def on_view_soundfont_path_changed(self):
         val = self.view.settings_tab.soundfont_path_var.get()
         if self.model.soundfont_pfad != val:
@@ -365,6 +384,12 @@ class VocaloidController:
             elif property_name == "singer":
                 if self.view.settings_tab.singer_var.get() != value:
                     self.view.settings_tab.singer_var.set(value)
+            elif property_name == "style_shift":
+                if self.view.settings_tab.style_shift_var.get() != value:
+                    self.view.settings_tab.style_shift_var.set(value)
+            elif property_name == "reference_track":
+                if self.view.song_tab.reference_var.get() != value:
+                    self.view.song_tab.reference_var.set(value)
             elif property_name == "harmonies":
                 if self.view.settings_tab.harmonies_var.get() != value:
                     self.view.settings_tab.harmonies_var.set(value)

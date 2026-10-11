@@ -29,12 +29,14 @@ DOUBLE_CENTS, DOUBLE_DELAYS, DOUBLE_DB = 12, (0.017, 0.026), -9.0
 
 # ── Rendern ──────────────────────────────────────────────────────────────────────
 def midi_zu_wav(midi_pfad: str, wav_pfad: str, is_drum: bool = False, instrument_type: str = "piano",
-                vst_pfad: str = None, soundfont_pfad: str = None, voices: dict = None) -> None:
+                vst_pfad: str = None, soundfont_pfad: str = None, voices: dict = None,
+                library: bool = True) -> None:
     """
     MIDI → Stereo-WAV. Reihenfolge: eigenes VST3-Instrument (wenn angegeben), SoundFont über
     FluidSynth oder tinysoundfont, zuletzt eine einfache eingebaute Klangerzeugung. Die Spur wird nicht normalisiert,
     damit die Dynamik erhalten bleibt; die Pegel setzt erst der Mixer.
     voices: {Unterspur: Stimme aus synth_engine}; diese Unterspuren spielen die eigenen Synths.
+    library: bessere Klänge aus den zusätzlichen SoundFonts (sound_library), soweit vorhanden.
     """
     soundfont_pfad = soundfont_pfad or SOUNDFONT_PFAD
     midi = pretty_midi.PrettyMIDI(midi_pfad)
@@ -56,7 +58,7 @@ def midi_zu_wav(midi_pfad: str, wav_pfad: str, is_drum: bool = False, instrument
     if audio is None and os.path.exists(soundfont_pfad):
         try:
             from renderer import render_midi
-            audio = render_midi(midi, soundfont_pfad)
+            audio = render_midi(midi, soundfont_pfad, library=library)
         except Exception as e:
             log.warning("SoundFont-Rendering fehlgeschlagen (%s), nutze die einfache Klangerzeugung", e)
     elif audio is None:
@@ -289,6 +291,7 @@ def mische_spuren(
     bpm: float = 120.0,
     sidechain_depth: float = 0.25,
     double_windows: list = None,
+    reference: str = None,
 ) -> None:
     """
     Mischt die Spuren zu einem Stereo-Master:
@@ -296,6 +299,7 @@ def mische_spuren(
     EQ und Kompressor pro Spur, gemeinsamer Hall und ein Delay für die Stimme, Bass duckt unter der Kick,
     dann Master-Kompressor, Lautheit auf MASTER_LUFS und Limiter.
     double_windows: Zeitbereiche (Sekunden), in denen der Gesang gedoppelt klingt, z. B. die Refrains.
+    reference: Vorbild-Song (WAV, MP3, FLAC); das Mastering gleicht Klangfarbe und Lautheit an ihn an.
     """
     from settings import DEFAULT_VOLUMES
 
@@ -359,11 +363,38 @@ def mische_spuren(
                            LowpassFilter(6000)])
         mix += echo(vocal_send, SAMPLE_RATE)
 
+    if reference and _master_like(mix, reference, output_pfad):
+        return
     master_volume = min(max(volumes.get("master", 1.0), 0.05), 1.0)
     mix = master(mix, compressor_threshold, compressor_ratio, limiter_threshold,
                  target_lufs=MASTER_LUFS + 20 * np.log10(master_volume))
     sf.write(output_pfad, mix.T, SAMPLE_RATE, subtype="PCM_24")
     log.info("Mix fertig: %s (%.1f LUFS)", output_pfad, _loudness(mix))
+
+
+def _master_like(mix: np.ndarray, reference: str, output_pfad: str) -> bool:
+    """Mastering nach Vorbild mit matchering: Frequenzgang, Lautheit und Stereobreite wie beim Vorbild-Song."""
+    import tempfile
+    if not os.path.exists(reference):
+        log.warning("Vorbild-Song nicht gefunden: %s, nutze das normale Mastering", reference)
+        return False
+    try:
+        import matchering as mg
+        mg.log(warning_handler=lambda text: log.info("matchering: %s", text))
+        with tempfile.TemporaryDirectory() as td:
+            target = os.path.join(td, "mix.wav")
+            loud = _loudness(mix)
+            gain = 10 ** ((MIX_REFERENCE_LUFS - loud) / 20) if loud != float("-inf") else 1.0
+            sf.write(target, (mix * gain).T, SAMPLE_RATE, subtype="FLOAT")
+            mg.process(target=target, reference=reference, results=[mg.pcm24(output_pfad)],
+                       config=mg.Config(temp_folder=td))
+    except Exception as e:
+        log.warning("Mastering nach Vorbild fehlgeschlagen (%s), nutze das normale Mastering", e)
+        return False
+    done, _ = sf.read(output_pfad, always_2d=True, dtype="float32")
+    log.info("Mix fertig: %s, gemastert nach %s (%.1f LUFS)", output_pfad, os.path.basename(reference),
+             _loudness(done.T))
+    return True
 
 
 def master(mix: np.ndarray, compressor_threshold: float = -20.0, compressor_ratio: float = 2.0,

@@ -14,15 +14,17 @@ INSTRUMENTS = ("piano", "bass", "guitar", "strings", "synth", "brass", "bells", 
                "drums", "melody")
 # fx: Riser, Becken-Swells und Impacts an den Übergängen (Audio, kein MIDI)
 CHANNELS = INSTRUMENTS + ("fx", "vocals", "master")
+# Teile, die sich einzeln neu würfeln lassen ("melody" ist die Gesangsmelodie, "chords" Akkorde und Ablauf)
+REROLLABLE = ("chords",) + INSTRUMENTS
 CHANNEL_FIELDS = ("volume", "pan", "enabled", "mute", "solo")
 # Wählbare Spielweisen pro Instrument; "default" nimmt das Muster des Genres
 STYLE_OPTIONS = {
     "piano": ("default", "chords", "eighths", "stabs", "arpeggio", "arpeggio16", "ballad_arp", "jazz_ch"),
     "bass": ("default", "root", "driving", "sync", "octaves", "wobble", "sub_pulse", "lazy"),
     "guitar": ("default", "chill_riff", "strummed", "palm_mute", "power_chords", "cutting"),
-    "strings": ("default", "legato", "build", "pizzicato", "staccato"),
+    "strings": ("default", "legato", "build", "pizzicato", "staccato", "harp"),
     "synth": ("default", "pad", "riser", "staccato_pluck", "wide_saw", "pluck", "arp", "supersaw"),
-    "brass": ("default", "stabs", "accents"),
+    "brass": ("default", "stabs", "accents", "horns"),
     "bells": ("default", "sparkle", "sparkle16", "hook_octave", "accents", "music_box"),
     "choir": ("default", "aahs", "oohs"),
     "counter": ("default", "answer", "guide", "solo"),
@@ -100,6 +102,8 @@ class SongSettings(BaseModel):
     key: str = "A"
     scale: Literal["minor", "major", "dorian", "phrygian"] = "minor"
     seed: Optional[int] = Field(None, ge=0)
+    # Wie oft ein Teil bei gleichem Seed neu gewürfelt wurde; ohne Eintrag bleibt er, wie der Seed ihn macht
+    variations: dict[str, int] = Field(default_factory=dict)
 
     active_sections: list[str] = Field(default_factory=lambda: [
         "Intro", "Verse", "PreChorus", "Chorus", "Verse", "PreChorus", "Chorus", "Bridge", "Chorus", "Outro"
@@ -109,7 +113,11 @@ class SongSettings(BaseModel):
     singer: str = "MERROW"
     vocal_engine: str = "NEUTRINO"
     harmonies: bool = True             # zweite Stimme im Refrain (nur mit NEUTRINO)
+    duet_singer: str = ""              # zweite NEUTRINO-Stimme fürs Duett (leer = kein Duett)
+    style_shift: int = Field(0, ge=-6, le=6)   # NEUTRINO StyleShift: + heller, - dunkler
+    reference_track: str = ""          # Vorbild-Song fürs Mastering (leer = normales Mastering)
     vst_path: str = ""
+    sound_library: bool = True         # bessere Klänge aus tools/soundfonts (setup_soundfonts.py), wenn vorhanden
     breathiness: float = Field(0.028, ge=0.0, le=0.2)
     shimmer: bool = True
     swing: float = Field(0.12, ge=0.0, le=0.5)
@@ -141,6 +149,11 @@ class SongSettings(BaseModel):
             raise ValueError(f"Unbekannte Sektionen: {unknown}")
         return list(value)
 
+    @field_validator("variations", mode="before")
+    @classmethod
+    def _check_variations(cls, value: dict) -> dict:
+        return {part: int(n) for part, n in (value or {}).items() if part in REROLLABLE and int(n) > 0}
+
     @field_validator("channels", mode="before")
     @classmethod
     def _complete_channels(cls, value: dict) -> dict:
@@ -170,6 +183,12 @@ class SongSettings(BaseModel):
     # ── Hilfen für die Pipeline ─────────────────────────────────────────────────
     def instrument_styles(self) -> dict:
         return {inst: self.channels[inst].style for inst in INSTRUMENTS}
+
+    def rerolled(self, part: str) -> "SongSettings":
+        """Gleicher Song, nur dieser Teil wird neu gewürfelt."""
+        if part not in REROLLABLE:
+            raise ValueError(f"Unbekannter Teil: {part}")
+        return self.with_updates(variations={**self.variations, part: self.variations.get(part, 0) + 1})
 
     def with_updates(self, **updates) -> "SongSettings":
         """Kopie mit geänderten Werten, die wieder geprüft wird."""

@@ -110,3 +110,38 @@ def test_master_limits_peaks():
     loud = (rng.standard_normal((2, 44100 * 3)) * 0.5).astype(np.float32)
     out = master(loud, limiter_threshold=-1.0)
     assert np.abs(out).max() <= 10 ** (-1.0 / 20) + 1e-4
+
+
+def test_reference_song_sets_loudness_and_tone_of_the_master(tmp_path):
+    """Mit Vorbild-Song gleicht das Mastering Lautheit und Klangfarbe an ihn an."""
+    from scipy.signal import butter, sosfilt
+    sr, n = 44100, 44100 * 12
+    rng = np.random.default_rng(0)
+    t = np.arange(n) / sr
+    reference = np.clip(rng.standard_normal((2, n)) * 0.2 + 0.3 * np.sin(2 * np.pi * 110 * t), -0.95, 0.95)
+    sf.write(tmp_path / "vorbild.wav", reference.T, sr)
+    tone = 0.2 * np.sin(2 * np.pi * 220 * t) * (1 + 0.5 * np.sin(2 * np.pi * 2 * t))
+    dark = np.vstack([tone, tone]) + sosfilt(butter(2, 800, fs=sr, output="sos"), rng.standard_normal((2, n)) * 0.05)
+    sf.write(tmp_path / "piano.wav", dark.T, sr)
+
+    def brightness(audio):
+        spec = np.abs(np.fft.rfft(audio.mean(axis=0))) ** 2
+        return spec[np.fft.rfftfreq(audio.shape[1], 1 / sr) > 4000].sum() / spec.sum()
+
+    plain, matched = tmp_path / "normal.wav", tmp_path / "vorbild_mix.wav"
+    mische_spuren([str(tmp_path / "piano.wav")], output_pfad=str(plain))
+    mische_spuren([str(tmp_path / "piano.wav")], output_pfad=str(matched), reference=str(tmp_path / "vorbild.wav"))
+    a, _ = sf.read(plain, always_2d=True)
+    b, _ = sf.read(matched, always_2d=True)
+    assert abs(mixer._loudness(b.T.astype(np.float32)) - mixer._loudness(reference.astype(np.float32))) < 3.0
+    assert brightness(b.T) > 5 * brightness(a.T)
+
+
+def test_missing_reference_song_falls_back_to_normal_mastering(tmp_path):
+    sr = 44100
+    t = np.arange(sr * 3) / sr
+    tone = 0.2 * np.sin(2 * np.pi * 220 * t)
+    sf.write(tmp_path / "piano.wav", np.vstack([tone, tone]).T, sr)
+    out = tmp_path / "mix.wav"
+    mische_spuren([str(tmp_path / "piano.wav")], output_pfad=str(out), reference=str(tmp_path / "fehlt.mp3"))
+    assert out.exists()

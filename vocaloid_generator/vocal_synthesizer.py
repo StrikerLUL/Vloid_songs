@@ -353,6 +353,19 @@ def neutrino_version(neutrino_pfad: str) -> int:
     return 2 if os.path.exists(os.path.join(neutrino_pfad, "bin", "NSF.exe")) else 3
 
 
+def neutrino_info(neutrino_pfad: str) -> str:
+    """Kurzbeschreibung für das Protokoll: Version, Ordner und installierte Stimmen."""
+    if not os.path.exists(os.path.join(neutrino_pfad, "bin", "NEUTRINO.exe")):
+        return f"kein NEUTRINO unter {neutrino_pfad}"
+    import re
+    versionen = re.findall(r"v\d+(?:\.\d+)+", os.path.abspath(neutrino_pfad))
+    ordner = versionen[-1] if versionen else ""
+    model = os.path.join(neutrino_pfad, "model")
+    stimmen = sorted(d for d in os.listdir(model) if os.path.isdir(os.path.join(model, d))) if os.path.isdir(model) else []
+    return (f"NEUTRINO v{neutrino_version(neutrino_pfad)}" + (f" ({ordner})" if ordner else "")
+            + f", Stimmen: {', '.join(stimmen) or 'keine'}")
+
+
 def _run(cmd: list, cwd: str, timeout: int) -> subprocess.CompletedProcess:
     log.debug("NEUTRINO: %s", " ".join(cmd))
     return subprocess.run(cmd, cwd=cwd, capture_output=True, timeout=timeout,
@@ -360,11 +373,13 @@ def _run(cmd: list, cwd: str, timeout: int) -> subprocess.CompletedProcess:
 
 
 def neutrino_synthese(xml_pfad, output_wav_pfad, neutrino_pfad, model_pfad, threads: int = None,
-                      timeout: int = 1800) -> bool:
+                      timeout: int = 1800, style_shift: int = 0) -> bool:
     """
     Rendert die Gesangsstimme mit NEUTRINO. v3 (Tau) schreibt die WAV selbst, v2 (Muon) braucht danach
     noch den Vocoder NSF.exe. Wirft RuntimeError mit NEUTRINOs Meldung, wenn etwas schiefgeht.
     Der Vorlauf-Takt aus erstelle_musicxml wird am Ende abgeschnitten.
+    style_shift: NEUTRINOs StyleShift in Halbtönen; positiv klingt die Stimme heller, negativ dunkler.
+    Versionen ohne StyleShift singen dann ohne.
     """
     import tempfile
 
@@ -394,17 +409,19 @@ def neutrino_synthese(xml_pfad, output_wav_pfad, neutrino_pfad, model_pfad, thre
             cmd = [neutrino_exe, full, timing, f0, mel, wav, model, "-n", threads, "-t"]
             dateien = {"full": full, "timing": timing, ".f0": f0, ".melspec": mel, ".wav": wav, "model": model,
                        ".mgc": os.path.join(td, "vocals.mgc"), ".bap": os.path.join(td, "vocals.bap")}
-            versuche = [_run_bat_aufruf(neutrino_pfad, neutrino_exe, dateien, threads),
-                        cmd + ["-m"],                                  # -m: Grafikkarte, sonst Prozessor
-                        cmd]
+            shift = ["-k", str(style_shift)] if style_shift else []
+            versuche = [_run_bat_aufruf(neutrino_pfad, neutrino_exe, dateien, threads, style_shift),
+                        cmd + shift + ["-m"],                          # -m: Grafikkarte, sonst Prozessor
+                        cmd + shift,
+                        cmd if shift else None]
             for versuch in filter(None, versuche):
                 run = _run(versuch, neutrino_pfad, timeout)
                 if run.returncode == 0 and os.path.exists(wav):
                     break
         else:
             log.info("[NEUTRINO v2] Singe...")
-            run = _run([neutrino_exe, full, timing, f0, mel, model, "-n", "1", "-o", threads, "-d", "3", "-t"],
-                       neutrino_pfad, timeout)
+            run = _run([neutrino_exe, full, timing, f0, mel, model, "-n", "1", "-k", str(style_shift), "-o", threads,
+                        "-d", "3", "-t"], neutrino_pfad, timeout)
             if run.returncode == 0:
                 vocoder = next((os.path.join(model, f"{m}.bin") for m in ("vs", "va", "ve")
                                 if os.path.exists(os.path.join(model, f"{m}.bin"))), os.path.join(model, "vs.bin"))
@@ -422,7 +439,7 @@ def neutrino_synthese(xml_pfad, output_wav_pfad, neutrino_pfad, model_pfad, thre
     return True
 
 
-def _run_bat_aufruf(neutrino_pfad: str, neutrino_exe: str, dateien: dict, threads: str):
+def _run_bat_aufruf(neutrino_pfad: str, neutrino_exe: str, dateien: dict, threads: str, style_shift: int = 0):
     """
     Der NEUTRINO.exe-Aufruf aus der Run.bat, die jeder NEUTRINO-Version beiliegt, mit unseren Dateien
     und Einstellungen. So passt er genau zur installierten Version. None ohne Run.bat oder ohne WAV-Ausgabe.
@@ -443,6 +460,7 @@ def _run_bat_aufruf(neutrino_pfad: str, neutrino_exe: str, dateien: dict, thread
     if not zeile:
         return None
     werte["numthreads"] = threads
+    werte["styleshift"] = str(style_shift)
     tokens = zeile.split()
     start = next(k for k, t in enumerate(tokens) if t.lower().endswith("neutrino.exe"))
     cmd = [neutrino_exe]

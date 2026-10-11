@@ -10,7 +10,7 @@ from song_plan import BEATS_PER_BAR, Section, SongPlan
 from theory import Chord, nearest_pitch, pitches_in_range, scale_pcs, voice_chord
 
 # Unterspuren mit eigenem Klang (General-MIDI-Programm)
-LAYER_PROGRAMS = {"pad": 89, "pizz": 45, "saw": 81, "oohs": 53}
+LAYER_PROGRAMS = {"pad": 89, "pizz": 45, "saw": 81, "oohs": 53, "harp": 46, "timp": 47}
 
 
 @dataclass
@@ -283,6 +283,50 @@ def strings(pattern: str, sec: Section, plan: SongPlan, rng: random.Random, ctx:
                 t = bar_start + k * 0.5
                 v = _voicing(ctx, "strings", _chord_for(sec, t), 55, 79, 3, ext=False)
                 out += [Ev(t, 0.25, p, _vel(sec, 0.75 if k % 2 == 0 else 0.6)) for p in v]
+    elif pattern == "harp":
+        out += _harp(sec)
+    elif pattern == "timpani":
+        out += _timpani(sec)
+    return out
+
+
+def _harp(sec: Section) -> list:
+    """Harfe: gebrochene Akkorde über zwei Oktaven, vor dem Refrain ein Glissando hinauf."""
+    out = []
+    # das Glissando endet, wo die Band vor dem Refrain aussetzt (letzter Schlag)
+    gliss_from = sec.end - 3 if sec.next_kind == "Chorus" else sec.end
+    for slot in sec.chords:
+        tones = pitches_in_range(slot.chord.triad_pcs, 55, 86)
+        figure = tones[:6] + tones[4:0:-1] if len(tones) >= 6 else tones + tones[-2:0:-1]
+        t, k = slot.start, 0
+        while t < min(slot.start + slot.dur, gliss_from) - 1e-6:
+            out.append(Ev(t, 1.5, figure[k % len(figure)], _vel(sec, 0.55 if k % 4 else 0.68), layer="harp"))
+            t += 0.5
+            k += 1
+    if gliss_from < sec.end:
+        # wie bei der echten Harfe, deren Pedale auf den Akkord gestellt sind: das Glissando klingt als Akkord
+        run = pitches_in_range(sec.chord_at(gliss_from).pcs, 60, 96)
+        step = 2.0 / len(run)
+        out += [Ev(gliss_from + i * step, 0.6, p, _vel(sec, 0.45 + 0.35 * i / len(run)), layer="harp")
+                for i, p in enumerate(run)]
+    return out
+
+
+def _timpani(sec: Section) -> list:
+    """Pauken: Wirbel mit Crescendo in den Refrain, im Refrain Schläge auf jede vierte Eins."""
+    out = []
+
+    def low(pc: int) -> int:
+        return pitches_in_range([pc], 40, 52)[0]
+
+    if sec.kind == "Chorus":
+        for b, bar_start in _bars(sec):
+            if b % 4 == 0:
+                out.append(Ev(bar_start, 1.5, low(sec.chord_at(bar_start).root), _vel(sec, 0.95), layer="timp"))
+    if sec.next_kind == "Chorus":
+        start = sec.end - BEATS_PER_BAR
+        pitch = low(sec.chord_at(start).root)
+        out += [Ev(start + i / 8, 0.15, pitch, _vel(sec, 0.35 + 0.6 * i / 31), layer="timp") for i in range(32)]
     return out
 
 
@@ -343,6 +387,12 @@ def brass(pattern: str, sec: Section, plan: SongPlan, rng: random.Random, ctx: d
             if b % 4 == 0:
                 v = _voicing(ctx, "brass", _chord_for(sec, bar_start), 58, 79, 3, ext=False)
                 out += [Ev(bar_start, 1.0, p, _vel(sec, 0.85)) for p in v]
+    elif pattern == "horns":
+        # Hörner halten die Harmonie in der Mittellage, jede Phrase etwas lauter
+        for slot in sec.chords:
+            phrase = ((slot.start - sec.start) % 16) / 16
+            v = _voicing(ctx, "horns", slot.chord, 50, 67, 3, ext=False)
+            out += [Ev(slot.start, slot.dur, p, _vel(sec, 0.5 + 0.2 * phrase)) for p in v]
     return out
 
 

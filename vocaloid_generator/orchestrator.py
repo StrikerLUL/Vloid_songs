@@ -2,14 +2,15 @@
 import logging
 import os
 import random
+from dataclasses import replace
 
 import pretty_midi
 
-from drums import CRASH, KICK, OPEN_HAT, HAT, PEDAL_HAT, RIDE, TAMBOURINE, TOMS, drum_section
+from drums import CRASH, KICK, OPEN_HAT, HAT, PEDAL_HAT, RIDE, TAMBOURINE, TOMS, drum_section, lead_in
 from lyrics import parse_lyrics
 from melody_writer import harmony_line, melody_data, required_bars, write_vocal_melody
 from parts import LAYER_PROGRAMS, PARTS, Ev, lead_hook
-from song_plan import BEATS_PER_BAR, build_plan
+from song_plan import BEATS_PER_BAR, build_plan, describe_arrangement
 from styles import get_style
 
 log = logging.getLogger(__name__)
@@ -31,6 +32,8 @@ TIMING_SPREAD = {"drums": 0.003, "bass": 0.004, "piano": 0.006, "guitar": 0.006,
                  "synth": 0.002, "brass": 0.006, "melody": 0.004, "bells": 0.003, "choir": 0.01,
                  "counter": 0.006, "perc": 0.006}
 SWING_MAX = 1 / 6                       # Swing 0.5 schiebt die zweite Sechzehntel um 1/12 Schlag
+# Teile mit eigenem Zufall (wie settings.REROLLABLE): Akkorde und Ablauf, Gesangsmelodie, jedes Instrument
+REROLLABLE = ("chords",) + INSTRUMENTS
 
 
 def _default_lyrics() -> dict:
@@ -41,7 +44,7 @@ def _default_lyrics() -> dict:
 def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: str, section_config: dict,
                      output_dir: str = None, lyrics: dict = None, swing: float = None,
                      jitter_scale: float = 1.0, instrument_styles: dict = None, style: str = None,
-                     vocal_range: tuple = None) -> dict:
+                     vocal_range: tuple = None, variations: dict = None) -> dict:
     """
     Komponiert den kompletten Song und schreibt eine MIDI-Datei pro Instrument nach output_dir.
 
@@ -49,33 +52,44 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
     lyrics: {Sektion: [Silben]}; Sektionen ohne Text singen den Standardtext.
     instrument_styles: {Instrument: Spielweise}; "default" nimmt die Spielweise des Stils.
     vocal_range: (tiefster, höchster Ton) der Gesangsmelodie, passend zur Stimme.
+    variations: {Teil: Zähler} aus REROLLABLE; ein höherer Zähler würfelt nur diesen Teil neu, der Rest des
+    Songs bleibt bei gleichem Seed gleich.
     Rückgabe: {Instrument: [pretty_midi.Note]}, dazu "melody_data", "silben", "vocal_melody", die zweite
     Stimme für den Refrain ("harmony_data", "harmony_silben") und "plan".
     """
     profile = get_style(style or genre)
-    rng = random.Random(random.getrandbits(32))
+    rngs = _part_rngs(random.getrandbits(32), variations or {})
     swing = profile.swing if swing is None else swing
     log.info("Komponiere: Stil %s, %s BPM, %s-%s", profile.name, bpm, key, mode)
 
     sung = {**_default_lyrics(), **(lyrics or {})}
     min_bars = {kind: required_bars(len(sung.get(kind, [])))
                 for kind in set(structure) if section_config.get(kind, {}).get("has_vocals", True)}
-    plan = build_plan(profile, bpm, structure, key, mode, section_config, rng, min_bars)
+    plan = build_plan(profile, bpm, structure, key, mode, section_config, rngs["chords"], min_bars)
     if vocal_range:
         plan.vocal_range = tuple(vocal_range)
-    vocal_notes = write_vocal_melody(plan, sung, rng)
+    vocal_notes = write_vocal_melody(plan, sung, rngs["melody"])
+
+    arrangement = describe_arrangement(plan)
+    if arrangement:
+        log.info("Ablauf: %s", ", ".join(arrangement))
 
     events = {inst: [] for inst in INSTRUMENTS}
     contexts = {inst: {"vocal": vocal_notes} for inst in PARTS}
     for sec in plan.sections:
-        for inst, part in PARTS.items():
-            pattern = _pattern(profile, sec, inst, instrument_styles)
-            for single in (pattern or "").split("+"):
-                if single:
-                    events[inst] += part(single, sec, plan, rng, contexts[inst])
-        if _pattern(profile, sec, "melody") == "hook":
-            events["melody"] += lead_hook(sec, plan, vocal_notes)
-        events["drums"] += drum_section(sec, profile.groove(sec.kind), rng)
+        for piece in _pieces(sec):
+            for inst, part in PARTS.items():
+                pattern = _pattern(profile, piece, inst, instrument_styles)
+                for single in (pattern or "").split("+"):
+                    if single:
+                        events[inst] += part(single, piece, plan, rngs[inst], contexts[inst])
+            if _pattern(profile, piece, "melody") == "hook":
+                events["melody"] += lead_hook(piece, plan, vocal_notes)
+            if piece.feel == "breakdown":
+                events["drums"] += lead_in(piece, rngs["drums"])
+            else:
+                groove = "halftime" if piece.feel == "halftime" else profile.groove(sec.kind)
+                events["drums"] += drum_section(piece, groove, rngs["drums"])
 
     _breaks_before_chorus(plan, events)
     _final_chord(plan, events)
@@ -83,7 +97,7 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
 
     tracks = {}
     for inst in INSTRUMENTS:
-        tracks[inst] = _to_notes(events[inst], bpm, inst, rng, swing, jitter_scale)
+        tracks[inst] = _to_notes(events[inst], bpm, inst, rngs[inst], swing, jitter_scale)
     out_dir = output_dir or _default_output()
     os.makedirs(out_dir, exist_ok=True)
     for inst in INSTRUMENTS:
@@ -102,6 +116,34 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
     return tracks
 
 
+BREAKDOWN_ENERGY = 0.4
+
+
+def _pieces(sec) -> list:
+    """
+    Die Sektion, wie die Band sie spielt: meist am Stück, bei Breakdown oder Halftime-Anfang in zwei Teilen.
+    Der erste Teil trägt feel, der zweite spielt normal und setzt mit Crash wieder ein.
+    """
+    if not sec.feel or sec.resume is None:
+        return [sec]
+    bars = int(round((sec.resume - sec.start) / BEATS_PER_BAR))
+    first = replace(sec, bars=bars, chords=[c for c in sec.chords if c.start < sec.resume], next_kind=sec.kind,
+                    resume=None, energy=BREAKDOWN_ENERGY if sec.feel == "breakdown" else sec.energy)
+    second = replace(sec, start=sec.resume, bars=sec.bars - bars, chords=[c for c in sec.chords if c.start >= sec.resume],
+                     prev_kind=sec.kind, feel="", resume=None)
+    return [first, second]
+
+
+def _piece_at(plan, beat: float):
+    pieces = _pieces(plan.section_at(beat))
+    return next((p for p in pieces if p.start <= beat < p.end), pieces[-1])
+
+
+def _part_rngs(base: int, variations: dict) -> dict:
+    """Ein eigener Zufall pro Teil: was ein Teil würfelt, ändert nichts an den anderen."""
+    return {name: random.Random(f"{base}:{name}:{int(variations.get(name, 0))}") for name in REROLLABLE}
+
+
 def _default_output() -> str:
     import config
     return config.OUTPUT_ORDNER
@@ -112,8 +154,9 @@ FULL_BAND = ("Intro", "PreChorus", "Chorus", "Outro")
 
 
 def _pattern(profile, sec, inst: str, overrides: dict = None):
-    """Spielweise eines Instruments in einer Sektion: die vom Stil, oder die in der App gewählte."""
-    pattern = profile.part(sec.kind, inst, sec.occurrence, sec.is_last_of_kind)
+    """Spielweise eines Instruments in einer Sektion (oder einem Teil aus _pieces): die vom Stil, oder die in der
+    App gewählte."""
+    pattern = profile.part(sec.kind, inst, sec.occurrence, sec.is_last_of_kind, sec.feel)
     chosen = (overrides or {}).get(inst)
     if not chosen or chosen == "default":
         return pattern
@@ -176,8 +219,7 @@ def _spread_stereo(plan, profile, events: dict, overrides: dict = None) -> None:
             e.layer = "toms"
     doubled = []
     for e in events["guitar"]:
-        sec = plan.section_at(e.start)
-        if _pattern(profile, sec, "guitar", overrides) in DOUBLE_TRACKED:
+        if _pattern(profile, _piece_at(plan, e.start), "guitar", overrides) in DOUBLE_TRACKED:
             e.layer = "left"
             doubled.append(Ev(e.start, e.dur, e.pitch, max(1, e.vel - 6), "right"))
     events["guitar"] += doubled

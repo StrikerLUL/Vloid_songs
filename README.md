@@ -21,7 +21,7 @@ Ohne uv geht es auch mit pip (Python 3.10 bis 3.12). Auch dann in einer eigenen 
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r vocaloid_generator\requirements.txt
-python vocaloid_generator\gui_mvc.py
+python vocaloid_generator\app.py
 ```
 
 ### Gesang mit NEUTRINO
@@ -33,7 +33,15 @@ Die App ruft NEUTRINO so auf, wie es die `Run.bat` der installierten Version vor
 
 Damit der Gesang natürlich klingt, bereitet die App die Noten für NEUTRINO vor: ein Takt Vorlauf, kurze Pausen innerhalb einer Phrase werden an die Note davor gebunden, und die Melodie bleibt im Tonumfang der gewählten Stimme. Männliche Stimmen (NAKUMO, SOMA, RUNO) singen eine Oktave tiefer. Im Refrain singt NEUTRINO eine zweite Stimme dazu, der Hauptgesang wird gedoppelt, und ein De-Esser nimmt scharfe S-Laute zurück.
 
+Im Tab „Gesang“ wählst du die Stimme, ob im Refrain eine zweite Stimme mitsingt, und die Klangfarbe (StyleShift): plus klingt heller, minus dunkler. StyleShift braucht eine NEUTRINO-Version, die die Option `-k` kennt; sonst singt NEUTRINO ohne. Zu Beginn jedes Songs steht im Protokoll, welche NEUTRINO-Version und welche Stimmen gefunden wurden.
+
 Schlägt NEUTRINO fehl, steht die Meldung im Protokoll, und die App nutzt die lokale Vorschau-Stimme (Windows-Sprachausgabe plus Tonhöhen-Korrektur). Ohne NEUTRINO nimmt sie diese Stimme sofort.
+
+**Duett:** Im Tab „Gesang“ unter „Duett mit“ eine zweite Stimme wählen (oder `--duett NAME` auf der Kommandozeile). Die beiden Stimmen wechseln sich in den Strophen ab, die Bridge singt die zweite, im Refrain singt die erste die Melodie und die zweite die zweite Stimme. Jede singt mit ihrem eigenen Tonumfang und steht etwas links bzw. rechts im Mix.
+
+**Melodie und Text:** Die Melodie folgt dem Tonhöhenakzent der Wörter (Tokio-Japanisch aus dem Wörterbuch): wo ein Wort im Sprechen steigt, steigt meist auch die Melodie, ん und っ springen nicht. Lange Töne am Phrasenende werden oft auf zwei Töne gesungen (Melisma), auf dem Vokal der letzten Silbe; Balladen machen das öfter, Chiptune selten.
+
+**Weiter bearbeiten in OpenUtau:** Neben `vocals.xml` für NEUTRINO schreibt die App die Gesangsnoten als UTAU-Projekt: `vocals.ust` (Melodie), `vocals_harmony.ust` (zweite Stimme) und beim Duett `vocals_duett_1.ust` und `vocals_duett_2.ust`. [OpenUtau](https://www.openutau.com/) öffnet sie mit Text, Tonhöhe und Tempo; dort lässt sich jede Note von Hand nachbessern oder mit einer anderen Stimme singen.
 
 ### Klang der Instrumente
 
@@ -45,7 +53,32 @@ uv run setup_fluidsynth.py
 
 Das lädt FluidSynth 2.6 nach `tools\fluidsynth\bin`. Ohne FluidSynth rendert `tinysoundfont`, das mit `uv sync` installiert wird. Im Protokoll steht, welcher der beiden spielt. Wer einen anderen SoundFont nutzen möchte, trägt ihn in den Einstellungen ein.
 
+Noch besser klingen einzelne Instrumente mit zusätzlichen SoundFonts. Einmal ausführen:
+
+```powershell
+uv run setup_soundfonts.py
+```
+
+Das lädt etwa 250 MB nach `tools\soundfonts` (mit `--ohne-verzerrt` 130 MB weniger, dann ohne die verzerrte Gitarre). Danach spielen diese Instrumente von selbst aus den neuen Dateien:
+
+| Instrument | SoundFont | Lizenz |
+| --- | --- | --- |
+| Flügel, Tine-E-Piano, Streicher, Pizzicato, Harfe, Pauken, Bläser, Hörner, Flöte, Oboe, Klarinette | MS Basic von MuseScore 4 (nur mit FluidSynth) | MIT |
+| FM-E-Piano (City Pop) | FreePats FM Piano 1 | CC0 |
+| cleane und verzerrte E-Gitarre | FreePats Electric Guitar FSBS | CC0 |
+| Schlagzeug (Rock: Red Zeppelin, sonst Black Pearl) | AVL Drumkits von Glen MacArthur | CC-BY-SA 3.0 |
+
+Alles andere spielt weiter GeneralUser GS. Im Tab „Pfade“ steht, wie viele der zusätzlichen SoundFonts da sind, und ein Schalter stellt sie zum Vergleichen ab. Mit einem eigenen SoundFont in den Einstellungen bleiben sie aus.
+
 Supersaw, Pluck, Pad, Lead und Chiptune-Klänge erzeugt die App selbst (`synth_engine.py`), ebenso Riser, Becken-Swells, Impacts und Downlifter vor den Refrains (`fx.py`). Wer ein eigenes VST3-Instrument wie Surge XT nutzen möchte, trägt es in den Einstellungen ein; es spielt dann Synth und Lead.
+
+### Vorbild-Song
+
+Im Tab „Song“ kannst du für jeden Song einen Vorbild-Song wählen (WAV, MP3 oder FLAC). Das Mastering gleicht dann Frequenzgang, Lautheit und Stereobreite an ihn an; das erledigt [matchering](https://github.com/sergree/matchering). Ohne Vorbild-Song mastert die App wie bisher auf -12 LUFS.
+
+### Liedtext
+
+Im Tab „Text“ steht der Text pro Sektion; rechts daneben zeigt die App, welche Silben gesungen werden. Japanisch darf ganz normal geschrieben werden, mit Kanji und ohne Leerzeichen: `夜の街を歩いてた` wird zu よ る の ま ち お あ る い て た. Die Lesung der Kanji kommt aus dem Wörterbuch von fugashi (UniDic). Liest es ein Wort falsch, steht die richtige Lesung in eckigen Klammern dahinter: `君[きみ]`. Partikel singt die App so, wie man sie spricht (は als わ), und ー wird als langer Vokal gesungen.
 
 ### MP3-Export
 
@@ -56,8 +89,22 @@ Für die MP3 braucht `pydub` das Programm ffmpeg (`winget install Gyan.FFmpeg`).
 Oberfläche:
 
 ```powershell
-uv run vocaloid_generator\gui_mvc.py
+uv run vocaloid_generator\app.py
 ```
+
+Oder einfach `Vloid Songs starten.bat` im Projektordner doppelklicken. Die App öffnet sich in einem eigenen Fenster. Geht das Fenster nicht auf (es braucht die Microsoft-Edge-WebView2-Laufzeit, die auf Windows 10 und 11 meist schon da ist), startet `uv run vocaloid_generator\app.py --browser` dieselbe Oberfläche im Browser unter http://127.0.0.1:8090.
+
+- **Song erzeugen** (oben rechts) macht einen neuen Song. Daneben wählst du, wie viele Fassungen am Stück entstehen; alle landen im Verlauf.
+- **Player:** Der fertige Song spielt mit Wellenform; ein Klick in die Wellenform springt an diese Stelle. Unter „Anhören“ hörst du jede Spur einzeln, an derselben Stelle im Song.
+- **Noten:** die Piano-Roll aller Spuren mit Tonhöhe, sie läuft beim Abspielen mit. Ein Klick auf eine Spur in der Legende blendet sie aus, ein Klick in die Noten springt im Player dorthin.
+- **Neu würfeln:** Ein Knopf pro Teil (Melodie, Akkorde, Schlagzeug, jedes Instrument). Nur dieser Teil wird neu, der Rest des Songs bleibt.
+- **Seed festhalten:** Danach macht „Song erzeugen“ wieder diesen Song, mit allem, was du inzwischen geändert hast (Mix, Gesang, Text). Das Seed-Feld im Tab „Song“ leeren, dann gibt es wieder jedes Mal einen neuen Song.
+- **Als ZIP für die DAW:** alle Spuren als WAV und MIDI, siehe unten.
+- **Tabs rechts:** Song (Stil, Tempo, Tonart, Ablauf, Vorbild-Song, eigene Vorlagen), Text (mit Vorschau, wie gesungen wird), Band (Spielweise, Lautstärke, Panorama, Mute/Solo pro Spur), Gesang, Mix, Verlauf und Pfade.
+
+Alle Einstellungen speichert die App sofort. Eigene Vorlagen (Tab „Song“) merken sich Stil, Tempo, Tonart, Ablauf, Band, Gesang und Mix, aber nicht den Text; sie liegen in `vocaloid_generator\vorlagen\`.
+
+Die alte Oberfläche (`uv run vocaloid_generator\gui_mvc.py`) startet noch, kennt aber Verlauf, Neu-Würfeln und Player nicht und fällt bald weg.
 
 Kommandozeile, nutzt dieselben Einstellungen wie die Oberfläche:
 
@@ -71,9 +118,32 @@ uv run vocaloid_generator\main.py --style Rock --bpm 140 --key E --scale minor -
 | `--bpm`, `--style`, `--key`, `--scale` | überschreiben die gespeicherten Einstellungen für diesen Lauf |
 | `--output` | Ausgabeordner |
 | `--settings` | eine andere Einstellungsdatei verwenden |
+| `--neu TEIL` | nur diesen Teil des letzten Songs neu würfeln, der Rest bleibt; mehrfach möglich |
+| `--varianten N` | N Songs am Stück erzeugen; mit `--neu` N Fassungen der gewählten Teile |
+| `--verlauf` | die letzten Songs auflisten |
+| `--aus-verlauf NR` | Einstellungen und Seed eines Songs aus dem Verlauf nehmen (1 = der neueste) |
+| `--zip DATEI` | den Song mit allen Spuren als ZIP für eine DAW exportieren |
+| `--stimme NAME`, `--duett NAME` | NEUTRINO-Stimme und zweite Stimme fürs Duett für diesen Lauf |
 | `-v` | alle Details ausgeben |
 
-Die fertigen Dateien landen in `vocaloid_generator\output\` (oder im Ordner aus den Einstellungen): `final_song.mp3`, `final_mix.wav`, die einzelnen Spuren als WAV und MIDI und `vocals.xml` für NEUTRINO.
+Die fertigen Dateien landen in `vocaloid_generator\output\` (oder im Ordner aus den Einstellungen): `final_song.mp3`, `final_mix.wav`, die einzelnen Spuren als WAV und MIDI, `vocals.xml` für NEUTRINO und die `.ust`-Dateien für OpenUtau.
+
+### Verlauf, Neu würfeln und Varianten
+
+Jeder fertige Song landet zusätzlich im Unterordner `verlauf\`: die MP3 und daneben eine JSON-Datei mit allen Einstellungen und dem Seed. Die 30 neuesten Songs bleiben dort, als Favorit markierte immer.
+
+Gefällt dir alles außer einem Teil, wird nur dieser neu gewürfelt. Teile sind `chords` (Akkorde und Ablauf), `melody` (Gesangsmelodie) und jedes Instrument: `piano`, `bass`, `guitar`, `strings`, `synth`, `brass`, `bells`, `choir`, `counter`, `perc`, `drums`.
+
+```powershell
+uv run vocaloid_generator\main.py --neu melody                  # der letzte Song mit neuer Melodie
+uv run vocaloid_generator\main.py --neu drums --varianten 3     # drei Schlagzeug-Fassungen zur Auswahl
+uv run vocaloid_generator\main.py --varianten 3                 # drei ganz neue Songs
+uv run vocaloid_generator\main.py --aus-verlauf 2 --zip song.zip
+```
+
+Neue Akkorde ändern auch alles, was auf den Akkorden spielt; eine neue Melodie ändert die Gegenstimme mit, weil sie der Melodie antwortet.
+
+Die ZIP-Datei enthält den Mix, jede Spur als WAV (`Spuren\`) und MIDI (`MIDI\`), die Gesangsnoten als MusicXML und UST (`Gesang\`), `einstellungen.json` und `song.txt` mit Tempo und Tonart. Alle Spuren starten bei 0:00 und lassen sich so in jede DAW ziehen.
 
 ## Stile
 
@@ -85,19 +155,21 @@ Jeder Stil bringt eigene Instrumente, Spielweisen, Schlagzeug-Grooves und Akkord
 | Dark Vocaloid | schnelles Sechzehntel-Klavier, verzerrte Gitarre, Chor, Celesta, Cello-Gegenstimme, Double-Bass-Drum im Refrain |
 | Kawaii Chiptune | eigene Chiptune-Synths, Synth-Bass, Glockenspiel in Sechzehnteln, Four-on-the-Floor, Bass duckt unter der Kick |
 | Rock | Gitarren doppelt links und rechts, Bass, Schlagzeug, Gitarren-Antworten und -Solo |
-| Ballade | Klavier-Arpeggien, Streicher, Pad, Spieluhr, Chor, Cello-Linie unter dem Gesang |
-| City Pop | E-Piano mit Septakkorden, Funk-Gitarre, Oktav-Bass, Bläser, Congas, Saxofon-Antworten |
+| Ballade | Klavier-Arpeggien, Orchester (Streicher, Pizzicato, Harfe mit Glissando, Pauken-Wirbel, Hörner), Pad, Spieluhr, Chor, Cello-Linie unter dem Gesang |
+| City Pop | FM-E-Piano mit Septakkorden, Funk-Gitarre, Oktav-Bass, Bläser, Congas, Saxofon-Antworten |
 
 Keine Sektion klingt zweimal gleich: Die zweite Strophe bekommt eine Gegenstimme, der letzte Refrain Chor und Glockenspiel in der Oktave der Hook, und im Refrain spielen mehrere Synth-Schichten zusammen.
 
-Im Instrumente-Tab lässt sich pro Instrument eine andere Spielweise wählen. „default“ nimmt die des Stils.
+Auch der Ablauf ändert sich von Song zu Song. Je nach Stil und Zufall steigt der letzte Refrain einen oder zwei Halbtöne oder bleibt in der Tonart, beginnt leise nur mit Klavier und Streichern (wie das „Ochisabi“ im J-Pop), die Bridge wird zum Breakdown ohne Schlagzeug, oder die zweite Strophe beginnt im Halftime. Was ein Song davon hat, steht im Protokoll unter „Ablauf“. „Akkorde“ neu würfeln würfelt auch das neu.
+
+Im Tab „Band“ lässt sich pro Instrument eine andere Spielweise wählen. „wie der Stil“ nimmt die des Stils.
 
 ## So entsteht ein Song
 
-1. **Bauplan:** Jede Sektion bekommt eine bewährte Akkordfolge (zum Beispiel die Royal-Road-Folge des J-Pop). Gleiche Sektionen klingen gleich, der Pre-Chorus endet auf der Dominante, der Refrain auf der Tonika, und der letzte Refrain steigt einen Halbton.
-2. **Melodie:** Phrasen aus wiederkehrenden Rhythmus-Motiven, betonte Töne sind Akkordtöne. Der Refrain wiederholt seine erste Phrase als Hook, Intro und Outro spielen diese Hook. Kurze Liedtexte werden wiederholt, lange machen die Sektion länger.
+1. **Bauplan:** Jede Sektion bekommt eine bewährte Akkordfolge (zum Beispiel die Royal-Road-Folge des J-Pop). Gleiche Sektionen klingen gleich, der Pre-Chorus endet auf der Dominante, der Refrain auf der Tonika, und der letzte Refrain steigt oft einen oder zwei Halbtöne.
+2. **Melodie:** Phrasen aus wiederkehrenden Rhythmus-Motiven, betonte Töne sind Akkordtöne, die Tonhöhe folgt dem Wortakzent, lange Töne am Phrasenende bekommen manchmal ein Melisma. Der Refrain wiederholt seine erste Phrase als Hook, Intro und Outro spielen diese Hook. Kurze Liedtexte werden wiederholt, lange machen die Sektion länger.
 3. **Begleitung und Schlagzeug:** Spielweisen pro Instrument mit Stimmführung, Grooves mit Fills, Crash auf jedem Refrain, Snare-Wirbel und kurzer Stopp vor dem Refrain.
-4. **Klang und Mix:** SoundFont-Rendering in Stereo (FluidSynth oder tinysoundfont), eigene Synths und Übergangs-Effekte, jede Spur auf ihre Ziel-Lautheit, EQ und Kompressor pro Spur, gemeinsamer Hall, De-Esser, Doppelung und Delay auf der Stimme, Master auf -12 LUFS mit Limiter.
+4. **Klang und Mix:** SoundFont-Rendering in Stereo (FluidSynth oder tinysoundfont, bessere Instrumente aus den zusätzlichen SoundFonts), eigene Synths und Übergangs-Effekte, jede Spur auf ihre Ziel-Lautheit, EQ und Kompressor pro Spur, gemeinsamer Hall, De-Esser, Doppelung und Delay auf der Stimme, Master auf -12 LUFS mit Limiter.
 
 Ohne Gesang (kein NEUTRINO, keine Vorschau-Stimme oder Gesang ausgeschaltet) spielt die Lead-Stimme die Gesangsmelodie.
 
@@ -105,7 +177,7 @@ Ohne Gesang (kein NEUTRINO, keine Vorschau-Stimme oder Gesang ausgeschaltet) spi
 
 Die App speichert alles in `vocaloid_generator\user_settings.json`. Die alte `settings.json` wird noch gelesen, solange es keine `user_settings.json` gibt. Ungültige Werte (zum Beispiel ein Pfad, den es auf diesem Rechner nicht gibt) werden beim Laden durch Standardwerte ersetzt und im Protokoll gemeldet.
 
-Jeder erzeugte Song meldet im Protokoll seinen Seed. Mit diesem Seed lässt sich derselbe Song später noch einmal erzeugen.
+Jeder erzeugte Song meldet im Protokoll seinen Seed. Mit diesem Seed lässt sich derselbe Song später noch einmal erzeugen. Seit dem Neu-Würfeln pro Teil hat jeder Teil seinen eigenen Zufall; ein Seed aus einer älteren Version ergibt deshalb einen anderen Song als damals.
 
 ## Tests
 
@@ -123,13 +195,18 @@ uv run pytest -m "not slow"   # ohne den Test, der echtes Audio rendert
 | `theory.py` | Tonarten, Akkorde, Stufen wie „IVmaj7“, Griffe mit Stimmführung |
 | `styles.py` | die Stile: Instrumente, Spielweisen pro Sektion, Akkordfolgen, Mix |
 | `song_plan.py` | Bauplan: Sektionen, Tonarten, Akkorde und Energie |
-| `melody_writer.py` | Gesangsmelodie mit Motiven und Refrain-Hook |
+| `melody_writer.py` | Gesangsmelodie mit Motiven, Refrain-Hook, Wortakzent, Melisma und Duett-Aufteilung |
 | `parts.py`, `drums.py` | Begleitung, Gegenstimme, Percussion und Schlagzeug |
 | `orchestrator.py` | setzt alles zusammen und schreibt die MIDI-Spuren |
 | `renderer.py` | rendert MIDI mit dem SoundFont (FluidSynth oder tinysoundfont) |
+| `sound_library.py`, `setup_soundfonts.py` | welches Instrument aus welchem zusätzlichen SoundFont spielt, und deren Download |
 | `synth_engine.py` | eigene Synths: Supersaw, Pluck, Pad, Lead, Chiptune |
 | `fx.py` | Riser, Becken-Swell, Impact und Downlifter |
 | `vocal_synthesizer.py` | MusicXML, NEUTRINO und die lokale Vorschau-Stimme |
-| `mixer.py`, `exporter.py` | Mischen, Mastern und MP3-Export |
-| `gui_mvc.py`, `model.py`, `view/`, `controller.py` | die Oberfläche |
+| `ust_export.py` | Gesangsnoten als UTAU-Projekt (.ust) für OpenUtau |
+| `mixer.py`, `exporter.py` | Mischen, Mastern, MP3- und ZIP-Export |
+| `history.py` | der Verlauf: jeder Song mit Seed und Einstellungen |
+| `app.py`, `gui/` | die Oberfläche (NiceGUI): Seite, Einstellungen, Player mit wavesurfer.js, Piano-Roll |
+| `vorlagen.py` | eigene Vorlagen speichern und laden |
+| `gui_mvc.py`, `model.py`, `view/`, `controller.py` | die alte Oberfläche (CustomTkinter) |
 | `main.py` | die Kommandozeile |

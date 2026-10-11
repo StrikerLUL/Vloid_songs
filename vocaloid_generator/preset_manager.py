@@ -132,3 +132,20 @@ def apply_preset(model, preset_name):
     model.style = preset_name
     model.log_text = f"Preset angewendet: {preset_name}"
     return True
+
+
+def preset_settings(preset_name, settings):
+    """Die Einstellungen mit den typischen Werten eines Stils (Tempo, Tonart, Ablauf, Lautstärken).
+    Gibt None zurück, wenn es für den Stil keine Vorgabe gibt."""
+    preset = PRESETS.get(preset_name)
+    if preset is None:
+        return None
+    channels = {ch: data.model_dump() for ch, data in settings.channels.items()}
+    for key, field in (("volumes", "volume"), ("panning", "pan"), ("enabled", "enabled")):
+        for ch, value in preset[key].items():
+            if ch in channels:
+                channels[ch][field] = value
+    return settings.with_updates(
+        style=preset_name, bpm=preset["bpm"], key=preset["key"], scale=preset["scale"],
+        active_sections=list(preset["active_sections"]), channels=channels,
+    )

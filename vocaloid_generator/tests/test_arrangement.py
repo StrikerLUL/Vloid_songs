@@ -122,7 +122,8 @@ def test_every_chorus_sings_the_same_hook(jpop_song):
     first, second, final = chorus_melodies(jpop_song.tracks)
     assert first == second
     assert [t for t, _ in final] == [t for t, _ in first]
-    assert all(b - a == 1 for (_, a), (_, b) in zip(first, final)), "Schlussrefrain einen Halbton höher"
+    up = jpop_song.tracks["plan"].key_change
+    assert all(b - a == up for (_, a), (_, b) in zip(first, final)), "Schlussrefrain in der neuen Tonart"
 
 
 def test_chorus_repeats_its_opening_phrase(jpop_song):
@@ -170,7 +171,7 @@ def test_melody_data_stays_in_sync_with_the_band(jpop_song):
 
 def test_short_lyrics_are_repeated_to_fill_the_section(tmp_path):
     tracks = compose(tmp_path, lyrics={"Verse": ["ら", "り", "る"], "Chorus": ["あ", "い"], "PreChorus": ["お"]})
-    verse = [s for s in tracks["silben"]][:9]
+    verse = [s for s in tracks["silben"] if not getattr(s, "melisma", False)][:9]   # ohne Melisma-Vokale
     assert verse == ["ら", "り", "る"] * 3
 
 
@@ -203,7 +204,8 @@ def test_chorus_starts_with_a_crash_and_kick(jpop_song):
     tracks = jpop_song.tracks
     for sec in tracks["plan"].sections:
         if sec.kind == "Chorus":
-            t0 = seconds(tracks, sec.start)
+            # beginnt der Refrain leise, setzt das Schlagzeug erst zur zweiten Hälfte ein
+            t0 = seconds(tracks, sec.resume if sec.feel == "breakdown" else sec.start)
             hits = {n.pitch for n in tracks["drums"] if abs(n.start - t0) < 0.03}
             assert {CRASH, KICK} <= hits
 

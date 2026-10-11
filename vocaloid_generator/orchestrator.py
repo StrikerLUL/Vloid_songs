@@ -50,6 +50,7 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
 
     style: Name des Stils (z. B. "Dark Vocaloid"); ohne Angabe entscheidet genre.
     lyrics: {Sektion: [Silben]}; Sektionen ohne Text singen den Standardtext.
+    swing: verschiebt jede zweite Sechzehntel nach hinten (0 bis 0,5), zusätzlich zum Swing des Stils.
     instrument_styles: {Instrument: Spielweise}; "default" nimmt die Spielweise des Stils.
     vocal_range: (tiefster, höchster Ton) der Gesangsmelodie, passend zur Stimme.
     variations: {Teil: Zähler} aus REROLLABLE; ein höherer Zähler würfelt nur diesen Teil neu, der Rest des
@@ -59,7 +60,7 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
     """
     profile = get_style(style or genre)
     rngs = _part_rngs(random.getrandbits(32), variations or {})
-    swing = profile.swing if swing is None else swing
+    swing = min(1.0, profile.swing + (swing or 0.0))     # Stile mit eigenem Swing (Lo-Fi) legen ihn dazu
     log.info("Komponiere: Stil %s, %s BPM, %s-%s", profile.name, bpm, key, mode)
 
     sung = {**_default_lyrics(), **(lyrics or {})}

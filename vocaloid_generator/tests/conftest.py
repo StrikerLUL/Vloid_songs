@@ -54,3 +54,10 @@ def jpop_song(tmp_path_factory):
         section_config=config.SECTION_CONFIG, output_dir=str(out),
     )
     return Song(tracks=tracks, structure=TEST_STRUCTURE, bpm=160, key="B", mode="minor", output_dir=str(out))
+
+
+@pytest.fixture(autouse=True)
+def without_surge(monkeypatch):
+    """Ein installiertes Surge XT taucht in den Tests nicht auf."""
+    import vst_sounds
+    monkeypatch.setattr(vst_sounds, "_surge_candidates", lambda: ())

@@ -304,6 +304,43 @@ def band_panel(s: SongSettings) -> None:
         ui.label("Master").classes("w-24")
         ui.slider(min=0, max=1.5, step=0.05).bind_value(s.channels["master"], "volume").props("label") \
             .classes("w-64")
+    section_title("Klang")
+    ui.switch("Verzerrte E-Gitarren über Verstärker und Box").bind_value(s, "guitar_amp").mark("switch-guitar_amp") \
+        .tooltip("Der SoundFont spielt die Gitarre sauber, verzerrt wird danach wie mit einem echten Verstärker, und "
+                 "die Box nimmt das Kratzen weg. Eine eigene Box (Impulsantwort) lässt sich unter Pfade wählen.")
+    ui.switch("Lo-Fi-Klang: Knistern und alte Bandmaschine").bind_value(s, "lofi_texture") \
+        .mark("switch-lofi_texture").tooltip("Nur im Stil Lo-Fi")
+    hint("Das Schlagzeug kann oben statt aus dem SoundFont aus einer Drum-Machine kommen (808 oder 909).")
+    section_title("Klänge aus dem VST-Instrument")
+    vst_editor(s)
+
+
+def vst_editor(s: SongSettings) -> None:
+    """Pro Spur einen Klang im Fenster des VST-Instruments (z. B. Surge XT) aussuchen."""
+    import vst_sounds
+
+    async def choose(part: str) -> None:
+        ui.notify("Das Fenster des Instruments geht auf. Such einen Klang aus und schließ das Fenster.")
+        state = await run.io_bound(vst_sounds.choose, s.vst_path, s.vst_sounds.get(part, ""))
+        if state:
+            s.vst_sounds = {**s.vst_sounds, part: state}
+        else:
+            ui.notify("Das Fenster ging nicht auf. Ist unter Pfade ein VST3-Instrument gewählt?", type="warning")
+
+    def forget(part: str) -> None:
+        s.vst_sounds = {k: v for k, v in s.vst_sounds.items() if k != part}
+
+    hint("Braucht ein VST3-Instrument unter Pfade, z. B. das kostenlose Surge XT mit echten Supersaws, Reese-Bässen "
+         "und Flächen. Ohne gewählten Klang spielt die Spur wie bisher.")
+    for part in vst_sounds.PARTS:
+        with ui.row().classes("items-center gap-3"):
+            ui.label(labels.CHANNELS[part]).classes("w-28")
+            ui.label().bind_text_from(s, "vst_sounds", backward=lambda d, p=part: "eigener Klang" if p in d else
+                                      "wie der Stil").classes("w-32 text-grey-5").mark(f"vst-status-{part}")
+            ui.button("Klang wählen", icon="tune", on_click=lambda p=part: choose(p)) \
+                .props("flat dense no-caps").bind_enabled_from(s, "vst_path", backward=bool).mark(f"vst-choose-{part}")
+            ui.button("zurück", icon="undo", on_click=lambda p=part: forget(p)).props("flat dense no-caps") \
+                .bind_visibility_from(s, "vst_sounds", backward=lambda d, p=part: p in d).mark(f"vst-forget-{part}")
 
 
 # ── Gesang ──────────────────────────────────────────────────────────────────────
@@ -414,7 +451,8 @@ def paths_panel(s: SongSettings, pick: PickFn, status: Callable[[], None]) -> No
         ("NEUTRINO-Ordner", "neutrino_pfad", True, (), config.NEUTRINO_PFAD),
         ("SoundFont", "soundfont_pfad", False, ("SoundFont (*.sf2;*.sf3)",), config.SOUNDFONT_PFAD),
         ("Ausgabeordner", "output_ordner", True, (), config.OUTPUT_ORDNER),
-        ("VST3-Instrument für Synth und Lead (optional)", "vst_path", False, ("VST3 (*.vst3)",), ""),
+        ("VST3-Instrument, z. B. Surge XT (optional)", "vst_path", False, ("VST3 (*.vst3)",), ""),
+        ("Impulsantwort der Gitarrenbox (WAV, optional)", "cabinet_ir", False, ("WAV (*.wav)",), "eingebaute Box"),
         ("Bibliothek der Vorbild-Songs", "reference_folder", True, (), _reference_library()),
     ):
         with ui.row().classes("w-full items-center no-wrap"):
@@ -422,6 +460,14 @@ def paths_panel(s: SongSettings, pick: PickFn, status: Callable[[], None]) -> No
                 .bind_value(s, attr).classes("col").props("dense stack-label").mark(f"path-{attr}") \
                 .on("blur", lambda: status())
             pick_button(pick, s, attr, folder=folder, file_types=types, then=status)
+    import vst_sounds
+    surge = vst_sounds.find_surge()
+    if surge:
+        def use_surge() -> None:
+            s.vst_path = surge
+            status()
+        ui.button("Surge XT gefunden – übernehmen", icon="piano", on_click=use_surge).props("flat dense no-caps") \
+            .bind_visibility_from(s, "vst_path", backward=lambda path: not path).mark("use-surge")
     import voicevox
     ui.input("Adresse von VOICEVOX", placeholder=f"leer = {voicevox.URL}").bind_value(s, "voicevox_url") \
         .classes("w-full").props("dense stack-label").mark("path-voicevox_url")

@@ -56,3 +56,13 @@ def test_vocal_options(captured):
     s = captured["settings"]
     assert (s.vocal_engine, s.voicevox_singer, s.vocal_takes, s.vibrato, s.glide) == ("VOICEVOX", 3002, 3, 0.0, 1.5)
     assert (s.breaths, s.echo_throws, s.final_choir) == (False, True, False)
+
+
+def test_sound_options(captured):
+    SongSettings(channels={"piano": {"volume": 0.3}}).save()
+    assert main.main(["--style", "Lo-Fi", "--schlagzeug", "909", "--ohne-verstaerker", "--box", "C:/box.wav",
+                      "--ohne-lofi-klang"]) == 0
+    s = captured["settings"]
+    assert (s.style, s.channels["drums"].style, s.guitar_amp, s.cabinet_ir, s.lofi_texture) == \
+        ("Lo-Fi", "909", False, "C:/box.wav", False)
+    assert s.channels["piano"].volume == 0.3

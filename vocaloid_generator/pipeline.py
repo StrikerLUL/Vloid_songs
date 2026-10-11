@@ -23,10 +23,16 @@ STYLE_TO_GENRE = {
     "Rock": "Rock",
     "Ballade": "Lo-Fi",
     "City Pop": "Lo-Fi",
+    "Future Bass": "EDM",
+    "Drum and Bass": "EDM",
+    "Lo-Fi": "Lo-Fi",
+    "Idol-Pop": "J-Pop",
 }
 
-# Spuren, die mit dem eigenen VST3-Synth gerendert werden, wenn einer gewählt ist
+# Spuren, die mit dem eigenen VST3-Synth gerendert werden, wenn einer gewählt ist und keine Klänge pro Spur
 VST_TRACKS = ("synth", "melody")
+# So viele Spuren rendern gleichzeitig (FluidSynth, die eigenen Synths und die Filter geben den Prozessor frei)
+RENDER_WORKERS = max(1, min(6, (os.cpu_count() or 2)))
 
 ProgressFn = Callable[[float, str], None]
 
@@ -153,10 +159,11 @@ def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None,
         levels={**profile.mix, "melody": profile.mix["vocals"] - 1.0} if lead_sings else profile.mix,
         reverb=profile.reverb,
         bpm=settings.bpm,
-        sidechain_depth=0.45 if profile.name == "Kawaii Chiptune" else 0.25,
+        sidechain_depth=profile.sidechain,
         double_windows=_chorus_windows(tracks.get("plan")),
         throw_windows=_throw_windows(settings, tracks) if result.vocals_wav else None,
         target_lufs=settings.master_lufs,
+        texture=profile.texture if settings.lofi_texture else "",
         **_reference_targets(settings, tracks, out, has_vocals=result.vocals_wav is not None),
     )
 
@@ -602,35 +609,88 @@ def _render_fx(settings: SongSettings, tracks: dict, out: str, seed: int) -> Opt
 
 
 def _render_instruments(settings: SongSettings, tracks: dict, out: str, report: ProgressFn) -> dict:
-    from mixer import midi_zu_wav
+    """Rendert jede Spur in ihre WAV; mehrere Spuren gleichzeitig auf mehreren Kernen (VST-Instrumente nacheinander)."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     from renderer import engine_name
-    from styles import get_style
-    voices = get_style(settings.style).voices
     import sound_library
     log.info("Instrumente aus dem SoundFont mit %s", engine_name())
     extra = sound_library.installed() if settings.sound_library and not settings.soundfont_pfad else []
     if extra:
         log.info("Zusätzliche SoundFonts: %s", ", ".join(extra))
-    wav_files = {}
     active = [inst for inst in INSTRUMENTS if settings.channels[inst].enabled and tracks.get(inst)]
     for inst in INSTRUMENTS:
-        wav = os.path.join(out, f"{inst}.wav")
-        _remove(wav)  # alte Spuren nicht versehentlich mitmischen
-        if inst not in active:
-            continue
-        report(0.55 + 0.3 * active.index(inst) / max(len(active), 1), f"Rendere {inst}...")
-        midi_zu_wav(
-            os.path.join(out, f"{inst}.mid"), wav,
-            is_drum=inst in ("drums", "perc"),
-            instrument_type=inst,
-            vst_pfad=settings.vst_path if (settings.vst_path and inst in VST_TRACKS) else None,
-            soundfont_pfad=settings.soundfont_file(),
-            voices=voices.get(inst),
-            library=settings.sound_library and not settings.soundfont_pfad,
-        )
-        if os.path.exists(wav):
-            wav_files[inst] = wav
+        _remove(os.path.join(out, f"{inst}.wav"))  # alte Spuren nicht versehentlich mitmischen
+    jobs = {inst: _render_job(settings, out, inst) for inst in active}
+    together = [inst for inst in active if not jobs[inst]["vst_pfad"]]
+    alone = [inst for inst in active if jobs[inst]["vst_pfad"]]
+    done = 0
+
+    def finished(inst: str) -> None:
+        nonlocal done
+        done += 1
+        report(round(0.55 + 0.29 * done / max(len(active), 1), 3), f"{inst} gerendert ({done} von {len(active)})")
+
+    from mixer import midi_zu_wav
+    with ThreadPoolExecutor(max_workers=RENDER_WORKERS) as pool:
+        futures = {pool.submit(midi_zu_wav, **jobs[inst]): inst for inst in together}
+        for future in as_completed(futures):
+            future.result()
+            finished(futures[future])
+    for inst in alone:
+        midi_zu_wav(**jobs[inst])
+        finished(inst)
+    wav_files = {}
+    for inst in active:
+        if os.path.exists(jobs[inst]["wav_pfad"]):
+            wav_files[inst] = jobs[inst]["wav_pfad"]
     return wav_files
+
+
+def _render_job(settings: SongSettings, out: str, inst: str) -> dict:
+    """Die Angaben für mixer.midi_zu_wav: welche Klänge diese Spur spielen."""
+    from styles import get_style
+    profile = get_style(settings.style)
+    vst, state = _vst_for(settings, inst)
+    return dict(
+        midi_pfad=os.path.join(out, f"{inst}.mid"), wav_pfad=os.path.join(out, f"{inst}.wav"),
+        is_drum=inst in ("drums", "perc"),
+        instrument_type=inst,
+        vst_pfad=vst,
+        vst_state=state,
+        soundfont_pfad=settings.soundfont_file(),
+        voices=profile.voices.get(inst),
+        library=settings.sound_library and not settings.soundfont_pfad,
+        drum_machine=_drum_machine(settings) if inst == "drums" else None,
+        amp=settings.guitar_amp,
+        cabinet_ir=settings.cabinet_ir,
+    )
+
+
+def _vst_for(settings: SongSettings, inst: str) -> tuple:
+    """
+    (VST-Pfad, gespeicherter Klang) für eine Spur, sonst (None, "").
+    Hat man Klänge pro Spur gewählt, spielen nur diese Spuren das Instrument; sonst Synth und Lead mit seinem
+    Standardklang.
+    """
+    if not settings.vst_path:
+        return None, ""
+    if inst in settings.vst_sounds:
+        return settings.vst_path, settings.vst_sounds[inst]
+    if not settings.vst_sounds and inst in VST_TRACKS:
+        return settings.vst_path, ""
+    return None, ""
+
+
+def _drum_machine(settings: SongSettings) -> Optional[str]:
+    """ "808" oder "909", wenn das Schlagzeug aus der Drum-Machine kommt: so gewählt oder vom Stil vorgegeben."""
+    from styles import get_style
+    chosen = settings.channels["drums"].style
+    if chosen in ("808", "909"):
+        return chosen
+    if chosen == "soundfont":
+        return None
+    return get_style(settings.style).drum_machine or None
 
 
 def _remove(path: str) -> None:

@@ -186,6 +186,13 @@ def bass(pattern: str, sec: Section, plan: SongPlan, rng: random.Random, ctx: di
     elif pattern == "lazy":
         for t, accent, dur in _pattern_hits(sec, [(0, 1.0), (6, 0.7), (10, 0.85)]):
             note(t, dur * 0.85, _chord_for(sec, t), accent, fifth=abs((t % 4) - 2.5) < 1e-6)
+    elif pattern == "rolling":
+        # Drum and Bass: lange Töne mit der Bassdrum (auf 1 und 3+) und bei jedem Akkordwechsel
+        hits = sorted({round(t, 6) for t, _, _ in _pattern_hits(sec, [(0, 1.0), (10, 0.85)])} |
+                      {round(slot.start, 6) for slot in sec.chords})
+        for i, t in enumerate(hits):
+            end = hits[i + 1] if i + 1 < len(hits) else sec.end
+            note(t, (end - t) * 0.95, _chord_for(sec, t), 1.0 if abs(t % 4) < 1e-6 else 0.85)
     ctx["bass"] = prev
     return out
 
@@ -364,6 +371,14 @@ def synth(pattern: str, sec: Section, plan: SongPlan, rng: random.Random, ctx: d
         for slot in sec.chords:
             v = _voicing(ctx, "synth", slot.chord, 60, 84, 4)
             out += [Ev(slot.start, slot.dur * 0.98, p, _vel(sec, 0.65)) for p in v]
+    elif pattern == "fb_chords":
+        # Future Bass: breite Akkorde, synkopisch zerhackt, unten mit dem Grundton
+        steps = [(0, 1.0), (3, 0.85), (6, 0.9), (10, 0.95), (12, 0.75), (14, 0.85)]
+        for t, accent, dur in _pattern_hits(sec, steps):
+            chord = _chord_for(sec, t)
+            v = _voicing(ctx, "saw", chord, 60, 81, 4)
+            root = _bass_pitch(chord.root, None, 48, 59)
+            out += [Ev(t, dur * 0.85, p, _vel(sec, 0.68 * accent), layer="saw") for p in [root] + v]
     elif pattern == "supersaw":
         # breite Akkordfläche im Refrain, oben mit der Oktave des Spitzentons
         for slot in sec.chords:

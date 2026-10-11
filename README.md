@@ -92,7 +92,15 @@ Das lädt etwa 250 MB nach `tools\soundfonts` (mit `--ohne-verzerrt` 130 MB weni
 
 Alles andere spielt weiter GeneralUser GS. Im Tab „Pfade“ steht, wie viele der zusätzlichen SoundFonts da sind, und ein Schalter stellt sie zum Vergleichen ab. Mit einem eigenen SoundFont in den Einstellungen bleiben sie aus.
 
-Supersaw, Pluck, Pad, Lead und Chiptune-Klänge erzeugt die App selbst (`synth_engine.py`), ebenso Riser, Becken-Swells, Impacts und Downlifter vor den Refrains (`fx.py`). Wer ein eigenes VST3-Instrument wie Surge XT nutzen möchte, trägt es in den Einstellungen ein; es spielt dann Synth und Lead.
+Supersaw, Pluck, Pad, Lead, Chiptune-Klänge, Reese- und Sub-Bass und die breiten Future-Bass-Akkorde erzeugt die App selbst (`synth_engine.py`), ebenso Riser, Becken-Swells, Impacts und Downlifter vor den Refrains (`fx.py`).
+
+**Schlagzeug aus der Drum-Machine:** Im Tab „Band“ steht beim Schlagzeug statt einer Spielweise der Klang: „wie der Stil“, das SoundFont-Schlagzeug oder die Drum-Machine 808 oder 909. Die App baut jeden Schlag wie die Roland-Maschinen aus Sinus, Rauschen und Rechteck-Schwingungen (`drum_machine.py`): die 808 mit langer, tiefer Bassdrum und metallischen Hi-Hats, die 909 kurz und druckvoll mit hellerer Snare. Ein offenes Hi-Hat verstummt, sobald ein geschlossenes kommt. Future Bass spielt von sich aus mit der 808.
+
+**Gitarren über Verstärker und Box:** Verzerrte E-Gitarren (Overdrive und Distortion) spielt der SoundFont sauber, verzerrt wird erst danach wie mit einem echten Verstärker, und eine Box nimmt das Kratzen weg (`guitar_amp.py`). Das klingt rockiger, besonders bei Akkorden. Wer eine echte Box hören möchte, wählt im Tab „Pfade“ eine Impulsantwort (WAV); kostenlose gibt es viele im Netz. Ein Schalter im Tab „Band“ stellt das ab.
+
+**Surge XT und andere VST3-Instrumente:** [Surge XT](https://surge-synthesizer.github.io) ist kostenlos und hat echte Supersaws, Reese-Bässe und Flächen, wie Future Bass und Drum and Bass sie brauchen. Ist es installiert, bietet der Tab „Pfade“ es an („Surge XT gefunden – übernehmen“), sonst trägt man den Pfad zur `.vst3`-Datei dort ein. Im Tab „Band“ öffnet „Klang wählen“ pro Spur (Synth, Lead, Bass, Gegenstimme) das Fenster des Instruments: einen Klang aussuchen, das Fenster schließen, und die Spur spielt ihn. „zurück“ gibt die Spur wieder dem Stil. Ohne gewählte Klänge spielt das Instrument wie bisher Synth und Lead mit seinem Standardklang. Getestet ist das mit einem nachgebauten Instrument, nicht mit Surge XT selbst; klappt etwas nicht, steht es im Protokoll, und die Spur spielt wie sonst.
+
+**Schneller rendern:** Die Spuren rendern gleichzeitig auf bis zu sechs Prozessorkernen. Mit vier Kernen ist das Rendern etwa zweieinhalbmal so schnell (die Instrumente eines ganzen Songs in 21 statt 50 Sekunden); VST-Instrumente spielen nacheinander.
 
 ### Vorbild-Songs
 
@@ -138,7 +146,7 @@ Oder einfach `Vloid Songs starten.bat` im Projektordner doppelklicken. Die App �
 - **Neu würfeln:** Ein Knopf pro Teil (Melodie, Akkorde, Schlagzeug, jedes Instrument). Nur dieser Teil wird neu, der Rest des Songs bleibt.
 - **Seed festhalten:** Danach macht „Song erzeugen“ wieder diesen Song, mit allem, was du inzwischen geändert hast (Mix, Gesang, Text). Das Seed-Feld im Tab „Song“ leeren, dann gibt es wieder jedes Mal einen neuen Song.
 - **Als ZIP für die DAW:** alle Spuren als WAV und MIDI, siehe unten.
-- **Tabs rechts:** Song (Stil, Tempo, Tonart, Ablauf, Vorbild-Songs, eigene Vorlagen), Text (mit Vorschau, wie gesungen wird), Band (Spielweise, Lautstärke, Panorama, Mute/Solo pro Spur), Gesang, Mix, Verlauf und Pfade.
+- **Tabs rechts:** Song (Stil, Tempo, Tonart, Ablauf, Vorbild-Songs, eigene Vorlagen), Text (mit Vorschau, wie gesungen wird), Band (Spielweise, Lautstärke, Panorama, Mute/Solo pro Spur, Klang von Schlagzeug, Gitarren und VST-Instrument), Gesang, Mix, Verlauf und Pfade.
 
 Alle Einstellungen speichert die App sofort. Eigene Vorlagen (Tab „Song“) merken sich Stil, Tempo, Tonart, Ablauf, Band, Gesang und Mix, aber nicht den Text; sie liegen in `vocaloid_generator\vorlagen\`.
 
@@ -165,6 +173,9 @@ uv run vocaloid_generator\main.py --style Rock --bpm 140 --key E --scale minor -
 | `--fassungen N` | NEUTRINO singt N-mal (1 bis 3), die sauberste Fassung zählt |
 | `--vibrato X`, `--uebergaenge X` | Vibrato und Übergänge zwischen den Tönen, 0 bis 2 (1 = wie gesungen) |
 | `--ohne-atmer`, `--ohne-echo`, `--ohne-chor` | Atmer, Echo auf dem letzten Wort oder Chor im letzten Refrain abschalten |
+| `--schlagzeug KLANG` | Schlagzeug aus `soundfont`, `808` oder `909` statt wie der Stil |
+| `--ohne-verstaerker`, `--box WAV` | verzerrte Gitarren wie früher aus dem SoundFont, oder über die Box aus dieser Impulsantwort |
+| `--ohne-lofi-klang` | Lo-Fi ohne Knistern und Bandmaschine |
 | `--vorbild DATEI` | Vorbild-Song für diesen Lauf, mehrfach möglich |
 | `--vom-vorbild` | Tempo, Tonart und Stil der Vorbilder übernehmen |
 | `--lautheit LUFS` | Lautheit des Masters, z. B. `-14` für YouTube |
@@ -201,19 +212,25 @@ Jeder Stil bringt eigene Instrumente, Spielweisen, Schlagzeug-Grooves und Akkord
 | Rock | Gitarren doppelt links und rechts, Bass, Schlagzeug, Gitarren-Antworten und -Solo |
 | Ballade | Klavier-Arpeggien, Orchester (Streicher, Pizzicato, Harfe mit Glissando, Pauken-Wirbel, Hörner), Pad, Spieluhr, Chor, Cello-Linie unter dem Gesang |
 | City Pop | FM-E-Piano mit Septakkorden, Funk-Gitarre, Oktav-Bass, Bläser, Congas, Saxofon-Antworten |
+| Future Bass | breite Supersaw-Akkorde, synkopisch zerhackt und stark unter der Bassdrum pumpend, Sub-Bass, Drum-Machine 808 mit Snare und Clap auf der Drei, Glockenspiel |
+| Drum and Bass | 174 BPM, Two-Step mit Ghost-Notes, rollender Reese-Bass, Rhodes-Arpeggien mit Septakkorden, Flächen, Flöten-Antworten |
+| Lo-Fi | Rhodes mit Jazz-Akkorden, gemütlicher Boom-Bap mit Swing, Jazz-Gitarre, Vibraphon; die Band klingt wie von einer alten Bandmaschine, und eine Schallplatte knistert (Schalter im Tab „Band“) |
+| Idol-Pop | 180 BPM in Dur, Funk-Gitarre, Bläser-Stabs, Oktav-Bass, Four-on-the-Floor im Refrain, Claps und Tamburin, der letzte Refrain steigt fast immer |
 
 Keine Sektion klingt zweimal gleich: Die zweite Strophe bekommt eine Gegenstimme, der letzte Refrain Chor und Glockenspiel in der Oktave der Hook, und im Refrain spielen mehrere Synth-Schichten zusammen.
 
 Auch der Ablauf ändert sich von Song zu Song. Je nach Stil und Zufall steigt der letzte Refrain einen oder zwei Halbtöne oder bleibt in der Tonart, beginnt leise nur mit Klavier und Streichern (wie das „Ochisabi“ im J-Pop), die Bridge wird zum Breakdown ohne Schlagzeug, oder die zweite Strophe beginnt im Halftime. Was ein Song davon hat, steht im Protokoll unter „Ablauf“. „Akkorde“ neu würfeln würfelt auch das neu.
 
-Im Tab „Band“ lässt sich pro Instrument eine andere Spielweise wählen. „wie der Stil“ nimmt die des Stils.
+Im Tab „Band“ lässt sich pro Instrument eine andere Spielweise wählen, beim Schlagzeug der Klang. „wie der Stil“ nimmt die des Stils.
+
+`--style Lo-Fi` war bisher ein anderer Name für City Pop und ist jetzt ein eigener Stil.
 
 ## So entsteht ein Song
 
 1. **Bauplan:** Jede Sektion bekommt eine bewährte Akkordfolge (zum Beispiel die Royal-Road-Folge des J-Pop). Gleiche Sektionen klingen gleich, der Pre-Chorus endet auf der Dominante, der Refrain auf der Tonika, und der letzte Refrain steigt oft einen oder zwei Halbtöne.
 2. **Melodie:** Phrasen aus wiederkehrenden Rhythmus-Motiven, betonte Töne sind Akkordtöne, die Tonhöhe folgt dem Wortakzent, lange Töne am Phrasenende bekommen manchmal ein Melisma. Der Refrain wiederholt seine erste Phrase als Hook, Intro und Outro spielen diese Hook. Kurze Liedtexte werden wiederholt, lange machen die Sektion länger.
 3. **Begleitung und Schlagzeug:** Spielweisen pro Instrument mit Stimmführung, Grooves mit Fills, Crash auf jedem Refrain, Snare-Wirbel und kurzer Stopp vor dem Refrain.
-4. **Klang und Mix:** SoundFont-Rendering in Stereo (FluidSynth oder tinysoundfont, bessere Instrumente aus den zusätzlichen SoundFonts), eigene Synths und Übergangs-Effekte, jede Spur auf ihre Ziel-Lautheit, EQ und Kompressor pro Spur, gemeinsamer Hall, De-Esser, Doppelung und Delay auf der Stimme, Echo auf dem letzten Wort, Atmer und Chor im letzten Refrain, Master auf die gewählte Lautheit (Standard -12 LUFS) mit Limiter.
+4. **Klang und Mix:** SoundFont-Rendering in Stereo (FluidSynth oder tinysoundfont, bessere Instrumente aus den zusätzlichen SoundFonts) auf mehreren Kernen, eigene Synths, Drum-Machine und Übergangs-Effekte, verzerrte Gitarren über Verstärker und Box, Klänge aus Surge XT, jede Spur auf ihre Ziel-Lautheit, EQ und Kompressor pro Spur, gemeinsamer Hall, De-Esser, Doppelung und Delay auf der Stimme, Echo auf dem letzten Wort, Atmer und Chor im letzten Refrain, Master auf die gewählte Lautheit (Standard -12 LUFS) mit Limiter.
 
 Ohne Gesang (kein NEUTRINO, kein VOICEVOX, keine Vorschau-Stimme oder Gesang ausgeschaltet) spielt die Lead-Stimme die Gesangsmelodie.
 
@@ -244,7 +261,10 @@ uv run pytest -m "not slow"   # ohne den Test, der echtes Audio rendert
 | `orchestrator.py` | setzt alles zusammen und schreibt die MIDI-Spuren |
 | `renderer.py` | rendert MIDI mit dem SoundFont (FluidSynth oder tinysoundfont) |
 | `sound_library.py`, `setup_soundfonts.py` | welches Instrument aus welchem zusätzlichen SoundFont spielt, und deren Download |
-| `synth_engine.py` | eigene Synths: Supersaw, Pluck, Pad, Lead, Chiptune |
+| `synth_engine.py` | eigene Synths: Supersaw, Pluck, Pad, Lead, Chiptune, Reese- und Sub-Bass, Future-Bass-Akkorde |
+| `drum_machine.py` | Schlagzeug wie aus der TR-808 und TR-909, ohne Samples |
+| `guitar_amp.py` | verzerrte E-Gitarren über Verstärker und Box (eingebaut oder Impulsantwort) |
+| `vst_sounds.py` | Surge XT finden, pro Spur einen Klang im Fenster des Instruments wählen und speichern |
 | `fx.py` | Riser, Becken-Swell, Impact und Downlifter |
 | `vocal_synthesizer.py` | MusicXML, NEUTRINO und die lokale Vorschau-Stimme |
 | `voicevox.py` | Singen über die Schnittstelle von VOICEVOX |

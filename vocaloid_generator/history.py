@@ -19,7 +19,8 @@ log = logging.getLogger(__name__)
 FOLDER = "verlauf"
 KEEP = 30                      # ältere Songs fallen heraus, Favoriten bleiben immer
 # Pfade gehören zum Rechner, nicht zum Song: beim Wiederherstellen bleiben die aktuellen
-MACHINE_FIELDS = ("neutrino_pfad", "soundfont_pfad", "output_ordner", "vst_path", "reference_folder", "voicevox_url")
+MACHINE_FIELDS = ("neutrino_pfad", "soundfont_pfad", "output_ordner", "vst_path", "reference_folder", "voicevox_url",
+                  "cabinet_ir")
 _STAMP = "%Y%m%d-%H%M%S"
 
 

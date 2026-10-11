@@ -20,17 +20,18 @@ CHANNEL_FIELDS = ("volume", "pan", "enabled", "mute", "solo")
 # Wählbare Spielweisen pro Instrument; "default" nimmt das Muster des Genres
 STYLE_OPTIONS = {
     "piano": ("default", "chords", "eighths", "stabs", "arpeggio", "arpeggio16", "ballad_arp", "jazz_ch"),
-    "bass": ("default", "root", "driving", "sync", "octaves", "wobble", "sub_pulse", "lazy"),
+    "bass": ("default", "root", "driving", "sync", "octaves", "wobble", "sub_pulse", "lazy", "rolling"),
     "guitar": ("default", "chill_riff", "strummed", "palm_mute", "power_chords", "cutting"),
     "strings": ("default", "legato", "build", "pizzicato", "staccato", "harp"),
-    "synth": ("default", "pad", "riser", "staccato_pluck", "wide_saw", "pluck", "arp", "supersaw"),
+    "synth": ("default", "pad", "riser", "staccato_pluck", "wide_saw", "pluck", "arp", "supersaw", "fb_chords"),
     "brass": ("default", "stabs", "accents", "horns"),
     "bells": ("default", "sparkle", "sparkle16", "hook_octave", "accents", "music_box"),
     "choir": ("default", "aahs", "oohs"),
     "counter": ("default", "answer", "guide", "solo"),
     "perc": ("default", "shaker", "claps", "tambourine", "congas", "cowbell"),
-    # Drums folgen dem Stil, die Lead-Stimme spielt den Refrain-Hook im Intro und Outro
-    "drums": ("default",),
+    # Drums spielen die Grooves des Stils; wählbar ist der Klang: SoundFont-Kit oder Drum-Machine 808/909.
+    # Die Lead-Stimme spielt den Refrain-Hook im Intro und Outro
+    "drums": ("default", "soundfont", "808", "909"),
     "melody": ("default",),
 }
 # Ziel-Lautheit des Masters je nach Plattform (LUFS); Streaming-Dienste regeln lautere Songs herunter
@@ -144,7 +145,11 @@ class SongSettings(BaseModel):
     ref_tempo_key: bool = True         # Tempo und Tonart der Vorbilder vorschlagen
     ref_style: bool = True             # passenden Stil vorschlagen
     vst_path: str = ""
+    vst_sounds: dict[str, str] = Field(default_factory=dict)   # Spur → gespeicherter Klang des VST-Instruments
     sound_library: bool = True         # bessere Klänge aus tools/soundfonts (setup_soundfonts.py), wenn vorhanden
+    guitar_amp: bool = True            # verzerrte E-Gitarren über Verstärker und Box statt verzerrter Samples
+    cabinet_ir: str = ""               # Impulsantwort einer Gitarrenbox (WAV); leer = eingebaute Box
+    lofi_texture: bool = True          # im Stil Lo-Fi: Knistern, leiernde Bandmaschine, gedämpfte Höhen
     breathiness: float = Field(0.028, ge=0.0, le=0.2)
     shimmer: bool = True
     swing: float = Field(0.12, ge=0.0, le=0.5)
@@ -184,6 +189,12 @@ class SongSettings(BaseModel):
         if unknown:
             raise ValueError(f"Unbekannte Sektionen: {unknown}")
         return list(value)
+
+    @field_validator("vst_sounds", mode="before")
+    @classmethod
+    def _check_vst_sounds(cls, value: dict) -> dict:
+        from vst_sounds import PARTS
+        return {part: str(state) for part, state in (value or {}).items() if part in PARTS and state}
 
     @field_validator("variations", mode="before")
     @classmethod

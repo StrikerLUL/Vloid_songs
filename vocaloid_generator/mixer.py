@@ -29,18 +29,28 @@ DOUBLE_CENTS, DOUBLE_DELAYS, DOUBLE_DB = 12, (0.017, 0.026), -9.0
 VOCAL_KEYS = ("vocals", "harmony", "gang")
 # Echo auf dem letzten Wort: Pegel des Sends, Rückkopplung und Länge in Schlägen (punktierte Achtel)
 THROW_DB, THROW_FEEDBACK, THROW_BEATS = -2.0, 0.45, 0.75
+# Lo-Fi: die Band leiert wie auf einer alten Bandmaschine (Tiefe in Sekunden, Tempo in Hz), klingt dumpfer,
+# dazu knistert eine Schallplatte
+LOFI_WOW, LOFI_FLUTTER = (0.0012, 0.55), (0.00015, 6.5)
+LOFI_LOWPASS_HZ = 6500
+VINYL_LUFS, VINYL_CLICKS_PER_SECOND = -40.0, 7.0
 
 
 # ── Rendern ──────────────────────────────────────────────────────────────────────
 def midi_zu_wav(midi_pfad: str, wav_pfad: str, is_drum: bool = False, instrument_type: str = "piano",
                 vst_pfad: str = None, soundfont_pfad: str = None, voices: dict = None,
-                library: bool = True) -> None:
+                library: bool = True, drum_machine: str = None, amp: bool = False, cabinet_ir: str = "",
+                vst_state: str = "") -> None:
     """
     MIDI → Stereo-WAV. Reihenfolge: eigenes VST3-Instrument (wenn angegeben), SoundFont über
     FluidSynth oder tinysoundfont, zuletzt eine einfache eingebaute Klangerzeugung. Die Spur wird nicht normalisiert,
     damit die Dynamik erhalten bleibt; die Pegel setzt erst der Mixer.
     voices: {Unterspur: Stimme aus synth_engine}; diese Unterspuren spielen die eigenen Synths.
     library: bessere Klänge aus den zusätzlichen SoundFonts (sound_library), soweit vorhanden.
+    drum_machine: "808" oder "909": das Schlagzeug kommt aus der Drum-Machine statt aus dem SoundFont.
+    amp: verzerrte E-Gitarren spielen sauber und gehen dann über Verstärker und Box (guitar_amp),
+    cabinet_ir ist die Impulsantwort einer echten Box (leer = eingebaute Box).
+    vst_state: gespeicherter Klang des VST-Instruments (vst_sounds), leer = sein Standardklang.
     """
     soundfont_pfad = soundfont_pfad or SOUNDFONT_PFAD
     midi = pretty_midi.PrettyMIDI(midi_pfad)
@@ -49,16 +59,27 @@ def midi_zu_wav(midi_pfad: str, wav_pfad: str, is_drum: bool = False, instrument
             inst.is_drum = True
 
     synths = []
+    if is_drum and drum_machine:
+        import drum_machine as machine
+        audio, midi.instruments = machine.render(midi, drum_machine)
+        synths.append(audio)
+    if amp and not vst_pfad:
+        import guitar_amp
+        for inst in [i for i in midi.instruments if guitar_amp.wants_amp(i)]:
+            audio = guitar_amp.play(inst, soundfont_pfad, library, cabinet_ir)
+            if audio is not None:
+                synths.append(audio)
+                midi.instruments.remove(inst)
     if voices and not vst_pfad:
         from synth_engine import render_notes
         own = [i for i in midi.instruments if not i.is_drum and _layer(i.name) in voices]
-        synths = [render_notes(i.notes, voices[_layer(i.name)]) for i in own if i.notes]
+        synths += [render_notes(i.notes, voices[_layer(i.name)]) for i in own if i.notes]
         midi.instruments = [i for i in midi.instruments if i not in own]
-        if synths and not any(i.notes for i in midi.instruments):
-            _write(wav_pfad, _sum(synths))
-            return
+    if synths and not any(i.notes for i in midi.instruments):
+        _write(wav_pfad, _sum(synths))
+        return
 
-    audio = _render_vst(midi, vst_pfad) if vst_pfad else None
+    audio = _render_vst(midi, vst_pfad, vst_state) if vst_pfad else None
     if audio is None and os.path.exists(soundfont_pfad):
         try:
             from renderer import render_midi
@@ -91,8 +112,9 @@ def _write(wav_pfad: str, audio: np.ndarray) -> None:
     log.info("Gerendert: %s", os.path.basename(wav_pfad))
 
 
-def _render_vst(midi: pretty_midi.PrettyMIDI, vst_pfad):
-    """Spielt die Noten mit einem VST3-Instrument (z. B. Surge XT). None, wenn das nicht klappt."""
+def _render_vst(midi: pretty_midi.PrettyMIDI, vst_pfad, state: str = ""):
+    """Spielt die Noten mit einem VST3-Instrument (z. B. Surge XT), mit dem gespeicherten Klang state.
+    None, wenn das nicht klappt."""
     if not isinstance(vst_pfad, str) or not os.path.exists(vst_pfad):
         log.warning("VST-Pfad nicht gefunden: %s", vst_pfad)
         return None
@@ -102,6 +124,9 @@ def _render_vst(midi: pretty_midi.PrettyMIDI, vst_pfad):
         if not getattr(plugin, "is_instrument", False):
             log.warning("%s ist kein Instrument, sondern ein Effekt", os.path.basename(vst_pfad))
             return None
+        if state:
+            import vst_sounds
+            vst_sounds.apply(plugin, state)
         messages = []                       # pedalboard erwartet die Zeiten in Sekunden ab Songbeginn
         for inst in midi.instruments:
             ch = 9 if inst.is_drum else 0
@@ -291,6 +316,36 @@ def _echo_throws(vocals: np.ndarray, windows: list, bpm: float) -> np.ndarray:
     return np.vstack([left, right]).astype(np.float32)
 
 
+def _lofi(band: np.ndarray) -> np.ndarray:
+    """Die Band wie von einer alten Bandmaschine: leichtes Leiern, warme Sättigung, gedämpfte Höhen."""
+    n = band.shape[1]
+    t = np.arange(n) / SAMPLE_RATE
+    delay = 0.003 + LOFI_WOW[0] * np.sin(2 * np.pi * LOFI_WOW[1] * t) + \
+        LOFI_FLUTTER[0] * np.sin(2 * np.pi * LOFI_FLUTTER[1] * t)
+    warped = np.vstack([np.interp(np.arange(n) - delay * SAMPLE_RATE, np.arange(n), ch, left=0.0) for ch in band])
+    peak = float(np.max(np.abs(warped))) or 1.0
+    warm = np.tanh(1.5 * warped / peak) / np.tanh(1.5) * peak
+    warm *= np.sqrt(np.mean(warped ** 2) / max(np.mean(warm ** 2), 1e-12))     # so laut wie vorher
+    dull = Pedalboard([LowpassFilter(LOFI_LOWPASS_HZ), LowpassFilter(LOFI_LOWPASS_HZ), HighpassFilter(35)])
+    return dull(warm.astype(np.float32), SAMPLE_RATE)
+
+
+def _vinyl(length: int, seed: int = 7) -> np.ndarray:
+    """Schallplatten-Knistern: Knackser in zufälligen Abständen, links und rechts verschieden, und leises Rauschen."""
+    from scipy.signal import butter, sosfilt
+    rng = np.random.default_rng(seed)
+    count = int(length / SAMPLE_RATE * VINYL_CLICKS_PER_SECOND)
+    clicks = np.zeros((2, length))
+    for ch in range(2):
+        clicks[ch, rng.integers(0, length, count)] = rng.exponential(1.0, count) * rng.choice((-1.0, 1.0), count)
+    crackle = sosfilt(butter(2, (900, 7000), "bandpass", fs=SAMPLE_RATE, output="sos"), clicks, axis=1)
+    hiss = sosfilt(butter(2, (2000, 9000), "bandpass", fs=SAMPLE_RATE, output="sos"),
+                   rng.standard_normal((2, length)), axis=1) * 0.01
+    vinyl = (crackle + hiss).astype(np.float32)
+    loud = _loudness(vinyl)
+    return vinyl * 10 ** ((VINYL_LUFS - loud) / 20) if np.isfinite(loud) else vinyl
+
+
 def _kick_envelope(drums: np.ndarray) -> np.ndarray:
     from scipy.signal import butter, lfilter, sosfilt
     mono = drums.mean(axis=0)
@@ -323,6 +378,7 @@ def mische_spuren(
     sections: list = None,
     energy_contrast_db: float = None,
     vocal_ratio_db: float = None,
+    texture: str = "",
 ) -> None:
     """
     Mischt die Spuren zu einem Stereo-Master:
@@ -335,6 +391,7 @@ def mische_spuren(
     sections, energy_contrast_db: [(Start, Ende in Sekunden, Energie)] und der Abstand zwischen lauten und leisen
     Stellen, den die Vorbilder haben; die Band wird in ruhigen Sektionen entsprechend leiser oder lauter.
     vocal_ratio_db: Gesang gegen Band, wie reference.vocal_ratio_db ihn in den Vorbildern schätzt.
+    texture: "lofi" lässt die Band wie von einer alten Bandmaschine klingen, mit Schallplatten-Knistern.
     """
     from settings import DEFAULT_VOLUMES
 
@@ -395,6 +452,12 @@ def mische_spuren(
         send += audio * reverb.get(key, 0.1)
         if key in VOCAL_KEYS:
             vocal_send += audio * 0.18
+    if texture == "lofi":
+        band = np.zeros_like(mix)
+        for key, audio in tracks.values():
+            if key not in VOCAL_KEYS:
+                band += audio
+        mix += _lofi(band) - band + _vinyl(length)
     lead = [audio for key, audio in tracks.values() if key == "vocals"]
     if throw_windows and lead:
         throws = _echo_throws(lead[0], throw_windows, bpm)

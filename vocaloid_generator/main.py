@@ -31,6 +31,12 @@ def parse_args(argv=None):
     p.add_argument("--ohne-atmer", action="store_true", help="kein Einatmen vor den Phrasen")
     p.add_argument("--ohne-echo", action="store_true", help="kein Echo auf dem letzten Wort")
     p.add_argument("--ohne-chor", action="store_true", help="kein Chor im letzten Refrain")
+    p.add_argument("--schlagzeug", choices=["soundfont", "808", "909"],
+                   help="Klang des Schlagzeugs: SoundFont oder Drum-Machine (sonst wie der Stil)")
+    p.add_argument("--ohne-verstaerker", action="store_true",
+                   help="verzerrte Gitarren aus dem SoundFont statt über Verstärker und Box")
+    p.add_argument("--box", metavar="WAV", help="Impulsantwort einer Gitarrenbox")
+    p.add_argument("--ohne-lofi-klang", action="store_true", help="Lo-Fi ohne Knistern und Bandmaschine")
     p.add_argument("--vorbild", action="append", metavar="DATEI",
                    help="Vorbild-Song (mehrfach möglich); ersetzt die Vorbilder aus den Einstellungen")
     p.add_argument("--vom-vorbild", action="store_true",
@@ -74,7 +80,13 @@ def main(argv=None) -> int:
                  "vocal_engine": args.engine, "voicevox_singer": args.voicevox_stimme, "vocal_takes": args.fassungen,
                  "vibrato": args.vibrato, "glide": args.uebergaenge,
                  "breaths": False if args.ohne_atmer else None, "echo_throws": False if args.ohne_echo else None,
-                 "final_choir": False if args.ohne_chor else None}
+                 "final_choir": False if args.ohne_chor else None,
+                 "guitar_amp": False if args.ohne_verstaerker else None, "cabinet_ir": args.box,
+                 "lofi_texture": False if args.ohne_lofi_klang else None}
+    if args.schlagzeug:
+        channels = {ch: data.model_dump() for ch, data in settings.channels.items()}
+        channels["drums"]["style"] = args.schlagzeug
+        overrides["channels"] = channels
     settings = settings.with_updates(**{k: v for k, v in overrides.items() if v is not None})
     parts = tuple(args.neu or ())
 

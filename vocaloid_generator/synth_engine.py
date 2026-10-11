@@ -1,4 +1,4 @@
-# synth_engine.py – Eigene Synth-Klänge für moderne Pop-Sounds: Supersaw, Pluck, Pad und Lead
+# synth_engine.py – Eigene Synth-Klänge für moderne Pop-Sounds: Supersaw, Pluck, Pad, Lead und Bässe
 #
 # Die Oszillatoren sind bandbegrenzt (PolyBLEP), damit hohe Töne nicht verzerrt klingen. Jede Stimme
 # wird in Stereo erzeugt: verstimmte Oszillatoren liegen links und rechts verteilt.
@@ -67,6 +67,9 @@ def _rng(note: pretty_midi.Note) -> np.random.Generator:
 
 # ── Stimmen ──────────────────────────────────────────────────────────────────────
 SUPERSAW_DETUNE = (-24, -15, -7, 0, 7, 15, 24)     # Cent
+FB_DETUNE = (-33, -21, -10, 0, 10, 21, 33)         # Cent, Future-Bass-Akkorde noch breiter
+FB_BEND_SEMITONES = 0.8        # Future-Bass-Akkorde setzen so weit über dem Ton ein
+REESE_SWEEP_HZ = 0.6           # so oft pro Sekunde öffnet sich der Filter des Reese-Basses
 
 
 def _supersaw(note, n_note, n_total):
@@ -125,6 +128,42 @@ def _chip(note, n_note, n_total):
     return np.vstack([wave, wave]) * env * 0.7
 
 
+def _reese(note, n_note, n_total):
+    """Reese-Bass für Drum and Bass: drei verstimmte Sägezähne, deren Schwebung den Ton wandern lässt, ein Filter,
+    der langsam auf- und zugeht, etwas Sättigung und darunter ein Sinus für den Druck."""
+    rng = _rng(note)
+    f = _freq(note.pitch)
+    t = np.arange(n_total) / SAMPLE_RATE
+    body = _spread([_saw(f * 2 ** (c / 1200), n_total, rng.random()) for c in (-19, 0, 17)], 0.5)
+    dark = sosfilt(butter(2, 260, "low", fs=SAMPLE_RATE, output="sos"), body, axis=1)
+    bright = sosfilt(butter(2, 1500, "low", fs=SAMPLE_RATE, output="sos"), body, axis=1)
+    sweep = 0.5 - 0.5 * np.cos(2 * np.pi * REESE_SWEEP_HZ * t + rng.random() * np.pi)
+    growl = np.tanh(2.0 * (dark + sweep * (bright - dark))) / np.tanh(2.0)
+    sub = np.sin(2 * np.pi * f * t)
+    env = _adsr(n_note, n_total, 0.006, 0.2, 0.9, 0.08)
+    return (growl + 0.7 * sub) * env * 0.7
+
+
+def _sub(note, n_note, n_total):
+    """Sub-Bass: ein Sinus mit leichter Sättigung, damit er auch auf kleinen Lautsprechern zu hören ist."""
+    f = float(_freq(note.pitch))
+    t = np.arange(n_total) / SAMPLE_RATE
+    wave = np.tanh(1.6 * np.sin(2 * np.pi * f * t)) / np.tanh(1.6)
+    env = _adsr(n_note, n_total, 0.004, 0.1, 0.9, 0.06)
+    return np.vstack([wave, wave]) * env * 0.8
+
+
+def _fb_chord(note, n_note, n_total):
+    """Future-Bass-Akkord: sehr breite Supersaw mit einer Oktave darunter, die von oben in den Ton fällt."""
+    rng = _rng(note)
+    t = np.arange(n_total) / SAMPLE_RATE
+    f = _freq(note.pitch) * 2 ** (FB_BEND_SEMITONES * np.exp(-t / 0.025) / 12)
+    voices = [_saw(f * 2 ** (c / 1200), n_total, rng.random()) for c in FB_DETUNE]
+    voices.append(0.6 * _saw(f / 2, n_total, rng.random()))
+    env = _adsr(n_note, n_total, 0.004, 0.3, 0.75, 0.12)
+    return _spread(voices, 1.0) * env
+
+
 # Plucks werden pro Anschlag erst hell und dann dunkel, wie ein Filter, der sich schnell schließt
 PLUCK_BRIGHT_HZ, PLUCK_DARK_HZ, PLUCK_FILTER_SECONDS = 9000, 900, 0.09
 
@@ -134,6 +173,9 @@ VOICES = {
     "pluck": (_pluck, 0.5, (200, 16000)),
     "lead": (_lead, 0.12, (180, 7000)),
     "chip": (_chip, 0.06, (120, 11000)),
+    "reese": (_reese, 0.1, (28, 6000)),
+    "sub": (_sub, 0.08, (25, 4000)),
+    "fb_chord": (_fb_chord, 0.15, (150, 13000)),
 }
 
 

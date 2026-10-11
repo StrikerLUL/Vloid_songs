@@ -294,3 +294,23 @@ async def test_lively_singing_can_be_switched_and_voicevox_singers_are_listed(us
 async def test_without_voicevox_the_app_says_how_to_get_it(user):
     await user.open("/")
     await user.should_see("VOICEVOX läuft nicht. Kostenlos unter voicevox.hiroshiba.jp; App starten, dann neu laden.")
+
+
+async def test_sound_switches_and_a_vst_sound_per_part(user, monkeypatch, tmp_path):
+    import vst_sounds
+    plugin = tmp_path / "Surge XT.vst3"
+    plugin.mkdir()
+    monkeypatch.setattr(vst_sounds, "_surge_candidates", lambda: (str(plugin),))
+    monkeypatch.setattr(vst_sounds, "choose", lambda path, state="": "QUJD" if path == str(plugin) else None)
+    await user.open("/")
+    user.find(marker="switch-guitar_amp").elements.pop().set_value(False)
+    user.find(marker="style-drums").elements.pop().set_value("909")
+    await until(lambda: (SongSettings.load().guitar_amp, SongSettings.load().channels["drums"].style) == (False, "909"))
+    assert not user.find(marker="vst-choose-bass").elements.pop().enabled
+    user.find(marker="use-surge").click()
+    await until(lambda: SongSettings.load().vst_path == str(plugin))
+    user.find(marker="vst-choose-bass").click()
+    await until(lambda: SongSettings.load().vst_sounds == {"bass": "QUJD"})
+    assert user.find(marker="vst-status-bass").elements.pop().text == "eigener Klang"
+    user.find(marker="vst-forget-bass").click()
+    await until(lambda: SongSettings.load().vst_sounds == {})

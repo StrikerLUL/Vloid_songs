@@ -73,6 +73,7 @@ def compose(settings: SongSettings, seed: Optional[int] = None):
         swing=settings.swing,
         jitter_scale=settings.jitter / DEFAULT_JITTER,
         instrument_styles=settings.instrument_styles(),
+        style=settings.style,
     )
     return tracks, seed
 
@@ -91,6 +92,9 @@ def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None,
 
     report(0.30, "Synthetisiere Gesang...")
     result.vocals_wav = _synthesize_vocals(settings, tracks, out)
+    lead_sings = result.vocals_wav is None and settings.channels["melody"].enabled
+    if lead_sings:
+        _lead_sings_melody(tracks, out)
 
     report(0.55, "Rendere Instrumente...")
     result.wav_files = _render_instruments(settings, tracks, out, report)
@@ -103,6 +107,8 @@ def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None,
 
     report(0.85, "Mische und mastere...")
     from mixer import mische_spuren
+    from styles import get_style
+    profile = get_style(settings.style)
     result.mix_wav = os.path.join(out, "final_mix.wav")
     mische_spuren(
         spur_pfade=stems,
@@ -115,6 +121,11 @@ def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None,
         compressor_threshold=settings.compressor_threshold,
         compressor_ratio=settings.compressor_ratio,
         limiter_threshold=settings.limiter_threshold,
+        # Singt die Lead-Stimme die Melodie, steht sie so weit vorn wie sonst der Gesang
+        levels={**profile.mix, "melody": profile.mix["vocals"] - 1.0} if lead_sings else profile.mix,
+        reverb=profile.reverb,
+        bpm=settings.bpm,
+        sidechain_depth=0.45 if profile.name == "Kawaii Chiptune" else 0.25,
     )
 
     report(0.95, "Exportiere MP3...")
@@ -161,6 +172,24 @@ def _synthesize_vocals(settings: SongSettings, tracks: dict, out: str) -> Option
         log.error("Lokale Stimme fehlgeschlagen, der Song entsteht ohne Gesang: %s", e)
         return None
     return vocals_wav if os.path.exists(vocals_wav) else None
+
+
+def _lead_sings_melody(tracks: dict, out: str) -> None:
+    """Ohne Gesang spielt die Lead-Stimme die Gesangsmelodie, damit der Song eine Melodie hat."""
+    import pretty_midi
+    path = os.path.join(out, "melody.mid")
+    if not tracks.get("vocal_melody") or not os.path.exists(path):
+        return
+    midi = pretty_midi.PrettyMIDI(path)
+    if not midi.instruments:
+        return
+    lead = midi.instruments[0]
+    lead.notes.extend(pretty_midi.Note(velocity=95, pitch=n.pitch, start=n.start, end=n.end)
+                      for n in tracks["vocal_melody"])
+    lead.notes.sort(key=lambda n: n.start)
+    midi.write(path)
+    tracks["melody"] = lead.notes
+    log.info("Kein Gesang: die Lead-Stimme spielt die Melodie.")
 
 
 def _render_instruments(settings: SongSettings, tracks: dict, out: str, report: ProgressFn) -> dict:

@@ -8,7 +8,7 @@ from settings import DEFAULT_LYRICS
 def test_default_lyrics_cover_all_sung_sections():
     parsed = parse_lyrics(DEFAULT_LYRICS)
     assert set(parsed) == {"Verse", "PreChorus", "Chorus", "Bridge"}
-    assert parsed["Verse"][:3] == ["ほ", "し", "が"]
+    assert parsed["Verse"][:3] == ["よ", "る", "の"]
 
 
 @pytest.mark.parametrize("header,expected", [

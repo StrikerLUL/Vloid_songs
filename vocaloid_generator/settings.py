@@ -15,13 +15,13 @@ CHANNELS = INSTRUMENTS + ("vocals", "master")
 CHANNEL_FIELDS = ("volume", "pan", "enabled", "mute", "solo")
 # Wählbare Spielweisen pro Instrument; "default" nimmt das Muster des Genres
 STYLE_OPTIONS = {
-    "piano": ("default", "chords", "stabs", "arpeggio", "jazz_ch"),
-    "bass": ("default", "root", "driving", "sync", "wobble", "sub_pulse", "lazy"),
-    "guitar": ("default", "chill_riff", "strummed", "palm_mute", "power_chords"),
-    "strings": ("default", "legato", "build", "pizzicato"),
+    "piano": ("default", "chords", "eighths", "stabs", "arpeggio", "arpeggio16", "ballad_arp", "jazz_ch"),
+    "bass": ("default", "root", "driving", "sync", "octaves", "wobble", "sub_pulse", "lazy"),
+    "guitar": ("default", "chill_riff", "strummed", "palm_mute", "power_chords", "cutting"),
+    "strings": ("default", "legato", "build", "pizzicato", "staccato"),
     "synth": ("default", "pad", "riser", "staccato_pluck", "wide_saw", "pluck", "arp"),
     "brass": ("default", "stabs", "accents"),
-    # Drums und Melodie haben noch keine wählbaren Spielweisen in der Engine
+    # Drums folgen dem Stil, die Lead-Stimme spielt den Refrain-Hook im Intro und Outro
     "drums": ("default",),
     "melody": ("default",),
 }
@@ -36,18 +36,32 @@ LEGACY_SETTINGS_PATH = os.path.join(config.BASE_DIR, "settings.json")
 DEFAULT_JITTER = 0.02
 
 DEFAULT_LYRICS = (
-    "[Verse]\nほ し が き れ い な よ る に き み の こ え が き こ え る よ う な き が し た\n\n"
-    "[Pre-Chorus]\nと ど か な い て を の ば し て も き み は と お い どこ か へ き え て し ま う\n\n"
-    "[Chorus]\nら ら ら う た お う よ き み に と ど け こ の き も ち ず っ と わ す れ な い で い て\n\n"
-    "[Bridge]\nも う す こ し だ け そ ば に い て ね わ す れ な い で き み の こ と だ け"
+    "[Verse]\n"
+    "よ る の ま ち を あ る い て た\n"
+    "ひ と り き り の か え り み ち\n"
+    "ね お ん の ひ か り に と け て\n"
+    "き み の こ え を さ が し て た\n\n"
+    "[Pre-Chorus]\n"
+    "と ど か な い と し っ て も\n"
+    "て を の ば し て し ま う の\n"
+    "こ の む ね の お く で\n"
+    "な に か が は じ ま る\n\n"
+    "[Chorus]\n"
+    "い ま う た う よ き み に と ど け\n"
+    "こ の お も い を ほ し の よ う に\n"
+    "か が や い て よ る を こ え て\n"
+    "ず っ と そ ば に い た い か ら わ す れ な い で\n\n"
+    "[Bridge]\n"
+    "な み だ の あ と も わ ら え る よ う に\n"
+    "も う い ち ど だ け し ん じ て み た い"
 )
 
-_DEFAULT_VOLUMES = {
+DEFAULT_VOLUMES = {
     "drums": 1.0, "bass": 0.9, "piano": 0.8, "guitar": 0.8, "strings": 0.7,
     "synth": 0.7, "brass": 0.7, "melody": 0.8, "vocals": 1.0, "master": 1.0,
 }
 _DEFAULT_PANS = {
-    "drums": 0.0, "bass": 0.0, "piano": -0.25, "guitar": 0.30, "strings": -0.40,
+    "drums": 0.0, "bass": 0.0, "piano": -0.25, "guitar": 0.0, "strings": -0.40,
     "synth": 0.0, "brass": 0.20, "melody": -0.15, "vocals": 0.0, "master": 0.0,
 }
 
@@ -65,7 +79,7 @@ class ChannelSettings(BaseModel):
 
 
 def _default_channels() -> dict:
-    return {ch: ChannelSettings(volume=_DEFAULT_VOLUMES[ch], pan=_DEFAULT_PANS[ch]) for ch in CHANNELS}
+    return {ch: ChannelSettings(volume=DEFAULT_VOLUMES[ch], pan=_DEFAULT_PANS[ch]) for ch in CHANNELS}
 
 
 class SongSettings(BaseModel):
@@ -80,7 +94,7 @@ class SongSettings(BaseModel):
     seed: Optional[int] = Field(None, ge=0)
 
     active_sections: list[str] = Field(default_factory=lambda: [
-        "Intro", "Build-up", "Verse", "PreChorus", "Chorus", "Bridge", "Outro"
+        "Intro", "Verse", "PreChorus", "Chorus", "Verse", "PreChorus", "Chorus", "Bridge", "Chorus", "Outro"
     ])
     lyrics: str = DEFAULT_LYRICS
 

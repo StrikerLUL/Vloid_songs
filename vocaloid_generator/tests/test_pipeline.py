@@ -40,6 +40,7 @@ def test_settings_reach_the_orchestrator(tmp_path, monkeypatch):
     assert seen["swing"] == 0.3
     assert seen["jitter_scale"] == pytest.approx(0.5)
     assert seen["instrument_styles"]["bass"] == "lazy"
+    assert seen["style"] == "City Pop"
 
 
 def test_same_seed_gives_the_same_song(tmp_path):
@@ -70,16 +71,21 @@ def test_midi_files_go_to_the_configured_folder(tmp_path):
 
 
 def test_lyrics_from_the_app_are_sung(tmp_path):
-    lyrics = "[Verse]\nあ い う え お か き く け こ\n[Chorus]\nさ し す せ そ"
+    verse, chorus = "あ い う え お か き く け こ".split(), "さ し す せ そ".split()
+    lyrics = "[Verse]\n" + " ".join(verse) + "\n[Chorus]\n" + " ".join(chorus)
     tracks, _ = compose(make_settings(tmp_path, lyrics=lyrics, active_sections=["Verse", "Chorus"]), seed=3)
-    assert tracks["silben"] == "あ い う え お か き く け こ さ し す せ そ".split()
-    sung = [d for d in tracks["melody_data"] if d[0] is not None]
-    assert len(sung) == len(tracks["melody"])
+    sung = tracks["silben"]
+    # Kurze Texte werden wiederholt, bis die Sektion gefüllt ist
+    n_verse = len(sung) - sung[::-1].index("こ")
+    assert sung[:n_verse] == verse * (n_verse // len(verse))
+    assert sung[n_verse:] == chorus * ((len(sung) - n_verse) // len(chorus))
+    notes = [d for d in tracks["melody_data"] if d[0] is not None]
+    assert len(notes) == len(sung) == len(tracks["vocal_melody"])
 
 
 def test_choosing_a_style_changes_the_part(tmp_path):
     default, _ = compose(make_settings(tmp_path), seed=11)
-    styled, _ = compose(make_settings(tmp_path, channels={"bass": {"style": "driving"}}), seed=11)
+    styled, _ = compose(make_settings(tmp_path, channels={"bass": {"style": "octaves"}}), seed=11)
     assert note_list(default, "bass") != note_list(styled, "bass")
 
 

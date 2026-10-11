@@ -1,5 +1,5 @@
 # pipeline.py – Der komplette Ablauf von den Einstellungen bis zur fertigen MP3.
-# Kommandozeile (main.py) und Oberfläche (controller.py) rufen beide nur generate_song() auf.
+# Kommandozeile (main.py) und Oberfläche (gui/page.py) rufen beide nur generate_song() auf.
 import logging
 import os
 import random
@@ -150,8 +150,11 @@ def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None,
         bpm=settings.bpm,
         sidechain_depth=0.45 if profile.name == "Kawaii Chiptune" else 0.25,
         double_windows=_chorus_windows(tracks.get("plan")),
-        reference=settings.reference_track or None,
+        target_lufs=settings.master_lufs,
+        **_reference_targets(settings, tracks, out, has_vocals=result.vocals_wav is not None),
     )
+
+    _remove(os.path.join(out, "vorbilder_zusammen.wav"))   # Zusammenschnitt der Vorbilder fürs Mastering
 
     report(0.95, "Exportiere MP3...")
     from exporter import exportiere_song
@@ -166,6 +169,23 @@ def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None,
 
     report(1.0, "Fertig")
     return result
+
+
+def from_references(settings: SongSettings) -> SongSettings:
+    """Tempo, Tonart und Stil der Vorbild-Songs übernehmen, soweit das in den Einstellungen erlaubt ist."""
+    import reference
+    from styles import STYLES
+    summary = reference.summarize(settings.reference_tracks, STYLES)
+    if summary is None:
+        log.warning("Keine Vorbild-Songs zum Übernehmen.")
+        return settings
+    updates = {}
+    if settings.ref_tempo_key:
+        updates.update(bpm=summary.bpm, key=summary.key, scale=summary.scale)
+    if settings.ref_style:
+        updates["style"] = summary.style
+    log.info("Vom Vorbild übernommen: %s", summary.describe())
+    return settings.with_updates(**updates)
 
 
 def generate_variants(settings: SongSettings, count: int, parts: tuple = (),
@@ -332,6 +352,42 @@ def _lead_sings_melody(tracks: dict, out: str) -> None:
     midi.write(path)
     tracks["melody"] = lead.notes
     log.info("Kein Gesang: die Lead-Stimme spielt die Melodie.")
+
+
+def _reference_targets(settings: SongSettings, tracks: dict, out: str, has_vocals: bool) -> dict:
+    """Was die Vorbild-Songs am Mix bestimmen dürfen: Mastering, Lautstärke-Verlauf, Gesangspegel."""
+    import reference
+    from styles import STYLES
+    refs = settings.reference_tracks
+    if not reference.active(refs):
+        return {}
+    targets = {}
+    if settings.ref_mastering:
+        try:
+            targets["reference"] = reference.mastering_reference(refs, folder=out)
+        except Exception as e:  # noqa: BLE001 – ohne Vorbild bleibt das normale Mastering
+            log.warning("Vorbilder fürs Mastering nicht nutzbar: %s", e)
+    plan = tracks.get("plan")
+    wants_energy = settings.ref_energy and plan is not None
+    wants_voice = settings.ref_vocal_level and has_vocals
+    summary = reference.summarize(refs, STYLES) if (wants_energy or wants_voice) else None
+    if summary is not None:
+        log.info("Vorbilder: %s", summary.describe())
+        if wants_energy:
+            targets["energy_contrast_db"] = summary.contrast_db
+            targets["sections"] = _section_energies(plan)
+        if wants_voice and summary.vocal_db is None:
+            log.info("In den Vorbildern ist kein Gesang zu hören; die Gesangslautstärke bleibt, wie sie ist.")
+        elif wants_voice:
+            targets["vocal_ratio_db"] = summary.vocal_db
+    return targets
+
+
+def _section_energies(plan) -> list:
+    """[(Start, Ende in Sekunden, Energie)], leise Anfänge (Breakdown) als eigener Teil."""
+    from orchestrator import _pieces
+    spb = plan.seconds_per_beat
+    return [(p.start * spb, p.end * spb, p.energy) for sec in plan.sections for p in _pieces(sec)]
 
 
 def _chorus_windows(plan) -> list:

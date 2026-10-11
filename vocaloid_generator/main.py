@@ -5,8 +5,8 @@ import logging
 import sys
 
 import history
-from pipeline import generate_song, generate_variants
-from settings import KEYS, REROLLABLE, SongSettings
+from pipeline import from_references, generate_song, generate_variants
+from settings import KEYS, REROLLABLE, ReferenceTrack, SongSettings
 
 log = logging.getLogger("vocaloid")
 
@@ -22,6 +22,11 @@ def parse_args(argv=None):
     p.add_argument("--output", help="Ausgabeordner")
     p.add_argument("--stimme", metavar="NAME", help="NEUTRINO-Stimme, z. B. MERROW")
     p.add_argument("--duett", metavar="NAME", help="zweite NEUTRINO-Stimme fürs Duett ('' = kein Duett)")
+    p.add_argument("--vorbild", action="append", metavar="DATEI",
+                   help="Vorbild-Song (mehrfach möglich); ersetzt die Vorbilder aus den Einstellungen")
+    p.add_argument("--vom-vorbild", action="store_true",
+                   help="Tempo, Tonart und Stil der Vorbilder übernehmen (soweit in den Einstellungen erlaubt)")
+    p.add_argument("--lautheit", type=float, metavar="LUFS", help="Ziel-Lautheit des Masters, z. B. -14 für YouTube")
     p.add_argument("--verlauf", action="store_true", help="die letzten Songs auflisten und beenden")
     p.add_argument("--aus-verlauf", type=int, metavar="NR",
                    help="Einstellungen und Seed eines Songs aus dem Verlauf nehmen (1 = der neueste)")
@@ -51,8 +56,12 @@ def main(argv=None) -> int:
         if settings is None:
             return 1
 
+    if args.vorbild:
+        settings = settings.with_updates(reference_tracks=[ReferenceTrack(path=p).model_dump() for p in args.vorbild])
+    if args.vom_vorbild:
+        settings = from_references(settings)
     overrides = {"seed": args.seed, "bpm": args.bpm, "style": args.style, "key": args.key, "scale": args.scale,
-                 "singer": args.stimme, "duet_singer": args.duett}
+                 "singer": args.stimme, "duet_singer": args.duett, "master_lufs": args.lautheit}
     settings = settings.with_updates(**{k: v for k, v in overrides.items() if v is not None})
     parts = tuple(args.neu or ())
 

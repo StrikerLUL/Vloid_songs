@@ -112,8 +112,8 @@ def test_master_limits_peaks():
     assert np.abs(out).max() <= 10 ** (-1.0 / 20) + 1e-4
 
 
-def test_reference_song_sets_loudness_and_tone_of_the_master(tmp_path):
-    """Mit Vorbild-Song gleicht das Mastering Lautheit und Klangfarbe an ihn an."""
+def test_reference_song_sets_the_tone_and_the_platform_the_loudness(tmp_path):
+    """Mit Vorbild-Song gleicht das Mastering die Klangfarbe an ihn an; die Lautheit bleibt die gewählte."""
     from scipy.signal import butter, sosfilt
     sr, n = 44100, 44100 * 12
     rng = np.random.default_rng(0)
@@ -130,10 +130,11 @@ def test_reference_song_sets_loudness_and_tone_of_the_master(tmp_path):
 
     plain, matched = tmp_path / "normal.wav", tmp_path / "vorbild_mix.wav"
     mische_spuren([str(tmp_path / "piano.wav")], output_pfad=str(plain))
-    mische_spuren([str(tmp_path / "piano.wav")], output_pfad=str(matched), reference=str(tmp_path / "vorbild.wav"))
+    mische_spuren([str(tmp_path / "piano.wav")], output_pfad=str(matched), reference=str(tmp_path / "vorbild.wav"),
+                  target_lufs=-14.0)
     a, _ = sf.read(plain, always_2d=True)
     b, _ = sf.read(matched, always_2d=True)
-    assert abs(mixer._loudness(b.T.astype(np.float32)) - mixer._loudness(reference.astype(np.float32))) < 3.0
+    assert mixer._loudness(b.T.astype(np.float32)) == pytest.approx(-14.0, abs=0.5)
     assert brightness(b.T) > 5 * brightness(a.T)
 
 

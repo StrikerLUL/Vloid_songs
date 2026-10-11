@@ -292,14 +292,21 @@ def mische_spuren(
     sidechain_depth: float = 0.25,
     double_windows: list = None,
     reference: str = None,
+    target_lufs: float = MASTER_LUFS,
+    sections: list = None,
+    energy_contrast_db: float = None,
+    vocal_ratio_db: float = None,
 ) -> None:
     """
     Mischt die Spuren zu einem Stereo-Master:
     jede Spur auf ihre Ziel-Lautheit (levels, LUFS) bringen, Fader/Panorama/Mute/Solo aus der App anwenden,
     EQ und Kompressor pro Spur, gemeinsamer Hall und ein Delay für die Stimme, Bass duckt unter der Kick,
-    dann Master-Kompressor, Lautheit auf MASTER_LUFS und Limiter.
+    dann Master-Kompressor, Lautheit auf target_lufs (Standard MASTER_LUFS) und Limiter.
     double_windows: Zeitbereiche (Sekunden), in denen der Gesang gedoppelt klingt, z. B. die Refrains.
     reference: Vorbild-Song (WAV, MP3, FLAC); das Mastering gleicht Klangfarbe und Lautheit an ihn an.
+    sections, energy_contrast_db: [(Start, Ende in Sekunden, Energie)] und der Abstand zwischen lauten und leisen
+    Stellen, den die Vorbilder haben; die Band wird in ruhigen Sektionen entsprechend leiser oder lauter.
+    vocal_ratio_db: Gesang gegen Band, wie reference.vocal_ratio_db ihn in den Vorbildern schätzt.
     """
     from settings import DEFAULT_VOLUMES
 
@@ -339,6 +346,11 @@ def mische_spuren(
         log.error("Kein Mix erstellt: alle Spuren stumm.")
         return
 
+    if energy_contrast_db is not None and sections:
+        _shape_energy(tracks, sections, energy_contrast_db, length)
+    if vocal_ratio_db is not None:
+        _match_vocal_level(tracks, vocal_ratio_db)
+
     drums = [a for k, a in tracks.values() if k == "drums"]
     if drums and sidechain_depth > 0:
         duck = 1.0 - sidechain_depth * _kick_envelope(drums[0])
@@ -363,17 +375,80 @@ def mische_spuren(
                            LowpassFilter(6000)])
         mix += echo(vocal_send, SAMPLE_RATE)
 
-    if reference and _master_like(mix, reference, output_pfad):
-        return
     master_volume = min(max(volumes.get("master", 1.0), 0.05), 1.0)
-    mix = master(mix, compressor_threshold, compressor_ratio, limiter_threshold,
-                 target_lufs=MASTER_LUFS + 20 * np.log10(master_volume))
+    target_lufs += 20 * np.log10(master_volume)
+    if reference and _master_like(mix, reference, output_pfad, target_lufs, limiter_threshold):
+        return
+    mix = master(mix, compressor_threshold, compressor_ratio, limiter_threshold, target_lufs=target_lufs)
     sf.write(output_pfad, mix.T, SAMPLE_RATE, subtype="PCM_24")
     log.info("Mix fertig: %s (%.1f LUFS)", output_pfad, _loudness(mix))
 
 
-def _master_like(mix: np.ndarray, reference: str, output_pfad: str) -> bool:
-    """Mastering nach Vorbild mit matchering: Frequenzgang, Lautheit und Stereobreite wie beim Vorbild-Song."""
+VOCAL_KEYS = ("vocals", "harmony")
+MAX_REFERENCE_DB = 6.0       # so weit dürfen die Vorbilder einen Pegel höchstens verschieben
+
+
+def _shape_energy(tracks: dict, sections: list, target_db: float, length: int) -> None:
+    """
+    Leise und laute Teile so weit auseinander wie im Vorbild: Die Band wird in ruhigen Sektionen leiser (oder
+    lauter), die energiereichsten bleiben, wie sie sind. Gemessen wird wie bei den Vorbildern (reference.contrast_db).
+    """
+    from reference import contrast_db
+    energies = [e for _, _, e in sections]
+    lo, hi = min(energies), max(energies)
+    band = [path for path, (key, _) in tracks.items() if key not in VOCAL_KEYS]
+    if hi - lo < 1e-6 or not band:
+        return
+    # 0 in der lautesten Sektion, 1 in der leisesten; an den Grenzen 0,3 s Übergang
+    times, quiet = [], []
+    for start, end, energy in sections:
+        ramp = min(0.15, (end - start) / 4)
+        times += [start + ramp, end - ramp]
+        quiet += [(hi - energy) / (hi - lo)] * 2
+    curve = np.interp(np.arange(length) / SAMPLE_RATE, times, quiet).astype(np.float32)
+    total = np.zeros_like(curve)
+    for _ in range(3):
+        mono = sum(audio for _, audio in tracks.values()).mean(axis=0)
+        delta = target_db - contrast_db(mono, SAMPLE_RATE)
+        if abs(delta) < 0.5:
+            break
+        step = np.clip(total - delta * curve, -MAX_REFERENCE_DB, MAX_REFERENCE_DB) - total
+        for path in band:
+            key, audio = tracks[path]
+            tracks[path] = (key, audio * 10 ** (step / 20))
+        total += step
+    log.info("Lautstärke-Verlauf wie im Vorbild: ruhigste Sektion %+.1f dB", float(total[int(np.argmax(curve))]))
+
+
+def _match_vocal_level(tracks: dict, target_db: float) -> None:
+    """Gesang so laut gegen die Band wie in den Vorbildern; geschätzt mit derselben Methode wie dort."""
+    import librosa
+
+    from reference import RATE, VOCAL_EXCERPT, _loudest, vocal_ratio_db
+    voices = [path for path, (key, _) in tracks.items() if key in VOCAL_KEYS]
+    if not voices:
+        return
+    total = 0.0
+    for _ in range(3):
+        mono = sum(audio for _, audio in tracks.values()).mean(axis=0)
+        excerpt = librosa.resample(_loudest(mono, SAMPLE_RATE, VOCAL_EXCERPT), orig_sr=SAMPLE_RATE, target_sr=RATE)
+        delta = target_db - vocal_ratio_db(excerpt, RATE)
+        step = float(np.clip(total + delta, -MAX_REFERENCE_DB, MAX_REFERENCE_DB)) - total
+        if abs(step) < 0.5:
+            break
+        for path in voices:
+            key, audio = tracks[path]
+            tracks[path] = (key, audio * 10 ** (step / 20))
+        total += step
+    log.info("Gesang %+.1f dB, so laut wie in den Vorbildern", total)
+
+
+def _master_like(mix: np.ndarray, reference: str, output_pfad: str, target_lufs: float = MASTER_LUFS,
+                 limiter_threshold: float = -0.3) -> bool:
+    """
+    Mastering nach Vorbild mit matchering: Frequenzgang und Stereobreite wie beim Vorbild-Song. Die Lautheit
+    kommt danach auf target_lufs, damit die gewählte Plattform (YouTube, Spotify, ...) auch hier gilt.
+    """
     import tempfile
     if not os.path.exists(reference):
         log.warning("Vorbild-Song nicht gefunden: %s, nutze das normale Mastering", reference)
@@ -392,8 +467,10 @@ def _master_like(mix: np.ndarray, reference: str, output_pfad: str) -> bool:
         log.warning("Mastering nach Vorbild fehlgeschlagen (%s), nutze das normale Mastering", e)
         return False
     done, _ = sf.read(output_pfad, always_2d=True, dtype="float32")
+    done = _limit_to(done.T, target_lufs, limiter_threshold)
+    sf.write(output_pfad, done.T, SAMPLE_RATE, subtype="PCM_24")
     log.info("Mix fertig: %s, gemastert nach %s (%.1f LUFS)", output_pfad, os.path.basename(reference),
-             _loudness(done.T))
+             _loudness(done))
     return True
 
 
@@ -410,7 +487,13 @@ def master(mix: np.ndarray, compressor_threshold: float = -20.0, compressor_rati
         PeakFilter(3000, 0.8, 0.8),
         HighShelfFilter(10000, 1.5),
     ])
-    mix = chain(mix, SAMPLE_RATE)
+    return _limit_to(chain(mix, SAMPLE_RATE), target_lufs, limiter_threshold)
+
+
+def _limit_to(mix: np.ndarray, target_lufs: float, limiter_threshold: float) -> np.ndarray:
+    """Auf target_lufs bringen, ohne über limiter_threshold zu kommen."""
+    if _loudness(mix) == float("-inf"):
+        return mix
     # Der Limiter verändert die Lautheit selbst, deshalb die Vorverstärkung ein paar Mal nachregeln
     limiter = Limiter(threshold_db=limiter_threshold, release_ms=80)
     gain_db = target_lufs - _loudness(mix)

@@ -244,3 +244,34 @@ async def test_paths_tab_tells_whether_the_extra_soundfonts_are_there(user):
     await user.should_see("setup_soundfonts.py ausführen")
     user.find(marker="sound-library-switch").elements.pop().set_value(False)
     await until(lambda: SongSettings.load().sound_library is False)
+
+
+async def test_references_from_the_library_suggest_tempo_key_and_style(user, monkeypatch):
+    import reference
+    os.makedirs(reference.LIBRARY)
+    path = os.path.join(reference.LIBRARY, "lieblingssong.wav")
+    sf.write(path, np.zeros((22050, 2), dtype=np.float32), 22050)
+    summary = reference.Summary(bpm=172, key="D", scale="minor", style="Dark Vocaloid", contrast_db=4.0,
+                                vocal_db=-3.0, names=["lieblingssong.wav"])
+    monkeypatch.setattr(reference, "summarize", lambda refs, styles=None: summary if reference.active(refs) else None)
+    await user.open("/")
+    user.find(marker="reference-library").elements.pop().set_value(path)
+    await until(lambda: [r.path for r in SongSettings.load().reference_tracks] == [path])
+    await user.should_see("Vorbilder: 172 BPM, D Moll, klingt nach Dark Vocaloid")
+    user.find(marker="reference-take-tempo").click()
+    user.find(marker="reference-take-style").click()
+    await until(lambda: (SongSettings.load().bpm, SongSettings.load().style) == (172, "Dark Vocaloid"))
+    assert (SongSettings.load().key, SongSettings.load().scale) == ("D", "minor")
+
+
+async def test_reference_suggestions_can_be_switched_off(user, monkeypatch):
+    import reference
+    summary = reference.Summary(bpm=172, key="D", scale="minor", style="Dark Vocaloid", contrast_db=4.0,
+                                vocal_db=-3.0, names=["a.wav"])
+    monkeypatch.setattr(reference, "summarize", lambda refs, styles=None: summary)
+    monkeypatch.setattr(reference, "active", lambda refs: [("a.wav", 1.0)])
+    await user.open("/")
+    await user.should_see(marker="reference-take-tempo")
+    user.find(marker="switch-ref_tempo_key").elements.pop().set_value(False)
+    await user.should_not_see(marker="reference-take-tempo")
+    await until(lambda: SongSettings.load().ref_tempo_key is False)

@@ -1,5 +1,6 @@
 # panels.py – Die Einstellungen der App, direkt an SongSettings gebunden
 import logging
+import os
 from collections.abc import Awaitable, Callable
 
 from nicegui import ui
@@ -7,7 +8,7 @@ from nicegui import ui
 import vorlagen
 from gui import labels
 from lyrics import _HEADER, syllables
-from settings import KEYS, STYLE_OPTIONS, SongSettings
+from settings import KEYS, MASTER_TARGETS, STYLE_OPTIONS, SongSettings
 from styles import STYLES
 
 log = logging.getLogger(__name__)
@@ -59,12 +60,8 @@ def song_panel(s: SongSettings, pick: PickFn, apply_template: Callable[[SongSett
     section_title("Ablauf")
     structure_editor(s)
 
-    section_title("Vorbild-Song fürs Mastering")
-    with ui.row().classes("w-full items-center no-wrap"):
-        ui.input(placeholder="kein Vorbild: normales Mastering").bind_value(s, "reference_track") \
-            .classes("col").props("clearable dense").mark("reference")
-        pick_button(pick, s, "reference_track", file_types=("Audio (*.wav;*.mp3;*.flac;*.ogg)",))
-    hint("Lautheit, Klangfarbe und Stereobreite werden an diesen Song angeglichen (matchering).")
+    section_title("Vorbild-Songs")
+    reference_editor(s, pick, apply_template)
 
     section_title("Vorlagen")
     templates_editor(s, apply_template)
@@ -101,6 +98,117 @@ def structure_editor(s: SongSettings) -> None:
         chips.refresh()
 
     chips()
+
+
+REFERENCE_SWITCHES = (
+    ("ref_mastering", "Mastering", "Klang und Stereobreite des Masters wie die Vorbilder (matchering); "
+                                   "die Lautheit stellst du im Tab Mix ein"),
+    ("ref_energy", "Lautstärke-Verlauf", "Strophe und Refrain liegen so weit auseinander wie in den Vorbildern"),
+    ("ref_vocal_level", "Gesangslautstärke", "Gesang so laut gegen die Band wie in den Vorbildern (geschätzt)"),
+    ("ref_tempo_key", "Tempo und Tonart vorschlagen", "Ein Klick übernimmt Tempo und Tonart der Vorbilder"),
+    ("ref_style", "Stil vorschlagen", "Ein Klick übernimmt den Stil, der am besten zu den Vorbildern passt"),
+)
+
+
+def reference_editor(s: SongSettings, pick: PickFn, apply_template: Callable[[SongSettings], None]) -> None:
+    """Mehrere Vorbilder mit Gewicht, aus Datei oder Bibliothek, dazu was sie bestimmen dürfen."""
+    import reference
+    from nicegui import run
+
+    from settings import ReferenceTrack
+    found = {"summary": None}
+
+    def folder() -> str:
+        return s.reference_folder or reference.LIBRARY
+
+    async def add(path: str) -> None:
+        if path and all(r.path != path for r in s.reference_tracks):
+            s.reference_tracks = s.reference_tracks + [ReferenceTrack(path=path)]
+        rows.refresh()
+        await measure()
+
+    async def remove(i: int) -> None:
+        s.reference_tracks = s.reference_tracks[:i] + s.reference_tracks[i + 1:]
+        rows.refresh()
+        await measure()
+
+    async def choose() -> None:
+        await add(await pick(file_types=("Audio (*.wav;*.mp3;*.flac;*.ogg;*.m4a)",)))
+
+    async def upload(e) -> None:
+        os.makedirs(folder(), exist_ok=True)
+        target = os.path.join(folder(), os.path.basename(e.file.name))
+        await e.file.save(target)
+        await add(target)
+
+    def open_library() -> None:
+        from gui import media
+        os.makedirs(folder(), exist_ok=True)
+        media.open_folder(folder())
+
+    @ui.refreshable
+    def rows() -> None:
+        for i, ref in enumerate(s.reference_tracks):
+            with ui.row().classes("w-full items-center no-wrap gap-2"):
+                ui.checkbox().bind_value(ref, "enabled").props("dense").on_value_change(lambda: measure())
+                ui.label(os.path.basename(ref.path)).classes("col ellipsis").tooltip(ref.path)
+                ui.slider(min=0, max=3, step=0.1).bind_value(ref, "weight").props("label dense") \
+                    .classes("w-28").tooltip("Gewicht: wie stark dieses Vorbild zählt") \
+                    .on("change", lambda: measure())
+                ui.button(icon="close", on_click=lambda _, i=i: remove(i)).props("flat round dense color=grey") \
+                    .mark(f"reference-remove-{i}")
+        if not s.reference_tracks:
+            hint("Kein Vorbild: normales Mastering. Füge einen oder mehrere Lieblingssongs hinzu.")
+        library = [f for f in reference.library_files(folder()) if all(r.path != f for r in s.reference_tracks)]
+        with ui.row().classes("w-full items-center no-wrap gap-2"):
+            ui.select({f: os.path.basename(f) for f in library}, label="Aus der Bibliothek",
+                      on_change=lambda e: add(e.value)).classes("col").props("dense").mark("reference-library")
+            ui.button(icon="folder_open", on_click=open_library).props("flat round dense") \
+                .tooltip(f"Bibliothek öffnen: Songs in diesen Ordner legen ({folder()})")
+            if pick.available:
+                ui.button("Datei", icon="add", on_click=choose).props("flat dense no-caps").mark("reference-add")
+        if not pick.available:
+            ui.upload(label="Vorbild hochladen", auto_upload=True, on_upload=upload) \
+                .props("dense flat accept=audio/*").classes("w-full")
+
+    @ui.refreshable
+    def summary_box() -> None:
+        summary = found["summary"]
+        if summary is None:
+            return
+        ui.label(f"Vorbilder: {summary.describe()}").classes("text-body2").mark("reference-summary")
+        with ui.row().classes("gap-2"):
+            if s.ref_tempo_key:
+                ui.button(f"{summary.bpm} BPM, {summary.key} übernehmen", icon="speed",
+                          on_click=lambda: take(bpm=summary.bpm, key=summary.key, scale=summary.scale)) \
+                    .props("outline dense no-caps").mark("reference-take-tempo")
+            if s.ref_style and summary.style != s.style:
+                ui.button(f"Stil {summary.style} übernehmen", icon="style",
+                          on_click=lambda: take(style=summary.style)) \
+                    .props("outline dense no-caps").mark("reference-take-style")
+
+    def take(**values) -> None:
+        apply_template(s.with_updates(**values))
+        summary_box.refresh()
+        ui.notify("Vom Vorbild übernommen: " + ", ".join(str(v) for v in values.values()), type="positive")
+
+    async def measure() -> None:
+        if not reference.active(s.reference_tracks):
+            found["summary"] = None
+            summary_box.refresh()
+            return
+        refs = [r.model_copy() for r in s.reference_tracks]
+        found["summary"] = await run.io_bound(reference.summarize, refs, list(STYLES))
+        summary_box.refresh()
+
+    rows()
+    with ui.column().classes("w-full gap-0"):
+        ui.label("Die Vorbilder bestimmen:").classes("text-caption text-grey-5 q-mt-sm")
+        for attr, text, tip in REFERENCE_SWITCHES:
+            ui.switch(text).bind_value(s, attr).props("dense").tooltip(tip).mark(f"switch-{attr}") \
+                .on_value_change(lambda: summary_box.refresh())
+    summary_box()
+    ui.timer(0.1, measure, once=True)
 
 
 def templates_editor(s: SongSettings, apply_template: Callable[[SongSettings], None]) -> None:
@@ -230,6 +338,10 @@ def duet_options(singers: list, s: SongSettings) -> dict:
 
 # ── Mix ─────────────────────────────────────────────────────────────────────────
 def mix_panel(s: SongSettings) -> None:
+    targets = {**MASTER_TARGETS, **({} if s.master_lufs in MASTER_TARGETS else {s.master_lufs: f"{s.master_lufs:g} LUFS"})}
+    ui.select(targets, label="Lautheit des Masters").bind_value(s, "master_lufs").classes("w-full") \
+        .mark("master-lufs")
+    hint("YouTube und Spotify regeln lautere Songs auf -14 LUFS herunter; ein Master auf -14 klingt dort nicht gequetscht.")
     for text, attr, lo, hi, step in (
         ("Kompressor: Schwelle (dB)", "compressor_threshold", -60, 0, 0.5),
         ("Kompressor: Verhältnis", "compressor_ratio", 1, 20, 0.5),
@@ -238,7 +350,7 @@ def mix_panel(s: SongSettings) -> None:
         with ui.row().classes("w-full items-center gap-4"):
             ui.label(text).classes("w-56")
             ui.slider(min=lo, max=hi, step=step).bind_value(s, attr).props("label").classes("col")
-    hint("Ist ein Vorbild-Song gewählt, mastert die App nach ihm; sonst auf -12 LUFS mit diesem Limiter.")
+    hint("Die Lautheit gilt immer, auch beim Mastering nach Vorbild-Songs; der Limiter hält die Spitzen unten.")
 
 
 # ── Pfade ───────────────────────────────────────────────────────────────────────
@@ -249,6 +361,7 @@ def paths_panel(s: SongSettings, pick: PickFn, status: Callable[[], None]) -> No
         ("SoundFont", "soundfont_pfad", False, ("SoundFont (*.sf2;*.sf3)",), config.SOUNDFONT_PFAD),
         ("Ausgabeordner", "output_ordner", True, (), config.OUTPUT_ORDNER),
         ("VST3-Instrument für Synth und Lead (optional)", "vst_path", False, ("VST3 (*.vst3)",), ""),
+        ("Bibliothek der Vorbild-Songs", "reference_folder", True, (), _reference_library()),
     ):
         with ui.row().classes("w-full items-center no-wrap"):
             ui.input(text, placeholder=f"leer = {default}" if default else "leer = keins") \
@@ -258,6 +371,11 @@ def paths_panel(s: SongSettings, pick: PickFn, status: Callable[[], None]) -> No
     ui.switch("Bessere Klänge aus den zusätzlichen SoundFonts (setup_soundfonts.py)") \
         .bind_value(s, "sound_library").mark("sound-library-switch") \
         .tooltip("Flügel, Streicher, Bläser, E-Gitarren und echte Schlagzeuge; gilt nur ohne eigenen SoundFont")
+
+
+def _reference_library() -> str:
+    import reference
+    return reference.LIBRARY
 
 
 def pick_button(pick: PickFn, s: SongSettings, attr: str, folder: bool = False, file_types: tuple = (),

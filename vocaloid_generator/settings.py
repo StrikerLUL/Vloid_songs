@@ -4,7 +4,7 @@ import logging
 import os
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 import config
 
@@ -33,6 +33,9 @@ STYLE_OPTIONS = {
     "drums": ("default",),
     "melody": ("default",),
 }
+# Ziel-Lautheit des Masters je nach Plattform (LUFS); Streaming-Dienste regeln lautere Songs herunter
+MASTER_TARGETS = {-12.0: "Standard (-12 LUFS)", -14.0: "YouTube und Spotify (-14 LUFS)",
+                  -16.0: "Apple Music (-16 LUFS)", -9.0: "Laut wie im Club (-9 LUFS)"}
 KEYS = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
 _FLAT_TO_SHARP = {"Db": "C#", "Eb": "D#", "Gb": "F#", "Ab": "G#", "Bb": "A#"}
 
@@ -88,6 +91,15 @@ class ChannelSettings(BaseModel):
     style: str = "default"
 
 
+class ReferenceTrack(BaseModel):
+    """Ein Vorbild-Song: Datei, Gewicht (wie stark er zählt) und an/aus."""
+    model_config = ConfigDict(validate_assignment=True, extra="ignore")
+
+    path: str
+    weight: float = Field(1.0, ge=0.0, le=3.0)
+    enabled: bool = True
+
+
 def _default_channels() -> dict:
     return {ch: ChannelSettings(volume=DEFAULT_VOLUMES[ch], pan=_DEFAULT_PANS[ch]) for ch in CHANNELS}
 
@@ -115,7 +127,14 @@ class SongSettings(BaseModel):
     harmonies: bool = True             # zweite Stimme im Refrain (nur mit NEUTRINO)
     duet_singer: str = ""              # zweite NEUTRINO-Stimme fürs Duett (leer = kein Duett)
     style_shift: int = Field(0, ge=-6, le=6)   # NEUTRINO StyleShift: + heller, - dunkler
-    reference_track: str = ""          # Vorbild-Song fürs Mastering (leer = normales Mastering)
+    # Vorbild-Songs (reference.py) und was sie bestimmen dürfen; jedes lässt sich abschalten
+    reference_tracks: list[ReferenceTrack] = Field(default_factory=list)
+    reference_folder: str = ""         # Ordner mit Lieblingssongs zum Anhaken (leer = vocaloid_generator/vorbilder)
+    ref_mastering: bool = True         # Klang und Lautheit des Masters wie die Vorbilder
+    ref_energy: bool = True            # leise und laute Teile so weit auseinander wie in den Vorbildern
+    ref_vocal_level: bool = True       # Gesang so laut gegen die Band wie in den Vorbildern
+    ref_tempo_key: bool = True         # Tempo und Tonart der Vorbilder vorschlagen
+    ref_style: bool = True             # passenden Stil vorschlagen
     vst_path: str = ""
     sound_library: bool = True         # bessere Klänge aus tools/soundfonts (setup_soundfonts.py), wenn vorhanden
     breathiness: float = Field(0.028, ge=0.0, le=0.2)
@@ -130,8 +149,17 @@ class SongSettings(BaseModel):
     compressor_threshold: float = Field(-20.0, ge=-60.0, le=0.0)
     compressor_ratio: float = Field(2.0, ge=1.0, le=20.0)
     limiter_threshold: float = Field(-0.3, ge=-20.0, le=0.0)
+    master_lufs: float = Field(-12.0, ge=-20.0, le=-6.0)   # Ziel-Lautheit des Masters (MASTER_TARGETS)
 
     channels: dict[str, ChannelSettings] = Field(default_factory=_default_channels)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _single_reference(cls, data):
+        """Ältere Einstellungen kennen nur einen Vorbild-Song (reference_track)."""
+        if isinstance(data, dict) and data.get("reference_track") and not data.get("reference_tracks"):
+            data = {**data, "reference_tracks": [{"path": data["reference_track"]}]}
+        return data
 
     @field_validator("key")
     @classmethod

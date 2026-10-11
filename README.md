@@ -72,9 +72,25 @@ Alles andere spielt weiter GeneralUser GS. Im Tab „Pfade“ steht, wie viele d
 
 Supersaw, Pluck, Pad, Lead und Chiptune-Klänge erzeugt die App selbst (`synth_engine.py`), ebenso Riser, Becken-Swells, Impacts und Downlifter vor den Refrains (`fx.py`). Wer ein eigenes VST3-Instrument wie Surge XT nutzen möchte, trägt es in den Einstellungen ein; es spielt dann Synth und Lead.
 
-### Vorbild-Song
+### Vorbild-Songs
 
-Im Tab „Song“ kannst du für jeden Song einen Vorbild-Song wählen (WAV, MP3 oder FLAC). Das Mastering gleicht dann Frequenzgang, Lautheit und Stereobreite an ihn an; das erledigt [matchering](https://github.com/sergree/matchering). Ohne Vorbild-Song mastert die App wie bisher auf -12 LUFS.
+Im Tab „Song“ gibst du jedem Song einen oder mehrere Vorbild-Songs (WAV, MP3, FLAC, OGG oder M4A), jeden mit einem Gewicht, wie stark er zählt. Lieblingssongs, die du öfter nimmst, legst du in den Ordner `vocaloid_generator\vorbilder\` (oder einen eigenen, Tab „Pfade“); dort hakst du sie nur noch an.
+
+Was die Vorbilder bestimmen, schaltest du einzeln an und aus:
+
+| Schalter | Was passiert |
+| --- | --- |
+| Mastering | Klang und Stereobreite des Masters wie die Vorbilder ([matchering](https://github.com/sergree/matchering)); bei mehreren Vorbildern nach ihrem Mittel |
+| Lautstärke-Verlauf | ruhige und laute Teile liegen so weit auseinander wie in den Vorbildern |
+| Gesangslautstärke | der Gesang steht so laut gegen die Band wie in den Vorbildern (eine Schätzung; Vorbilder ohne Gesang ändern nichts) |
+| Tempo und Tonart vorschlagen | ein Klick übernimmt das gemessene Tempo und die Tonart |
+| Stil vorschlagen | ein Klick übernimmt den Stil, der am besten zu den Vorbildern passt |
+
+Gemessen wird mit librosa, jede Datei nur einmal (`vorbild_messungen.json`). Aus den Vorbildern landet nichts im Song, sie werden nur gemessen.
+
+### Lautheit des Masters
+
+Im Tab „Mix“ wählst du, wie laut der fertige Song wird: Standard -12 LUFS, -14 für YouTube und Spotify (die lautere Songs ohnehin herunterregeln), -16 für Apple Music oder -9 für den Club. Das gilt auch beim Mastering nach Vorbild-Songs.
 
 ### Liedtext
 
@@ -100,11 +116,9 @@ Oder einfach `Vloid Songs starten.bat` im Projektordner doppelklicken. Die App �
 - **Neu würfeln:** Ein Knopf pro Teil (Melodie, Akkorde, Schlagzeug, jedes Instrument). Nur dieser Teil wird neu, der Rest des Songs bleibt.
 - **Seed festhalten:** Danach macht „Song erzeugen“ wieder diesen Song, mit allem, was du inzwischen geändert hast (Mix, Gesang, Text). Das Seed-Feld im Tab „Song“ leeren, dann gibt es wieder jedes Mal einen neuen Song.
 - **Als ZIP für die DAW:** alle Spuren als WAV und MIDI, siehe unten.
-- **Tabs rechts:** Song (Stil, Tempo, Tonart, Ablauf, Vorbild-Song, eigene Vorlagen), Text (mit Vorschau, wie gesungen wird), Band (Spielweise, Lautstärke, Panorama, Mute/Solo pro Spur), Gesang, Mix, Verlauf und Pfade.
+- **Tabs rechts:** Song (Stil, Tempo, Tonart, Ablauf, Vorbild-Songs, eigene Vorlagen), Text (mit Vorschau, wie gesungen wird), Band (Spielweise, Lautstärke, Panorama, Mute/Solo pro Spur), Gesang, Mix, Verlauf und Pfade.
 
 Alle Einstellungen speichert die App sofort. Eigene Vorlagen (Tab „Song“) merken sich Stil, Tempo, Tonart, Ablauf, Band, Gesang und Mix, aber nicht den Text; sie liegen in `vocaloid_generator\vorlagen\`.
-
-Die alte Oberfläche (`uv run vocaloid_generator\gui_mvc.py`) startet noch, kennt aber Verlauf, Neu-Würfeln und Player nicht und fällt bald weg.
 
 Kommandozeile, nutzt dieselben Einstellungen wie die Oberfläche:
 
@@ -124,6 +138,9 @@ uv run vocaloid_generator\main.py --style Rock --bpm 140 --key E --scale minor -
 | `--aus-verlauf NR` | Einstellungen und Seed eines Songs aus dem Verlauf nehmen (1 = der neueste) |
 | `--zip DATEI` | den Song mit allen Spuren als ZIP für eine DAW exportieren |
 | `--stimme NAME`, `--duett NAME` | NEUTRINO-Stimme und zweite Stimme fürs Duett für diesen Lauf |
+| `--vorbild DATEI` | Vorbild-Song für diesen Lauf, mehrfach möglich |
+| `--vom-vorbild` | Tempo, Tonart und Stil der Vorbilder übernehmen |
+| `--lautheit LUFS` | Lautheit des Masters, z. B. `-14` für YouTube |
 | `-v` | alle Details ausgeben |
 
 Die fertigen Dateien landen in `vocaloid_generator\output\` (oder im Ordner aus den Einstellungen): `final_song.mp3`, `final_mix.wav`, die einzelnen Spuren als WAV und MIDI, `vocals.xml` für NEUTRINO und die `.ust`-Dateien für OpenUtau.
@@ -169,7 +186,7 @@ Im Tab „Band“ lässt sich pro Instrument eine andere Spielweise wählen. „
 1. **Bauplan:** Jede Sektion bekommt eine bewährte Akkordfolge (zum Beispiel die Royal-Road-Folge des J-Pop). Gleiche Sektionen klingen gleich, der Pre-Chorus endet auf der Dominante, der Refrain auf der Tonika, und der letzte Refrain steigt oft einen oder zwei Halbtöne.
 2. **Melodie:** Phrasen aus wiederkehrenden Rhythmus-Motiven, betonte Töne sind Akkordtöne, die Tonhöhe folgt dem Wortakzent, lange Töne am Phrasenende bekommen manchmal ein Melisma. Der Refrain wiederholt seine erste Phrase als Hook, Intro und Outro spielen diese Hook. Kurze Liedtexte werden wiederholt, lange machen die Sektion länger.
 3. **Begleitung und Schlagzeug:** Spielweisen pro Instrument mit Stimmführung, Grooves mit Fills, Crash auf jedem Refrain, Snare-Wirbel und kurzer Stopp vor dem Refrain.
-4. **Klang und Mix:** SoundFont-Rendering in Stereo (FluidSynth oder tinysoundfont, bessere Instrumente aus den zusätzlichen SoundFonts), eigene Synths und Übergangs-Effekte, jede Spur auf ihre Ziel-Lautheit, EQ und Kompressor pro Spur, gemeinsamer Hall, De-Esser, Doppelung und Delay auf der Stimme, Master auf -12 LUFS mit Limiter.
+4. **Klang und Mix:** SoundFont-Rendering in Stereo (FluidSynth oder tinysoundfont, bessere Instrumente aus den zusätzlichen SoundFonts), eigene Synths und Übergangs-Effekte, jede Spur auf ihre Ziel-Lautheit, EQ und Kompressor pro Spur, gemeinsamer Hall, De-Esser, Doppelung und Delay auf der Stimme, Master auf die gewählte Lautheit (Standard -12 LUFS) mit Limiter.
 
 Ohne Gesang (kein NEUTRINO, keine Vorschau-Stimme oder Gesang ausgeschaltet) spielt die Lead-Stimme die Gesangsmelodie.
 
@@ -205,8 +222,8 @@ uv run pytest -m "not slow"   # ohne den Test, der echtes Audio rendert
 | `vocal_synthesizer.py` | MusicXML, NEUTRINO und die lokale Vorschau-Stimme |
 | `ust_export.py` | Gesangsnoten als UTAU-Projekt (.ust) für OpenUtau |
 | `mixer.py`, `exporter.py` | Mischen, Mastern, MP3- und ZIP-Export |
+| `reference.py` | Vorbild-Songs messen: Tempo, Tonart, Stil, Lautstärke-Verlauf, Gesangsanteil |
 | `history.py` | der Verlauf: jeder Song mit Seed und Einstellungen |
 | `app.py`, `gui/` | die Oberfläche (NiceGUI): Seite, Einstellungen, Player mit wavesurfer.js, Piano-Roll |
 | `vorlagen.py` | eigene Vorlagen speichern und laden |
-| `gui_mvc.py`, `model.py`, `view/`, `controller.py` | die alte Oberfläche (CustomTkinter) |
 | `main.py` | die Kommandozeile |

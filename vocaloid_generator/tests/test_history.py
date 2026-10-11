@@ -97,7 +97,7 @@ def test_finished_songs_land_in_the_history_with_their_settings(tmp_path):
     restored = found.settings
     assert (restored.style, restored.bpm, restored.seed) == ("City Pop", 95, 21)
     assert restored.variations == {"melody": 1}
-    assert restored.reference_track == "C:/vorbild.mp3"
+    assert [r.path for r in restored.reference_tracks] == ["C:/vorbild.mp3"]
     assert "City Pop" in found.title and "Seed 21" in found.title
 
 

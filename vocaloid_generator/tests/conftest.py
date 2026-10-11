@@ -24,6 +24,14 @@ def without_sound_library(tmp_path, monkeypatch):
     monkeypatch.setattr(sound_library, "FOLDER", str(tmp_path / "soundfonts"))
 
 
+@pytest.fixture(autouse=True)
+def isolated_references(tmp_path, monkeypatch):
+    """Vorbild-Bibliothek und Messungen liegen im Testordner, nie bei den echten Songs."""
+    import reference
+    monkeypatch.setattr(reference, "LIBRARY", str(tmp_path / "vorbilder"))
+    monkeypatch.setattr(reference, "CACHE", str(tmp_path / "vorbild_messungen.json"))
+
+
 @pytest.fixture(scope="session")
 def jpop_song(tmp_path_factory):
     """Ein kompletter J-Pop-Song mit Drop und Tonartwechsel, fest gesät."""

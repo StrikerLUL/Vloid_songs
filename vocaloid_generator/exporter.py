@@ -1,6 +1,6 @@
 # exporter.py
+import io
 import logging
-import os
 
 log = logging.getLogger(__name__)
 
@@ -12,16 +12,18 @@ def exportiere_song(wav_pfad, mp3_pfad=None):
     if not mp3_pfad:
         return None
 
+    # Erst in den Speicher exportieren: pydub öffnet eine Zieldatei, bevor ffmpeg startet,
+    # und lässt sie offen, wenn ffmpeg fehlt (unter Windows lässt sie sich dann nicht mehr löschen)
+    buffer = io.BytesIO()
     try:
         from pydub import AudioSegment
         song = AudioSegment.from_wav(wav_pfad)
-        song.export(mp3_pfad, format="mp3", bitrate="320k")
+        song.export(buffer, format="mp3", bitrate="320k")
     except Exception as e:
         log.warning(f"MP3-Export übersprungen (ffmpeg fehlt?), der Song liegt als WAV vor: {e}")
-        # pydub legt die Datei schon an, bevor ffmpeg scheitert
-        if os.path.exists(mp3_pfad):
-            os.remove(mp3_pfad)
         return None
 
+    with open(mp3_pfad, "wb") as f:
+        f.write(buffer.getvalue())
     log.info(f"MP3 exportiert: {mp3_pfad}")
     return mp3_pfad

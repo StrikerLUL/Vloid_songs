@@ -1,0 +1,255 @@
+# styles.py – Klangprofile der Stile: Instrumente, Spielweisen pro Sektion, Akkordfolgen, Mix
+from dataclasses import dataclass, field
+
+# ── Akkordfolgen ─────────────────────────────────────────────────────────────────
+# Takte durch "|" getrennt, zwei Akkorde in einem Takt teilen sich den Takt.
+# Dur-Folgen beziehen sich auf I = Grundton, Moll-Folgen auf i = Grundton.
+PROGRESSIONS = {
+    "major": {
+        "Verse": [
+            "I | V/3 | vi | iii | IV | I/3 | ii | V",       # Kanon
+            "I | vi | IV | V",
+            "vi | IV | V | I",
+            "I | iii | IV | V",
+            "I | V | vi | IV",
+            "IV | V | iii | vi",
+        ],
+        "PreChorus": [
+            "IV | V | iii | vi",
+            "ii | iii | IV | V",
+            "vi | iii | IV | V",
+            "IV | iii | ii | V",
+        ],
+        "Chorus": [
+            "IVmaj7 | V7 | iii7 | vi",                        # Royal Road, die J-Pop-Akkordfolge
+            "IV | V | iii | vi | ii | V | I | I",
+            "I | V | vi | IV",
+            "vi | IV | V | I",
+            "I | V/3 | vi | I/5 | IV | I/3 | ii | V",
+        ],
+        "Bridge": [
+            "vi | IV | I | V",
+            "ii | iii | IV | V",
+            "IV | iv | I | vi",
+            "vi | V | IV | V",
+        ],
+    },
+    "minor": {
+        "Verse": [
+            "i | bVI | bVII | i",
+            "i | bVII | bVI | bVII",
+            "i | iv | bVII | bIII",
+            "i | bVI | bIII | bVII",
+            "i | i | bVI | bVII",
+        ],
+        "PreChorus": [
+            "iv | v | bVI | bVII",
+            "bVI | bVII | bVI | bVII",
+            "bVI | bVII | bIII | bVI",
+            "iv | bVII | bIII | bVI",
+        ],
+        "Chorus": [
+            "bVImaj7 | bVII | v7 | i",                       # Royal Road in Moll
+            "i | bVI | bIII | bVII",
+            "bVI | bVII | i | i",
+            "bVI | bVII | v | i | bVI | bVII | V | i",
+            "i | bVII | bVI | V",
+        ],
+        "Bridge": [
+            "bVI | bVII | bIII | bVI",
+            "iv | i | bVII | bIII",
+            "bVI | bIII | bVII | i",
+        ],
+    },
+}
+# Stile mit eigener Harmonik ersetzen einzelne Listen
+STYLE_PROGRESSIONS = {
+    "City Pop": {
+        "major": {
+            "Verse": ["IVmaj7 | iii7 | ii7 | Imaj7", "Imaj7 | vi7 | ii7 | V7"],
+            "PreChorus": ["ii7 | iii7 | IVmaj7 | V7sus4"],
+            "Chorus": ["IVmaj7 | III7 | vi7 | v7 I7", "IVmaj7 | V7 | iii7 | vi7"],
+            "Bridge": ["ii7 | V7 | Imaj7 | vi7"],
+        },
+        "minor": {
+            "Verse": ["i7 | iv7 | bVII7 | bIIImaj7"],
+            "Chorus": ["bVImaj7 | bVII7 | v7 | i7", "iv7 | bVII7 | bIIImaj7 | bVImaj7"],
+        },
+    },
+}
+
+# Abschluss-Takte: Vor dem Refrain steht die Dominante, der Refrain endet auf der Tonika
+CADENCES = {
+    "major": {"to_chorus": "V", "end": ("IV V", "I")},
+    "minor": {"to_chorus": "V", "end": ("bVI bVII", "i")},
+}
+
+# ── Energie pro Sektion (0 = still, 1 = volle Band) ──────────────────────────────
+SECTION_ENERGY = {
+    "Intro": 0.75, "Build-up": 0.6, "Verse": 0.45, "PreChorus": 0.65,
+    "Chorus": 0.9, "Bridge": 0.4, "Drop": 0.7, "Outro": 0.6,
+}
+
+INSTRUMENT_PARTS = ("piano", "bass", "guitar", "strings", "synth", "brass", "melody")
+
+
+@dataclass(frozen=True)
+class StyleProfile:
+    name: str
+    programs: dict                 # Instrument → General-MIDI-Programm des SoundFonts
+    drum_kit: int                  # Preset in Bank 128
+    parts: dict                    # Sektion → {Instrument: Spielweise}; fehlt ein Instrument, schweigt es
+    grooves: dict                  # Sektion → Drum-Groove
+    mix: dict                      # Instrument → Ziel-Lautheit in LUFS (vor dem Mastering)
+    reverb: dict                   # Instrument → Hall-Anteil
+    chord_color: str = "triad"     # triad | seventh
+    modulate_final_chorus: int = 1
+    vocal_center: int = 67         # mittlere Gesangslage (MIDI)
+    double_time_melody: bool = False
+    swing: float = 0.0
+    halftime_below_bpm: int = 0    # unter diesem Tempo: Sechzehntel-Gefühl statt Achtel
+
+    def part(self, section: str, instrument: str):
+        return self.parts.get(section, self.parts.get("Verse", {})).get(instrument)
+
+    def groove(self, section: str) -> str:
+        return self.grooves.get(section, self.grooves.get("Verse", "verse"))
+
+
+_MIX_POP = {"drums": -17.0, "bass": -19.5, "piano": -22.0, "guitar": -23.0, "strings": -24.5,
+            "synth": -24.0, "brass": -24.0, "melody": -21.0, "vocals": -17.0}
+_REVERB_POP = {"drums": 0.06, "bass": 0.0, "piano": 0.16, "guitar": 0.12, "strings": 0.28,
+               "synth": 0.2, "brass": 0.15, "melody": 0.2, "vocals": 0.18}
+
+STYLES = {
+    "J-Pop Energy": StyleProfile(
+        name="J-Pop Energy",
+        programs={"piano": 0, "bass": 33, "guitar": 29, "strings": 48, "synth": 81, "brass": 61, "melody": 81},
+        drum_kit=0,
+        parts={
+            "Intro":     {"piano": "eighths", "bass": "driving", "guitar": "strummed", "synth": "arp", "melody": "hook"},
+            "Build-up":  {"piano": "stabs", "bass": "driving", "strings": "build", "synth": "riser"},
+            "Verse":     {"piano": "arpeggio", "bass": "sync", "guitar": "palm_mute"},
+            "PreChorus": {"piano": "stabs", "bass": "driving", "guitar": "strummed", "strings": "legato", "synth": "pluck"},
+            "Chorus":    {"piano": "eighths", "bass": "driving", "guitar": "strummed", "strings": "legato", "synth": "arp"},
+            "Bridge":    {"piano": "arpeggio", "bass": "root", "strings": "legato", "synth": "pad"},
+            "Drop":      {"bass": "wobble", "synth": "arp"},
+            "Outro":     {"piano": "eighths", "bass": "driving", "guitar": "strummed", "strings": "legato", "melody": "hook"},
+        },
+        grooves={"Intro": "pop_chorus", "Build-up": "build", "Verse": "pop_verse", "PreChorus": "pop_pre",
+                 "Chorus": "pop_chorus", "Bridge": "halftime", "Drop": "four_floor", "Outro": "pop_chorus"},
+        mix=_MIX_POP, reverb=_REVERB_POP,
+    ),
+    "Dark Vocaloid": StyleProfile(
+        name="Dark Vocaloid",
+        programs={"piano": 0, "bass": 34, "guitar": 30, "strings": 48, "synth": 81, "brass": 61, "melody": 30},
+        drum_kit=16,
+        parts={
+            "Intro":     {"piano": "arpeggio16", "bass": "driving", "guitar": "power_chords", "strings": "staccato", "melody": "hook"},
+            "Build-up":  {"piano": "arpeggio16", "bass": "driving", "guitar": "palm_mute", "strings": "build"},
+            "Verse":     {"piano": "arpeggio16", "bass": "sync", "guitar": "palm_mute"},
+            "PreChorus": {"piano": "stabs", "bass": "driving", "guitar": "palm_mute", "strings": "staccato", "synth": "pad"},
+            "Chorus":    {"piano": "arpeggio16", "bass": "driving", "guitar": "power_chords", "strings": "legato", "synth": "arp"},
+            "Bridge":    {"piano": "arpeggio", "bass": "root", "strings": "legato", "synth": "pad"},
+            "Drop":      {"bass": "driving", "guitar": "palm_mute"},
+            "Outro":     {"piano": "arpeggio16", "bass": "driving", "guitar": "power_chords", "strings": "legato", "melody": "hook"},
+        },
+        grooves={"Intro": "rock_chorus", "Build-up": "build", "Verse": "rock_verse", "PreChorus": "pop_pre",
+                 "Chorus": "double_kick", "Bridge": "halftime", "Drop": "rock_chorus", "Outro": "rock_chorus"},
+        mix={**_MIX_POP, "guitar": -22.0, "piano": -22.5}, reverb=_REVERB_POP,
+        vocal_center=66,
+    ),
+    "Kawaii Chiptune": StyleProfile(
+        name="Kawaii Chiptune",
+        programs={"piano": 8, "bass": 38, "guitar": 27, "strings": 50, "synth": 80, "brass": 62, "melody": 80},
+        drum_kit=25,
+        parts={
+            "Intro":     {"piano": "stabs", "bass": "wobble", "synth": "arp", "melody": "hook"},
+            "Build-up":  {"bass": "sub_pulse", "synth": "riser", "strings": "build"},
+            "Verse":     {"piano": "stabs", "bass": "sub_pulse", "synth": "pluck"},
+            "PreChorus": {"piano": "stabs", "bass": "sub_pulse", "synth": "arp", "strings": "legato"},
+            "Chorus":    {"piano": "eighths", "bass": "wobble", "synth": "arp", "strings": "legato", "brass": "stabs"},
+            "Bridge":    {"piano": "arpeggio", "bass": "root", "synth": "pad"},
+            "Drop":      {"bass": "wobble", "synth": "arp"},
+            "Outro":     {"piano": "stabs", "bass": "wobble", "synth": "arp", "melody": "hook"},
+        },
+        grooves={"Intro": "four_floor", "Build-up": "build", "Verse": "edm_verse", "PreChorus": "build",
+                 "Chorus": "four_floor", "Bridge": "halftime", "Drop": "four_floor", "Outro": "four_floor"},
+        mix={**_MIX_POP, "synth": -22.5, "piano": -24.0}, reverb=_REVERB_POP,
+        vocal_center=69,
+    ),
+    "Rock": StyleProfile(
+        name="Rock",
+        programs={"piano": 0, "bass": 34, "guitar": 30, "strings": 48, "synth": 89, "brass": 61, "melody": 29},
+        drum_kit=16,
+        parts={
+            "Intro":     {"bass": "driving", "guitar": "power_chords", "melody": "hook"},
+            "Build-up":  {"bass": "driving", "guitar": "palm_mute"},
+            "Verse":     {"bass": "driving", "guitar": "palm_mute"},
+            "PreChorus": {"bass": "driving", "guitar": "strummed"},
+            "Chorus":    {"bass": "driving", "guitar": "power_chords"},
+            "Bridge":    {"bass": "root", "guitar": "chill_riff"},
+            "Drop":      {"bass": "driving", "guitar": "palm_mute"},
+            "Outro":     {"bass": "driving", "guitar": "power_chords", "melody": "hook"},
+        },
+        grooves={"Intro": "rock_chorus", "Build-up": "build", "Verse": "rock_verse", "PreChorus": "pop_pre",
+                 "Chorus": "rock_chorus", "Bridge": "halftime", "Drop": "rock_chorus", "Outro": "rock_chorus"},
+        mix={**_MIX_POP, "guitar": -20.5}, reverb={**_REVERB_POP, "guitar": 0.08},
+        modulate_final_chorus=0,
+    ),
+    "Ballade": StyleProfile(
+        name="Ballade",
+        programs={"piano": 0, "bass": 33, "guitar": 25, "strings": 49, "synth": 89, "brass": 60, "melody": 73},
+        drum_kit=8,
+        parts={
+            "Intro":     {"piano": "ballad_arp", "strings": "legato", "melody": "hook"},
+            "Build-up":  {"piano": "ballad_arp", "strings": "build", "bass": "root"},
+            "Verse":     {"piano": "ballad_arp", "bass": "root"},
+            "PreChorus": {"piano": "ballad_arp", "bass": "root", "strings": "legato"},
+            "Chorus":    {"piano": "chords", "bass": "root", "strings": "legato", "guitar": "chill_riff", "synth": "pad"},
+            "Bridge":    {"piano": "ballad_arp", "strings": "legato", "synth": "pad"},
+            "Drop":      {"piano": "ballad_arp"},
+            "Outro":     {"piano": "ballad_arp", "strings": "legato", "melody": "hook"},
+        },
+        grooves={"Intro": None, "Build-up": "ballad", "Verse": "ballad_light", "PreChorus": "ballad",
+                 "Chorus": "ballad", "Bridge": None, "Drop": None, "Outro": None},
+        mix={**_MIX_POP, "piano": -19.5, "drums": -20.0, "strings": -22.0}, reverb={**_REVERB_POP, "piano": 0.24},
+        chord_color="add9", halftime_below_bpm=200,
+    ),
+    "City Pop": StyleProfile(
+        name="City Pop",
+        programs={"piano": 4, "bass": 33, "guitar": 27, "strings": 49, "synth": 89, "brass": 61, "melody": 65},
+        drum_kit=0,
+        parts={
+            "Intro":     {"piano": "jazz_ch", "bass": "octaves", "guitar": "cutting", "brass": "stabs", "melody": "hook"},
+            "Build-up":  {"piano": "jazz_ch", "bass": "sync", "guitar": "cutting", "strings": "build"},
+            "Verse":     {"piano": "jazz_ch", "bass": "sync", "guitar": "cutting"},
+            "PreChorus": {"piano": "jazz_ch", "bass": "sync", "guitar": "cutting", "strings": "legato"},
+            "Chorus":    {"piano": "jazz_ch", "bass": "octaves", "guitar": "cutting", "strings": "legato", "brass": "stabs"},
+            "Bridge":    {"piano": "jazz_ch", "bass": "lazy", "strings": "legato", "synth": "pad"},
+            "Drop":      {"bass": "octaves", "guitar": "cutting"},
+            "Outro":     {"piano": "jazz_ch", "bass": "octaves", "guitar": "cutting", "brass": "stabs", "melody": "hook"},
+        },
+        grooves={"Intro": "citypop", "Build-up": "pop_pre", "Verse": "citypop", "PreChorus": "citypop",
+                 "Chorus": "citypop", "Bridge": "halftime", "Drop": "citypop", "Outro": "citypop"},
+        mix={**_MIX_POP, "piano": -21.0, "brass": -22.5}, reverb=_REVERB_POP,
+        chord_color="seventh", vocal_center=66,
+    ),
+}
+# Genre-Namen aus älteren Einstellungen und der Kommandozeile
+STYLE_ALIASES = {"J-Pop": "J-Pop Energy", "EDM": "Kawaii Chiptune", "Lo-Fi": "City Pop", "Rock": "Rock"}
+DEFAULT_STYLE = "J-Pop Energy"
+
+
+def get_style(name: str) -> StyleProfile:
+    name = STYLE_ALIASES.get(name, name)
+    return STYLES.get(name, STYLES[DEFAULT_STYLE])
+
+
+def progressions_for(style: str, mode_class: str, section: str) -> list:
+    """Akkordfolgen für eine Sektion; Stile mit eigener Harmonik haben Vorrang."""
+    own = STYLE_PROGRESSIONS.get(style, {}).get(mode_class, {}).get(section)
+    if own:
+        return own
+    bank = PROGRESSIONS[mode_class]
+    return bank.get(section) or bank["Chorus" if section in ("Intro", "Outro", "Drop") else "Verse"]

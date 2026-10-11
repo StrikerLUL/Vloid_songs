@@ -33,7 +33,7 @@ Ohne NEUTRINO nutzt die App automatisch die lokale Vorschau-Stimme (Windows-Spra
 
 ### Klang der Instrumente
 
-Die Instrumente werden mit dem SoundFont `soundfont.sf2` gerendert. Dafür braucht `pyfluidsynth` die FluidSynth-Bibliothek. Fehlt sie, steht im Protokoll der App „Fallback auf basic synthesis“ und die Instrumente klingen nach einfachen Sinustönen. FluidSynth gibt es unter <https://github.com/FluidSynth/fluidsynth/releases>; den `bin`-Ordner aus dem Download in den `PATH` aufnehmen.
+Die Instrumente werden mit dem SoundFont `soundfont.sf2` (GeneralUser GS) in Stereo gerendert. Das erledigt `tinysoundfont`, das mit `uv sync` installiert wird; eine zusätzliche FluidSynth-DLL ist nicht nötig. Wer einen anderen SoundFont nutzen möchte, trägt ihn in den Einstellungen ein.
 
 ### MP3-Export
 
@@ -63,6 +63,30 @@ uv run vocaloid_generator\main.py --style Rock --bpm 140 --key E --scale minor -
 
 Die fertigen Dateien landen in `vocaloid_generator\output\` (oder im Ordner aus den Einstellungen): `final_song.mp3`, `final_mix.wav`, die einzelnen Spuren als WAV und MIDI und `vocals.xml` für NEUTRINO.
 
+## Stile
+
+Jeder Stil bringt eigene Instrumente, Spielweisen, Schlagzeug-Grooves und Akkordfarben mit:
+
+| Stil | Klang |
+| --- | --- |
+| J-Pop Energy | Klavier, Overdrive-Gitarre, Streicher, Synth-Arpeggio, treibender Pop-Beat |
+| Dark Vocaloid | schnelles Sechzehntel-Klavier, verzerrte Gitarre, Double-Bass-Drum im Refrain |
+| Kawaii Chiptune | Square-Synths, Synth-Bass, Four-on-the-Floor, Bass duckt unter der Kick |
+| Rock | Band pur: Gitarren doppelt links und rechts, Bass, Schlagzeug |
+| Ballade | Klavier-Arpeggien, Streicher, Pad, Akkorde mit None |
+| City Pop | E-Piano mit Septakkorden, Funk-Gitarre, Oktav-Bass, Bläser |
+
+Im Instrumente-Tab lässt sich pro Instrument eine andere Spielweise wählen. „default“ nimmt die des Stils.
+
+## So entsteht ein Song
+
+1. **Bauplan:** Jede Sektion bekommt eine bewährte Akkordfolge (zum Beispiel die Royal-Road-Folge des J-Pop). Gleiche Sektionen klingen gleich, der Pre-Chorus endet auf der Dominante, der Refrain auf der Tonika, und der letzte Refrain steigt einen Halbton.
+2. **Melodie:** Phrasen aus wiederkehrenden Rhythmus-Motiven, betonte Töne sind Akkordtöne. Der Refrain wiederholt seine erste Phrase als Hook, Intro und Outro spielen diese Hook. Kurze Liedtexte werden wiederholt, lange machen die Sektion länger.
+3. **Begleitung und Schlagzeug:** Spielweisen pro Instrument mit Stimmführung, Grooves mit Fills, Crash auf jedem Refrain, Snare-Wirbel und kurzer Stopp vor dem Refrain.
+4. **Klang und Mix:** SoundFont-Rendering in Stereo, jede Spur auf ihre Ziel-Lautheit, EQ und Kompressor pro Spur, gemeinsamer Hall, Delay auf der Stimme, Master auf -12 LUFS mit Limiter.
+
+Ohne Gesang (kein NEUTRINO, keine Vorschau-Stimme oder Gesang ausgeschaltet) spielt die Lead-Stimme die Gesangsmelodie.
+
 ## Einstellungen
 
 Die App speichert alles in `vocaloid_generator\user_settings.json`. Die alte `settings.json` wird noch gelesen, solange es keine `user_settings.json` gibt. Ungültige Werte (zum Beispiel ein Pfad, den es auf diesem Rechner nicht gibt) werden beim Laden durch Standardwerte ersetzt und im Protokoll gemeldet.
@@ -82,10 +106,14 @@ uv run pytest -m "not slow"   # ohne den Test, der echtes Audio rendert
 | --- | --- |
 | `settings.py` | alle Einstellungen eines Songs, mit Prüfung der Werte |
 | `pipeline.py` | der komplette Ablauf: komponieren, Gesang, rendern, mischen, exportieren |
-| `orchestrator.py` | setzt die Spuren der einzelnen Generatoren zu einem Song zusammen |
-| `*_generator.py` | Akkorde, Bass, Schlagzeug, Melodie und die übrigen Instrumente |
-| `humanizer.py` | Timing- und Lautstärke-Schwankungen wie bei echten Musikern |
+| `theory.py` | Tonarten, Akkorde, Stufen wie „IVmaj7“, Griffe mit Stimmführung |
+| `styles.py` | die Stile: Instrumente, Spielweisen pro Sektion, Akkordfolgen, Mix |
+| `song_plan.py` | Bauplan: Sektionen, Tonarten, Akkorde und Energie |
+| `melody_writer.py` | Gesangsmelodie mit Motiven und Refrain-Hook |
+| `parts.py`, `drums.py` | Begleitung und Schlagzeug |
+| `orchestrator.py` | setzt alles zusammen und schreibt die MIDI-Spuren |
+| `renderer.py` | rendert MIDI mit dem SoundFont |
 | `vocal_synthesizer.py` | MusicXML, NEUTRINO und die lokale Vorschau-Stimme |
-| `mixer.py`, `exporter.py` | Rendern, Mischen, Mastern und MP3-Export |
+| `mixer.py`, `exporter.py` | Mischen, Mastern und MP3-Export |
 | `gui_mvc.py`, `model.py`, `view/`, `controller.py` | die Oberfläche |
 | `main.py` | die Kommandozeile |

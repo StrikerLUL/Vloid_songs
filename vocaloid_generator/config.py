@@ -24,7 +24,7 @@ SECTION_CONFIG = {
     "Verse":     {"bars": 16, "has_vocals": True},
     "PreChorus": {"bars": 8,  "has_vocals": True},
     "Chorus":    {"bars": 16, "has_vocals": True},
-    "Bridge":    {"bars": 12, "has_vocals": True},
+    "Bridge":    {"bars": 8,  "has_vocals": True},
     "Drop":      {"bars": 2,  "has_vocals": False},
     "Outro":     {"bars": 8,  "has_vocals": False},
 }

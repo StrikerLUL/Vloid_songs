@@ -260,9 +260,23 @@ def generiere_lokale_vocals(melodie_daten, silben, bpm, output_wav_pfad, **kwarg
 
 
 # ── MusicXML & NEUTRINO ──────────────────────────────────────────────────────
+_REST_WERTE = (4.0, 3.0, 2.0, 1.5, 1.0, 0.75, 0.5, 0.25, 0.125)
+
+
 def _quantisiere_dauer(d: float) -> float:
-    erlaubt = [0.125, 0.25, 0.375, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0]
-    return min(erlaubt, key=lambda x: abs(x - d))
+    """Auf Zweiunddreißigstel runden, ohne die Länge zu verfälschen (Taktgrenzen bindet music21 selbst über)."""
+    return max(0.125, round(float(d) * 8) / 8)
+
+
+def _pausen(dauer: float) -> list:
+    """Lange Pausen in notierbare Stücke teilen, damit Gesang und Band synchron bleiben."""
+    rest, teile = _quantisiere_dauer(dauer), []
+    for wert in _REST_WERTE:
+        while rest >= wert - 1e-9:
+            teile.append(wert)
+            rest -= wert
+    return teile
+
 
 def erstelle_musicxml(melodie_daten, liedtext_silben, bpm, output_xml_pfad):
     try:
@@ -270,31 +284,30 @@ def erstelle_musicxml(melodie_daten, liedtext_silben, bpm, output_xml_pfad):
     except ImportError:
         log.warning("music21 nicht installiert. MusicXML kann nicht generiert werden.")
         return ""
-        
+
     s = stream.Stream()
     s.append(tempo.MetronomeMark(number=bpm))
     s.append(meter.TimeSignature("4/4"))
     silben_index = 0
-    
+
     for pitch, dauer in melodie_daten:
-        dauer_q = _quantisiere_dauer(float(dauer))
         if pitch is None:
-            r = note.Rest(quarterLength=dauer_q)
-            s.append(r)
-        else:
-            if silben_index < len(liedtext_silben):
-                n_ = note.Note(pitch, quarterLength=dauer_q)
-                n_.addLyric(liedtext_silben[silben_index])
-                if dauer >= 1.0:
-                    n_.expressions.append(expressions.TextExpression("vibrato"))
-                s.append(n_)
-                if silben_index % 8 == 0:
-                    s.insert(n_.offset, dynamics.Dynamic("mf"))
-                silben_index += 1
-                
+            for teil in _pausen(dauer):
+                s.append(note.Rest(quarterLength=teil))
+        elif silben_index < len(liedtext_silben):
+            n_ = note.Note(pitch, quarterLength=_quantisiere_dauer(dauer))
+            n_.addLyric(liedtext_silben[silben_index])
+            if dauer >= 1.0:
+                n_.expressions.append(expressions.TextExpression("vibrato"))
+            s.append(n_)
+            if silben_index % 8 == 0:
+                s.insert(n_.offset, dynamics.Dynamic("mf"))
+            silben_index += 1
+
     pfad = s.write("musicxml", fp=output_xml_pfad)
     log.info(f"[OK] MusicXML: {pfad}")
     return str(pfad)
+
 
 def extract_data_from_musicxml(xml_pfad):
     """

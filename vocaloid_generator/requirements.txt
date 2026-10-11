@@ -7,9 +7,10 @@ pedalboard
 pretty_midi
 pydantic
 pydub
-pyfluidsynth
+pyloudnorm
 pyttsx3
 pyworld
 scipy
 setuptools<81
 soundfile
+tinysoundfont

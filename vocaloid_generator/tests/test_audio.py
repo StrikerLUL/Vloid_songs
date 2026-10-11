@@ -7,7 +7,11 @@ import soundfile as sf
 import config
 import mixer
 from mixer import master, midi_zu_wav, mische_spuren
+import renderer
 from renderer import render_midi
+
+# FluidSynth nur, wenn die Bibliothek da ist (unter Windows nach setup_fluidsynth.py)
+ENGINES = ["tinysoundfont"] + (["fluidsynth"] if renderer._fluidsynth() else [])
 
 
 def midi_with(program=0, is_drum=False, pitches=(60, 64, 67), pan=None):
@@ -25,22 +29,25 @@ def rms(audio):
     return np.sqrt(np.mean(audio ** 2, axis=-1))
 
 
-def test_soundfont_renders_in_stereo():
-    audio = render_midi(midi_with(0), config.SOUNDFONT_PFAD)
+@pytest.mark.parametrize("engine", ENGINES)
+def test_soundfont_renders_in_stereo(engine):
+    audio = render_midi(midi_with(0), config.SOUNDFONT_PFAD, engine=engine)
     assert audio.shape[0] == 2 and audio.dtype == np.float32
     assert np.all(rms(audio) > 1e-3)
 
 
-def test_drums_render_as_real_hits():
+@pytest.mark.parametrize("engine", ENGINES)
+def test_drums_render_as_real_hits(engine):
     """Früher kamen ohne FluidSynth beim Schlagzeug nur NaN-Werte (ein Knacken) heraus."""
-    audio = render_midi(midi_with(0, is_drum=True, pitches=(36, 38, 42, 49)), config.SOUNDFONT_PFAD)
+    audio = render_midi(midi_with(0, is_drum=True, pitches=(36, 38, 42, 49)), config.SOUNDFONT_PFAD, engine=engine)
     assert not np.isnan(audio).any()
     assert np.all(rms(audio) > 1e-3)
     assert audio.std() > 1e-3
 
 
-def test_pan_controller_moves_the_sound():
-    audio = render_midi(midi_with(29, pan=0), config.SOUNDFONT_PFAD)
+@pytest.mark.parametrize("engine", ENGINES)
+def test_pan_controller_moves_the_sound(engine):
+    audio = render_midi(midi_with(29, pan=0), config.SOUNDFONT_PFAD, engine=engine)
     left, right = rms(audio)
     assert left > 3 * right
 

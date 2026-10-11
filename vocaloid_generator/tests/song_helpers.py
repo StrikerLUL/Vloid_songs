@@ -6,7 +6,7 @@ import config
 TEST_STRUCTURE = ["Intro", "Verse", "PreChorus", "Chorus", "Drop", "Verse", "PreChorus", "Chorus", "Bridge", "Chorus", "Outro"]
 
 # Einträge in den Spuren, die keine Noten sind
-NON_NOTE_KEYS = ("silben", "melody_data", "plan", "vocal_melody")
+NON_NOTE_KEYS = ("silben", "melody_data", "plan", "vocal_melody", "harmony_data", "harmony_silben")
 
 # Die Humanisierung verschiebt Noten um bis zu 20 ms; so weit darf die erste Note
 # einer Sektion vor deren Anfang liegen

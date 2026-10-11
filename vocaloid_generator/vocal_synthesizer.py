@@ -261,6 +261,36 @@ def generiere_lokale_vocals(melodie_daten, silben, bpm, output_wav_pfad, **kwarg
 
 # ── MusicXML & NEUTRINO ──────────────────────────────────────────────────────
 _REST_WERTE = (4.0, 3.0, 2.0, 1.5, 1.0, 0.75, 0.5, 0.25, 0.125)
+# NEUTRINO setzt vor einen Song ohne Pausentakt selbst einen. Wir schreiben immer einen Takt Pause
+# davor und schneiden ihn nach dem Rendern wieder ab, dann bleibt der Gesang im Takt der Band.
+VORLAUF_SCHLAEGE = 4.0
+# Kurze Pausen in einer Phrase klingen bei NEUTRINO abgehackt; bis zu dieser Länge wird gebunden
+LEGATO_BIS = 0.5
+# Empfohlener Tonumfang der NEUTRINO-Stimmen (MIDI, C4 = 60) laut studio-neutrino.com.
+# Männliche Stimmen singen eine Oktave tiefer, als die Melodie notiert ist.
+STIMMEN = {
+    "MERROW": (57, 76), "REINA": (53, 72), "KIRITAN": (59, 74), "ITAKO": (57, 74), "ZUNDAMON": (57, 74),
+    "SEVEN": (57, 72), "NAKUMO": (45, 71), "SOMA": (48, 72), "RUNO": (43, 69),
+}
+OKTAVE_TIEFER = {"NAKUMO", "SOMA", "RUNO"}
+
+
+def stimmlage(singer: str) -> tuple:
+    """(tiefster, höchster Ton der notierten Melodie, Transposition beim Singen) für eine Stimme."""
+    name = (singer or "").upper()
+    lo, hi = STIMMEN.get(name, STIMMEN["MERROW"])
+    shift = -12 if name in OKTAVE_TIEFER else 0
+    return max(lo - shift, 55), min(hi - shift, 79), shift
+
+
+def installed_singers(neutrino_pfad: str) -> list:
+    """Namen der Stimmen im Ordner model von NEUTRINO; ohne NEUTRINO die bekannten Stimmen."""
+    model = os.path.join(neutrino_pfad or "", "model")
+    try:
+        found = [d for d in os.listdir(model) if os.path.isdir(os.path.join(model, d))]
+    except OSError:
+        found = []
+    return sorted(found) or sorted(STIMMEN)
 
 
 def _quantisiere_dauer(d: float) -> float:
@@ -278,9 +308,21 @@ def _pausen(dauer: float) -> list:
     return teile
 
 
-def erstelle_musicxml(melodie_daten, liedtext_silben, bpm, output_xml_pfad):
+def _gebunden(melodie_daten) -> list:
+    """Kurze Pausen innerhalb einer Phrase der Note davor zuschlagen."""
+    out = []
+    for pitch, dauer in melodie_daten:
+        if pitch is None and dauer <= LEGATO_BIS + 1e-9 and out and out[-1][0] is not None:
+            out[-1] = (out[-1][0], out[-1][1] + dauer)
+        else:
+            out.append((pitch, dauer))
+    return out
+
+
+def erstelle_musicxml(melodie_daten, liedtext_silben, bpm, output_xml_pfad, transpose: int = 0):
+    """Gesangsstimme als MusicXML für NEUTRINO: ein Takt Vorlauf, jede Note mit Silbe, Tempo, 4/4."""
     try:
-        from music21 import stream, note, tempo, meter, expressions, dynamics
+        from music21 import meter, note, stream, tempo
     except ImportError:
         log.warning("music21 nicht installiert. MusicXML kann nicht generiert werden.")
         return ""
@@ -288,244 +330,141 @@ def erstelle_musicxml(melodie_daten, liedtext_silben, bpm, output_xml_pfad):
     s = stream.Stream()
     s.append(tempo.MetronomeMark(number=bpm))
     s.append(meter.TimeSignature("4/4"))
-    silben_index = 0
-
-    for pitch, dauer in melodie_daten:
+    s.append(note.Rest(quarterLength=VORLAUF_SCHLAEGE))
+    silben = list(liedtext_silben)
+    i = 0
+    for pitch, dauer in _gebunden(melodie_daten):
         if pitch is None:
             for teil in _pausen(dauer):
                 s.append(note.Rest(quarterLength=teil))
-        elif silben_index < len(liedtext_silben):
-            n_ = note.Note(pitch, quarterLength=_quantisiere_dauer(dauer))
-            n_.addLyric(liedtext_silben[silben_index])
-            if dauer >= 1.0:
-                n_.expressions.append(expressions.TextExpression("vibrato"))
-            s.append(n_)
-            if silben_index % 8 == 0:
-                s.insert(n_.offset, dynamics.Dynamic("mf"))
-            silben_index += 1
+            continue
+        n_ = note.Note(int(pitch) + transpose, quarterLength=_quantisiere_dauer(dauer))
+        n_.addLyric(silben[i] if i < len(silben) else "ら")   # ohne Silbe bricht NEUTRINO ab
+        s.append(n_)
+        i += 1
 
     pfad = s.write("musicxml", fp=output_xml_pfad)
     log.info(f"[OK] MusicXML: {pfad}")
     return str(pfad)
 
 
-def extract_data_from_musicxml(xml_pfad):
+def neutrino_version(neutrino_pfad: str) -> int:
+    """2 für NEUTRINO v2 (eigener Vocoder NSF.exe), sonst 3."""
+    return 2 if os.path.exists(os.path.join(neutrino_pfad, "bin", "NSF.exe")) else 3
+
+
+def _run(cmd: list, cwd: str, timeout: int) -> subprocess.CompletedProcess:
+    log.debug("NEUTRINO: %s", " ".join(cmd))
+    return subprocess.run(cmd, cwd=cwd, capture_output=True, timeout=timeout,
+                          encoding="utf-8", errors="replace")
+
+
+def neutrino_synthese(xml_pfad, output_wav_pfad, neutrino_pfad, model_pfad, threads: int = None,
+                      timeout: int = 1800) -> bool:
     """
-    Helper function to parse a MusicXML file and extract melody_data, silben, and bpm
-    using music21 first, and falling back to a lightweight ElementTree parser.
+    Rendert die Gesangsstimme mit NEUTRINO. v3 (Tau) schreibt die WAV selbst, v2 (Muon) braucht danach
+    noch den Vocoder NSF.exe. Wirft RuntimeError mit NEUTRINOs Meldung, wenn etwas schiefgeht.
+    Der Vorlauf-Takt aus erstelle_musicxml wird am Ende abgeschnitten.
     """
-    try:
-        from music21 import converter, note, tempo
-        score = converter.parse(xml_pfad)
-        
-        # 1. Extract BPM
-        bpm = 148
-        for el in score.recurse():
-            if isinstance(el, tempo.MetronomeMark):
-                if el.number:
-                    bpm = float(el.number)
+    import tempfile
+
+    if not os.path.isdir(neutrino_pfad):
+        raise FileNotFoundError(f"NEUTRINO nicht gefunden unter {neutrino_pfad}")
+    if not os.path.isdir(model_pfad):
+        raise FileNotFoundError(f"Stimme nicht gefunden: {model_pfad}")
+    bin_pfad = os.path.join(neutrino_pfad, "bin")
+    label_exe = os.path.join(bin_pfad, "musicXMLtoLabel.exe")
+    neutrino_exe = os.path.join(bin_pfad, "NEUTRINO.exe")
+    for exe in (label_exe, neutrino_exe):
+        if not os.path.exists(exe):
+            raise FileNotFoundError(f"{os.path.basename(exe)} fehlt in {bin_pfad}")
+    threads = str(threads or max(1, min(8, (os.cpu_count() or 4))))
+    model = os.path.join(os.path.abspath(model_pfad), "")
+
+    with tempfile.TemporaryDirectory() as td:
+        full, mono, timing = (os.path.join(td, n) for n in ("full.lab", "mono.lab", "timing.lab"))
+        f0, mel, wav = (os.path.join(td, n) for n in ("vocals.f0", "vocals.melspec", "vocals.wav"))
+
+        run = _run([label_exe, os.path.abspath(xml_pfad), full, mono], neutrino_pfad, 300)
+        if run.returncode != 0 or not os.path.exists(full):
+            raise RuntimeError(f"musicXMLtoLabel: {(run.stderr or run.stdout).strip()[-400:]}")
+
+        if neutrino_version(neutrino_pfad) == 3:
+            log.info("[NEUTRINO v3] Singe...")
+            cmd = [neutrino_exe, full, timing, f0, mel, wav, model, "-n", threads, "-t"]
+            dateien = {"full": full, "timing": timing, ".f0": f0, ".melspec": mel, ".wav": wav, "model": model,
+                       ".mgc": os.path.join(td, "vocals.mgc"), ".bap": os.path.join(td, "vocals.bap")}
+            versuche = [_run_bat_aufruf(neutrino_pfad, neutrino_exe, dateien, threads),
+                        cmd + ["-m"],                                  # -m: Grafikkarte, sonst Prozessor
+                        cmd]
+            for versuch in filter(None, versuche):
+                run = _run(versuch, neutrino_pfad, timeout)
+                if run.returncode == 0 and os.path.exists(wav):
                     break
-        
-        # 2. Extract notes, rests, and lyrics
-        melody_data = []
-        silben = []
-        for el in score.recurse():
-            if isinstance(el, note.Note):
-                pitch = el.pitch.midi
-                dauer = float(el.duration.quarterLength)
-                melody_data.append((pitch, dauer))
-                if el.lyrics:
-                    lyric_text = "".join([l.text for l in el.lyrics if l.text])
-                    silben.append(lyric_text if lyric_text else "a")
-                else:
-                    silben.append("a")
-            elif isinstance(el, note.Rest):
-                dauer = float(el.duration.quarterLength)
-                melody_data.append((None, dauer))
-                
-        if not silben:
-            silben = ["a"]
-            
-        if len(melody_data) > 0:
-            return melody_data, silben, bpm
-    except Exception as e:
-        log.error(f"[Fallback Parser] music21 parsing failed: {e}. Trying ElementTree parser...")
-        
-    # ElementTree backup parser
-    import xml.etree.ElementTree as ET
-    melody_data = []
-    silben = []
-    bpm = 148
-    try:
-        tree = ET.parse(xml_pfad)
-        root = tree.getroot()
-        
-        divisions = 1
-        div_elem = root.find(".//divisions")
-        if div_elem is not None:
-            divisions = int(div_elem.text)
-            
-        sound_elem = root.find(".//sound")
-        if sound_elem is not None and "tempo" in sound_elem.attrib:
-            bpm = float(sound_elem.attrib["tempo"])
-            
-        step_offsets = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
-        
-        for note_elem in root.findall(".//note"):
-            dur_elem = note_elem.find("duration")
-            duration_val = int(dur_elem.text) if dur_elem is not None else divisions
-            duration_quarters = duration_val / divisions
-            
-            rest_elem = note_elem.find("rest")
-            if rest_elem is not None:
-                melody_data.append((None, duration_quarters))
-                continue
-                
-            pitch_elem = note_elem.find("pitch")
-            if pitch_elem is not None:
-                step = pitch_elem.find("step").text
-                octave = int(pitch_elem.find("octave").text)
-                alter_elem = pitch_elem.find("alter")
-                alter = int(alter_elem.text) if alter_elem is not None else 0
-                
-                midi_pitch = 12 * (octave + 1) + step_offsets.get(step, 0) + alter
-                melody_data.append((midi_pitch, duration_quarters))
-            else:
-                melody_data.append((None, duration_quarters))
-                
-            lyric_elem = note_elem.find(".//lyric/text")
-            if lyric_elem is not None and lyric_elem.text:
-                silben.append(lyric_elem.text)
-            else:
-                silben.append("a")
-                
-        if not silben:
-            silben = ["a"]
-        return melody_data, silben, bpm
-    except Exception as ex:
-        log.error(f"[Fallback XML Parser] Failed to parse: {ex}")
-        return [], [], bpm
+        else:
+            log.info("[NEUTRINO v2] Singe...")
+            run = _run([neutrino_exe, full, timing, f0, mel, model, "-n", "1", "-o", threads, "-d", "3", "-t"],
+                       neutrino_pfad, timeout)
+            if run.returncode == 0:
+                vocoder = next((os.path.join(model, f"{m}.bin") for m in ("vs", "va", "ve")
+                                if os.path.exists(os.path.join(model, f"{m}.bin"))), os.path.join(model, "vs.bin"))
+                run = _run([os.path.join(bin_pfad, "NSF.exe"), f0, mel, vocoder, wav, "-l", timing,
+                            "-n", "1", "-p", threads, "-s", "48", "-t"], neutrino_pfad, timeout)
+        if run.returncode != 0 or not os.path.exists(wav):
+            raise RuntimeError(f"NEUTRINO: {(run.stderr or run.stdout).strip()[-400:]}")
 
-def neutrino_synthese(xml_pfad, output_wav_pfad, neutrino_pfad, model_pfad):
-    try:
-        if not os.path.exists(neutrino_pfad):
-            raise FileNotFoundError(f"NEUTRINO nicht gefunden unter {neutrino_pfad}")
-            
-        bin_pfad = os.path.abspath(os.path.join(neutrino_pfad, "bin"))
-        if bin_pfad not in os.environ.get("PATH", ""):
-            os.environ["PATH"] = bin_pfad + os.pathsep + os.environ.get("PATH", "")
-            
-        ml_exe   = os.path.join(bin_pfad, "musicXMLtoLabel.exe")
-        neu_exe  = os.path.join(bin_pfad, "neutrino.exe")
-        
-        if not os.path.exists(ml_exe) or not os.path.exists(neu_exe):
-            raise FileNotFoundError(f"NEUTRINO executables missing in {bin_pfad}")
-            
-        import tempfile
-        import pyworld as pw
-        import librosa
-        from scipy.signal import resample
-        
-        with tempfile.TemporaryDirectory() as td:
-            full_l   = os.path.join(td, "temp_vocals.lab")
-            mono_l   = os.path.join(td, "temp_vocals_mono.lab")
-            tim_l    = os.path.join(td, "temp_vocals_timing.lab")
-            f0_f     = os.path.join(td, "temp_vocals.f0")
-            mel_f    = os.path.join(td, "temp_vocals.melspec")
-            tmp_w    = os.path.join(td, "temp_vocals_out.wav")
-            
-            # 1. MusicXML zu Label (Phoneme)
-            log.info("[NEUTRINO] Generating label files...")
-            subprocess.run(
-                [ml_exe, os.path.abspath(xml_pfad), os.path.abspath(full_l), os.path.abspath(mono_l)],
-                check=True, cwd=neutrino_pfad, capture_output=True, timeout=120)
-                
-            # 2. NEUTRINO v3 generiert Akustik-Parameter
-            log.info("[NEUTRINO] Running neutrino.exe...")
-            subprocess.run(
-                [neu_exe, os.path.abspath(full_l), os.path.abspath(tim_l), os.path.abspath(f0_f),
-                 os.path.abspath(mel_f), os.path.abspath(tmp_w), model_pfad, "-n", "4", "-t"],
-                check=True, cwd=neutrino_pfad, capture_output=True, timeout=120)
-                 
-            # Ensure f0 and melspec files are successfully generated
-            if not os.path.exists(f0_f) or not os.path.exists(mel_f):
-                raise FileNotFoundError(f"NEUTRINO did not generate expected .f0 or .melspec files. f0: {os.path.exists(f0_f)}, melspec: {os.path.exists(mel_f)}")
-            
-            # Verify if neutrino.exe writes a wav directly (which it won't with 5 positional arguments, but let's check)
-            if os.path.exists(tmp_w):
-                shutil.move(tmp_w, output_wav_pfad)
-                log.info(f"[OK] NEUTRINO Vocals (direct WAV): {output_wav_pfad}")
-                return True
-                
-            # Since it doesn't write wav directly, use pyworld to synthesize the wav file from the f0 and melspec data.
-            log.info("[NEUTRINO] Synthesizing WAV using local vocoder (pyworld) from f0/melspec...")
-            
-            # Load f0 and melspec
-            f0 = np.fromfile(f0_f, dtype=np.float32).astype(np.float64)
-            melspec_flat = np.fromfile(mel_f, dtype=np.float32)
-            
-            num_frames = len(f0)
-            if num_frames == 0 or len(melspec_flat) == 0:
-                raise ValueError("Generated f0 or melspec is empty.")
-                
-            num_channels = len(melspec_flat) // num_frames
-            melspec = melspec_flat.reshape(num_frames, num_channels)
-            
-            fs = 48000  # standard NEUTRINO v3.1 model sample rate
-            fft_size = pw.get_cheaptrick_fft_size(fs)
-            num_bins = fft_size // 2 + 1
-            
-            # Reconstruct linear spectrogram from log-mel spectrogram
-            mel_linear = np.exp(np.clip(melspec, -20.0, 20.0))
-            mel_fb = librosa.filters.mel(sr=fs, n_fft=fft_size, n_mels=num_channels)
-            mel_fb_pinv = np.linalg.pinv(mel_fb)
-            sp_approx = np.matmul(mel_linear, mel_fb_pinv.T)
-            sp_approx = np.clip(sp_approx, 1e-10, None)
-            
-            # Construct aperiodicity
-            frequencies = np.linspace(0, fs / 2, num_bins)
-            ap = np.zeros_like(sp_approx)
-            for t in range(num_frames):
-                if f0[t] == 0:
-                    ap[t, :] = 1.0
-                else:
-                    ap[t, :] = 0.15 + 0.7 * (frequencies / (fs / 2))
-                    
-            f0 = np.ascontiguousarray(f0)
-            sp_approx = np.ascontiguousarray(sp_approx)
-            ap = np.ascontiguousarray(ap)
-            
-            synthesized = pw.synthesize(f0, sp_approx, ap, fs)
-            
-            # Resample if needed
-            if fs != SAMPLERATE:
-                target_len = int(len(synthesized) * SAMPLERATE / fs)
-                synthesized = resample(synthesized, target_len)
-                
-            peak = np.max(np.abs(synthesized))
-            if peak > 0:
-                synthesized = synthesized / peak * 0.88
-                
-            synthesized_stereo = np.vstack((synthesized, synthesized)).T.astype(np.float32)
-            
-            os.makedirs(os.path.dirname(os.path.abspath(output_wav_pfad)), exist_ok=True)
-            sf.write(output_wav_pfad, synthesized_stereo, SAMPLERATE)
-            log.info(f"[OK] NEUTRINO Vocals (synthesized): {output_wav_pfad}")
-            return True
-            
-    except Exception as e:
-        log.error(f"[NEUTRINO Engine Failed] Error: {e}. Executing robust fallback to local vocals...")
-        try:
-            melody_data, silben, bpm = extract_data_from_musicxml(xml_pfad)
-            if len(melody_data) > 0:
-                generiere_lokale_vocals(melody_data, silben, bpm, output_wav_pfad)
-                log.info(f"[Fallback OK] Rendered local vocals to {output_wav_pfad}")
-                return True
-            else:
-                log.error("[Fallback Failed] No melody data parsed from MusicXML.")
-                return False
-        except Exception as ex:
-            log.error(f"[Fallback Failed] Critical error rendering local vocals fallback: {ex}")
-            return False
+        audio, sr = sf.read(wav, always_2d=True, dtype="float32")
+    bpm = _tempo_aus_musicxml(xml_pfad)
+    audio = audio[int(round(VORLAUF_SCHLAEGE * 60.0 / bpm * sr)):]
+    os.makedirs(os.path.dirname(os.path.abspath(output_wav_pfad)), exist_ok=True)
+    sf.write(output_wav_pfad, audio, sr, subtype="FLOAT")
+    log.info(f"[OK] NEUTRINO-Gesang: {output_wav_pfad}")
+    return True
 
 
+def _run_bat_aufruf(neutrino_pfad: str, neutrino_exe: str, dateien: dict, threads: str):
+    """
+    Der NEUTRINO.exe-Aufruf aus der Run.bat, die jeder NEUTRINO-Version beiliegt, mit unseren Dateien
+    und Einstellungen. So passt er genau zur installierten Version. None ohne Run.bat oder ohne WAV-Ausgabe.
+    """
+    import re
+    pfad = os.path.join(neutrino_pfad, "Run.bat")
+    if not os.path.exists(pfad):
+        return None
+    with open(pfad, "rb") as f:
+        text = f.read().decode("utf-8", errors="replace")
+    werte, zeile = {}, None
+    for line in (z.strip() for z in text.splitlines()):
+        gesetzt = re.match(r'(?i)set\s+"?(\w+)=([^"]*)"?$', line)
+        if gesetzt:
+            werte[gesetzt.group(1).lower()] = gesetzt.group(2).strip()
+        elif zeile is None and re.search(r"(?i)neutrino\.exe", line) and not re.match(r"(?i)(rem\b|::?|echo\b)", line):
+            zeile = line
+    if not zeile:
+        return None
+    werte["numthreads"] = threads
+    tokens = zeile.split()
+    start = next(k for k, t in enumerate(tokens) if t.lower().endswith("neutrino.exe"))
+    cmd = [neutrino_exe]
+    for token in tokens[start + 1:]:
+        if token in ("&", "&&", "|", "||") or token.startswith((">", "2>")):
+            break
+        token = re.sub(r"[%!](\w+)[%!]", lambda m: werte.get(m.group(1).lower(), m.group(0)), token)
+        name = token.lower().replace("/", "\\").lstrip(".\\")
+        endung = os.path.splitext(name)[1]
+        if endung == ".lab":
+            cmd.append(dateien["timing" if "timing" in name else "full"])
+        elif endung in dateien:
+            cmd.append(dateien[endung])
+        elif name.startswith("model"):
+            cmd.append(dateien["model"])
+        else:
+            cmd.append(token)
+    return cmd if dateien[".wav"] in cmd else None
+
+
+def _tempo_aus_musicxml(xml_pfad: str) -> float:
+    import re
+    text = open(xml_pfad, encoding="utf-8").read()
+    m = re.search(r'<sound[^>]*tempo="([0-9.]+)"', text) or re.search(r"<per-minute>([0-9.]+)</per-minute>", text)
+    return float(m.group(1)) if m else 120.0

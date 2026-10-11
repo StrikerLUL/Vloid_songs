@@ -1,7 +1,7 @@
 # view/tabs.py - Tab Views for Vocaloid Generator Pro MVC
 import tkinter as tk
 import customtkinter as ctk
-from settings import STYLE_OPTIONS
+from settings import CHANNELS, INSTRUMENTS, STYLE_OPTIONS
 
 from .widgets import HoverTooltip, VSTDropArea
 
@@ -338,12 +338,11 @@ class InstrumenteTab(ctk.CTkFrame):
         grid_frame = ctk.CTkFrame(container, fg_color="transparent")
         grid_frame.pack(fill="both", expand=True, padx=15, pady=5)
         
-        grid_frame.grid_columnconfigure(0, weight=1)
-        grid_frame.grid_columnconfigure(1, weight=1)
+        instruments = [inst.capitalize() for inst in INSTRUMENTS]
+        for c in range((len(instruments) + 3) // 4):
+            grid_frame.grid_columnconfigure(c, weight=1)
         for r in range(4):
             grid_frame.grid_rowconfigure(r, weight=1)
-            
-        instruments = ["Piano", "Bass", "Guitar", "Strings", "Synth", "Brass", "Drums", "Melody"]
         
         # Spielweisen pro Instrument kommen aus dem Einstellungs-Modell
         self.style_options = {inst: list(STYLE_OPTIONS[inst.lower()]) for inst in instruments}
@@ -413,9 +412,9 @@ class MixerTab(ctk.CTkFrame):
         faders_frame = ctk.CTkFrame(faders_container, fg_color="transparent")
         faders_frame.pack(fill="both", expand=True, padx=10, pady=5)
         
-        channels = ["piano", "bass", "guitar", "strings", "synth", "brass", "drums", "melody", "vocals", "master"]
-        
-        for c in range(10):
+        channels = list(CHANNELS)
+
+        for c in range(len(channels)):
             faders_frame.grid_columnconfigure(c, weight=1)
             
         self.channels_controls = {}
@@ -598,6 +597,26 @@ class SettingsTab(ctk.CTkFrame):
         self.vst_area = VSTDropArea(container, on_vst_selected or (lambda path: None))
         self.vst_area.grid(row=6, column=1, padx=20, pady=12, sticky="w")
         HoverTooltip(self.vst_area, "Wird für die Synth- und Melodie-Spur genutzt, z. B. Surge XT.")
+
+        # 7. NEUTRINO-Stimme und zweite Stimme im Refrain
+        lbl_singer = ctk.CTkLabel(container, text="Stimme (NEUTRINO):", text_color="#a8a8b3", font=("Segoe UI", 10, "bold"))
+        lbl_singer.grid(row=7, column=0, padx=20, pady=10, sticky="e")
+        self.singer_var = tk.StringVar(value="MERROW")
+        self.singer_menu = ctk.CTkComboBox(container, variable=self.singer_var, values=["MERROW"], width=200,
+                                           fg_color="#0d1b2a", border_color="#533483", button_color="#533483")
+        self.singer_menu.grid(row=7, column=1, padx=20, pady=10, sticky="w")
+        HoverTooltip(self.singer_menu, "Die Stimmen aus dem Ordner model von NEUTRINO. Die Melodie passt sich ihrem Tonumfang an.")
+
+        self.harmonies_var = tk.BooleanVar(value=True)
+        self.harmonies_box = ctk.CTkCheckBox(container, text="Zweite Stimme im Refrain", variable=self.harmonies_var,
+                                             text_color="#eaeaea", fg_color="#533483", border_color="#00f5d4")
+        self.harmonies_box.grid(row=8, column=1, padx=20, pady=(0, 12), sticky="w")
+
+    def set_singers(self, names: list) -> None:
+        """Stimmen für die Auswahl; die gewählte bleibt in der Liste, auch wenn ihr Ordner fehlt."""
+        current = self.singer_var.get()
+        values = sorted(set(names) | ({current} if current else set()))
+        self.singer_menu.configure(values=values)
 
     def _browse_neutrino(self):
         from tkinter import filedialog

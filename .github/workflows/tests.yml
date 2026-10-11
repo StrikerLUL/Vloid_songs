@@ -16,6 +16,8 @@ jobs:
           python-version: "3.12"
       - name: Abhängigkeiten installieren
         run: uv sync --locked
+      - name: FluidSynth laden
+        run: uv run setup_fluidsynth.py
       - name: Ruff
         run: uv run ruff check .
       - name: Tests

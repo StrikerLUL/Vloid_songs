@@ -189,5 +189,29 @@ class TestVocaloidGeneratorMVC(unittest.TestCase):
         finally:
             root.destroy()
 
+    def test_singer_and_harmonies_reach_the_settings(self):
+        """Stimme und zweite Stimme lassen sich in den Einstellungen wählen und landen in SongSettings."""
+        import customtkinter as ctk
+        from model import VocaloidModel
+        from view.main_view import VocaloidMainView
+        from controller import VocaloidController
+
+        root = ctk.CTk()
+        root.withdraw()
+        try:
+            with patch.object(VocaloidModel, "save_settings"):
+                model = VocaloidModel()
+                view = VocaloidMainView(*[lambda *a: None] * 4)
+                VocaloidController(model, view)
+                self.assertIn("REINA", view.settings_tab.singer_menu.cget("values"))
+                view.settings_tab.singer_var.set("REINA")
+                view.settings_tab.harmonies_var.set(False)
+                settings = model.to_settings()
+                self.assertEqual((settings.singer, settings.harmonies), ("REINA", False))
+                view.destroy()
+        finally:
+            root.destroy()
+
+
 if __name__ == "__main__":
     unittest.main()

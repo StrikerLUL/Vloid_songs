@@ -8,6 +8,7 @@ from theory import Chord, is_minor, key_pc, parse_roman
 
 BEATS_PER_BAR = 4
 SLOW_BPM = 100
+VOCAL_RANGE = (57, 79)       # A3 bis G5: Lage, in der die Melodie geschrieben wird
 SHARED_PROGRESSION = {"Intro": "Chorus", "Outro": "Chorus", "Drop": "Chorus", "Build-up": "PreChorus"}
 
 
@@ -64,6 +65,7 @@ class SongPlan:
     mode: str
     sections: list
     progressions: dict       # Sektionsart → gewählte Akkordfolge (Stufen)
+    vocal_range: tuple = VOCAL_RANGE
 
     @property
     def total_beats(self) -> float:

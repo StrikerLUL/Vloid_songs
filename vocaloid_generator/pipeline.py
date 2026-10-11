@@ -61,6 +61,8 @@ def compose(settings: SongSettings, seed: Optional[int] = None):
     if seed is None:
         seed = settings.seed if settings.seed is not None else new_seed()
     seed_everything(seed)
+    from vocal_synthesizer import stimmlage
+    lo, hi, _ = stimmlage(settings.singer)
     tracks = orchestrate_song(
         genre=genre_for_style(settings.style),
         bpm=settings.bpm,
@@ -74,6 +76,7 @@ def compose(settings: SongSettings, seed: Optional[int] = None):
         jitter_scale=settings.jitter / DEFAULT_JITTER,
         instrument_styles=settings.instrument_styles(),
         style=settings.style,
+        vocal_range=(lo, hi),
     )
     return tracks, seed
 
@@ -98,10 +101,16 @@ def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None,
 
     report(0.55, "Rendere Instrumente...")
     result.wav_files = _render_instruments(settings, tracks, out, report)
+    fx_wav = _render_fx(settings, tracks, out, seed) if result.wav_files else None
+    if fx_wav:
+        result.wav_files["fx"] = fx_wav
 
     stems = list(result.wav_files.values())
     if result.vocals_wav:
         stems.append(result.vocals_wav)
+    harmony = os.path.join(out, "vocals_harmony.wav")
+    if result.vocals_wav and os.path.exists(harmony):
+        stems.append(harmony)
     if not stems:
         raise RuntimeError("Keine Audiospuren zum Mischen vorhanden.")
 
@@ -126,6 +135,7 @@ def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None,
         reverb=profile.reverb,
         bpm=settings.bpm,
         sidechain_depth=0.45 if profile.name == "Kawaii Chiptune" else 0.25,
+        double_windows=_chorus_windows(tracks.get("plan")),
     )
 
     report(0.95, "Exportiere MP3...")
@@ -150,15 +160,20 @@ def _synthesize_vocals(settings: SongSettings, tracks: dict, out: str) -> Option
         log.warning("Keine Melodie oder keine Silben vorhanden, überspringe den Gesang.")
         return None
 
-    from vocal_synthesizer import erstelle_musicxml, generiere_lokale_vocals, neutrino_synthese
-    xml = erstelle_musicxml(melody_data, silben, settings.bpm, os.path.join(out, "vocals.xml"))
+    from vocal_synthesizer import erstelle_musicxml, generiere_lokale_vocals, neutrino_synthese, stimmlage
+    _, _, transpose = stimmlage(settings.singer)
+    xml = erstelle_musicxml(melody_data, silben, settings.bpm, os.path.join(out, "vocals.xml"), transpose)
+    harmony_wav = os.path.join(out, "vocals_harmony.wav")
+    _remove(harmony_wav)
 
     if settings.vocal_engine == "NEUTRINO" and xml:
         neutrino_dir = settings.neutrino_dir()
         model_dir = os.path.join(neutrino_dir, "model", settings.singer)
         try:
-            if neutrino_synthese(xml, vocals_wav, neutrino_dir, model_dir) and os.path.exists(vocals_wav):
-                return vocals_wav
+            neutrino_synthese(xml, vocals_wav, neutrino_dir, model_dir)
+            if settings.harmonies and tracks.get("harmony_data"):
+                _sing_harmony(settings, tracks, out, neutrino_dir, model_dir, transpose, harmony_wav)
+            return vocals_wav
         except Exception as e:
             log.warning("NEUTRINO fehlgeschlagen: %s", e)
         log.warning("NEUTRINO nicht verfügbar, nutze die lokale Vorschau-Stimme.")
@@ -172,6 +187,18 @@ def _synthesize_vocals(settings: SongSettings, tracks: dict, out: str) -> Option
         log.error("Lokale Stimme fehlgeschlagen, der Song entsteht ohne Gesang: %s", e)
         return None
     return vocals_wav if os.path.exists(vocals_wav) else None
+
+
+def _sing_harmony(settings, tracks, out, neutrino_dir, model_dir, transpose, harmony_wav) -> None:
+    """Zweite Stimme im Refrain, mit derselben NEUTRINO-Stimme gesungen."""
+    from vocal_synthesizer import erstelle_musicxml, neutrino_synthese
+    xml = erstelle_musicxml(tracks["harmony_data"], tracks["harmony_silben"], settings.bpm,
+                            os.path.join(out, "vocals_harmony.xml"), transpose)
+    try:
+        neutrino_synthese(xml, harmony_wav, neutrino_dir, model_dir)
+        log.info("Zweite Stimme im Refrain gesungen.")
+    except Exception as e:
+        log.warning("Zweite Stimme fehlgeschlagen, der Song bekommt nur die Hauptstimme: %s", e)
 
 
 def _lead_sings_melody(tracks: dict, out: str) -> None:
@@ -192,8 +219,35 @@ def _lead_sings_melody(tracks: dict, out: str) -> None:
     log.info("Kein Gesang: die Lead-Stimme spielt die Melodie.")
 
 
+def _chorus_windows(plan) -> list:
+    if plan is None:
+        return []
+    spb = plan.seconds_per_beat
+    return [(sec.start * spb, sec.end * spb) for sec in plan.sections if sec.kind == "Chorus"]
+
+
+def _render_fx(settings: SongSettings, tracks: dict, out: str, seed: int) -> Optional[str]:
+    """Riser, Becken-Swells und Impacts an den Übergängen als eigene Spur."""
+    wav = os.path.join(out, "fx.wav")
+    _remove(wav)
+    plan = tracks.get("plan")
+    if plan is None or not settings.channels["fx"].enabled or plan.style.fx == "none":
+        return None
+    import soundfile as sf
+    from fx import SAMPLE_RATE, render_fx
+    audio = render_fx(plan, seed)
+    if not np.any(audio):
+        return None
+    sf.write(wav, audio.T, SAMPLE_RATE, subtype="FLOAT")
+    return wav
+
+
 def _render_instruments(settings: SongSettings, tracks: dict, out: str, report: ProgressFn) -> dict:
     from mixer import midi_zu_wav
+    from renderer import engine_name
+    from styles import get_style
+    voices = get_style(settings.style).voices
+    log.info("Instrumente aus dem SoundFont mit %s", engine_name())
     wav_files = {}
     active = [inst for inst in INSTRUMENTS if settings.channels[inst].enabled and tracks.get(inst)]
     for inst in INSTRUMENTS:
@@ -204,10 +258,11 @@ def _render_instruments(settings: SongSettings, tracks: dict, out: str, report: 
         report(0.55 + 0.3 * active.index(inst) / max(len(active), 1), f"Rendere {inst}...")
         midi_zu_wav(
             os.path.join(out, f"{inst}.mid"), wav,
-            is_drum=(inst == "drums"),
+            is_drum=inst in ("drums", "perc"),
             instrument_type=inst,
             vst_pfad=settings.vst_path if (settings.vst_path and inst in VST_TRACKS) else None,
             soundfont_pfad=settings.soundfont_file(),
+            voices=voices.get(inst),
         )
         if os.path.exists(wav):
             wav_files[inst] = wav

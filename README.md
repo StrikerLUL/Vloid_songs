@@ -29,11 +29,23 @@ python vocaloid_generator\gui_mvc.py
 1. NEUTRINO (`NEUTRINO-windows-v3.1`) und die Stimme MERROW (`めろう（NEUTRINO-Library）-v3.1`) herunterladen und beide Ordner in den Projektordner legen.
 2. `python setup_neutrino.py` kopiert die Stimme an die richtige Stelle.
 
-Ohne NEUTRINO nutzt die App automatisch die lokale Vorschau-Stimme (Windows-Sprachausgabe plus Tonhöhen-Korrektur).
+Die App ruft NEUTRINO so auf, wie es die `Run.bat` der installierten Version vorgibt, und erkennt dabei v2 (mit `NSF.exe`) und v3 (schreibt die WAV selbst). Neuere Versionen von [studio-neutrino.com](https://studio-neutrino.com/) klingen besser (ab v3.2.2 mit neuem Vocoder) und funktionieren genauso.
+
+Damit der Gesang natürlich klingt, bereitet die App die Noten für NEUTRINO vor: ein Takt Vorlauf, kurze Pausen innerhalb einer Phrase werden an die Note davor gebunden, und die Melodie bleibt im Tonumfang der gewählten Stimme. Männliche Stimmen (NAKUMO, SOMA, RUNO) singen eine Oktave tiefer. Im Refrain singt NEUTRINO eine zweite Stimme dazu, der Hauptgesang wird gedoppelt, und ein De-Esser nimmt scharfe S-Laute zurück.
+
+Schlägt NEUTRINO fehl, steht die Meldung im Protokoll, und die App nutzt die lokale Vorschau-Stimme (Windows-Sprachausgabe plus Tonhöhen-Korrektur). Ohne NEUTRINO nimmt sie diese Stimme sofort.
 
 ### Klang der Instrumente
 
-Die Instrumente werden mit dem SoundFont `soundfont.sf2` (GeneralUser GS) in Stereo gerendert. Das erledigt `tinysoundfont`, das mit `uv sync` installiert wird; eine zusätzliche FluidSynth-DLL ist nicht nötig. Wer einen anderen SoundFont nutzen möchte, trägt ihn in den Einstellungen ein.
+Die Instrumente werden mit dem SoundFont `soundfont.sf2` (GeneralUser GS) in Stereo gerendert. Am besten klingt das mit FluidSynth, das alle Feinheiten des SoundFonts umsetzt. Einmal ausführen:
+
+```powershell
+uv run setup_fluidsynth.py
+```
+
+Das lädt FluidSynth 2.6 nach `tools\fluidsynth\bin`. Ohne FluidSynth rendert `tinysoundfont`, das mit `uv sync` installiert wird. Im Protokoll steht, welcher der beiden spielt. Wer einen anderen SoundFont nutzen möchte, trägt ihn in den Einstellungen ein.
+
+Supersaw, Pluck, Pad, Lead und Chiptune-Klänge erzeugt die App selbst (`synth_engine.py`), ebenso Riser, Becken-Swells, Impacts und Downlifter vor den Refrains (`fx.py`). Wer ein eigenes VST3-Instrument wie Surge XT nutzen möchte, trägt es in den Einstellungen ein; es spielt dann Synth und Lead.
 
 ### MP3-Export
 
@@ -69,12 +81,14 @@ Jeder Stil bringt eigene Instrumente, Spielweisen, Schlagzeug-Grooves und Akkord
 
 | Stil | Klang |
 | --- | --- |
-| J-Pop Energy | Klavier, Overdrive-Gitarre, Streicher, Synth-Arpeggio, treibender Pop-Beat |
-| Dark Vocaloid | schnelles Sechzehntel-Klavier, verzerrte Gitarre, Double-Bass-Drum im Refrain |
-| Kawaii Chiptune | Square-Synths, Synth-Bass, Four-on-the-Floor, Bass duckt unter der Kick |
-| Rock | Band pur: Gitarren doppelt links und rechts, Bass, Schlagzeug |
-| Ballade | Klavier-Arpeggien, Streicher, Pad, Akkorde mit None |
-| City Pop | E-Piano mit Septakkorden, Funk-Gitarre, Oktav-Bass, Bläser |
+| J-Pop Energy | Klavier, Overdrive-Gitarre, Streicher, Pluck und Supersaw, Glockenspiel, Chor, Gegenstimme, Shaker und Claps, Riser und Impacts |
+| Dark Vocaloid | schnelles Sechzehntel-Klavier, verzerrte Gitarre, Chor, Celesta, Cello-Gegenstimme, Double-Bass-Drum im Refrain |
+| Kawaii Chiptune | eigene Chiptune-Synths, Synth-Bass, Glockenspiel in Sechzehnteln, Four-on-the-Floor, Bass duckt unter der Kick |
+| Rock | Gitarren doppelt links und rechts, Bass, Schlagzeug, Gitarren-Antworten und -Solo |
+| Ballade | Klavier-Arpeggien, Streicher, Pad, Spieluhr, Chor, Cello-Linie unter dem Gesang |
+| City Pop | E-Piano mit Septakkorden, Funk-Gitarre, Oktav-Bass, Bläser, Congas, Saxofon-Antworten |
+
+Keine Sektion klingt zweimal gleich: Die zweite Strophe bekommt eine Gegenstimme, der letzte Refrain Chor und Glockenspiel in der Oktave der Hook, und im Refrain spielen mehrere Synth-Schichten zusammen.
 
 Im Instrumente-Tab lässt sich pro Instrument eine andere Spielweise wählen. „default“ nimmt die des Stils.
 
@@ -83,7 +97,7 @@ Im Instrumente-Tab lässt sich pro Instrument eine andere Spielweise wählen. �
 1. **Bauplan:** Jede Sektion bekommt eine bewährte Akkordfolge (zum Beispiel die Royal-Road-Folge des J-Pop). Gleiche Sektionen klingen gleich, der Pre-Chorus endet auf der Dominante, der Refrain auf der Tonika, und der letzte Refrain steigt einen Halbton.
 2. **Melodie:** Phrasen aus wiederkehrenden Rhythmus-Motiven, betonte Töne sind Akkordtöne. Der Refrain wiederholt seine erste Phrase als Hook, Intro und Outro spielen diese Hook. Kurze Liedtexte werden wiederholt, lange machen die Sektion länger.
 3. **Begleitung und Schlagzeug:** Spielweisen pro Instrument mit Stimmführung, Grooves mit Fills, Crash auf jedem Refrain, Snare-Wirbel und kurzer Stopp vor dem Refrain.
-4. **Klang und Mix:** SoundFont-Rendering in Stereo, jede Spur auf ihre Ziel-Lautheit, EQ und Kompressor pro Spur, gemeinsamer Hall, Delay auf der Stimme, Master auf -12 LUFS mit Limiter.
+4. **Klang und Mix:** SoundFont-Rendering in Stereo (FluidSynth oder tinysoundfont), eigene Synths und Übergangs-Effekte, jede Spur auf ihre Ziel-Lautheit, EQ und Kompressor pro Spur, gemeinsamer Hall, De-Esser, Doppelung und Delay auf der Stimme, Master auf -12 LUFS mit Limiter.
 
 Ohne Gesang (kein NEUTRINO, keine Vorschau-Stimme oder Gesang ausgeschaltet) spielt die Lead-Stimme die Gesangsmelodie.
 
@@ -110,9 +124,11 @@ uv run pytest -m "not slow"   # ohne den Test, der echtes Audio rendert
 | `styles.py` | die Stile: Instrumente, Spielweisen pro Sektion, Akkordfolgen, Mix |
 | `song_plan.py` | Bauplan: Sektionen, Tonarten, Akkorde und Energie |
 | `melody_writer.py` | Gesangsmelodie mit Motiven und Refrain-Hook |
-| `parts.py`, `drums.py` | Begleitung und Schlagzeug |
+| `parts.py`, `drums.py` | Begleitung, Gegenstimme, Percussion und Schlagzeug |
 | `orchestrator.py` | setzt alles zusammen und schreibt die MIDI-Spuren |
-| `renderer.py` | rendert MIDI mit dem SoundFont |
+| `renderer.py` | rendert MIDI mit dem SoundFont (FluidSynth oder tinysoundfont) |
+| `synth_engine.py` | eigene Synths: Supersaw, Pluck, Pad, Lead, Chiptune |
+| `fx.py` | Riser, Becken-Swell, Impact und Downlifter |
 | `vocal_synthesizer.py` | MusicXML, NEUTRINO und die lokale Vorschau-Stimme |
 | `mixer.py`, `exporter.py` | Mischen, Mastern und MP3-Export |
 | `gui_mvc.py`, `model.py`, `view/`, `controller.py` | die Oberfläche |

@@ -484,8 +484,9 @@ def melody_data(notes: list) -> tuple:
     return data, syllables
 
 
-def required_bars(kind: str, n_syllables: int, bars: int) -> int:
-    """Takte, die eine Sektion mindestens braucht, damit n Silben singbar hineinpassen."""
+def required_bars(n_syllables: int) -> int:
+    """Takte (Zweierpotenz), die eine Sektion mindestens braucht, damit n Silben singbar hineinpassen."""
+    bars = 1
     while n_syllables > max_syllables(bars):
         bars *= 2
     return bars

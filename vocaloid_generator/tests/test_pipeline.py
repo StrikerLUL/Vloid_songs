@@ -121,6 +121,17 @@ def test_generate_song_renders_and_mixes(tmp_path):
     if result.mp3:
         assert os.path.getsize(result.mp3) > 0
 
+    # Der Song liegt im Verlauf und lässt sich mit allen Spuren als ZIP exportieren
+    import zipfile
+
+    import history
+    from exporter import exportiere_projekt
+    [entry] = history.entries(out)
+    assert entry.audio == result.history and entry.settings.seed == 9
+    with zipfile.ZipFile(exportiere_projekt(result, str(tmp_path / "song.zip"))) as z:
+        names = z.namelist()
+    assert "Spuren/piano.wav" in names and "MIDI/piano.mid" in names and "einstellungen.json" in names
+
 
 def test_generate_song_without_any_track_fails_clearly(tmp_path):
     s = make_settings(tmp_path, channels={ch: {"enabled": False} for ch in (*INSTRUMENTS, "vocals")})

@@ -14,6 +14,8 @@ INSTRUMENTS = ("piano", "bass", "guitar", "strings", "synth", "brass", "bells", 
                "drums", "melody")
 # fx: Riser, Becken-Swells und Impacts an den Übergängen (Audio, kein MIDI)
 CHANNELS = INSTRUMENTS + ("fx", "vocals", "master")
+# Teile, die sich einzeln neu würfeln lassen ("melody" ist die Gesangsmelodie, "chords" Akkorde und Ablauf)
+REROLLABLE = ("chords",) + INSTRUMENTS
 CHANNEL_FIELDS = ("volume", "pan", "enabled", "mute", "solo")
 # Wählbare Spielweisen pro Instrument; "default" nimmt das Muster des Genres
 STYLE_OPTIONS = {
@@ -100,6 +102,8 @@ class SongSettings(BaseModel):
     key: str = "A"
     scale: Literal["minor", "major", "dorian", "phrygian"] = "minor"
     seed: Optional[int] = Field(None, ge=0)
+    # Wie oft ein Teil bei gleichem Seed neu gewürfelt wurde; ohne Eintrag bleibt er, wie der Seed ihn macht
+    variations: dict[str, int] = Field(default_factory=dict)
 
     active_sections: list[str] = Field(default_factory=lambda: [
         "Intro", "Verse", "PreChorus", "Chorus", "Verse", "PreChorus", "Chorus", "Bridge", "Chorus", "Outro"
@@ -143,6 +147,11 @@ class SongSettings(BaseModel):
             raise ValueError(f"Unbekannte Sektionen: {unknown}")
         return list(value)
 
+    @field_validator("variations", mode="before")
+    @classmethod
+    def _check_variations(cls, value: dict) -> dict:
+        return {part: int(n) for part, n in (value or {}).items() if part in REROLLABLE and int(n) > 0}
+
     @field_validator("channels", mode="before")
     @classmethod
     def _complete_channels(cls, value: dict) -> dict:
@@ -172,6 +181,12 @@ class SongSettings(BaseModel):
     # ── Hilfen für die Pipeline ─────────────────────────────────────────────────
     def instrument_styles(self) -> dict:
         return {inst: self.channels[inst].style for inst in INSTRUMENTS}
+
+    def rerolled(self, part: str) -> "SongSettings":
+        """Gleicher Song, nur dieser Teil wird neu gewürfelt."""
+        if part not in REROLLABLE:
+            raise ValueError(f"Unbekannter Teil: {part}")
+        return self.with_updates(variations={**self.variations, part: self.variations.get(part, 0) + 1})
 
     def with_updates(self, **updates) -> "SongSettings":
         """Kopie mit geänderten Werten, die wieder geprüft wird."""

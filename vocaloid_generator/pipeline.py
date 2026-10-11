@@ -38,8 +38,16 @@ class SongResult:
     midi_files: dict = field(default_factory=dict)
     wav_files: dict = field(default_factory=dict)
     vocals_wav: Optional[str] = None
+    harmony_wav: Optional[str] = None
     mix_wav: Optional[str] = None
     mp3: Optional[str] = None
+    settings: Optional[SongSettings] = None    # die benutzten Einstellungen, mit Seed
+    history: Optional[str] = None              # Kopie im Verlauf
+
+    @property
+    def audio(self) -> Optional[str]:
+        """Der fertige Song: die MP3, ohne ffmpeg die WAV."""
+        return self.mp3 or self.mix_wav
 
 
 def genre_for_style(style: str) -> str:
@@ -77,12 +85,15 @@ def compose(settings: SongSettings, seed: Optional[int] = None):
         instrument_styles=settings.instrument_styles(),
         style=settings.style,
         vocal_range=(lo, hi),
+        variations=settings.variations,
     )
     return tracks, seed
 
 
-def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None, seed: Optional[int] = None) -> SongResult:
-    """Komponieren, Gesang, Rendern, Mischen, Exportieren. Wirft RuntimeError, wenn keine Spur entsteht."""
+def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None, seed: Optional[int] = None,
+                  keep_history: bool = True) -> SongResult:
+    """Komponieren, Gesang, Rendern, Mischen, Exportieren und im Verlauf ablegen.
+    Wirft RuntimeError, wenn keine Spur entsteht."""
     report = progress or (lambda fraction, message: None)
     out = settings.output_dir()
     os.makedirs(out, exist_ok=True)
@@ -90,7 +101,8 @@ def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None,
     report(0.05, "Komponiere Song...")
     tracks, seed = compose(settings, seed)
     log.info("Seed: %d (mit diesem Seed entsteht derselbe Song noch einmal)", seed)
-    result = SongResult(seed=seed, output_dir=out)
+    settings = settings.with_updates(seed=seed)
+    result = SongResult(seed=seed, output_dir=out, settings=settings)
     result.midi_files = {inst: os.path.join(out, f"{inst}.mid") for inst in INSTRUMENTS if tracks.get(inst)}
 
     report(0.30, "Synthetisiere Gesang...")
@@ -110,6 +122,7 @@ def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None,
         stems.append(result.vocals_wav)
     harmony = os.path.join(out, "vocals_harmony.wav")
     if result.vocals_wav and os.path.exists(harmony):
+        result.harmony_wav = harmony
         stems.append(harmony)
     if not stems:
         raise RuntimeError("Keine Audiospuren zum Mischen vorhanden.")
@@ -145,8 +158,33 @@ def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None,
     _remove(mp3)  # eine MP3 vom letzten Song darf nicht als neue gelten
     result.mp3 = exportiere_song(wav_pfad=result.mix_wav, mp3_pfad=mp3)
 
+    if keep_history:
+        import history
+        entry = history.record(result.audio, settings, out)
+        result.history = entry.audio if entry else None
+
     report(1.0, "Fertig")
     return result
+
+
+def generate_variants(settings: SongSettings, count: int, parts: tuple = (),
+                      progress: Optional[ProgressFn] = None) -> list:
+    """Mehrere Songs am Stück, alle im Verlauf. Ohne parts mit neuem Seed je Song; mit parts derselbe Song,
+    nur diese Teile jedes Mal neu gewürfelt (z. B. drei Melodien zur Auswahl)."""
+    report = progress or (lambda fraction, message: None)
+    if not parts:
+        settings = settings.with_updates(seed=None, variations={})
+    elif settings.seed is None:
+        raise ValueError("Zum Neu-Würfeln einzelner Teile braucht der Song einen festen Seed.")
+    results = []
+    for i in range(count):
+        for part in parts:
+            settings = settings.rerolled(part)
+
+        def step(fraction, message, i=i):
+            report((i + fraction) / count, f"Variante {i + 1}/{count}: {message}" if count > 1 else message)
+        results.append(generate_song(settings, progress=step))
+    return results
 
 
 def _synthesize_vocals(settings: SongSettings, tracks: dict, out: str) -> Optional[str]:

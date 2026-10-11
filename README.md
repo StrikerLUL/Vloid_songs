@@ -81,9 +81,31 @@ uv run vocaloid_generator\main.py --style Rock --bpm 140 --key E --scale minor -
 | `--bpm`, `--style`, `--key`, `--scale` | überschreiben die gespeicherten Einstellungen für diesen Lauf |
 | `--output` | Ausgabeordner |
 | `--settings` | eine andere Einstellungsdatei verwenden |
+| `--neu TEIL` | nur diesen Teil des letzten Songs neu würfeln, der Rest bleibt; mehrfach möglich |
+| `--varianten N` | N Songs am Stück erzeugen; mit `--neu` N Fassungen der gewählten Teile |
+| `--verlauf` | die letzten Songs auflisten |
+| `--aus-verlauf NR` | Einstellungen und Seed eines Songs aus dem Verlauf nehmen (1 = der neueste) |
+| `--zip DATEI` | den Song mit allen Spuren als ZIP für eine DAW exportieren |
 | `-v` | alle Details ausgeben |
 
 Die fertigen Dateien landen in `vocaloid_generator\output\` (oder im Ordner aus den Einstellungen): `final_song.mp3`, `final_mix.wav`, die einzelnen Spuren als WAV und MIDI und `vocals.xml` für NEUTRINO.
+
+### Verlauf, Neu würfeln und Varianten
+
+Jeder fertige Song landet zusätzlich im Unterordner `verlauf\`: die MP3 und daneben eine JSON-Datei mit allen Einstellungen und dem Seed. Die 30 neuesten Songs bleiben dort, als Favorit markierte immer.
+
+Gefällt dir alles außer einem Teil, wird nur dieser neu gewürfelt. Teile sind `chords` (Akkorde und Ablauf), `melody` (Gesangsmelodie) und jedes Instrument: `piano`, `bass`, `guitar`, `strings`, `synth`, `brass`, `bells`, `choir`, `counter`, `perc`, `drums`.
+
+```powershell
+uv run vocaloid_generator\main.py --neu melody                  # der letzte Song mit neuer Melodie
+uv run vocaloid_generator\main.py --neu drums --varianten 3     # drei Schlagzeug-Fassungen zur Auswahl
+uv run vocaloid_generator\main.py --varianten 3                 # drei ganz neue Songs
+uv run vocaloid_generator\main.py --aus-verlauf 2 --zip song.zip
+```
+
+Neue Akkorde ändern auch alles, was auf den Akkorden spielt; eine neue Melodie ändert die Gegenstimme mit, weil sie der Melodie antwortet.
+
+Die ZIP-Datei enthält den Mix, jede Spur als WAV (`Spuren\`) und MIDI (`MIDI\`), die Gesangsnoten als MusicXML (`Gesang\`), `einstellungen.json` und `song.txt` mit Tempo und Tonart. Alle Spuren starten bei 0:00 und lassen sich so in jede DAW ziehen.
 
 ## Stile
 
@@ -115,7 +137,7 @@ Ohne Gesang (kein NEUTRINO, keine Vorschau-Stimme oder Gesang ausgeschaltet) spi
 
 Die App speichert alles in `vocaloid_generator\user_settings.json`. Die alte `settings.json` wird noch gelesen, solange es keine `user_settings.json` gibt. Ungültige Werte (zum Beispiel ein Pfad, den es auf diesem Rechner nicht gibt) werden beim Laden durch Standardwerte ersetzt und im Protokoll gemeldet.
 
-Jeder erzeugte Song meldet im Protokoll seinen Seed. Mit diesem Seed lässt sich derselbe Song später noch einmal erzeugen.
+Jeder erzeugte Song meldet im Protokoll seinen Seed. Mit diesem Seed lässt sich derselbe Song später noch einmal erzeugen. Seit dem Neu-Würfeln pro Teil hat jeder Teil seinen eigenen Zufall; ein Seed aus einer älteren Version ergibt deshalb einen anderen Song als damals.
 
 ## Tests
 
@@ -140,6 +162,7 @@ uv run pytest -m "not slow"   # ohne den Test, der echtes Audio rendert
 | `synth_engine.py` | eigene Synths: Supersaw, Pluck, Pad, Lead, Chiptune |
 | `fx.py` | Riser, Becken-Swell, Impact und Downlifter |
 | `vocal_synthesizer.py` | MusicXML, NEUTRINO und die lokale Vorschau-Stimme |
-| `mixer.py`, `exporter.py` | Mischen, Mastern und MP3-Export |
+| `mixer.py`, `exporter.py` | Mischen, Mastern, MP3- und ZIP-Export |
+| `history.py` | der Verlauf: jeder Song mit Seed und Einstellungen |
 | `gui_mvc.py`, `model.py`, `view/`, `controller.py` | die Oberfläche |
 | `main.py` | die Kommandozeile |

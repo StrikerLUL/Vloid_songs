@@ -16,6 +16,12 @@ STYLE = """
 .vg-roll canvas { display: block; }
 .vg-head { position: absolute; top: 0; left: 0; bottom: 14px; width: 2px; background: #ffffff; opacity: 0.8;
            pointer-events: none; }
+.vg-karaoke { text-align: center; padding: 10px 0 4px; }
+.vg-line { font-size: 26px; font-weight: 600; min-height: 36px; letter-spacing: 1px; }
+.vg-line span { color: #ffffff; transition: color 0.08s; }
+.vg-line span.sung { color: #ff4f8b; }
+.vg-next { font-size: 16px; opacity: 0.5; min-height: 22px; }
+.vg-roll.editing { cursor: ns-resize; }
 """
 
 
@@ -46,14 +52,38 @@ class WavePlayer(Element, component="wave_player.js", esm={"wavesurfer": "wavesu
 
 
 class PianoRoll(Element, component="piano_roll.js"):
-    """Noten aller Spuren; Spuren lassen sich ausblenden."""
+    """
+    Noten aller Spuren; Spuren lassen sich ausblenden. Mit editable lassen sich die Töne der Gesangsmelodie
+    nach oben und unten ziehen (oder mit den Pfeiltasten verschieben); jede Änderung meldet das Ereignis "edit"
+    mit {start, pitch} (Anfang in Sekunden, neue Tonhöhe).
+    """
 
     def __init__(self) -> None:
         super().__init__()
-        self._props.update(notes=[], tracks=[], hidden=[], duration=0)
+        self._props.update(notes=[], tracks=[], hidden=[], duration=0, editable=False)
 
     def show(self, data: dict) -> None:
         self._props.update(notes=data["notes"], tracks=data["tracks"], duration=data["duration"], hidden=[])
+        self.update()
+
+    @property
+    def notes(self) -> list:
+        return self._props["notes"]
+
+    @property
+    def editable(self) -> bool:
+        return self._props["editable"]
+
+    def set_editable(self, editable: bool) -> None:
+        self._props["editable"] = editable
+        self.update()
+
+    def move(self, start: float, pitch: int) -> None:
+        """Den Ton der Gesangsmelodie, der bei start (Sekunden) beginnt, auf pitch setzen (auch in Python)."""
+        vocal = next((i for i, t in enumerate(self.tracks) if t.get("key") == "vocals"), None)
+        for note in self._props["notes"]:
+            if note[3] == vocal and abs(note[0] - start) < 1e-3:
+                note[2] = pitch
         self.update()
 
     @property
@@ -67,6 +97,22 @@ class PianoRoll(Element, component="piano_roll.js"):
     def set_hidden(self, hidden: list) -> None:
         self._props["hidden"] = sorted(hidden)
         self.update()
+
+
+class Karaoke(Element, component="karaoke.js"):
+    """Der Liedtext zum Mitlesen; lines kommt aus karaoke.lines()."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._props["lines"] = []
+
+    def show(self, lines: list) -> None:
+        self._props["lines"] = lines
+        self.update()
+
+    @property
+    def lines(self) -> list:
+        return self._props["lines"]
 
 
 def add_style() -> None:

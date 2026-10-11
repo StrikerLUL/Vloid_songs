@@ -5,7 +5,7 @@ import logging
 import sys
 
 import history
-from pipeline import from_references, generate_song, generate_variants, hook_choices, hook_kind
+from pipeline import from_references, generate_song, generate_variants, hook_choices, hook_kind, lyric_video
 from settings import KEYS, REROLLABLE, ReferenceTrack, SongSettings, is_rerollable
 
 log = logging.getLogger("vocaloid")
@@ -27,6 +27,15 @@ def _custom_chords(text: str) -> tuple:
     if error:
         raise argparse.ArgumentTypeError(error)
     return kind, chords
+
+
+def _section_bars(text: str) -> tuple:
+    import config
+    from settings import MAX_BARS, MIN_BARS
+    kind, _, bars = text.partition("=")
+    if kind not in config.SECTION_CONFIG or not bars.isdigit() or not MIN_BARS <= int(bars) <= MAX_BARS:
+        raise argparse.ArgumentTypeError(f"erwartet SEKTION=TAKTE ({MIN_BARS} bis {MAX_BARS}), z. B. 'Chorus=8': {text}")
+    return kind, int(bars)
 
 
 def parse_args(argv=None):
@@ -75,6 +84,10 @@ def parse_args(argv=None):
                    help="eigene Akkorde, z. B. 'Chorus=F G Em Am' oder 'Verse=vi IV I V' (mehrfach möglich, "
                         "'Chorus=' nimmt wieder die des Stils)")
     p.add_argument("--melodie-midi", metavar="DATEI", help="eigene Melodie als MIDI-Datei ('' = komponieren)")
+    p.add_argument("--takte", action="append", type=_section_bars, metavar="SEKTION=N",
+                   help="Länge einer Sektion in Takten, z. B. 'Chorus=8' (mehrfach möglich)")
+    p.add_argument("--lyric-video", nargs="?", const="", metavar="DATEI",
+                   help="dazu ein Lyric-Video (MP4) mit dem Text zum Mitlesen; ohne DATEI neben dem Song")
     p.add_argument("--melodie-sektion", metavar="SEKTION", help="dort singt die eigene Melodie (Standard: Chorus)")
     p.add_argument("--varianten", type=int, default=1, metavar="N",
                    help="N Songs am Stück erzeugen; mit --neu N Fassungen der gewählten Teile")
@@ -114,6 +127,8 @@ def main(argv=None) -> int:
                  "melody_midi": args.melodie_midi, "melody_midi_section": args.melodie_sektion}
     if args.akkorde:
         overrides["custom_chords"] = {**settings.custom_chords, **dict(args.akkorde)}
+    if args.takte:
+        overrides["section_bars"] = {**settings.section_bars, **dict(args.takte)}
     if args.refrain:
         overrides["variations"] = {**settings.variations, f"melody:{hook_kind(settings)}": args.refrain}
     if args.schlagzeug:
@@ -143,6 +158,12 @@ def main(argv=None) -> int:
 
     for result in results:
         log.info("Fertig! Seed %d: %s", result.seed, result.history or result.audio)
+    if args.lyric_video is not None:
+        try:
+            log.info("Lyric-Video: %s", lyric_video(results[-1], args.lyric_video or None))
+        except RuntimeError as e:
+            log.error("%s", e)
+            return 1
     if args.zip:
         from exporter import exportiere_projekt
         log.info("ZIP: %s", exportiere_projekt(results[-1], args.zip))

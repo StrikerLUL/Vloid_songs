@@ -87,6 +87,14 @@ def piano_roll(result) -> dict:
     return data
 
 
+def lyrics(result) -> list:
+    """Die Zeilen zum Mitlesen (karaoke.lines) des Songs; leer ohne Gesang."""
+    import karaoke
+    if result is None:
+        return []
+    return karaoke.load(os.path.join(result.output_dir, karaoke.FILE))
+
+
 def open_folder(path: str) -> bool:
     """Öffnet einen Ordner im Explorer (oder im Dateimanager)."""
     if not os.path.isdir(path):

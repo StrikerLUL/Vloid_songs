@@ -102,6 +102,14 @@ class ReferenceTrack(BaseModel):
     enabled: bool = True
 
 
+MIN_BARS, MAX_BARS = 1, 64        # Länge einer Sektion in Takten
+
+
+def edit_key(beat: float) -> str:
+    """Schlüssel eines geänderten Tons: sein Anfang in Schlägen, auf Sechzehntel gerundet ("12.25")."""
+    return f"{round(beat * 4) / 4:g}"
+
+
 def is_rerollable(key: str) -> bool:
     """Ein Teil aus REROLLABLE, wahlweise mit Sektionsart: "bass" oder "bass:Chorus"."""
     part, _, kind = key.partition(":")
@@ -133,6 +141,9 @@ class SongSettings(BaseModel):
     active_sections: list[str] = Field(default_factory=lambda: [
         "Intro", "Verse", "PreChorus", "Chorus", "Verse", "PreChorus", "Chorus", "Bridge", "Chorus", "Outro"
     ])
+    section_bars: dict[str, int] = Field(default_factory=dict)   # Takte pro Sektionsart; fehlt sie, wie config.py
+    # Geänderte Töne der Gesangsmelodie: {Schlag ab Songanfang: Tonhöhe}, gelten für Seed und Zähler dieses Songs
+    melody_edits: dict[str, int] = Field(default_factory=dict)
     lyrics: str = DEFAULT_LYRICS
 
     singer: str = "MERROW"
@@ -162,6 +173,7 @@ class SongSettings(BaseModel):
     guitar_amp: bool = True            # verzerrte E-Gitarren über Verstärker und Box statt verzerrter Samples
     cabinet_ir: str = ""               # Impulsantwort einer Gitarrenbox (WAV); leer = eingebaute Box
     lofi_texture: bool = True          # im Stil Lo-Fi: Knistern, leiernde Bandmaschine, gedämpfte Höhen
+    show_karaoke: bool = True          # Text zum Mitlesen unter dem Player
     breathiness: float = Field(0.028, ge=0.0, le=0.2)
     shimmer: bool = True
     swing: float = Field(0.12, ge=0.0, le=0.5)
@@ -213,6 +225,23 @@ class SongSettings(BaseModel):
     def _check_variations(cls, value: dict) -> dict:
         return {part: int(n) for part, n in (value or {}).items() if is_rerollable(part) and int(n) > 0}
 
+    @field_validator("section_bars", mode="before")
+    @classmethod
+    def _check_section_bars(cls, value: dict) -> dict:
+        return {kind: int(bars) for kind, bars in (value or {}).items()
+                if kind in config.SECTION_CONFIG and MIN_BARS <= int(bars) <= MAX_BARS}
+
+    @field_validator("melody_edits", mode="before")
+    @classmethod
+    def _check_melody_edits(cls, value: dict) -> dict:
+        edits = {}
+        for beat, pitch in (value or {}).items():
+            try:
+                edits[edit_key(float(beat))] = max(0, min(127, int(pitch)))
+            except (TypeError, ValueError):
+                continue
+        return edits
+
     @field_validator("custom_chords", mode="before")
     @classmethod
     def _check_custom_chords(cls, value: dict) -> dict:
@@ -257,10 +286,20 @@ class SongSettings(BaseModel):
         return {inst: self.channels[inst].style for inst in INSTRUMENTS}
 
     def rerolled(self, part: str) -> "SongSettings":
-        """Gleicher Song, nur dieser Teil wird neu gewürfelt ("bass" im ganzen Song, "bass:Chorus" nur im Refrain)."""
+        """
+        Gleicher Song, nur dieser Teil wird neu gewürfelt ("bass" im ganzen Song, "bass:Chorus" nur im Refrain).
+        Neue Melodie oder neue Akkorde verwerfen die geänderten Töne, sie gehörten zur alten Melodie.
+        """
         if not is_rerollable(part):
             raise ValueError(f"Unbekannter Teil: {part}")
-        return self.with_updates(variations={**self.variations, part: self.variations.get(part, 0) + 1})
+        edits = {} if part.partition(":")[0] in ("melody", "chords") else self.melody_edits
+        return self.with_updates(variations={**self.variations, part: self.variations.get(part, 0) + 1},
+                                 melody_edits=edits)
+
+    def section_config(self) -> dict:
+        """config.SECTION_CONFIG mit den eigenen Längen der Sektionen."""
+        return {kind: {**cfg, "bars": self.section_bars.get(kind, cfg["bars"])}
+                for kind, cfg in config.SECTION_CONFIG.items()}
 
     def with_updates(self, **updates) -> "SongSettings":
         """Kopie mit geänderten Werten, die wieder geprüft wird."""

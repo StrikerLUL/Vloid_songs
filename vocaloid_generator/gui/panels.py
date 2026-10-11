@@ -73,14 +73,32 @@ def song_panel(s: SongSettings, pick: PickFn, apply_template: Callable[[SongSett
     templates_editor(s, apply_template)
 
 
+BAR_CHOICES = (2, 4, 8, 12, 16, 24, 32)
+
+
 def structure_editor(s: SongSettings) -> None:
+    import config
+    dragged = {"from": None}
+
     @ui.refreshable
     def chips() -> None:
         with ui.row().classes("gap-1"):
             for i, name in enumerate(s.active_sections):
-                ui.chip(labels.SECTIONS.get(name, name), removable=True, color="deep-purple-4",
-                        text_color="white", on_value_change=lambda _, i=i: remove(i)).props("dense") \
-                    .mark(f"section-{i}")
+                bars = s.section_bars.get(name, config.SECTION_CONFIG[name]["bars"])
+                with ui.chip(f"{labels.SECTIONS.get(name, name)} · {bars}", removable=True, color="deep-purple-4",
+                             text_color="white", on_value_change=lambda _, i=i: remove(i)) \
+                        .props("dense draggable clickable").mark(f"section-{i}") as chip:
+                    with ui.menu().props("auto-close"):
+                        ui.label(f"{labels.SECTIONS.get(name, name)}: Takte").classes("q-px-md q-pt-sm text-caption")
+                        for choice in BAR_CHOICES:
+                            ui.menu_item(f"{choice} Takte" + (" (Standard)" if choice == config.SECTION_CONFIG[name]["bars"]
+                                                               else ""),
+                                         on_click=lambda _, n=name, b=choice: set_bars(n, b)).mark(f"bars-{name}-{choice}")
+                chip.on("dragstart", lambda _, i=i: dragged.update({"from": i}))
+                chip.on("dragover", js_handler="(e) => e.preventDefault()")
+                chip.on("drop", lambda _, i=i: move(i))
+        hint("Ziehen ändert die Reihenfolge, ein Klick die Länge in Takten (gilt für alle Sektionen dieser Art). "
+             "Lange Liedtexte machen eine Sektion länger.")
         with ui.row().classes("gap-1 items-center"):
             ui.label("Anhängen:").classes("text-caption")
             for name, text in labels.SECTIONS.items():
@@ -93,6 +111,21 @@ def structure_editor(s: SongSettings) -> None:
     def remove(i: int) -> None:
         if len(s.active_sections) > 1:
             s.active_sections = s.active_sections[:i] + s.active_sections[i + 1:]
+        chips.refresh()
+
+    def move(target: int) -> None:
+        source, dragged["from"] = dragged["from"], None
+        if source is None or source == target or not 0 <= source < len(s.active_sections):
+            return
+        sections = list(s.active_sections)
+        sections.insert(target, sections.pop(source))
+        s.active_sections = sections
+        chips.refresh()
+
+    def set_bars(kind: str, bars: int) -> None:
+        default = config.SECTION_CONFIG[kind]["bars"]
+        s.section_bars = {**{k: v for k, v in s.section_bars.items() if k != kind},
+                          **({kind: bars} if bars != default else {})}
         chips.refresh()
 
     def add(name: str) -> None:

@@ -68,6 +68,11 @@ def parse_lyrics(text: str) -> dict:
     Format: eine Überschrift wie [Verse] pro Sektion, darunter Silben mit Leerzeichen getrennt.
     Text vor der ersten Überschrift wird ignoriert.
     """
+    return {name: [s for line in lines for s in line] for name, lines in section_lines(text).items()}
+
+
+def section_lines(text: str) -> dict:
+    """{Sektion: [[Silben einer Zeile], ...]}: wie parse_lyrics, aber Zeile für Zeile (für den Text zum Mitlesen)."""
     sections = {}
     current = None
     for raw_line in (text or "").splitlines():
@@ -77,8 +82,10 @@ def parse_lyrics(text: str) -> dict:
             current = normalize_section(header.group(1))
             sections.setdefault(current, [])
         elif current and line:
-            sections[current].extend(syllables(line))
-    return {name: sylls for name, sylls in sections.items() if sylls}
+            sung = syllables(line)
+            if sung:
+                sections[current].append(sung)
+    return {name: lines for name, lines in sections.items() if lines}
 
 
 def syllables(line: str) -> list:

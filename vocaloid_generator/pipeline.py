@@ -84,7 +84,7 @@ def compose(settings: SongSettings, seed: Optional[int] = None):
         structure=list(settings.active_sections),
         key=settings.key,
         mode=settings.scale,
-        section_config=config.SECTION_CONFIG,
+        section_config=settings.section_config(),
         output_dir=settings.output_dir(),
         lyrics=parse_lyrics(settings.lyrics),
         swing=settings.swing,
@@ -95,6 +95,7 @@ def compose(settings: SongSettings, seed: Optional[int] = None):
         variations=settings.variations,
         custom_chords=settings.custom_chords,
         imported_melody=_own_melody(settings),
+        melody_edits=settings.melody_edits,
     )
     return tracks, seed
 
@@ -135,6 +136,7 @@ def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None,
     result.midi_files = {inst: os.path.join(out, f"{inst}.mid") for inst in INSTRUMENTS if tracks.get(inst)}
 
     _write_ust(settings, tracks, out)
+    _write_karaoke(settings, tracks, out)
     report(0.30, "Synthetisiere Gesang...")
     result.vocals_wav = _synthesize_vocals(settings, tracks, out)
     lead_sings = result.vocals_wav is None and settings.channels["melody"].enabled
@@ -241,6 +243,17 @@ def generate_variants(settings: SongSettings, count: int, parts: tuple = (),
             report((i + fraction) / count, f"Variante {i + 1}/{count}: {message}" if count > 1 else message)
         results.append(generate_song(settings, progress=step))
     return results
+
+
+def lyric_video(result: SongResult, path: Optional[str] = None) -> str:
+    """Lyric-Video (MP4) des Songs mit dem Text zum Mitlesen; Standard: lyric_video.mp4 neben dem Song."""
+    import karaoke
+    if not result.audio or not os.path.exists(result.audio):
+        raise RuntimeError("Der Song fehlt, erst einen Song erzeugen.")
+    found = karaoke.load(os.path.join(result.output_dir, karaoke.FILE))
+    s = result.settings
+    title = f"{s.style} · {s.bpm} BPM" if s else ""
+    return karaoke.video(result.audio, found, path or os.path.join(result.output_dir, "lyric_video.mp4"), title)
 
 
 HOOK_BARS = 8           # so lang ist die Vorschau einer Refrain-Melodie
@@ -592,6 +605,20 @@ def _sing_harmony(settings, tracks, out, neutrino_dir, model_dir, transpose, har
 UST_FILES = ("vocals.ust", "vocals_harmony.ust", "vocals_duett_1.ust", "vocals_duett_2.ust")
 
 
+def _write_karaoke(settings: SongSettings, tracks: dict, out: str) -> None:
+    """Der Liedtext mit der Zeit jeder Silbe, zum Mitlesen im Player und fürs Lyric-Video."""
+    import karaoke
+    from lyrics import section_lines
+    from settings import DEFAULT_LYRICS
+    lengths = {kind: [len(line) for line in text_lines]
+               for kind, text_lines in {**section_lines(DEFAULT_LYRICS), **section_lines(settings.lyrics)}.items()}
+    found = karaoke.lines(tracks["vocal_melody"], tracks["silben"], settings.bpm, tracks.get("plan"), lengths)
+    try:
+        karaoke.save(os.path.join(out, karaoke.FILE), found)
+    except OSError as e:
+        log.warning("Liedtext zum Mitlesen nicht gespeichert: %s", e)
+
+
 def _write_ust(settings: SongSettings, tracks: dict, out: str) -> list:
     """Die Gesangsnoten als UTAU-Projekte für OpenUtau: Melodie, zweite Stimme und beim Duett beide Teile."""
     from melody_writer import split_for_duet
@@ -719,12 +746,18 @@ def _render_instruments(settings: SongSettings, tracks: dict, out: str, report: 
     if extra:
         log.info("Zusätzliche SoundFonts: %s", ", ".join(extra))
     active = [inst for inst in INSTRUMENTS if settings.channels[inst].enabled and tracks.get(inst)]
-    for inst in INSTRUMENTS:
-        _remove(os.path.join(out, f"{inst}.wav"))  # alte Spuren nicht versehentlich mitmischen
     jobs = {inst: _render_job(settings, out, inst) for inst in active}
-    together = [inst for inst in active if not jobs[inst]["vst_pfad"]]
-    alone = [inst for inst in active if jobs[inst]["vst_pfad"]]
-    done = 0
+    keys = {inst: _render_key(jobs[inst], extra) for inst in active}
+    kept = [inst for inst in active if _rendered_before(jobs[inst]["wav_pfad"], keys[inst])]
+    for inst in INSTRUMENTS:
+        if inst not in kept:
+            _remove(os.path.join(out, f"{inst}.wav"))  # alte Spuren nicht versehentlich mitmischen
+            _remove(os.path.join(out, f"{inst}.wav.key"))
+    if kept:
+        log.info("Unverändert, nicht neu gerendert: %s", ", ".join(kept))
+    together = [inst for inst in active if inst not in kept and not jobs[inst]["vst_pfad"]]
+    alone = [inst for inst in active if inst not in kept and jobs[inst]["vst_pfad"]]
+    done = len(kept)
 
     def finished(inst: str) -> None:
         nonlocal done
@@ -744,7 +777,52 @@ def _render_instruments(settings: SongSettings, tracks: dict, out: str, report: 
     for inst in active:
         if os.path.exists(jobs[inst]["wav_pfad"]):
             wav_files[inst] = jobs[inst]["wav_pfad"]
+            if inst not in kept:
+                _remember_render(jobs[inst]["wav_pfad"], keys[inst])
     return wav_files
+
+
+# Der Code, der Klang macht: ändert er sich (neue Version der App), wird alles neu gerendert
+RENDER_CODE = ("renderer.py", "mixer.py", "synth_engine.py", "drum_machine.py", "guitar_amp.py", "sound_library.py",
+               "styles.py")
+
+
+def _render_key(job: dict, library: list) -> str:
+    """
+    Fingerabdruck einer Spur: ihre MIDI-Datei, alle Angaben zum Klang, SoundFont, Impulsantwort und VST-Instrument
+    (Größe und Zeit) und der Klang-Code. Gleicher Fingerabdruck = gleiche WAV, so rendert neu Singen oder ein neu gewürfeltes
+    Schlagzeug nur, was sich geändert hat.
+    """
+    import hashlib
+    import json
+    digest = hashlib.sha1()
+    for path in (job["midi_pfad"], *(os.path.join(config.BASE_DIR, f) for f in RENDER_CODE)):
+        try:
+            with open(path, "rb") as f:
+                digest.update(f.read())
+        except OSError:
+            digest.update(path.encode())
+    files = [(p, os.path.getsize(p), os.path.getmtime(p))
+             for p in (job["soundfont_pfad"], job["cabinet_ir"], job["vst_pfad"]) if p and os.path.exists(p)]
+    described = {k: v for k, v in job.items() if k not in ("midi_pfad", "wav_pfad")}
+    digest.update(json.dumps([described, files, sorted(library)], sort_keys=True, default=str).encode())
+    return digest.hexdigest()
+
+
+def _rendered_before(wav: str, key: str) -> bool:
+    try:
+        with open(wav + ".key", encoding="utf-8") as f:
+            return f.read().strip() == key and os.path.exists(wav)
+    except OSError:
+        return False
+
+
+def _remember_render(wav: str, key: str) -> None:
+    try:
+        with open(wav + ".key", "w", encoding="utf-8") as f:
+            f.write(key)
+    except OSError as e:
+        log.debug("Fingerabdruck für %s nicht gespeichert: %s", wav, e)
 
 
 def _render_job(settings: SongSettings, out: str, inst: str) -> dict:

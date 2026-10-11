@@ -136,6 +136,10 @@ Unter „Eigene Melodie“ wählst du eine MIDI-Datei, zum Beispiel aus einer DA
 
 Für die MP3 braucht `pydub` das Programm ffmpeg (`winget install Gyan.FFmpeg`). Ohne ffmpeg entsteht der Song nur als `final_mix.wav`, und im Protokoll steht „MP3-Export übersprungen“.
 
+### Lyric-Video
+
+„Lyric-Video (MP4)“ unter dem Player (oder `--lyric-video`) macht aus dem Song ein Video in 1280×720, zum Beispiel für YouTube: dunkler Hintergrund, die Wellenform des Songs unten und in der Mitte der Text, Silbe für Silbe eingefärbt, darunter schon die nächste Zeile. Die Zeiten kommen aus der Gesangsmelodie, der Text steht also genau dann da, wenn er gesungen wird; die Zeilen sind die Zeilen aus dem Tab „Text“. Das Video baut ffmpeg (dasselbe wie für die MP3, die Version von Gyan hat alles dabei) und landet als `lyric_video.mp4` im Ausgabeordner. Ein Song ohne Gesang hat keinen Text zum Mitlesen und damit auch kein Lyric-Video.
+
 ## Starten
 
 Oberfläche:
@@ -147,12 +151,15 @@ uv run vocaloid_generator\app.py
 Oder einfach `Vloid Songs starten.bat` im Projektordner doppelklicken. Die App öffnet sich in einem eigenen Fenster. Geht das Fenster nicht auf (es braucht die Microsoft-Edge-WebView2-Laufzeit, die auf Windows 10 und 11 meist schon da ist), startet `uv run vocaloid_generator\app.py --browser` dieselbe Oberfläche im Browser unter http://127.0.0.1:8090.
 
 - **Song erzeugen** (oben rechts) macht einen neuen Song. Daneben wählst du, wie viele Fassungen am Stück entstehen; alle landen im Verlauf.
-- **Player:** Der fertige Song spielt mit Wellenform; ein Klick in die Wellenform springt an diese Stelle. Unter „Anhören“ hörst du jede Spur einzeln, an derselben Stelle im Song.
+- **Player:** Der fertige Song spielt mit Wellenform; ein Klick in die Wellenform springt an diese Stelle. Unter „Anhören“ hörst du jede Spur einzeln, an derselben Stelle im Song. Darunter läuft der Text zum Mitlesen wie beim Karaoke mit, die gesungenen Silben in Pink und klein darunter die nächste Zeile; der Schalter „Mitlesen“ blendet ihn aus.
 - **Noten:** die Piano-Roll aller Spuren mit Tonhöhe, sie läuft beim Abspielen mit. Ein Klick auf eine Spur in der Legende blendet sie aus, ein Klick in die Noten springt im Player dorthin.
+- **Gesang bearbeiten:** Mit diesem Schalter über den Noten lassen sich die Töne der Gesangsmelodie nach oben oder unten ziehen, oder anklicken und mit den Pfeiltasten verschieben (mit Umschalt eine Oktave). „Neu singen“ macht denselben Song mit den geänderten Tönen; Zweitstimme, Chor und die Hook im Intro und Outro gehen mit. „Änderungen verwerfen“ stellt die Töne wieder her. Würfelst du Melodie oder Akkorde neu, fallen die Änderungen weg, weil die Töne dann andere sind.
 - **Neu würfeln:** Ein Knopf pro Teil (Melodie, Akkorde, Schlagzeug, jedes Instrument). Nur dieser Teil wird neu, der Rest des Songs bleibt. Rechts darüber wählst du, wo: im ganzen Song oder nur in einer Sektion, etwa nur die Melodie im Refrain oder nur das Schlagzeug in der Strophe.
 - **3 Refrain-Melodien zur Auswahl:** drei neue Melodien für den Refrain als kurze Vorschau (Melodie als Synth über den Akkorden, in Sekunden fertig). Anhören, „nehmen“ drücken, und der ganze Song entsteht mit dieser Melodie.
 - **Seed festhalten:** Danach macht „Song erzeugen“ wieder diesen Song, mit allem, was du inzwischen geändert hast (Mix, Gesang, Text). Das Seed-Feld im Tab „Song“ leeren, dann gibt es wieder jedes Mal einen neuen Song.
-- **Als ZIP für die DAW:** alle Spuren als WAV und MIDI, siehe unten.
+- **Als ZIP für die DAW:** alle Spuren als WAV und MIDI, siehe unten. **Lyric-Video (MP4):** siehe oben.
+- **Vergleichen:** Im Verlauf hat jeder Song die Knöpfe A und B. Wähl zwei Songs, dann stehen unter dem Player A und B; ein Klick wechselt an derselben Stelle im Song, so hörst du direkt, welcher Refrain oder welcher Mix besser ist.
+- **Ablauf:** Im Tab „Song“ ziehst du die Sektionen in eine andere Reihenfolge, ein Klick auf eine Sektion wählt ihre Länge in Takten (gilt für alle Sektionen dieser Art, zum Beispiel ein kurzer Refrain mit 8 Takten).
 - **Tabs rechts:** Song (Stil, Tempo, Tonart, Ablauf, Vorbild-Songs, eigene Vorlagen), Text (mit Vorschau, wie gesungen wird), Band (Spielweise, Lautstärke, Panorama, Mute/Solo pro Spur, Klang von Schlagzeug, Gitarren und VST-Instrument), Gesang, Mix, Verlauf und Pfade.
 
 Alle Einstellungen speichert die App sofort. Eigene Vorlagen (Tab „Song“) merken sich Stil, Tempo, Tonart, Ablauf, Band, Gesang und Mix, aber nicht den Text; sie liegen in `vocaloid_generator\vorlagen\`.
@@ -189,9 +196,11 @@ uv run vocaloid_generator\main.py --style Rock --bpm 140 --key E --scale minor -
 | `--vorbild DATEI` | Vorbild-Song für diesen Lauf, mehrfach möglich |
 | `--vom-vorbild` | Tempo, Tonart und Stil der Vorbilder übernehmen |
 | `--lautheit LUFS` | Lautheit des Masters, z. B. `-14` für YouTube |
+| `--takte SEKTION=N` | Länge einer Sektion in Takten, z. B. `Chorus=8`; mehrfach möglich |
+| `--lyric-video [DATEI]` | nach dem Song ein Lyric-Video als MP4 bauen (Standard: `lyric_video.mp4` im Ausgabeordner) |
 | `-v` | alle Details ausgeben |
 
-Die fertigen Dateien landen in `vocaloid_generator\output\` (oder im Ordner aus den Einstellungen): `final_song.mp3`, `final_mix.wav`, die einzelnen Spuren als WAV und MIDI, `vocals.xml` für NEUTRINO und die `.ust`-Dateien für OpenUtau.
+Die fertigen Dateien landen in `vocaloid_generator\output\` (oder im Ordner aus den Einstellungen): `final_song.mp3`, `final_mix.wav`, die einzelnen Spuren als WAV und MIDI, `vocals.xml` für NEUTRINO, die `.ust`-Dateien für OpenUtau und `liedtext.json` mit der Zeit jeder Silbe (für das Mitlesen und das Lyric-Video).
 
 ### Verlauf, Neu würfeln und Varianten
 
@@ -245,7 +254,7 @@ Die Sektion „Solo“ (im Tab „Song“ unter „Ablauf“ anhängen) ist ein 
 1. **Bauplan:** Jede Sektion bekommt eine bewährte Akkordfolge (zum Beispiel die Royal-Road-Folge des J-Pop). Gleiche Sektionen klingen gleich, der Pre-Chorus endet auf der Dominante, der Refrain auf der Tonika, und der letzte Refrain steigt oft einen oder zwei Halbtöne.
 2. **Melodie:** Phrasen aus wiederkehrenden Rhythmus-Motiven, betonte Töne sind Akkordtöne, die Tonhöhe folgt dem Wortakzent, lange Töne am Phrasenende bekommen manchmal ein Melisma. Der Refrain wiederholt seine erste Phrase als Hook, Intro und Outro spielen diese Hook. Kurze Liedtexte werden wiederholt, lange machen die Sektion länger.
 3. **Begleitung und Schlagzeug:** Spielweisen pro Instrument mit Stimmführung, Grooves mit Fills, Crash auf jedem Refrain, Snare-Wirbel und kurzer Stopp vor dem Refrain.
-4. **Klang und Mix:** SoundFont-Rendering in Stereo (FluidSynth oder tinysoundfont, bessere Instrumente aus den zusätzlichen SoundFonts) auf mehreren Kernen, eigene Synths, Drum-Machine und Übergangs-Effekte, verzerrte Gitarren über Verstärker und Box, Klänge aus Surge XT, jede Spur auf ihre Ziel-Lautheit, EQ und Kompressor pro Spur, gemeinsamer Hall, De-Esser, Doppelung und Delay auf der Stimme, Echo auf dem letzten Wort, Atmer und Chor im letzten Refrain, Master auf die gewählte Lautheit (Standard -12 LUFS) mit Limiter.
+4. **Klang und Mix:** SoundFont-Rendering in Stereo (FluidSynth oder tinysoundfont, bessere Instrumente aus den zusätzlichen SoundFonts) auf mehreren Kernen, eigene Synths, Drum-Machine und Übergangs-Effekte, verzerrte Gitarren über Verstärker und Box, Klänge aus Surge XT, jede Spur auf ihre Ziel-Lautheit, EQ und Kompressor pro Spur, gemeinsamer Hall, De-Esser, Doppelung und Delay auf der Stimme, Echo auf dem letzten Wort, Atmer und Chor im letzten Refrain, Master auf die gewählte Lautheit (Standard -12 LUFS) mit Limiter. Spuren, an denen sich nichts geändert hat (gleiche Noten, gleicher Klang), rendert die App nicht noch einmal: Wer nur das Schlagzeug neu würfelt oder Töne im Gesang ändert, spart so das Rendern der übrigen Spuren; Gesang und Mix entstehen trotzdem neu.
 
 Ohne Gesang (kein NEUTRINO, kein VOICEVOX, keine Vorschau-Stimme oder Gesang ausgeschaltet) spielt die Lead-Stimme die Gesangsmelodie.
 
@@ -286,9 +295,10 @@ uv run pytest -m "not slow"   # ohne den Test, der echtes Audio rendert
 | `voicevox.py` | Singen über die Schnittstelle von VOICEVOX |
 | `voice_fx.py` | Atmer, Echo auf dem letzten Wort, Vibrato und Übergänge, beste Fassung, Chor im letzten Refrain |
 | `ust_export.py` | Gesangsnoten als UTAU-Projekt (.ust) für OpenUtau |
+| `karaoke.py` | der Text zum Mitlesen mit der Zeit jeder Silbe, und das Lyric-Video über ffmpeg |
 | `mixer.py`, `exporter.py` | Mischen, Mastern, MP3- und ZIP-Export |
 | `reference.py` | Vorbild-Songs messen: Tempo, Tonart, Stil, Lautstärke-Verlauf, Gesangsanteil |
 | `history.py` | der Verlauf: jeder Song mit Seed und Einstellungen |
-| `app.py`, `gui/` | die Oberfläche (NiceGUI): Seite, Einstellungen, Player mit wavesurfer.js, Piano-Roll |
+| `app.py`, `gui/` | die Oberfläche (NiceGUI): Seite, Einstellungen, Player mit wavesurfer.js, Mitlesen, Piano-Roll zum Ändern des Gesangs |
 | `vorlagen.py` | eigene Vorlagen speichern und laden |
 | `main.py` | die Kommandozeile |

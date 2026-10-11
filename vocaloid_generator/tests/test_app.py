@@ -11,12 +11,13 @@ from nicegui import ui
 from nicegui.testing.user_simulation import user_simulation
 
 import history
+import karaoke
 import pipeline
 import vorlagen
 from gui import media, page
-from gui.components import PianoRoll, WavePlayer
+from gui.components import Karaoke, PianoRoll, WavePlayer
 from pipeline import SongResult
-from settings import SongSettings
+from settings import SongSettings, edit_key
 
 
 @pytest_asyncio.fixture
@@ -70,6 +71,27 @@ def fake_generation(monkeypatch):
 
     monkeypatch.setattr(pipeline, "generate_song", fake_song)
     return calls
+
+
+@pytest.fixture
+def sung_generation(fake_generation, monkeypatch):
+    """Wie fake_generation, aber der Song hat Gesang: eine Gesangsmelodie und den Text zum Mitlesen."""
+    fake_song = pipeline.generate_song
+
+    def sung_song(settings, progress=None, seed=None):
+        result = fake_song(settings, progress, seed)
+        midi = pretty_midi.PrettyMIDI()
+        inst = pretty_midi.Instrument(0)
+        inst.notes += [pretty_midi.Note(100, 64 + i, 0.5 * i, 0.5 * i + 0.4) for i in range(4)]
+        midi.instruments.append(inst)
+        midi.write(os.path.join(result.output_dir, "vocal_melody.mid"))
+        karaoke.save(os.path.join(result.output_dir, karaoke.FILE),
+                     [{"start": 0.0, "end": 0.9, "syllables": [[0.0, 0.4, "よ"], [0.5, 0.9, "る"]]},
+                      {"start": 1.0, "end": 1.9, "syllables": [[1.0, 1.4, "の"], [1.5, 1.9, "ま"]]}])
+        return result
+
+    monkeypatch.setattr(pipeline, "generate_song", sung_song)
+    return fake_generation
 
 
 async def test_page_shows_settings_and_waits_for_a_song(user):
@@ -383,3 +405,102 @@ async def test_own_chords_and_melody_are_saved(user):
     user.find(marker="melody-section").elements.pop().set_value("Verse")
     await until(lambda: (SongSettings.load().melody_midi, SongSettings.load().melody_midi_section)
                 == ("C:/melodie.mid", "Verse"))
+
+
+# ── Bedienung: Mitlesen, Lyric-Video, Vergleich, Ablauf, Töne ändern ──────────────
+async def test_lyrics_to_read_along_and_the_switch_to_hide_them(user, sung_generation):
+    await user.open("/")
+    user.find(marker="generate").click()
+    await user.should_see("Seed 1000", retries=50)
+    [view] = user.find(Karaoke).elements
+    await until(lambda: view.lines)         # den Text liest ein Hintergrund-Thread
+    assert [karaoke.text(line) for line in view.lines] == ["よる", "のま"]
+    assert view.visible
+    user.find(marker="switch-karaoke").click()
+    await until(lambda: not view.visible)
+    await until(lambda: SongSettings.load().show_karaoke is False)
+
+
+async def test_lyric_video_is_made_for_the_current_song(user, fake_generation, monkeypatch, tmp_path):
+    made = []
+
+    def fake_video(result, path=None):
+        made.append(result.seed)
+        path = str(tmp_path / "lyric_video.mp4")
+        open(path, "wb").close()
+        return path
+
+    monkeypatch.setattr(pipeline, "lyric_video", fake_video)
+    await user.open("/")
+    user.find(marker="generate").click()
+    await user.should_see("Seed 1000", retries=50)
+    user.find(marker="video").click()
+    await user.should_see("Lyric-Video gespeichert", retries=50)
+    assert made == [1000]
+
+    def no_ffmpeg(result, path=None):
+        raise RuntimeError("Für das Lyric-Video fehlt ffmpeg")
+
+    monkeypatch.setattr(pipeline, "lyric_video", no_ffmpeg)
+    user.find(marker="video").click()
+    await user.should_see("fehlt ffmpeg", retries=50)
+
+
+async def test_two_songs_from_the_history_can_be_compared(user, fake_generation):
+    await user.open("/")
+    user.find(marker="count").elements.pop().value = 2
+    user.find(marker="generate").click()
+    await user.should_see("Seed 1001", retries=80)
+    user.find(marker="tab-Verlauf").click()
+    user.find(marker="history-A-1").click()
+    user.find(marker="history-B-2").click()
+    await user.should_see(marker="compare-B")
+    [player] = user.find(WavePlayer).elements
+    user.find(marker="compare-B").click()
+    await until(lambda: player.title.startswith("B · "))
+    user.find(marker="compare-A").click()
+    await until(lambda: player.title.startswith("A · "))
+    user.find(marker="compare-close").click()
+    await user.should_not_see(marker="compare-A")
+
+
+async def test_sections_can_be_dragged_and_their_length_chosen(user):
+    await user.open("/")
+    before = SongSettings.load().active_sections
+    user.find(marker="section-0").trigger("dragstart")
+    user.find(marker="section-2").trigger("drop")
+    await until(lambda: SongSettings.load().active_sections == before[1:3] + before[:1] + before[3:])
+    user.find(marker="bars-Chorus-8").click()
+    await until(lambda: SongSettings.load().section_bars == {"Chorus": 8})
+    await user.should_see("Refrain · 8")
+    user.find(marker="bars-Chorus-16").click()      # die Standardlänge braucht keinen Eintrag
+    await until(lambda: SongSettings.load().section_bars == {})
+
+
+async def test_sung_notes_can_be_moved_and_sung_again(user, sung_generation):
+    await user.open("/")
+    user.find(marker="generate").click()
+    await user.should_see("Seed 1000", retries=50)
+    [roll] = user.find(PianoRoll).elements
+    await until(lambda: roll.tracks)
+    assert roll.tracks[0]["key"] == "vocals"
+    user.find(marker="edit-melody").click()
+    await until(lambda: roll.editable)
+
+    # Der zweite Ton (0,5 s) geht von 65 auf 67
+    user.find(PianoRoll).trigger("edit", {"start": 0.5, "pitch": 67})
+    await user.should_see("1 Ton geändert")
+    assert [n[2] for n in roll.notes if n[3] == 0] == [64, 67, 66, 67]
+    beat = edit_key(0.5 * SongSettings.load().bpm / 60)
+    await until(lambda: SongSettings.load().melody_edits == {beat: 67})
+
+    # Neu singen: derselbe Song mit dem geänderten Ton
+    user.find(marker="resing").click()
+    await until(lambda: len(sung_generation) == 2)
+    assert sung_generation[-1].seed == 1000 and sung_generation[-1].melody_edits == {beat: 67}
+    await user.should_see("Seed 1000 · 1 Ton geändert", retries=50)
+
+    # Verwerfen: die Töne stehen wieder wie gesungen
+    user.find(marker="drop-edits").click()
+    await until(lambda: SongSettings.load().melody_edits == {})
+    await until(lambda: [n[2] for n in roll.notes if n[3] == 0] == [64, 65, 66, 67])

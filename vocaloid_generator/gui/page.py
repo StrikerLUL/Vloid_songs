@@ -14,8 +14,8 @@ from nicegui import app, run, ui
 import history
 import pipeline
 from gui import labels, media, panels
-from gui.components import PianoRoll, WavePlayer, add_style
-from settings import ChannelSettings, SongSettings
+from gui.components import Karaoke, PianoRoll, WavePlayer, add_style
+from settings import ChannelSettings, SongSettings, edit_key
 
 log = logging.getLogger(__name__)
 
@@ -116,7 +116,7 @@ def assign(target: SongSettings, source: SongSettings) -> None:
 def build() -> None:
     """Baut die Seite. Jede Seite hat ihre eigenen Einstellungen und ihren eigenen Song."""
     settings = SongSettings.load()
-    state = {"result": None, "saved": settings.model_dump()}
+    state = {"result": None, "saved": settings.model_dump(), "compare": {"A": None, "B": None}}
     job = Job()
     picker = Picker()
     logs = LogQueue()
@@ -146,16 +146,32 @@ def build() -> None:
                     song_label = ui.label("Noch kein Song. Klick oben auf „Song erzeugen“.") \
                         .classes("text-subtitle1").mark("song-label")
                     ui.space()
+                    ui.switch("Mitlesen").bind_value(settings, "show_karaoke").props("dense").mark("switch-karaoke") \
+                        .tooltip("Den Liedtext beim Abspielen unter dem Player zeigen")
                     ui.button("Seed festhalten", icon="lock", on_click=lambda: lock_seed()) \
                         .props("flat dense no-caps").mark("lock-seed") \
                         .tooltip("Der Song bleibt, auch wenn du Mix, Gesang oder Text änderst.")
                 player = WavePlayer().classes("w-full").mark("player")
+                lyrics_view = Karaoke().classes("w-full").mark("karaoke") \
+                    .bind_visibility_from(settings, "show_karaoke")
                 stem_row = ui.row().classes("gap-1 q-mt-sm")
+                compare_row = ui.row().classes("items-center gap-1 q-mt-sm")
             with ui.card().classes("w-full bg-grey-9"):
                 with ui.row().classes("w-full items-center gap-1"):
                     ui.label("Noten").classes("text-subtitle1 q-mr-md")
                     legend = ui.row().classes("gap-1")
+                    ui.space()
+                    ui.switch("Gesang bearbeiten", on_change=lambda e: roll.set_editable(e.value)) \
+                        .props("dense").mark("edit-melody") \
+                        .tooltip("Töne der Gesangsmelodie nach oben oder unten ziehen, oder anklicken und mit den "
+                                 "Pfeiltasten verschieben (mit Umschalt um eine Oktave)")
                 roll = PianoRoll().classes("w-full")
+                with ui.row().classes("items-center gap-1") as edit_row:
+                    edits_label = ui.label().classes("text-caption").mark("edits")
+                    resing_button = ui.button("Neu singen", icon="record_voice_over", on_click=lambda: resing()) \
+                        .props("unelevated dense no-caps color=secondary").mark("resing")
+                    ui.button("Änderungen verwerfen", icon="undo", on_click=lambda: drop_edits()) \
+                        .props("flat dense no-caps").mark("drop-edits")
             with ui.card().classes("w-full bg-grey-9"):
                 with ui.row().classes("w-full items-center no-wrap"):
                     ui.label("Neu würfeln: nur dieser Teil wird neu, der Rest bleibt").classes("text-subtitle1")
@@ -178,6 +194,9 @@ def build() -> None:
                 with ui.row().classes("gap-2 q-mt-sm"):
                     zip_button = ui.button("Als ZIP für die DAW", icon="archive", on_click=lambda: export_zip()) \
                         .props("flat no-caps").mark("zip")
+                    video_button = ui.button("Lyric-Video (MP4)", icon="movie", on_click=lambda: make_video()) \
+                        .props("flat no-caps").mark("video") \
+                        .tooltip("Der Song mit dem Text zum Mitlesen als Video, z. B. für YouTube (braucht ffmpeg)")
                     ui.button("Ausgabeordner öffnen", icon="folder",
                               on_click=lambda: media.open_folder(settings.output_dir())).props("flat no-caps")
             with ui.card().classes("w-full bg-grey-9"):
@@ -220,18 +239,18 @@ def build() -> None:
             return
         await generate(f"{part}:{kind}" if kind else part)
 
-    async def generate(part: Optional[str] = None, n: Optional[int] = None) -> None:
+    async def generate(part: Optional[str] = None, n: Optional[int] = None, same_song: bool = False) -> None:
         if job.running:
             return
         current = settings.model_copy(deep=True)
         result = state["result"]
-        if part is not None:
+        if part is not None or same_song:
             if result is None:
                 ui.notify("Erst einen Song erzeugen, dann einzelne Teile neu würfeln.", type="warning")
                 return
             current = current.with_updates(seed=result.seed, variations=result.settings.variations)
         elif current.seed is None:
-            current = current.with_updates(variations={})
+            current = current.with_updates(variations={}, melody_edits={})
         save_settings()
         job.start()
         set_busy(True)
@@ -254,6 +273,7 @@ def build() -> None:
             return
         state["result"] = results[-1]
         settings.variations = results[-1].settings.variations
+        settings.melody_edits = results[-1].settings.melody_edits
         await show_result(results[-1])
         show_history()
         if len(results) > 1:
@@ -301,8 +321,86 @@ def build() -> None:
         hook_row.clear()
         await generate(n=1)
 
+    # ── Gesang bearbeiten ─────────────────────────────────────────────────────────
+    def on_edit(e) -> None:
+        result = state["result"]
+        if result is None:
+            return
+        start, pitch = float(e.args["start"]), int(e.args["pitch"])
+        settings.melody_edits = {**settings.melody_edits, edit_key(start * result.settings.bpm / 60): pitch}
+        roll.move(start, pitch)
+        show_edits()
+
+    def show_edits() -> None:
+        n = len(settings.melody_edits)
+        edits_label.set_text(_edits(n))
+        edit_row.set_visibility(n > 0)
+        resing_button.set_enabled(n > 0 and not job.running)
+
+    async def resing() -> None:
+        """Derselbe Song mit den geänderten Tönen; unveränderte Spuren werden nicht neu gerendert."""
+        await generate(n=1, same_song=True)
+        show_edits()
+
+    async def drop_edits() -> None:
+        settings.melody_edits = {}
+        show_edits()
+        result = state["result"]
+        if result is not None:
+            data = await run.io_bound(media.piano_roll, result)
+            if data is not None:
+                roll.show(data)
+
+    roll.on("edit", on_edit)
+
+    # ── Lyric-Video und Vergleich ─────────────────────────────────────────────────
+    async def make_video() -> None:
+        result = state["result"]
+        if result is None or job.running:
+            ui.notify("Erst einen Song erzeugen.", type="warning")
+            return
+        job.start()
+        job.report(0.1, "Baue Lyric-Video...")
+        set_busy(True)
+        try:
+            path = await run.io_bound(pipeline.lyric_video, result)
+        except RuntimeError as e:
+            ui.notify(str(e), type="warning", multi_line=True)
+            path = None
+        finally:
+            job.report(1.0, "Fertig")
+            job.running = False
+            set_busy(False)
+        if path:
+            ui.notify(f"Lyric-Video gespeichert: {path}", type="positive", multi_line=True)
+            ui.download.file(path)
+
+    def choose(slot: str, entry) -> None:
+        state["compare"][slot] = entry
+        show_compare()
+
+    def show_compare() -> None:
+        compare_row.clear()
+        chosen = state["compare"]
+        if not any(chosen.values()):
+            return
+        with compare_row:
+            ui.label("Vergleich:").classes("text-caption q-mr-xs")
+            for slot in ("A", "B"):
+                entry = chosen[slot]
+                if entry is None:
+                    ui.label(f"{slot}: im Verlauf wählen").classes("text-caption text-grey-6")
+                    continue
+                ui.button(f"{slot}: {entry.created:%H:%M} {entry.settings.style}",
+                          on_click=lambda _, sl=slot, e=entry: play(f"{sl} · {describe(e.settings)}", e.audio)) \
+                    .props("outline dense no-caps").mark(f"compare-{slot}") \
+                    .tooltip("Wechselt an derselben Stelle im Song")
+            ui.button(icon="close", on_click=lambda: (state["compare"].update(A=None, B=None), show_compare())) \
+                .props("flat round dense").mark("compare-close")
+
     async def show_result(result) -> None:
         song_label.set_text(describe(result.settings))
+        lyrics_view.show(await run.io_bound(media.lyrics, result) or [])
         found = media.stems(result)
         stem_row.clear()
         with stem_row:
@@ -318,6 +416,7 @@ def build() -> None:
         if data is None:        # die App wird gerade beendet
             return
         roll.show(data)
+        show_edits()
         legend.clear()
         with legend:
             for i, track in enumerate(data["tracks"]):
@@ -367,8 +466,9 @@ def build() -> None:
 
     # ── Fortschritt, Protokoll, Speichern ──────────────────────────────────────────
     def set_busy(busy: bool) -> None:
-        for button in (generate_button, zip_button, hooks_button, *reroll_buttons.values()):
+        for button in (generate_button, zip_button, video_button, hooks_button, *reroll_buttons.values()):
             button.set_enabled(not busy)
+        resing_button.set_enabled(not busy and bool(settings.melody_edits))
         show_steps()
 
     def show_steps() -> None:
@@ -423,12 +523,16 @@ def build() -> None:
             panels.hint("Die 30 neuesten Songs bleiben, mit Stern markierte immer. "
                         "↺ übernimmt die Einstellungen samt Seed.")
             with ui.scroll_area().classes("w-full").style("height: 60vh"):
-                for entry in entries:
+                for nr, entry in enumerate(entries, 1):
                     with ui.row().classes("w-full items-center no-wrap gap-1"):
                         ui.button(icon="play_arrow", on_click=lambda _, e=entry: play(describe(e.settings), e.audio)) \
                             .props("flat round dense").mark("history-play")
                         ui.label(f"{entry.created:%d.%m. %H:%M}  {describe(entry.settings)}") \
                             .classes("col text-body2")
+                        for slot in ("A", "B"):
+                            ui.button(slot, on_click=lambda _, sl=slot, e=entry: choose(sl, e)) \
+                                .props("flat dense round size=sm").mark(f"history-{slot}-{nr}") \
+                                .tooltip(f"Als {slot} vergleichen: im Player zwischen A und B wechseln")
                         ui.button(icon="star" if entry.favorite else "star_border",
                                   on_click=lambda _, e=entry: favorite(e)).props("flat round dense color=amber") \
                             .mark("history-favorite")
@@ -453,12 +557,18 @@ def build() -> None:
 
     ui.timer(0.3, tick)
     show_status()
+    show_edits()
 
 
 def describe(s: SongSettings) -> str:
     rerolled = ", ".join(f"{_part_name(p)} {n}×" for p, n in sorted(s.variations.items()))
     return (f"{s.style} · {s.bpm} BPM · {s.key} {labels.SCALES.get(s.scale, s.scale)} · Seed {s.seed}"
-            + (f" · neu gewürfelt: {rerolled}" if rerolled else ""))
+            + (f" · neu gewürfelt: {rerolled}" if rerolled else "")
+            + (f" · {_edits(len(s.melody_edits))}" if s.melody_edits else ""))
+
+
+def _edits(n: int) -> str:
+    return "1 Ton geändert" if n == 1 else f"{n} Töne geändert"
 
 
 def _part_name(key: str) -> str:

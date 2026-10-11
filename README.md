@@ -6,17 +6,22 @@ Läuft unter Windows.
 
 ## Installation
 
-Empfohlen mit [uv](https://docs.astral.sh/uv/), das Python und alle Bibliotheken passend installiert:
+Empfohlen mit [uv](https://docs.astral.sh/uv/). Im Projektordner (dort, wo `pyproject.toml` liegt) ausführen:
 
 ```powershell
 winget install astral-sh.uv
 uv sync
 ```
 
-Ohne uv geht es auch mit pip (Python 3.10 bis 3.12):
+`uv sync` legt im Projektordner einen eigenen Ordner `.venv` mit allen Bibliotheken an. Die Python-Installation auf dem Rechner und andere Projekte bleiben unberührt.
+
+Ohne uv geht es auch mit pip (Python 3.10 bis 3.12). Auch dann in einer eigenen Umgebung installieren, damit pip keine Versionen anderer Projekte ändert:
 
 ```powershell
+python -m venv .venv
+.venv\Scripts\activate
 pip install -r vocaloid_generator\requirements.txt
+python vocaloid_generator\gui_mvc.py
 ```
 
 ### Gesang mit NEUTRINO
@@ -29,6 +34,10 @@ Ohne NEUTRINO nutzt die App automatisch die lokale Vorschau-Stimme (Windows-Spra
 ### Klang der Instrumente
 
 Die Instrumente werden mit dem SoundFont `soundfont.sf2` gerendert. Dafür braucht `pyfluidsynth` die FluidSynth-Bibliothek. Fehlt sie, steht im Protokoll der App „Fallback auf basic synthesis“ und die Instrumente klingen nach einfachen Sinustönen. FluidSynth gibt es unter <https://github.com/FluidSynth/fluidsynth/releases>; den `bin`-Ordner aus dem Download in den `PATH` aufnehmen.
+
+### MP3-Export
+
+Für die MP3 braucht `pydub` das Programm ffmpeg (`winget install Gyan.FFmpeg`). Ohne ffmpeg entsteht der Song nur als `final_mix.wav`, und im Protokoll steht „MP3-Export übersprungen“.
 
 ## Starten
 

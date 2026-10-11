@@ -120,8 +120,8 @@ def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None,
     report(0.95, "Exportiere MP3...")
     from exporter import exportiere_song
     mp3 = os.path.join(out, "final_song.mp3")
-    exportiere_song(wav_pfad=result.mix_wav, mp3_pfad=mp3)
-    result.mp3 = mp3 if os.path.exists(mp3) else None
+    _remove(mp3)  # eine MP3 vom letzten Song darf nicht als neue gelten
+    result.mp3 = exportiere_song(wav_pfad=result.mix_wav, mp3_pfad=mp3)
 
     report(1.0, "Fertig")
     return result

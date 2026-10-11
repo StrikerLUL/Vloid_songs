@@ -120,3 +120,19 @@ def test_generate_song_without_any_track_fails_clearly(tmp_path):
     s = make_settings(tmp_path, channels={ch: {"enabled": False} for ch in (*INSTRUMENTS, "vocals")})
     with pytest.raises(RuntimeError, match="Keine Audiospuren"):
         generate_song(s, seed=1)
+
+
+def test_mp3_export_without_ffmpeg_leaves_no_empty_file(tmp_path, monkeypatch):
+    import numpy as np
+    import soundfile as sf
+    from pydub import AudioSegment
+
+    from exporter import exportiere_song
+
+    wav = str(tmp_path / "mix.wav")
+    sf.write(wav, np.zeros((4410, 2), dtype=np.float32), 44100)
+    mp3 = str(tmp_path / "song.mp3")
+    monkeypatch.setattr(AudioSegment, "converter", str(tmp_path / "kein-ffmpeg.exe"))
+
+    assert exportiere_song(wav, mp3) is None
+    assert not os.path.exists(mp3)

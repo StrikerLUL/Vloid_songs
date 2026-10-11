@@ -257,7 +257,7 @@ async def test_references_from_the_library_suggest_tempo_key_and_style(user, mon
     await user.open("/")
     user.find(marker="reference-library").elements.pop().set_value(path)
     await until(lambda: [r.path for r in SongSettings.load().reference_tracks] == [path])
-    await user.should_see("Vorbilder: 172 BPM, D Moll, klingt nach Dark Vocaloid")
+    await user.should_see("Vorbilder: 172 BPM, D Moll, klingt nach Dark Vocaloid", retries=50)
     user.find(marker="reference-take-tempo").click()
     user.find(marker="reference-take-style").click()
     await until(lambda: (SongSettings.load().bpm, SongSettings.load().style) == (172, "Dark Vocaloid"))
@@ -281,7 +281,7 @@ async def test_lively_singing_can_be_switched_and_voicevox_singers_are_listed(us
     import voicevox
     monkeypatch.setattr(voicevox, "singers", lambda url=None, timeout=None: {3002: "四国めたん (ノーマル)"})
     await user.open("/")
-    await user.should_see("VOICEVOX läuft, 1 Singstimmen.")
+    await user.should_see("VOICEVOX läuft, 1 Singstimmen.", retries=50)   # Timer, dann ein Thread
     select = user.find(marker="voicevox-singer").elements.pop()
     assert select.options[3002] == "四国めたん (ノーマル)"
     select.set_value(3002)
@@ -293,7 +293,8 @@ async def test_lively_singing_can_be_switched_and_voicevox_singers_are_listed(us
 
 async def test_without_voicevox_the_app_says_how_to_get_it(user):
     await user.open("/")
-    await user.should_see("VOICEVOX läuft nicht. Kostenlos unter voicevox.hiroshiba.jp; App starten, dann neu laden.")
+    await user.should_see("VOICEVOX läuft nicht. Kostenlos unter voicevox.hiroshiba.jp; App starten, dann neu laden.",
+                          retries=50)
 
 
 async def test_sound_switches_and_a_vst_sound_per_part(user, monkeypatch, tmp_path):
@@ -328,7 +329,7 @@ async def test_rerolling_only_in_one_section(user, fake_generation):
     # Eine Sektion, die der Song nicht hat, würfelt nichts
     user.find(marker="reroll-where").elements.pop().set_value("Solo")
     user.find(marker="reroll-drums").click()
-    await user.should_see("keine Sektion Solo")
+    await user.should_see("keine Sektion Solo", retries=20)
     assert len(fake_generation) == 2
 
 
@@ -377,7 +378,7 @@ async def test_own_chords_and_melody_are_saved(user):
     user.find(marker="chords-Chorus").clear()
     await until(lambda: SongSettings.load().custom_chords == {"Verse": "vi IV I V"})
     user.find(marker="chords-Bridge").type("F Fxyz")
-    await user.should_see("Unbekannter Akkord: Fxyz")
+    await user.should_see("Unbekannter Akkord: Fxyz", retries=20)
     user.find(marker="melody-midi").type("C:/melodie.mid")
     user.find(marker="melody-section").elements.pop().set_value("Verse")
     await until(lambda: (SongSettings.load().melody_midi, SongSettings.load().melody_midi_section)

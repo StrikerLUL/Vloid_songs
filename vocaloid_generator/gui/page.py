@@ -13,6 +13,7 @@ from nicegui import app, run, ui
 
 import history
 import pipeline
+import polish
 import rating
 from gui import labels, media, panels
 from gui.components import Karaoke, PianoRoll, WavePlayer, add_style
@@ -517,6 +518,7 @@ def build() -> None:
             ui.label(sound_library.status()).classes("text-caption").mark("sound-library")
             ui.label(sample_library.status()).classes("text-caption").mark("sample-library")
             ui.label(rating.status()).classes("text-caption").mark("rating-status")
+            ui.label(polish.status(settings)).classes("text-caption").mark("polish-status")
         singer_select.set_options(sorted(set(_singers(settings)) | {settings.singer}), value=settings.singer)
         duet_select.set_options(panels.duet_options(_singers(settings), settings), value=settings.duet_singer)
         show_history()

@@ -179,6 +179,9 @@ class SongSettings(BaseModel):
     cabinet_ir: str = ""               # Impulsantwort einer Gitarrenbox (WAV); leer = eingebaute Box
     lofi_texture: bool = True          # im Stil Lo-Fi: Knistern, leiernde Bandmaschine, gedämpfte Höhen
     mix_movement: bool = True          # Anlauf vor dem Refrain, Hall pro Sektion, breitere Refrains (mix_movement.py)
+    polish: bool = True                # zweite Fassung mit von ACE-Step veredelter Band (setup_ace_step.py), wenn da
+    polish_strength: float = Field(0.4, ge=0.05, le=0.95)   # wie viel ACE-Step am Klang der Band ändert
+    polish_caption: str = ""           # eigene Klangbeschreibung für ACE-Step (Englisch); leer = passend zum Stil
     show_karaoke: bool = True          # Text zum Mitlesen unter dem Player
     breathiness: float = Field(0.028, ge=0.0, le=0.2)
     shimmer: bool = True

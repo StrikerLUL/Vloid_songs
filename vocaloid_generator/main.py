@@ -69,6 +69,11 @@ def parse_args(argv=None):
     p.add_argument("--ohne-lofi-klang", action="store_true", help="Lo-Fi ohne Knistern und Bandmaschine")
     p.add_argument("--ohne-bewegung", action="store_true",
                    help="Mix ohne Anlauf vor dem Refrain, Hall pro Sektion und breitere Refrains")
+    p.add_argument("--ohne-veredler", action="store_true",
+                   help="keine zweite Fassung mit von ACE-Step veredelter Band (setup_ace_step.py)")
+    p.add_argument("--veredler-staerke", type=float, metavar="0.1-0.9",
+                   help="wie viel ACE-Step am Klang der Band ändert (Standard 0.4)")
+    p.add_argument("--veredler-klang", metavar="TEXT", help="Klangbeschreibung für ACE-Step auf Englisch")
     p.add_argument("--vorbild", action="append", metavar="DATEI",
                    help="Vorbild-Song (mehrfach möglich); ersetzt die Vorbilder aus den Einstellungen")
     p.add_argument("--vom-vorbild", action="store_true",
@@ -137,6 +142,8 @@ def main(argv=None) -> int:
                  "auto_rating": False if args.ohne_bewertung else None,
                  "lofi_texture": False if args.ohne_lofi_klang else None,
                  "mix_movement": False if args.ohne_bewegung else None,
+                 "polish": False if args.ohne_veredler else None, "polish_strength": args.veredler_staerke,
+                 "polish_caption": args.veredler_klang,
                  "melody_midi": args.melodie_midi, "melody_midi_section": args.melodie_sektion,
                  "motif_folder": args.motive,
                  "more_motifs": False if args.ohne_motive else None,
@@ -174,6 +181,8 @@ def main(argv=None) -> int:
 
     for result in results:
         log.info("Fertig! Seed %d: %s", result.seed, result.history or result.audio)
+        if result.polished_wav:
+            log.info("Veredelte Fassung: %s", result.polished_mp3 or result.polished_wav)
     chosen = best(results)
     if chosen.rating:
         log.info("Beste Fassung: Seed %d, %s", chosen.seed, chosen.rating.describe())

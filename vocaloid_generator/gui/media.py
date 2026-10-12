@@ -42,6 +42,9 @@ def stems(result) -> dict:
     mix = result.audio
     if mix and os.path.exists(mix):
         found["Mix"] = mix
+    polished = getattr(result, "polished_mp3", None) or getattr(result, "polished_wav", None)
+    if polished and os.path.exists(polished):
+        found["Veredelt (ACE-Step)"] = polished
     if result.vocals_wav and os.path.exists(result.vocals_wav):
         found[labels.CHANNELS["vocals"]] = result.vocals_wav
     if result.harmony_wav and os.path.exists(result.harmony_wav):

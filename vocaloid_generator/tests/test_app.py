@@ -1,6 +1,7 @@
 # test_app.py – Die neue Oberfläche (NiceGUI), ohne Browser simuliert
 import asyncio
 import os
+import shutil
 
 import numpy as np
 import pretty_midi
@@ -286,6 +287,27 @@ async def test_paths_tab_tells_whether_the_extra_soundfonts_are_there(user):
     await user.should_see("setup_bewertung.py ausführen")
     user.find(marker="rating-switch").elements.pop().set_value(False)
     await until(lambda: SongSettings.load().auto_rating is False)
+    await user.should_see("setup_ace_step.py ausführen")
+    user.find(marker="polish-switch").elements.pop().set_value(False)
+    await until(lambda: SongSettings.load().polish is False)
+
+
+async def test_the_polished_version_can_be_played_and_tuned(user, fake_generation, monkeypatch):
+    fake_song = pipeline.generate_song
+
+    def polished_song(settings, progress=None, seed=None):
+        result = fake_song(settings, progress, seed)
+        result.polished_wav = os.path.join(result.output_dir, "final_mix_veredelt.wav")
+        shutil.copy(result.mix_wav, result.polished_wav)
+        return result
+    monkeypatch.setattr(pipeline, "generate_song", polished_song)
+    await user.open("/")
+    user.find(marker="generate").click()
+    await user.should_see(marker="stem-Veredelt", retries=50)
+    user.find(marker="tab-Mix").click()
+    user.find(marker="polish-strength").elements.pop().set_value(0.7)
+    user.find(marker="polish-caption").elements.pop().set_value("dream pop")
+    await until(lambda: (SongSettings.load().polish_strength, SongSettings.load().polish_caption) == (0.7, "dream pop"))
 
 
 async def test_movement_in_the_mix_can_be_switched_off(user):

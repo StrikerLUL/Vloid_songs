@@ -41,6 +41,13 @@ def without_rating(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def without_polish(tmp_path, monkeypatch):
+    """Ein eingerichteter Klang-Veredler (setup_ace_step.py) veredelt in den Tests nicht mit."""
+    import polish
+    monkeypatch.setattr(polish, "FOLDER", str(tmp_path / "ace-step"))
+
+
+@pytest.fixture(autouse=True)
 def isolated_references(tmp_path, monkeypatch):
     """Vorbild-Bibliothek und Messungen liegen im Testordner, nie bei den echten Songs."""
     import reference

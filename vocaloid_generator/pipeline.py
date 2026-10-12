@@ -51,6 +51,8 @@ class SongResult:
     settings: Optional[SongSettings] = None    # die benutzten Einstellungen, mit Seed
     history: Optional[str] = None              # Kopie im Verlauf
     rating: Optional[object] = None            # rating.Rating, wenn mehrere Fassungen bewertet wurden
+    polished_wav: Optional[str] = None         # zweite Fassung mit der vom Klang-Veredler neu eingespielten Band
+    polished_mp3: Optional[str] = None
 
     @property
     def audio(self) -> Optional[str]:
@@ -171,10 +173,8 @@ def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None,
     from styles import get_style
     profile = get_style(settings.style)
     result.mix_wav = os.path.join(out, "final_mix.wav")
-    mische_spuren(
-        spur_pfade=stems,
+    mix_args = dict(
         lautstaerken=[1.0] * len(stems),
-        output_pfad=result.mix_wav,
         volumes={ch: settings.channels[ch].volume for ch in CHANNELS},
         panning={ch: settings.channels[ch].pan for ch in CHANNELS},
         mutes={ch: settings.channels[ch].mute for ch in CHANNELS},
@@ -194,6 +194,8 @@ def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None,
         movement=_movement(tracks.get("plan")) if settings.mix_movement else None,
         **_reference_targets(settings, tracks, out, has_vocals=result.vocals_wav is not None),
     )
+    mische_spuren(spur_pfade=stems, output_pfad=result.mix_wav, **mix_args)
+    _polish(settings, tracks, result, stems, mix_args, report)
 
     _remove(os.path.join(out, "vorbilder_zusammen.wav"))   # Zusammenschnitt der Vorbilder fürs Mastering
 
@@ -202,6 +204,10 @@ def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None,
     mp3 = os.path.join(out, "final_song.mp3")
     _remove(mp3)  # eine MP3 vom letzten Song darf nicht als neue gelten
     result.mp3 = exportiere_song(wav_pfad=result.mix_wav, mp3_pfad=mp3)
+    polished_mp3 = os.path.join(out, "final_song_veredelt.mp3")
+    _remove(polished_mp3)
+    if result.polished_wav:
+        result.polished_mp3 = exportiere_song(wav_pfad=result.polished_wav, mp3_pfad=polished_mp3)
 
     if keep_history:
         import history
@@ -210,6 +216,32 @@ def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None,
 
     report(1.0, "Fertig")
     return result
+
+
+def _polish(settings: SongSettings, tracks: dict, result: SongResult, stems: list, mix_args: dict,
+            report: ProgressFn) -> None:
+    """Klang-Veredler (Versuch): ACE-Step spielt die Band neu ein, der Gesang bleibt; ergibt final_mix_veredelt.wav."""
+    import polish
+    out = result.output_dir
+    target, new_band = os.path.join(out, "final_mix_veredelt.wav"), os.path.join(out, "band_veredelt.wav")
+    for old in (target, new_band):
+        _remove(old)         # eine Fassung vom letzten Song darf nicht als neue gelten
+    band = [path for inst, path in result.wav_files.items() if inst != "fx"]
+    if not settings.polish or not band or tracks.get("plan") is None or not polish.available():
+        return
+    from mixer import mische_spuren
+    report(0.88, "Veredle den Klang der Band mit ACE-Step (Versuch)...")
+    band_mix = os.path.join(out, "band_vorlage.wav")
+    # Die Vorlage ist die Band, wie sie im Song klingt, ohne Gesang und Effekte; Lo-Fi kommt erst danach dazu
+    mische_spuren(spur_pfade=band, output_pfad=band_mix, **{**mix_args, "throw_windows": None, "texture": ""})
+    try:
+        if polish.polish(band_mix, new_band, settings, tracks["plan"], result.seed):
+            mische_spuren(spur_pfade=stems, output_pfad=target, band=new_band, **mix_args)
+            result.polished_wav = target if os.path.exists(target) else None
+    finally:
+        _remove(band_mix)
+    if result.polished_wav:
+        log.info("Veredelte Fassung: %s", target)
 
 
 def from_references(settings: SongSettings) -> SongSettings:

@@ -22,7 +22,8 @@ DEFAULT_LEVELS = {"drums": -17.0, "bass": -19.5, "piano": -22.0, "guitar": -23.0
                   "perc": -28.5, "melody": -21.0, "fx": -27.0, "vocals": -17.0, "harmony": -24.0, "gang": -23.0}
 DEFAULT_REVERB = {"drums": 0.06, "bass": 0.0, "piano": 0.16, "guitar": 0.12, "strings": 0.28,
                   "synth": 0.2, "brass": 0.15, "bells": 0.35, "choir": 0.4, "counter": 0.24,
-                  "perc": 0.08, "melody": 0.2, "fx": 0.3, "vocals": 0.18, "harmony": 0.26, "gang": 0.32}
+                  "perc": 0.08, "melody": 0.2, "fx": 0.3, "vocals": 0.18, "harmony": 0.26, "gang": 0.32,
+                  "band": 0.03}
 # Gesangsdoppelung im Refrain: zwei leicht verstimmte, verzögerte Kopien links und rechts
 DOUBLE_CENTS, DOUBLE_DELAYS, DOUBLE_DB = 12, (0.017, 0.026), -9.0
 # Gesangsspuren: Hauptstimme, zweite Stimme und der Chor im letzten Refrain („gang“); sie hören auf den Kanal Gesang
@@ -388,6 +389,7 @@ def mische_spuren(
     vocal_ratio_db: float = None,
     texture: str = "",
     movement: list = None,
+    band: str = None,
 ) -> None:
     """
     Mischt die Spuren zu einem Stereo-Master:
@@ -403,6 +405,8 @@ def mische_spuren(
     texture: "lofi" lässt die Band wie von einer alten Bandmaschine klingen, mit Schallplatten-Knistern.
     movement: die Sektionen (mix_movement.Part); dann bewegt sich der Mix: Anlauf vor jedem Refrain, Hall je nach
     Sektion, breitere Refrains.
+    band: eine fertige Fassung der Band (WAV, z. B. vom Klang-Veredler); sie ersetzt alle Spuren außer Gesang und
+    Effekten, so laut wie diese zusammen.
     """
     from settings import DEFAULT_VOLUMES
 
@@ -457,6 +461,8 @@ def mische_spuren(
         for path, (key, audio) in tracks.items():
             if key in ("bass", "synth"):
                 tracks[path] = (key, audio * duck)
+    if band:
+        _replace_band(tracks, band, length)
 
     mix = np.zeros((2, length), dtype=np.float32)
     send = np.zeros_like(mix)
@@ -512,6 +518,20 @@ def _move(tracks: dict, parts: list, length: int) -> None:
         if rises:
             audio = mix_movement.rise(audio, rises)
         tracks[path] = (key, mix_movement.widen(audio, width))
+
+
+def _replace_band(tracks: dict, path: str, length: int) -> None:
+    """Die Band (alles außer Gesang und Effekten) durch eine fertige Fassung ersetzen, genauso laut."""
+    band = [p for p, (key, _) in tracks.items() if key not in VOCAL_KEYS and key != "fx"]
+    if not band or not os.path.exists(path):
+        return
+    new = _load(path, length)
+    before, after = _loudness(sum(tracks[p][1] for p in band)), _loudness(new)
+    if before == float("-inf") or after == float("-inf"):
+        return
+    for p in band:
+        del tracks[p]
+    tracks[path] = ("band", new * 10 ** ((before - after) / 20))
 
 
 def _shape_energy(tracks: dict, sections: list, target_db: float, length: int) -> None:

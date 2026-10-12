@@ -43,7 +43,8 @@ def exportiere_projekt(result, zip_pfad: str) -> str:
 
     out = result.output_dir
     dateien = []
-    for pfad in (result.mp3, result.mix_wav):
+    for pfad in (result.mp3, result.mix_wav, getattr(result, "polished_mp3", None),
+                 getattr(result, "polished_wav", None)):
         if pfad:
             dateien.append((pfad, os.path.basename(pfad)))
     for name, pfad in sorted(result.wav_files.items()):

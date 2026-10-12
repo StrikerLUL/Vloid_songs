@@ -132,6 +132,18 @@ Im Tab „Mix“ wählst du, wie laut der fertige Song wird: Standard -12 LUFS, 
 
 **Bewegung im Mix:** Der Mix klingt nicht von vorn bis hinten gleich. Im letzten Takt vor jedem Refrain verliert die Band nach und nach ihre Bässe (Filter) und wird etwas leiser; mit dem Refrain ist alles auf einmal wieder da. Strophen haben weniger Hall und klingen näher, Bridge, Intro und Outro mehr. Im Refrain ist die Band breiter. Der Schalter „Bewegung im Mix“ im Tab „Mix“ (oder `--ohne-bewegung`) stellt das ab (`mix_movement.py`).
 
+### Klang-Veredler (ACE-Step, Versuch)
+
+[ACE-Step 1.5](https://github.com/ace-step/ACE-Step-1.5) ist ein KI-Modell für Musik. Die App gibt ihm die fertige Band (ohne Gesang und Effekte) als Vorlage: Takt, Akkorde und Melodie bleiben, den Klang spielt ACE-Step neu ein. Danach liegt die neue Band genau unter dem Gesang, und die App mischt beides zu einer zweiten Fassung, `final_mix_veredelt.wav` (und `final_song_veredelt.mp3`). Der normale Song bleibt, wie er ist; im Player heißt die zweite Fassung „Veredelt (ACE-Step)“. Der Gesang geht nie durch ACE-Step, denn die Lizenz von NEUTRINO verbietet, seine Stimme umzuwandeln.
+
+Im Tab „Mix“ stellst du ein, wie stark ACE-Step den Klang verändert (wenig: fast wie vorher, viel: freier, aber die Melodie kann sich verbiegen), und kannst den Klang auf Englisch beschreiben, z. B. `dreamy shoegaze, washed out guitars`. Leer nimmt die App eine Beschreibung passend zum Stil. Einmal einrichten:
+
+```powershell
+uv run setup_ace_step.py           # etwa 20 GB: Modelle etwa 10 GB, PyTorch mit CUDA etwa 6 GB
+```
+
+Das lädt ACE-Step in einer festen Fassung nach `tools\ace-step`, legt dort seine eigene Umgebung an (die App bleibt unberührt), lädt die Modelle und prüft, ob die Grafikkarte erkannt wird. Es braucht eine NVIDIA-Grafikkarte; mit 4 GB lagert ACE-Step Teile in den Arbeitsspeicher aus und rechnet mit kleineren Zahlen (INT8), das dauert pro Song ein paar Minuten. Ausschalten: Schalter im Tab „Pfade“ oder `--ohne-veredler`. Es ist ein Versuch: Getestet ist der Ablauf mit einem nachgebauten Modell, nicht mit ACE-Step selbst. Klappt etwas nicht, steht es im Protokoll, und es gibt nur den normalen Song.
+
 ### Liedtext
 
 Im Tab „Text“ steht der Text pro Sektion; rechts daneben zeigt die App, welche Silben gesungen werden. Japanisch darf ganz normal geschrieben werden, mit Kanji und ohne Leerzeichen: `夜の街を歩いてた` wird zu よ る の ま ち お あ る い て た. Die Lesung der Kanji kommt aus dem Wörterbuch von fugashi (UniDic). Liest es ein Wort falsch, steht die richtige Lesung in eckigen Klammern dahinter: `君[きみ]`. Partikel singt die App so, wie man sie spricht (は als わ), und ー wird als langer Vokal gesungen.
@@ -209,6 +221,9 @@ uv run vocaloid_generator\main.py --style Rock --bpm 140 --key E --scale minor -
 | `--ohne-samples` | Orchester aus dem SoundFont statt aus den echten Aufnahmen |
 | `--ohne-lofi-klang` | Lo-Fi ohne Knistern und Bandmaschine |
 | `--ohne-bewegung` | Mix ohne Anlauf vor dem Refrain, Hall pro Sektion und breitere Refrains |
+| `--ohne-veredler` | keine zweite Fassung mit von ACE-Step veredelter Band (sonst, wenn `setup_ace_step.py` gelaufen ist) |
+| `--veredler-staerke 0.6` | wie viel ACE-Step am Klang der Band ändert (0.1 bis 0.9, Standard 0.4) |
+| `--veredler-klang "TEXT"` | eigene Klangbeschreibung für ACE-Step auf Englisch |
 | `--vorbild DATEI` | Vorbild-Song für diesen Lauf, mehrfach möglich |
 | `--vom-vorbild` | Tempo, Tonart und Stil der Vorbilder übernehmen |
 | `--lautheit LUFS` | Lautheit des Masters, z. B. `-14` für YouTube |
@@ -314,6 +329,7 @@ uv run pytest -m "not slow"   # ohne den Test, der echtes Audio rendert
 | `sfz.py`, `sample_library.py`, `setup_samples.py` | Sampler für SFZ-Instrumente, welches Instrument aus welchen Orchester-Aufnahmen spielt, und deren Download |
 | `mix_movement.py` | Bewegung im Mix: Anlauf vor dem Refrain, Hall pro Sektion, breitere Refrains |
 | `motifs.py` | zusätzliche und aus MIDI-Dateien gelernte Rhythmen und Bewegungen für die Gesangsmelodie |
+| `polish.py`, `polish_worker.py`, `setup_ace_step.py` | Klang-Veredler: ACE-Step 1.5 spielt die Band neu ein (eigene Umgebung), und diese einrichten |
 | `rating.py`, `rating_worker.py`, `setup_bewertung.py` | mehrere Fassungen benoten (Audiobox Aesthetics in eigener Umgebung) und diese einrichten |
 | `synth_engine.py` | eigene Synths: Supersaw, Pluck, Pad, Lead, Chiptune, Reese- und Sub-Bass, Future-Bass-Akkorde |
 | `drum_machine.py` | Schlagzeug wie aus der TR-808 und TR-909, ohne Samples |

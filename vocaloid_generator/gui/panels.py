@@ -544,6 +544,16 @@ def mix_panel(s: SongSettings) -> None:
     hint("Die Lautheit gilt immer, auch beim Mastering nach Vorbild-Songs; der Limiter hält die Spitzen unten.")
     ui.switch("Bewegung im Mix").bind_value(s, "mix_movement").mark("switch-mix_movement") \
         .tooltip("Anlauf mit Filter vor jedem Refrain, Hall je nach Sektion, breitere Refrains")
+    with ui.column().classes("w-full gap-1").bind_visibility_from(s, "polish"):
+        ui.label("Klang-Veredler (ACE-Step, Versuch)").classes("text-subtitle2 q-mt-sm")
+        with ui.row().classes("w-full items-center gap-4"):
+            ui.label("Wie stark verändern").classes("w-56")
+            ui.slider(min=0.1, max=0.9, step=0.05).bind_value(s, "polish_strength").props("label").classes("col") \
+                .mark("polish-strength")
+        ui.input("Klangbeschreibung auf Englisch", placeholder="leer = passend zum Stil") \
+            .bind_value(s, "polish_caption").classes("w-full").props("dense stack-label").mark("polish-caption")
+        hint("ACE-Step spielt die Band neu ein, Takt, Akkorde und Melodie bleiben, der Gesang wird nicht verändert. "
+             "Das Ergebnis ist eine zweite Fassung neben dem normalen Song („Veredelt“ im Player).")
 
 
 # ── Pfade ───────────────────────────────────────────────────────────────────────
@@ -582,6 +592,9 @@ def paths_panel(s: SongSettings, pick: PickFn, status: Callable[[], None]) -> No
     ui.switch("Mehrere Fassungen automatisch bewerten (setup_bewertung.py)") \
         .bind_value(s, "auto_rating").mark("rating-switch") \
         .tooltip("Audiobox Aesthetics hört jede Fassung an und gibt ihr eine Note; die beste wird geladen")
+    ui.switch("Klang der Band mit ACE-Step veredeln (setup_ace_step.py, Versuch)") \
+        .bind_value(s, "polish").mark("polish-switch").on_value_change(lambda: status()) \
+        .tooltip("Zweite Fassung jedes Songs mit neu eingespielter Band; braucht eine NVIDIA-Grafikkarte")
 
 
 def _reference_library() -> str:

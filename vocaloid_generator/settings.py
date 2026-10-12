@@ -103,6 +103,7 @@ class ReferenceTrack(BaseModel):
 
 
 MIN_BARS, MAX_BARS = 1, 64        # Länge einer Sektion in Takten
+MAX_NOTE_BEATS = 16.0             # so lang darf ein Ton der Melodie von Hand werden
 
 
 def edit_key(beat: float) -> str:
@@ -137,6 +138,9 @@ class SongSettings(BaseModel):
     custom_chords: dict[str, str] = Field(default_factory=dict)
     melody_midi: str = ""              # eigene Melodie als MIDI-Datei (leer = komponiert)
     melody_midi_section: str = "Chorus"    # in dieser Sektionsart singt die eigene Melodie
+    more_motifs: bool = True           # mehr eingebaute Rhythmen und Gesten für die Gesangsmelodie (motifs.py)
+    learned_motifs: bool = True        # Rhythmen und Gesten aus den MIDI-Dateien in motif_folder lernen
+    motif_folder: str = ""             # Ordner mit MIDI-Melodien (leer = vocaloid_generator/motive)
 
     active_sections: list[str] = Field(default_factory=lambda: [
         "Intro", "Verse", "PreChorus", "Chorus", "Verse", "PreChorus", "Chorus", "Bridge", "Chorus", "Outro"
@@ -144,6 +148,7 @@ class SongSettings(BaseModel):
     section_bars: dict[str, int] = Field(default_factory=dict)   # Takte pro Sektionsart; fehlt sie, wie config.py
     # Geänderte Töne der Gesangsmelodie: {Schlag ab Songanfang: Tonhöhe}, gelten für Seed und Zähler dieses Songs
     melody_edits: dict[str, int] = Field(default_factory=dict)
+    melody_lengths: dict[str, float] = Field(default_factory=dict)   # {Schlag: neue Länge in Schlägen}
     lyrics: str = DEFAULT_LYRICS
 
     singer: str = "MERROW"
@@ -170,9 +175,15 @@ class SongSettings(BaseModel):
     vst_path: str = ""
     vst_sounds: dict[str, str] = Field(default_factory=dict)   # Spur → gespeicherter Klang des VST-Instruments
     sound_library: bool = True         # bessere Klänge aus tools/soundfonts (setup_soundfonts.py), wenn vorhanden
+    samples: bool = True               # Orchester aus echten Aufnahmen (setup_samples.py, VSCO 2), wenn vorhanden
+    auto_rating: bool = True           # mehrere Fassungen automatisch bewerten (setup_bewertung.py), wenn eingerichtet
     guitar_amp: bool = True            # verzerrte E-Gitarren über Verstärker und Box statt verzerrter Samples
     cabinet_ir: str = ""               # Impulsantwort einer Gitarrenbox (WAV); leer = eingebaute Box
     lofi_texture: bool = True          # im Stil Lo-Fi: Knistern, leiernde Bandmaschine, gedämpfte Höhen
+    mix_movement: bool = True          # Anlauf vor dem Refrain, Hall pro Sektion, breitere Refrains (mix_movement.py)
+    polish: bool = True                # zweite Fassung mit von ACE-Step veredelter Band (setup_ace_step.py), wenn da
+    polish_strength: float = Field(0.4, ge=0.05, le=0.95)   # wie viel ACE-Step am Klang der Band ändert
+    polish_caption: str = ""           # eigene Klangbeschreibung für ACE-Step (Englisch); leer = passend zum Stil
     show_karaoke: bool = True          # Text zum Mitlesen unter dem Player
     breathiness: float = Field(0.028, ge=0.0, le=0.2)
     shimmer: bool = True
@@ -242,6 +253,17 @@ class SongSettings(BaseModel):
                 continue
         return edits
 
+    @field_validator("melody_lengths", mode="before")
+    @classmethod
+    def _check_melody_lengths(cls, value: dict) -> dict:
+        lengths = {}
+        for beat, length in (value or {}).items():
+            try:
+                lengths[edit_key(float(beat))] = min(max(round(float(length) * 4) / 4, 0.25), MAX_NOTE_BEATS)
+            except (TypeError, ValueError):
+                continue
+        return lengths
+
     @field_validator("custom_chords", mode="before")
     @classmethod
     def _check_custom_chords(cls, value: dict) -> dict:
@@ -273,6 +295,22 @@ class SongSettings(BaseModel):
     def soundfont_file(self) -> str:
         return _existing_or_default(self.soundfont_pfad, config.SOUNDFONT_PFAD, "SoundFont")
 
+    def own_soundfont(self) -> bool:
+        """
+        Spielt ein selbst gewählter SoundFont statt des mitgelieferten? Alte Einstellungen zeigen oft auf den
+        mitgelieferten, nur an anderer Stelle; das zählt nicht als eigener.
+        """
+        if not self.soundfont_pfad or not os.path.exists(self.soundfont_pfad):
+            return False
+        path, default = self.soundfont_pfad, config.SOUNDFONT_PFAD
+        if os.path.normcase(os.path.abspath(path)) == os.path.normcase(os.path.abspath(default)):
+            return False
+        try:
+            return not (os.path.basename(path).lower() == os.path.basename(default).lower()
+                        and os.path.getsize(path) == os.path.getsize(default))
+        except OSError:
+            return True
+
     def output_dir(self) -> str:
         configured = self.output_ordner
         if configured and (os.path.isdir(configured) or os.path.isdir(os.path.dirname(configured))):
@@ -292,9 +330,10 @@ class SongSettings(BaseModel):
         """
         if not is_rerollable(part):
             raise ValueError(f"Unbekannter Teil: {part}")
-        edits = {} if part.partition(":")[0] in ("melody", "chords") else self.melody_edits
+        new_melody = part.partition(":")[0] in ("melody", "chords")
         return self.with_updates(variations={**self.variations, part: self.variations.get(part, 0) + 1},
-                                 melody_edits=edits)
+                                 melody_edits={} if new_melody else self.melody_edits,
+                                 melody_lengths={} if new_melody else self.melody_lengths)
 
     def section_config(self) -> dict:
         """config.SECTION_CONFIG mit den eigenen Längen der Sektionen."""

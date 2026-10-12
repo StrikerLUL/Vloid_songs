@@ -1,6 +1,7 @@
 # test_app.py – Die neue Oberfläche (NiceGUI), ohne Browser simuliert
 import asyncio
 import os
+import shutil
 
 import numpy as np
 import pretty_midi
@@ -158,6 +159,20 @@ async def test_several_versions_land_in_the_history(user, fake_generation):
     assert len(user.find(marker="history-play").elements) == 3
 
 
+async def test_the_best_rated_version_is_loaded(user, fake_generation, monkeypatch):
+    import rating
+    notes = iter([4.0, 8.0, 6.0])
+    monkeypatch.setattr(rating, "available", lambda: True)
+    monkeypatch.setattr(rating, "rate", lambda paths: [rating.Rating(n, 5.0, 5.0, n) for n, _ in zip(notes, paths)])
+    await user.open("/")
+    user.find(marker="count").elements.pop().value = 3
+    user.find(marker="generate").click()
+    await user.should_see("Geladen ist die beste: Note 8.0", retries=80)
+    await user.should_see("Seed 1001")
+    user.find(marker="tab-Verlauf").click()
+    assert sorted(b.text for b in user.find(marker="history-rating").elements) == ["4.0", "6.0", "8.0"]
+
+
 async def test_restoring_from_history_takes_settings_and_seed(user, fake_generation, tmp_path):
     out = str(tmp_path / "out")
     old = SongSettings(output_ordner=out, bpm=99, style="Rock", seed=77, variations={"bass": 2})
@@ -264,8 +279,52 @@ async def test_paths_tab_tells_whether_the_extra_soundfonts_are_there(user):
     await user.open("/")
     user.find(marker="tab-Pfade").click()
     await user.should_see("setup_soundfonts.py ausführen")
+    await user.should_see("setup_samples.py ausführen")
     user.find(marker="sound-library-switch").elements.pop().set_value(False)
     await until(lambda: SongSettings.load().sound_library is False)
+    user.find(marker="samples-switch").elements.pop().set_value(False)
+    await until(lambda: SongSettings.load().samples is False)
+    await user.should_see("setup_bewertung.py ausführen")
+    user.find(marker="rating-switch").elements.pop().set_value(False)
+    await until(lambda: SongSettings.load().auto_rating is False)
+    await user.should_see("setup_ace_step.py ausführen")
+    user.find(marker="polish-switch").elements.pop().set_value(False)
+    await until(lambda: SongSettings.load().polish is False)
+
+
+async def test_the_polished_version_can_be_played_and_tuned(user, fake_generation, monkeypatch):
+    fake_song = pipeline.generate_song
+
+    def polished_song(settings, progress=None, seed=None):
+        result = fake_song(settings, progress, seed)
+        result.polished_wav = os.path.join(result.output_dir, "final_mix_veredelt.wav")
+        shutil.copy(result.mix_wav, result.polished_wav)
+        return result
+    monkeypatch.setattr(pipeline, "generate_song", polished_song)
+    await user.open("/")
+    user.find(marker="generate").click()
+    await user.should_see(marker="stem-Veredelt", retries=50)
+    user.find(marker="tab-Mix").click()
+    user.find(marker="polish-strength").elements.pop().set_value(0.7)
+    user.find(marker="polish-caption").elements.pop().set_value("dream pop")
+    await until(lambda: (SongSettings.load().polish_strength, SongSettings.load().polish_caption) == (0.7, "dream pop"))
+
+
+async def test_movement_in_the_mix_can_be_switched_off(user):
+    await user.open("/")
+    user.find(marker="tab-Mix").click()
+    user.find(marker="switch-mix_movement").elements.pop().set_value(False)
+    await until(lambda: SongSettings.load().mix_movement is False)
+
+
+async def test_melody_motifs_can_be_switched_and_say_what_they_learned(user):
+    await user.open("/")
+    await user.should_see("Gelernte Motive: keine MIDI-Dateien")
+    user.find(marker="more-motifs").elements.pop().set_value(False)
+    await until(lambda: SongSettings.load().more_motifs is False)
+    user.find(marker="learned-motifs").elements.pop().set_value(False)
+    await user.should_see("Gelernte Motive: aus")
+    await until(lambda: SongSettings.load().learned_motifs is False)
 
 
 async def test_references_from_the_library_suggest_tempo_key_and_style(user, monkeypatch):
@@ -452,6 +511,7 @@ async def test_two_songs_from_the_history_can_be_compared(user, fake_generation)
     user.find(marker="generate").click()
     await user.should_see("Seed 1001", retries=80)
     user.find(marker="tab-Verlauf").click()
+    await user.should_see(marker="history-A-1", retries=50)     # der Verlauf baut sich nach dem Song neu auf
     user.find(marker="history-A-1").click()
     user.find(marker="history-B-2").click()
     await user.should_see(marker="compare-B")
@@ -504,3 +564,55 @@ async def test_sung_notes_can_be_moved_and_sung_again(user, sung_generation):
     user.find(marker="drop-edits").click()
     await until(lambda: SongSettings.load().melody_edits == {})
     await until(lambda: [n[2] for n in roll.notes if n[3] == 0] == [64, 65, 66, 67])
+
+
+async def test_sung_notes_can_be_made_longer_and_heard_at_once(user, sung_generation):
+    await user.open("/")
+    user.find(marker="generate").click()
+    await user.should_see("Seed 1000", retries=50)
+    [roll] = user.find(PianoRoll).elements
+    await until(lambda: roll.tracks)
+    user.find(marker="edit-melody").click()
+    await until(lambda: roll.editable)
+
+    # Der dritte Ton (1,0 s) wird länger, der zweite höher: zwei geänderte Töne
+    user.find(PianoRoll).trigger("resize", {"start": 1.0, "end": 1.45})
+    await user.should_see("1 Ton geändert")
+    assert [n[1] for n in roll.notes if n[3] == 0] == [0.4, 0.9, 1.45, 1.9]
+    user.find(PianoRoll).trigger("edit", {"start": 0.5, "pitch": 67})
+    await user.should_see("2 Töne geändert")
+    bpm = SongSettings.load().bpm
+    beats = min(max(round(0.45 * bpm / 60 * 4) / 4, 0.25), 16)
+    await until(lambda: SongSettings.load().melody_lengths == {edit_key(1.0 * bpm / 60): beats})
+
+    # Vorschau: Synth über der Band, ohne neu zu singen
+    out = SongSettings.load().output_dir()
+    user.find(marker="preview-edits").click()
+    await until(lambda: os.path.exists(os.path.join(out, "vorschau_aenderungen.wav")), seconds=20)
+    assert len(sung_generation) == 1
+
+    # Neu singen nimmt beides mit, Verwerfen setzt beides zurück
+    user.find(marker="resing").click()
+    await until(lambda: len(sung_generation) == 2)
+    assert sung_generation[-1].melody_lengths == {edit_key(1.0 * bpm / 60): beats}
+    await user.should_see("Seed 1000 · 2 Töne geändert", retries=50)
+    user.find(marker="drop-edits").click()
+    await until(lambda: (SongSettings.load().melody_edits, SongSettings.load().melody_lengths) == ({}, {}))
+
+
+async def test_a_hummed_melody_becomes_the_own_melody(user, tmp_path):
+    from nicegui.elements.upload_files import SmallFileUpload
+    from test_humming import BPM as HUMMED_BPM
+    from test_humming import TUNE, hum
+    SongSettings.load().with_updates(bpm=HUMMED_BPM).save()
+    await user.open("/")
+    [upload] = user.find(marker="hum-upload").elements
+    recording = hum(tmp_path / "idee.wav")
+    with open(recording, "rb") as f:
+        await upload.handle_uploads([SmallFileUpload("idee.wav", "audio/wav", f.read())])
+    await user.should_see(f"Gesummte Melodie: {len(TUNE)} Töne", retries=100)
+    out = SongSettings.load().output_dir()
+    await until(lambda: SongSettings.load().melody_midi == os.path.join(out, "summen", "idee.mid"))
+    await upload.handle_uploads([SmallFileUpload("kaputt.wav", "audio/wav", b"RIFF kaputt")])
+    await user.should_see("keine Melodie zu hören", retries=100)
+    assert SongSettings.load().melody_midi == os.path.join(out, "summen", "idee.mid")

@@ -46,7 +46,8 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
                      output_dir: str = None, lyrics: dict = None, swing: float = None,
                      jitter_scale: float = 1.0, instrument_styles: dict = None, style: str = None,
                      vocal_range: tuple = None, variations: dict = None, custom_chords: dict = None,
-                     imported_melody: dict = None, melody_edits: dict = None) -> dict:
+                     imported_melody: dict = None, melody_edits: dict = None, motifs=None,
+                     melody_lengths: dict = None) -> dict:
     """
     Komponiert den kompletten Song und schreibt eine MIDI-Datei pro Instrument nach output_dir.
 
@@ -60,6 +61,8 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
     custom_chords: {Sektionsart: eigene Akkorde}, siehe song_plan.parse_custom.
     imported_melody: {Sektionsart: Melodie aus melody_import.load}; dort singt sie statt der komponierten.
     melody_edits: {Schlag: Tonhöhe} (settings.edit_key): Töne der Gesangsmelodie, die von Hand geändert wurden.
+    melody_lengths: {Schlag: Länge in Schlägen}: Töne, die von Hand kürzer oder länger gemacht wurden.
+    motifs: zusätzliche Rhythmen und Gesten für die Gesangsmelodie (motifs.for_settings), None = nur eingebaute.
     Rückgabe: {Instrument: [pretty_midi.Note]}, dazu "melody_data", "silben", "vocal_melody", die zweite
     Stimme für den Refrain ("harmony_data", "harmony_silben") und "plan".
     """
@@ -77,8 +80,8 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
     if vocal_range:
         plan.vocal_range = tuple(vocal_range)
     vocal_notes = write_vocal_melody(plan, sung, dice.part("melody"), rerolls=dice.rerolled_kinds("melody"),
-                                     imported=imported_melody)
-    _apply_edits(vocal_notes, melody_edits or {})
+                                     imported=imported_melody, motifs=motifs)
+    _apply_edits(vocal_notes, melody_edits or {}, melody_lengths or {})
 
     arrangement = describe_arrangement(plan)
     if arrangement:
@@ -155,17 +158,23 @@ def _piece_at(plan, beat: float):
     return next((p for p in pieces if p.start <= beat < p.end), pieces[-1])
 
 
-def _apply_edits(vocal_notes: list, edits: dict) -> None:
-    """Von Hand geänderte Töne übernehmen; Band, zweite Stimme und Chor folgen ihnen."""
+def _apply_edits(vocal_notes: list, edits: dict, lengths: dict = None) -> None:
+    """Von Hand geänderte Töne (Höhe, Länge) übernehmen; Band, zweite Stimme und Chor folgen ihnen. Ein längerer
+    Ton endet spätestens, wo der nächste beginnt."""
     from settings import edit_key
+    lengths = lengths or {}
     changed = 0
-    for n in vocal_notes:
-        pitch = edits.get(edit_key(n.start))
+    for i, n in enumerate(vocal_notes):
+        key = edit_key(n.start)
+        pitch, length = edits.get(key), lengths.get(key)
         if pitch is not None:
             n.pitch = pitch
-            changed += 1
-    if edits:
-        log.info("Geänderte Töne in der Melodie: %d von %d", changed, len(edits))
+        if length is not None:
+            following = [m.start for m in vocal_notes[i + 1:] if m.start > n.start]
+            n.dur = min(length, min(following) - n.start) if following else length
+        changed += pitch is not None or length is not None
+    if edits or lengths:
+        log.info("Geänderte Töne in der Melodie: %d von %d", changed, len(set(edits) | set(lengths)))
 
 
 class Dice:

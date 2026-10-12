@@ -90,7 +90,15 @@ Das lädt etwa 250 MB nach `tools\soundfonts` (mit `--ohne-verzerrt` 130 MB weni
 | cleane und verzerrte E-Gitarre | FreePats Electric Guitar FSBS | CC0 |
 | Schlagzeug (Rock: Red Zeppelin, sonst Black Pearl) | AVL Drumkits von Glen MacArthur | CC-BY-SA 3.0 |
 
-Alles andere spielt weiter GeneralUser GS. Im Tab „Pfade“ steht, wie viele der zusätzlichen SoundFonts da sind, und ein Schalter stellt sie zum Vergleichen ab. Mit einem eigenen SoundFont in den Einstellungen bleiben sie aus.
+Alles andere spielt weiter GeneralUser GS. Im Tab „Pfade“ steht, wie viele der zusätzlichen SoundFonts da sind, und ein Schalter stellt sie zum Vergleichen ab. Mit einem eigenen SoundFont in den Einstellungen bleiben sie aus (zeigt die Einstellung auf den mitgelieferten `soundfont.sf2`, zählt das nicht als eigener).
+
+**Orchester aus echten Aufnahmen:** Am echtesten klingen Streicher, Bläser, Harfe, Pauken und Stabspiele aus den Aufnahmen von [VSCO 2 Community Edition](https://github.com/sgossner/VSCO-2-CE) (Versilian Studios, CC0). Einmal ausführen:
+
+```powershell
+uv run setup_samples.py
+```
+
+Das lädt etwa 1,2 GB nach `tools\samples` (mit `--nur Violin Harp` nur einzelne Instrumente). Bricht es ab, macht der nächste Start dort weiter. Danach spielen Streicher, Solo-Geige, Bratsche, Cello, Kontrabass, Tremolo, Pizzicato, Harfe, Pauken, Trompete, Posaune, Tuba, Horn, Bläsersatz, Flöte, Piccolo, Oboe, Klarinette, Fagott, Glockenspiel, Marimba, Xylophon und Röhrenglocken aus den Aufnahmen. Ein eingebauter Sampler spielt sie (`sfz.py`, liest das SFZ-Format): kurze Töne nehmen die kurz gespielten Aufnahmen (Spiccato, Staccato), Streicher- und Bläsersätze verteilen ihre Töne nach der Tonhöhe auf Geigen, Bratschen, Celli und Kontrabässe bzw. Trompeten, Posaunen und Tuba, und jedes Instrument wird auf dieselbe Lautstärke gebracht. Langsam anschwellende Streicher setzen etwas später in der Aufnahme ein, damit sie auf dem Schlag kommen. Der Schalter „Orchester aus echten Aufnahmen“ im Tab „Pfade“ (oder `--ohne-samples`) stellt das ab; wie bei den SoundFonts bleibt es mit einem eigenen SoundFont aus.
 
 Supersaw, Pluck, Pad, Lead, Chiptune-Klänge, Reese- und Sub-Bass und die breiten Future-Bass-Akkorde erzeugt die App selbst (`synth_engine.py`), ebenso Riser, Becken-Swells, Impacts und Downlifter vor den Refrains (`fx.py`).
 
@@ -122,6 +130,20 @@ Gemessen wird mit librosa, jede Datei nur einmal (`vorbild_messungen.json`). Aus
 
 Im Tab „Mix“ wählst du, wie laut der fertige Song wird: Standard -12 LUFS, -14 für YouTube und Spotify (die lautere Songs ohnehin herunterregeln), -16 für Apple Music oder -9 für den Club. Das gilt auch beim Mastering nach Vorbild-Songs.
 
+**Bewegung im Mix:** Der Mix klingt nicht von vorn bis hinten gleich. Im letzten Takt vor jedem Refrain verliert die Band nach und nach ihre Bässe (Filter) und wird etwas leiser; mit dem Refrain ist alles auf einmal wieder da. Strophen haben weniger Hall und klingen näher, Bridge, Intro und Outro mehr. Im Refrain ist die Band breiter. Der Schalter „Bewegung im Mix“ im Tab „Mix“ (oder `--ohne-bewegung`) stellt das ab (`mix_movement.py`).
+
+### Klang-Veredler (ACE-Step, Versuch)
+
+[ACE-Step 1.5](https://github.com/ace-step/ACE-Step-1.5) ist ein KI-Modell für Musik. Die App gibt ihm die fertige Band (ohne Gesang und Effekte) als Vorlage: Takt, Akkorde und Melodie bleiben, den Klang spielt ACE-Step neu ein. Danach liegt die neue Band genau unter dem Gesang, und die App mischt beides zu einer zweiten Fassung, `final_mix_veredelt.wav` (und `final_song_veredelt.mp3`). Der normale Song bleibt, wie er ist; im Player heißt die zweite Fassung „Veredelt (ACE-Step)“. Der Gesang geht nie durch ACE-Step, denn die Lizenz von NEUTRINO verbietet, seine Stimme umzuwandeln.
+
+Im Tab „Mix“ stellst du ein, wie stark ACE-Step den Klang verändert (wenig: fast wie vorher, viel: freier, aber die Melodie kann sich verbiegen), und kannst den Klang auf Englisch beschreiben, z. B. `dreamy shoegaze, washed out guitars`. Leer nimmt die App eine Beschreibung passend zum Stil. Einmal einrichten:
+
+```powershell
+uv run setup_ace_step.py           # etwa 20 GB: Modelle etwa 10 GB, PyTorch mit CUDA etwa 6 GB
+```
+
+Das lädt ACE-Step in einer festen Fassung nach `tools\ace-step`, legt dort seine eigene Umgebung an (die App bleibt unberührt), lädt die Modelle und prüft, ob die Grafikkarte erkannt wird. Es braucht eine NVIDIA-Grafikkarte; mit 4 GB lagert ACE-Step Teile in den Arbeitsspeicher aus und rechnet mit kleineren Zahlen (INT8), das dauert pro Song ein paar Minuten. Ausschalten: Schalter im Tab „Pfade“ oder `--ohne-veredler`. Es ist ein Versuch: Getestet ist der Ablauf mit einem nachgebauten Modell, nicht mit ACE-Step selbst. Klappt etwas nicht, steht es im Protokoll, und es gibt nur den normalen Song.
+
 ### Liedtext
 
 Im Tab „Text“ steht der Text pro Sektion; rechts daneben zeigt die App, welche Silben gesungen werden. Japanisch darf ganz normal geschrieben werden, mit Kanji und ohne Leerzeichen: `夜の街を歩いてた` wird zu よ る の ま ち お あ る い て た. Die Lesung der Kanji kommt aus dem Wörterbuch von fugashi (UniDic). Liest es ein Wort falsch, steht die richtige Lesung in eckigen Klammern dahinter: `君[きみ]`. Partikel singt die App so, wie man sie spricht (は als わ), und ー wird als langer Vokal gesungen.
@@ -131,6 +153,10 @@ Im Tab „Text“ steht der Text pro Sektion; rechts daneben zeigt die App, welc
 Im Tab „Song“ stehen unter „Eigene Akkorde“ Felder für Strophe, Pre-Chorus, Refrain und Bridge. Dort gehen Akkordnamen (`F G Em Am`, `C/E`, `Bbmaj7`) oder Stufen (`IV V iii vi`); ohne `|` ist jeder Akkord ein Takt, mit `|` trennst du Takte (`F | G | Em Am`). Die Folge wiederholt sich, bis die Sektion voll ist, und klingt genau so, ohne die Schlusswendung des Stils. Intro, Outro und Solo spielen die Akkorde des Refrains. Steigt der letzte Refrain, steigen Akkordnamen mit. Leere Felder nehmen die Akkorde des Stils, Tippfehler zeigt das Feld sofort an.
 
 Unter „Eigene Melodie“ wählst du eine MIDI-Datei, zum Beispiel aus einer DAW oder von einem Keyboard eingespielt, und die Sektion, in der sie gesungen wird (Standard: Refrain). Die Spur mit den meisten Tönen zählt, auf Sechzehntel gerundet; bei Akkorden singt der höchste Ton. Die Melodie wiederholt sich, bis die Sektion voll ist (eine längere Melodie macht die Sektion länger, höchstens 16 Takte), und rückt in ganzen Oktaven in die Stimmlage. Sie wird nicht in die Tonart umgerechnet: Schreib sie in der Tonart des Songs. Der Text wird Silbe für Silbe auf die Töne gelegt. Feld leeren, dann wird wieder komponiert.
+
+**Melodie summen:** Statt einer MIDI-Datei geht auch eine Aufnahme (WAV, MP3, FLAC, OGG, M4A), zum Beispiel vom Handy: Summ oder sing die Melodie im Tempo des Songs, Ton für Ton („da-da-da“). Darunter im Tab „Song“ lädst du sie hoch (im Fenster: „Melodie summen“); die App erkennt die Töne (librosa pYIN), rundet sie auf Sechzehntel, legt den ersten Ton auf die Eins und trägt die fertige MIDI-Datei (`summen\<Name>.mid` im Ausgabeordner) oben als eigene Melodie ein. Wer etwas schief summt, macht nichts: Es zählt der Abstand zwischen den Tönen. Ist keine Melodie zu hören (Stille, nur Rauschen), sagt die App das und lässt das Feld, wie es war.
+
+**Motive der Melodie:** Die komponierte Melodie baut jeden Takt aus einem Rhythmus und einer Bewegung (steigen, fallen, Bogen). Dazu kommen mehr eingebaute (Synkopen wie im J-Pop, Schlüsse mit Vorhalt, Zickzack, Umspielungen) und gelernte: Leg MIDI-Dateien mit Melodien, die dir gefallen, in den Ordner `vocaloid_generator\motive\` (oder einen eigenen, Tab „Song“ unter „Motive der Melodie“). Aus jeder Datei zählen die einstimmigen Spuren in Gesangslage; jeder 4/4-Takt liefert seinen Rhythmus und seine Bewegung, häufige kommen öfter dran, und etwa die Hälfte der Takte singt dann gelernte. Beides hat einen Schalter (`--ohne-motive` schaltet beides ab, `--motive ORDNER` nimmt einen anderen Ordner). Neue Dateien im Ordner ändern auch Songs mit festem Seed; mit beiden Schaltern aus singt ein Seed dieselbe Melodie wie vor v5.
 
 ### MP3-Export
 
@@ -154,6 +180,8 @@ Oder einfach `Vloid Songs starten.bat` im Projektordner doppelklicken. Die App �
 - **Player:** Der fertige Song spielt mit Wellenform; ein Klick in die Wellenform springt an diese Stelle. Unter „Anhören“ hörst du jede Spur einzeln, an derselben Stelle im Song. Darunter läuft der Text zum Mitlesen wie beim Karaoke mit, die gesungenen Silben in Pink und klein darunter die nächste Zeile; der Schalter „Mitlesen“ blendet ihn aus.
 - **Noten:** die Piano-Roll aller Spuren mit Tonhöhe, sie läuft beim Abspielen mit. Ein Klick auf eine Spur in der Legende blendet sie aus, ein Klick in die Noten springt im Player dorthin.
 - **Gesang bearbeiten:** Mit diesem Schalter über den Noten lassen sich die Töne der Gesangsmelodie nach oben oder unten ziehen, oder anklicken und mit den Pfeiltasten verschieben (mit Umschalt eine Oktave). „Neu singen“ macht denselben Song mit den geänderten Tönen; Zweitstimme, Chor und die Hook im Intro und Outro gehen mit. „Änderungen verwerfen“ stellt die Töne wieder her. Würfelst du Melodie oder Akkorde neu, fallen die Änderungen weg, weil die Töne dann andere sind.
+- **Tonlängen:** Am rechten Rand eines Tons ändert sich der Mauszeiger; dort gezogen (oder angeklickt und mit Pfeil links/rechts) wird der Ton in Sechzehnteln kürzer oder länger, höchstens bis zum nächsten Ton.
+- **Vorschau:** „Vorschau“ spielt die geänderten Stellen sofort, mit einem Synth statt Gesang über der Band, ein Takt davor und danach. Das dauert Sekunden; gefällt es, singt „Neu singen“ die Änderungen richtig.
 - **Neu würfeln:** Ein Knopf pro Teil (Melodie, Akkorde, Schlagzeug, jedes Instrument). Nur dieser Teil wird neu, der Rest des Songs bleibt. Rechts darüber wählst du, wo: im ganzen Song oder nur in einer Sektion, etwa nur die Melodie im Refrain oder nur das Schlagzeug in der Strophe.
 - **3 Refrain-Melodien zur Auswahl:** drei neue Melodien für den Refrain als kurze Vorschau (Melodie als Synth über den Akkorden, in Sekunden fertig). Anhören, „nehmen“ drücken, und der ganze Song entsteht mit dieser Melodie.
 - **Seed festhalten:** Danach macht „Song erzeugen“ wieder diesen Song, mit allem, was du inzwischen geändert hast (Mix, Gesang, Text). Das Seed-Feld im Tab „Song“ leeren, dann gibt es wieder jedes Mal einen neuen Song.
@@ -180,7 +208,10 @@ uv run vocaloid_generator\main.py --style Rock --bpm 140 --key E --scale minor -
 | `--refrains N`, `--refrain NR` | N Refrain-Melodien als kurze Vorschau schreiben; mit `--refrain` und demselben `--seed` entsteht der ganze Song mit einer davon |
 | `--akkorde SEKTION=AKKORDE` | eigene Akkorde, z. B. `"Chorus=F G Em Am"`; mehrfach möglich, `"Chorus="` nimmt wieder die des Stils |
 | `--melodie-midi DATEI`, `--melodie-sektion SEKTION` | eigene Melodie aus einer MIDI-Datei, gesungen im Refrain oder in der angegebenen Sektion |
+| `--summen AUFNAHME` | eine gesummte Melodie (WAV, MP3 …) in Noten verwandeln und als eigene Melodie singen lassen |
+| `--motive ORDNER`, `--ohne-motive` | Rhythmen und Bewegungen der Melodie aus den MIDI-Dateien dieses Ordners lernen, oder nur die alten eingebauten |
 | `--varianten N` | N Songs am Stück erzeugen; mit `--neu` N Fassungen der gewählten Teile |
+| `--ohne-bewertung` | mehrere Fassungen nicht automatisch benoten (sonst, wenn `setup_bewertung.py` gelaufen ist) |
 | `--verlauf` | die letzten Songs auflisten |
 | `--aus-verlauf NR` | Einstellungen und Seed eines Songs aus dem Verlauf nehmen (1 = der neueste) |
 | `--zip DATEI` | den Song mit allen Spuren als ZIP für eine DAW exportieren |
@@ -192,7 +223,12 @@ uv run vocaloid_generator\main.py --style Rock --bpm 140 --key E --scale minor -
 | `--ohne-atmer`, `--ohne-echo`, `--ohne-chor` | Atmer, Echo auf dem letzten Wort oder Chor im letzten Refrain abschalten |
 | `--schlagzeug KLANG` | Schlagzeug aus `soundfont`, `808` oder `909` statt wie der Stil |
 | `--ohne-verstaerker`, `--box WAV` | verzerrte Gitarren wie früher aus dem SoundFont, oder über die Box aus dieser Impulsantwort |
+| `--ohne-samples` | Orchester aus dem SoundFont statt aus den echten Aufnahmen |
 | `--ohne-lofi-klang` | Lo-Fi ohne Knistern und Bandmaschine |
+| `--ohne-bewegung` | Mix ohne Anlauf vor dem Refrain, Hall pro Sektion und breitere Refrains |
+| `--ohne-veredler` | keine zweite Fassung mit von ACE-Step veredelter Band (sonst, wenn `setup_ace_step.py` gelaufen ist) |
+| `--veredler-staerke 0.6` | wie viel ACE-Step am Klang der Band ändert (0.1 bis 0.9, Standard 0.4) |
+| `--veredler-klang "TEXT"` | eigene Klangbeschreibung für ACE-Step auf Englisch |
 | `--vorbild DATEI` | Vorbild-Song für diesen Lauf, mehrfach möglich |
 | `--vom-vorbild` | Tempo, Tonart und Stil der Vorbilder übernehmen |
 | `--lautheit LUFS` | Lautheit des Masters, z. B. `-14` für YouTube |
@@ -219,6 +255,15 @@ uv run vocaloid_generator\main.py --aus-verlauf 2 --zip song.zip
 ```
 
 Neue Akkorde ändern auch alles, was auf den Akkorden spielt; eine neue Melodie ändert die Gegenstimme mit, weil sie der Melodie antwortet. Die Refrain-Melodie spielt auch im Intro, Outro und Solo, also werden sie mit ihr neu.
+
+**Die beste Fassung von selbst finden:** Bei mehreren Fassungen kann die App jede anhören und benoten, mit [Audiobox Aesthetics](https://github.com/facebookresearch/audiobox-aesthetics) von Meta. Das Modell hört die lautesten 30 Sekunden (meist den Refrain) und schätzt von 1 bis 10, wie gern man zuhört und wie sauber der Song klingt; die Note ist der Mittelwert. Geladen wird danach die Fassung mit der besten Note, im Verlauf steht bei jeder ihre Note. Einmal einrichten:
+
+```powershell
+uv run setup_bewertung.py          # mit NVIDIA-Grafikkarte etwa 3 GB
+uv run setup_bewertung.py --cpu    # ohne Grafikkarte, kleiner und langsamer
+```
+
+Das legt in `tools\bewertung` eine eigene Umgebung mit PyTorch an (die App selbst bleibt unberührt) und lädt das Modell. Ausschalten: Schalter im Tab „Pfade“ oder `--ohne-bewertung`. Die Note ist eine Schätzung, kein Urteil: anhören lohnt sich trotzdem.
 
 Die ZIP-Datei enthält den Mix, jede Spur als WAV (`Spuren\`) und MIDI (`MIDI\`), die Gesangsnoten als MusicXML und UST (`Gesang\`), `einstellungen.json` und `song.txt` mit Tempo und Tonart. Alle Spuren starten bei 0:00 und lassen sich so in jede DAW ziehen.
 
@@ -282,10 +327,17 @@ uv run pytest -m "not slow"   # ohne den Test, der echtes Audio rendert
 | `song_plan.py` | Bauplan: Sektionen, Tonarten, Akkorde und Energie |
 | `melody_writer.py` | Gesangsmelodie mit Motiven, Refrain-Hook, Wortakzent, Melisma und Duett-Aufteilung |
 | `melody_import.py` | eigene Melodie aus einer MIDI-Datei lesen und in eine Sektion legen |
+| `humming.py` | eine gesummte Melodie (Aufnahme) in eine MIDI-Datei verwandeln |
+| `preview.py` | geänderte Töne sofort anhören: Synth über der Band, nur um die Änderungen herum |
 | `parts.py`, `drums.py` | Begleitung, Gegenstimme, Solo, Percussion und Schlagzeug |
 | `orchestrator.py` | setzt alles zusammen und schreibt die MIDI-Spuren |
 | `renderer.py` | rendert MIDI mit dem SoundFont (FluidSynth oder tinysoundfont) |
 | `sound_library.py`, `setup_soundfonts.py` | welches Instrument aus welchem zusätzlichen SoundFont spielt, und deren Download |
+| `sfz.py`, `sample_library.py`, `setup_samples.py` | Sampler für SFZ-Instrumente, welches Instrument aus welchen Orchester-Aufnahmen spielt, und deren Download |
+| `mix_movement.py` | Bewegung im Mix: Anlauf vor dem Refrain, Hall pro Sektion, breitere Refrains |
+| `motifs.py` | zusätzliche und aus MIDI-Dateien gelernte Rhythmen und Bewegungen für die Gesangsmelodie |
+| `polish.py`, `polish_worker.py`, `setup_ace_step.py` | Klang-Veredler: ACE-Step 1.5 spielt die Band neu ein (eigene Umgebung), und diese einrichten |
+| `rating.py`, `rating_worker.py`, `setup_bewertung.py` | mehrere Fassungen benoten (Audiobox Aesthetics in eigener Umgebung) und diese einrichten |
 | `synth_engine.py` | eigene Synths: Supersaw, Pluck, Pad, Lead, Chiptune, Reese- und Sub-Bass, Future-Bass-Akkorde |
 | `drum_machine.py` | Schlagzeug wie aus der TR-808 und TR-909, ohne Samples |
 | `guitar_amp.py` | verzerrte E-Gitarren über Verstärker und Box (eingebaut oder Impulsantwort) |

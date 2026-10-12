@@ -5,7 +5,8 @@ import logging
 import sys
 
 import history
-from pipeline import from_references, generate_song, generate_variants, hook_choices, hook_kind, lyric_video
+from pipeline import (best, from_references, generate_song, generate_variants, hook_choices, hook_kind,
+                      lyric_video)
 from settings import KEYS, REROLLABLE, ReferenceTrack, SongSettings, is_rerollable
 
 log = logging.getLogger("vocaloid")
@@ -63,7 +64,16 @@ def parse_args(argv=None):
     p.add_argument("--ohne-verstaerker", action="store_true",
                    help="verzerrte Gitarren aus dem SoundFont statt über Verstärker und Box")
     p.add_argument("--box", metavar="WAV", help="Impulsantwort einer Gitarrenbox")
+    p.add_argument("--ohne-samples", action="store_true",
+                   help="Orchester aus dem SoundFont statt aus den echten Aufnahmen (setup_samples.py)")
     p.add_argument("--ohne-lofi-klang", action="store_true", help="Lo-Fi ohne Knistern und Bandmaschine")
+    p.add_argument("--ohne-bewegung", action="store_true",
+                   help="Mix ohne Anlauf vor dem Refrain, Hall pro Sektion und breitere Refrains")
+    p.add_argument("--ohne-veredler", action="store_true",
+                   help="keine zweite Fassung mit von ACE-Step veredelter Band (setup_ace_step.py)")
+    p.add_argument("--veredler-staerke", type=float, metavar="0.1-0.9",
+                   help="wie viel ACE-Step am Klang der Band ändert (Standard 0.4)")
+    p.add_argument("--veredler-klang", metavar="TEXT", help="Klangbeschreibung für ACE-Step auf Englisch")
     p.add_argument("--vorbild", action="append", metavar="DATEI",
                    help="Vorbild-Song (mehrfach möglich); ersetzt die Vorbilder aus den Einstellungen")
     p.add_argument("--vom-vorbild", action="store_true",
@@ -84,11 +94,18 @@ def parse_args(argv=None):
                    help="eigene Akkorde, z. B. 'Chorus=F G Em Am' oder 'Verse=vi IV I V' (mehrfach möglich, "
                         "'Chorus=' nimmt wieder die des Stils)")
     p.add_argument("--melodie-midi", metavar="DATEI", help="eigene Melodie als MIDI-Datei ('' = komponieren)")
+    p.add_argument("--summen", metavar="AUFNAHME",
+                   help="eine gesummte Melodie (WAV, MP3 …) in Noten verwandeln und singen lassen")
     p.add_argument("--takte", action="append", type=_section_bars, metavar="SEKTION=N",
                    help="Länge einer Sektion in Takten, z. B. 'Chorus=8' (mehrfach möglich)")
     p.add_argument("--lyric-video", nargs="?", const="", metavar="DATEI",
                    help="dazu ein Lyric-Video (MP4) mit dem Text zum Mitlesen; ohne DATEI neben dem Song")
     p.add_argument("--melodie-sektion", metavar="SEKTION", help="dort singt die eigene Melodie (Standard: Chorus)")
+    p.add_argument("--motive", metavar="ORDNER", help="Rhythmen und Gesten aus den MIDI-Melodien in diesem Ordner lernen")
+    p.add_argument("--ohne-motive", action="store_true",
+                   help="nur die alten eingebauten Rhythmen und Gesten (ohne zusätzliche und gelernte)")
+    p.add_argument("--ohne-bewertung", action="store_true",
+                   help="mehrere Fassungen nicht automatisch bewerten (sonst mit setup_bewertung.py)")
     p.add_argument("--varianten", type=int, default=1, metavar="N",
                    help="N Songs am Stück erzeugen; mit --neu N Fassungen der gewählten Teile")
     p.add_argument("--zip", metavar="DATEI", help="den Song mit allen Spuren als ZIP für eine DAW exportieren")
@@ -123,8 +140,16 @@ def main(argv=None) -> int:
                  "breaths": False if args.ohne_atmer else None, "echo_throws": False if args.ohne_echo else None,
                  "final_choir": False if args.ohne_chor else None,
                  "guitar_amp": False if args.ohne_verstaerker else None, "cabinet_ir": args.box,
+                 "samples": False if args.ohne_samples else None,
+                 "auto_rating": False if args.ohne_bewertung else None,
                  "lofi_texture": False if args.ohne_lofi_klang else None,
-                 "melody_midi": args.melodie_midi, "melody_midi_section": args.melodie_sektion}
+                 "mix_movement": False if args.ohne_bewegung else None,
+                 "polish": False if args.ohne_veredler else None, "polish_strength": args.veredler_staerke,
+                 "polish_caption": args.veredler_klang,
+                 "melody_midi": args.melodie_midi, "melody_midi_section": args.melodie_sektion,
+                 "motif_folder": args.motive,
+                 "more_motifs": False if args.ohne_motive else None,
+                 "learned_motifs": False if args.ohne_motive else None}
     if args.akkorde:
         overrides["custom_chords"] = {**settings.custom_chords, **dict(args.akkorde)}
     if args.takte:
@@ -136,6 +161,10 @@ def main(argv=None) -> int:
         channels["drums"]["style"] = args.schlagzeug
         overrides["channels"] = channels
     settings = settings.with_updates(**{k: v for k, v in overrides.items() if v is not None})
+    if args.summen:
+        settings = _hummed(settings, args.summen)
+        if settings is None:
+            return 1
     parts = tuple(args.neu or ())
 
     log.info("=== Vocaloid Song Generator ===")
@@ -158,16 +187,33 @@ def main(argv=None) -> int:
 
     for result in results:
         log.info("Fertig! Seed %d: %s", result.seed, result.history or result.audio)
+        if result.polished_wav:
+            log.info("Veredelte Fassung: %s", result.polished_mp3 or result.polished_wav)
+    chosen = best(results)
+    if chosen.rating:
+        log.info("Beste Fassung: Seed %d, %s", chosen.seed, chosen.rating.describe())
     if args.lyric_video is not None:
         try:
-            log.info("Lyric-Video: %s", lyric_video(results[-1], args.lyric_video or None))
+            log.info("Lyric-Video: %s", lyric_video(chosen, args.lyric_video or None))
         except RuntimeError as e:
             log.error("%s", e)
             return 1
     if args.zip:
         from exporter import exportiere_projekt
-        log.info("ZIP: %s", exportiere_projekt(results[-1], args.zip))
+        log.info("ZIP: %s", exportiere_projekt(chosen, args.zip))
     return 0
+
+
+def _hummed(settings: SongSettings, recording: str):
+    """Die Einstellungen mit der gesummten Melodie als eigener Melodie; None, wenn keine zu hören ist."""
+    import humming
+    target = humming.target_for(recording, settings.output_dir())
+    count = humming.transcribe(recording, settings.bpm, target)
+    if not count:
+        log.error("In %s ist keine Melodie zu hören", recording)
+        return None
+    log.info("Gesummte Melodie: %d Töne in %s", count, target)
+    return settings.with_updates(melody_midi=target)
 
 
 def _hooks(settings: SongSettings, count: int, progress) -> int:

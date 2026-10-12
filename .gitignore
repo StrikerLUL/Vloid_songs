@@ -21,5 +21,6 @@ vocaloid_generator/*.wav
 vocaloid_generator/user_settings.json
 vocaloid_generator/vorlagen/
 vocaloid_generator/vorbilder/
+vocaloid_generator/motive/
 vocaloid_generator/vorbild_messungen.json
 .nicegui/

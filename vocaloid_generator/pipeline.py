@@ -50,6 +50,9 @@ class SongResult:
     mp3: Optional[str] = None
     settings: Optional[SongSettings] = None    # die benutzten Einstellungen, mit Seed
     history: Optional[str] = None              # Kopie im Verlauf
+    rating: Optional[object] = None            # rating.Rating, wenn mehrere Fassungen bewertet wurden
+    polished_wav: Optional[str] = None         # zweite Fassung mit der vom Klang-Veredler neu eingespielten Band
+    polished_mp3: Optional[str] = None
 
     @property
     def audio(self) -> Optional[str]:
@@ -76,6 +79,7 @@ def compose(settings: SongSettings, seed: Optional[int] = None):
     if seed is None:
         seed = settings.seed if settings.seed is not None else new_seed()
     seed_everything(seed)
+    import motifs
     from vocal_synthesizer import stimmlage
     lo, hi, _ = stimmlage(settings.singer)
     tracks = orchestrate_song(
@@ -96,6 +100,8 @@ def compose(settings: SongSettings, seed: Optional[int] = None):
         custom_chords=settings.custom_chords,
         imported_melody=_own_melody(settings),
         melody_edits=settings.melody_edits,
+        melody_lengths=settings.melody_lengths,
+        motifs=motifs.for_settings(settings),
     )
     return tracks, seed
 
@@ -168,10 +174,8 @@ def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None,
     from styles import get_style
     profile = get_style(settings.style)
     result.mix_wav = os.path.join(out, "final_mix.wav")
-    mische_spuren(
-        spur_pfade=stems,
+    mix_args = dict(
         lautstaerken=[1.0] * len(stems),
-        output_pfad=result.mix_wav,
         volumes={ch: settings.channels[ch].volume for ch in CHANNELS},
         panning={ch: settings.channels[ch].pan for ch in CHANNELS},
         mutes={ch: settings.channels[ch].mute for ch in CHANNELS},
@@ -188,8 +192,11 @@ def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None,
         throw_windows=_throw_windows(settings, tracks) if result.vocals_wav else None,
         target_lufs=settings.master_lufs,
         texture=profile.texture if settings.lofi_texture else "",
+        movement=_movement(tracks.get("plan")) if settings.mix_movement else None,
         **_reference_targets(settings, tracks, out, has_vocals=result.vocals_wav is not None),
     )
+    mische_spuren(spur_pfade=stems, output_pfad=result.mix_wav, **mix_args)
+    _polish(settings, tracks, result, stems, mix_args, report)
 
     _remove(os.path.join(out, "vorbilder_zusammen.wav"))   # Zusammenschnitt der Vorbilder fürs Mastering
 
@@ -198,6 +205,10 @@ def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None,
     mp3 = os.path.join(out, "final_song.mp3")
     _remove(mp3)  # eine MP3 vom letzten Song darf nicht als neue gelten
     result.mp3 = exportiere_song(wav_pfad=result.mix_wav, mp3_pfad=mp3)
+    polished_mp3 = os.path.join(out, "final_song_veredelt.mp3")
+    _remove(polished_mp3)
+    if result.polished_wav:
+        result.polished_mp3 = exportiere_song(wav_pfad=result.polished_wav, mp3_pfad=polished_mp3)
 
     if keep_history:
         import history
@@ -206,6 +217,32 @@ def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None,
 
     report(1.0, "Fertig")
     return result
+
+
+def _polish(settings: SongSettings, tracks: dict, result: SongResult, stems: list, mix_args: dict,
+            report: ProgressFn) -> None:
+    """Klang-Veredler (Versuch): ACE-Step spielt die Band neu ein, der Gesang bleibt; ergibt final_mix_veredelt.wav."""
+    import polish
+    out = result.output_dir
+    target, new_band = os.path.join(out, "final_mix_veredelt.wav"), os.path.join(out, "band_veredelt.wav")
+    for old in (target, new_band):
+        _remove(old)         # eine Fassung vom letzten Song darf nicht als neue gelten
+    band = [path for inst, path in result.wav_files.items() if inst != "fx"]
+    if not settings.polish or not band or tracks.get("plan") is None or not polish.available():
+        return
+    from mixer import mische_spuren
+    report(0.88, "Veredle den Klang der Band mit ACE-Step (Versuch)...")
+    band_mix = os.path.join(out, "band_vorlage.wav")
+    # Die Vorlage ist die Band, wie sie im Song klingt, ohne Gesang und Effekte; Lo-Fi kommt erst danach dazu
+    mische_spuren(spur_pfade=band, output_pfad=band_mix, **{**mix_args, "throw_windows": None, "texture": ""})
+    try:
+        if polish.polish(band_mix, new_band, settings, tracks["plan"], result.seed):
+            mische_spuren(spur_pfade=stems, output_pfad=target, band=new_band, **mix_args)
+            result.polished_wav = target if os.path.exists(target) else None
+    finally:
+        _remove(band_mix)
+    if result.polished_wav:
+        log.info("Veredelte Fassung: %s", target)
 
 
 def from_references(settings: SongSettings) -> SongSettings:
@@ -228,21 +265,57 @@ def from_references(settings: SongSettings) -> SongSettings:
 def generate_variants(settings: SongSettings, count: int, parts: tuple = (),
                       progress: Optional[ProgressFn] = None) -> list:
     """Mehrere Songs am Stück, alle im Verlauf. Ohne parts mit neuem Seed je Song; mit parts derselbe Song,
-    nur diese Teile jedes Mal neu gewürfelt (z. B. drei Melodien zur Auswahl)."""
+    nur diese Teile jedes Mal neu gewürfelt (z. B. drei Melodien zur Auswahl). Ist die automatische Bewertung
+    eingerichtet und an, bekommt jede Fassung eine Note (rating.py); best() sucht dann die beste heraus."""
+    import tempfile
+
+    import rating
     report = progress or (lambda fraction, message: None)
     if not parts:
         settings = settings.with_updates(seed=None, variations={})
     elif settings.seed is None:
         raise ValueError("Zum Neu-Würfeln einzelner Teile braucht der Song einen festen Seed.")
-    results = []
-    for i in range(count):
-        for part in parts:
-            settings = settings.rerolled(part)
+    judge = settings.auto_rating and count > 1 and rating.available()
+    results, clips = [], []
+    with tempfile.TemporaryDirectory() as folder:
+        for i in range(count):
+            for part in parts:
+                settings = settings.rerolled(part)
 
-        def step(fraction, message, i=i):
-            report((i + fraction) / count, f"Variante {i + 1}/{count}: {message}" if count > 1 else message)
-        results.append(generate_song(settings, progress=step))
+            def step(fraction, message, i=i):
+                share = 0.95 if judge else 1.0
+                report((i + fraction) / count * share, f"Variante {i + 1}/{count}: {message}" if count > 1 else message)
+            result = generate_song(settings, progress=step)
+            results.append(result)
+            if judge and result is not None and result.mix_wav:
+                # jetzt ausschneiden: die nächste Fassung überschreibt den Mix
+                clips.append((result, rating.excerpt(result.mix_wav, os.path.join(folder, f"{i + 1}.wav"))))
+        if clips:
+            report(0.96, "Bewerte die Fassungen...")
+            _rate(clips)
     return results
+
+
+def _rate(clips: list) -> None:
+    import history
+    import rating
+    ready = [(result, clip) for result, clip in clips if clip]
+    for (result, _), found in zip(ready, rating.rate([clip for _, clip in ready])):
+        result.rating = found
+        if found and result.history:
+            history.set_rating(result.history, found.to_dict())
+    rated = sorted((r for r, _ in ready if r.rating), key=lambda r: -r.rating.overall)
+    if rated:
+        log.info("Bewertung: %s", "; ".join(f"Seed {r.seed}: {r.rating.describe()}" for r in rated))
+
+
+def best(results: list):
+    """Die Fassung mit der besten Note; ohne Noten die letzte."""
+    results = [r for r in results if r is not None]
+    rated = [r for r in results if r.rating]
+    if rated:
+        return max(rated, key=lambda r: r.rating.overall)
+    return results[-1] if results else None
 
 
 def lyric_video(result: SongResult, path: Optional[str] = None) -> str:
@@ -719,6 +792,16 @@ def _chorus_windows(plan) -> list:
             for sec in plan.sections if sec.kind == "Chorus"]
 
 
+def _movement(plan) -> Optional[list]:
+    """Die Sektionen für die Bewegung im Mix (mix_movement.Part), in Sekunden."""
+    if plan is None:
+        return None
+    from mix_movement import Part
+    from song_plan import BEATS_PER_BAR
+    spb = plan.seconds_per_beat
+    return [Part(sec.start * spb, sec.end * spb, sec.kind, BEATS_PER_BAR * spb) for sec in plan.sections]
+
+
 def _render_fx(settings: SongSettings, tracks: dict, out: str, seed: int) -> Optional[str]:
     """Riser, Becken-Swells und Impacts an den Übergängen als eigene Spur."""
     wav = os.path.join(out, "fx.wav")
@@ -742,9 +825,15 @@ def _render_instruments(settings: SongSettings, tracks: dict, out: str, report: 
     from renderer import engine_name
     import sound_library
     log.info("Instrumente aus dem SoundFont mit %s", engine_name())
-    extra = sound_library.installed() if settings.sound_library and not settings.soundfont_pfad else []
+    extra = sound_library.installed() if settings.sound_library and not settings.own_soundfont() else []
     if extra:
         log.info("Zusätzliche SoundFonts: %s", ", ".join(extra))
+    if _samples(settings):
+        import sample_library
+        orchestra = sample_library.installed()
+        if orchestra:
+            log.info("Orchester-Aufnahmen: %d Instrumente", len(orchestra))
+        extra = extra + orchestra
     active = [inst for inst in INSTRUMENTS if settings.channels[inst].enabled and tracks.get(inst)]
     jobs = {inst: _render_job(settings, out, inst) for inst in active}
     keys = {inst: _render_key(jobs[inst], extra) for inst in active}
@@ -784,7 +873,7 @@ def _render_instruments(settings: SongSettings, tracks: dict, out: str, report: 
 
 # Der Code, der Klang macht: ändert er sich (neue Version der App), wird alles neu gerendert
 RENDER_CODE = ("renderer.py", "mixer.py", "synth_engine.py", "drum_machine.py", "guitar_amp.py", "sound_library.py",
-               "styles.py")
+               "styles.py", "sfz.py", "sample_library.py")
 
 
 def _render_key(job: dict, library: list) -> str:
@@ -838,11 +927,17 @@ def _render_job(settings: SongSettings, out: str, inst: str) -> dict:
         vst_state=state,
         soundfont_pfad=settings.soundfont_file(),
         voices=profile.voices.get(inst),
-        library=settings.sound_library and not settings.soundfont_pfad,
+        library=settings.sound_library and not settings.own_soundfont(),
         drum_machine=_drum_machine(settings) if inst == "drums" else None,
         amp=settings.guitar_amp,
         cabinet_ir=settings.cabinet_ir,
+        samples=_samples(settings),
     )
+
+
+def _samples(settings: SongSettings) -> bool:
+    """Orchester-Aufnahmen statt SoundFont: eingeschaltet und kein eigener SoundFont gewählt."""
+    return settings.samples and not settings.own_soundfont()
 
 
 def _vst_for(settings: SongSettings, inst: str) -> tuple:

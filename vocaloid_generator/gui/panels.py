@@ -66,6 +66,9 @@ def song_panel(s: SongSettings, pick: PickFn, apply_template: Callable[[SongSett
     section_title("Eigene Melodie")
     melody_editor(s, pick)
 
+    section_title("Motive der Melodie")
+    motif_editor(s, pick)
+
     section_title("Vorbild-Songs")
     reference_editor(s, pick, apply_template)
 
@@ -164,6 +167,75 @@ def melody_editor(s: SongSettings, pick: PickFn) -> None:
     ui.select(sung, label="Singt in").bind_value(s, "melody_midi_section").classes("w-48").mark("melody-section")
     hint("Die Spur mit den meisten Tönen zählt, auf Sechzehntel gerundet; sie wiederholt sich, bis die Sektion "
          "voll ist, und rückt in die Stimmlage. Schreib sie in der Tonart des Songs.")
+    humming_editor(s, pick)
+
+
+def humming_editor(s: SongSettings, pick: PickFn) -> None:
+    """Eine gesummte Melodie (Aufnahme) wird zur MIDI-Datei, die der Song singt."""
+    import humming
+
+    async def hum(path: str) -> None:
+        if not path:
+            return
+        target = humming.target_for(path, s.output_dir())
+        count = await run.io_bound(humming.transcribe, path, s.bpm, target)
+        if not count:
+            ui.notify("In der Aufnahme ist keine Melodie zu hören (oder die Datei ist nicht lesbar). "
+                      "Summ deutlich, Ton für Ton (da-da-da).",
+                      type="warning", multi_line=True)
+            return
+        s.melody_midi = target
+        ui.notify(f"Gesummte Melodie: {count} Töne, gespeichert als {os.path.basename(target)}", type="positive")
+
+    async def choose() -> None:
+        await hum(await pick(file_types=humming.FILE_TYPES))
+
+    async def upload(e) -> None:
+        folder = os.path.join(s.output_dir(), "summen")
+        os.makedirs(folder, exist_ok=True)
+        target = os.path.join(folder, os.path.basename(e.file.name))
+        await e.file.save(target)
+        await hum(target)
+
+    if pick.available:
+        ui.button("Melodie summen (Aufnahme wählen)", icon="mic", on_click=choose) \
+            .props("outline dense no-caps").mark("hum-pick")
+    else:
+        ui.upload(label="Gesummte Melodie hochladen", auto_upload=True, on_upload=upload) \
+            .props("dense flat accept=audio/*").classes("w-full").mark("hum-upload")
+    hint("Summ oder sing deine Melodie im Tempo des Songs ins Handy, Ton für Ton (da-da-da). Daraus werden Noten "
+         "für das Feld oben, auf Sechzehntel gerundet; der erste Ton liegt auf der Eins.")
+
+
+def motif_editor(s: SongSettings, pick: PickFn) -> None:
+    import motifs
+
+    def folder() -> str:
+        return motifs.folder(s)
+
+    def show() -> None:
+        info.set_text(motifs.status(s))
+
+    def open_folder() -> None:
+        from gui import media
+        os.makedirs(folder(), exist_ok=True)
+        media.open_folder(folder())
+
+    ui.switch("Mehr eingebaute Rhythmen und Gesten").bind_value(s, "more_motifs").mark("more-motifs") \
+        .tooltip("Synkopen wie im J-Pop, Schlüsse mit Vorhalt, Zickzack und Umspielungen")
+    learned = ui.switch("Motive aus deinen MIDI-Dateien lernen").bind_value(s, "learned_motifs") \
+        .mark("learned-motifs").tooltip("Rhythmen und Bewegungen der Melodien in deinem Motiv-Ordner")
+    with ui.row().classes("w-full items-center no-wrap"):
+        ui.input("Ordner mit MIDI-Melodien", placeholder=f"leer = {motifs.FOLDER}").bind_value(s, "motif_folder") \
+            .classes("col").props("dense stack-label clearable").mark("motif-folder").on("blur", lambda: show())
+        ui.button(icon="folder_open", on_click=open_folder).props("flat round dense") \
+            .tooltip("Ordner öffnen: MIDI-Dateien mit Melodien hineinlegen, die dir gefallen")
+        pick_button(pick, s, "motif_folder", folder=True, then=show)
+    info = ui.label("").classes("text-caption").mark("motif-status")
+    learned.on_value_change(lambda: show())       # erst jetzt: das Binden beim Aufbau ruft es sonst ohne info auf
+    show()
+    hint("Jeder Takt einer Melodie in Gesangslage liefert seinen Rhythmus und seine Bewegung; etwa die Hälfte "
+         "der Takte singt dann solche. Neue Dateien ändern auch Songs mit festem Seed.")
 
 
 REFERENCE_SWITCHES = (
@@ -508,6 +580,18 @@ def mix_panel(s: SongSettings) -> None:
             ui.label(text).classes("w-56")
             ui.slider(min=lo, max=hi, step=step).bind_value(s, attr).props("label").classes("col")
     hint("Die Lautheit gilt immer, auch beim Mastering nach Vorbild-Songs; der Limiter hält die Spitzen unten.")
+    ui.switch("Bewegung im Mix").bind_value(s, "mix_movement").mark("switch-mix_movement") \
+        .tooltip("Anlauf mit Filter vor jedem Refrain, Hall je nach Sektion, breitere Refrains")
+    with ui.column().classes("w-full gap-1").bind_visibility_from(s, "polish"):
+        ui.label("Klang-Veredler (ACE-Step, Versuch)").classes("text-subtitle2 q-mt-sm")
+        with ui.row().classes("w-full items-center gap-4"):
+            ui.label("Wie stark verändern").classes("w-56")
+            ui.slider(min=0.1, max=0.9, step=0.05).bind_value(s, "polish_strength").props("label").classes("col") \
+                .mark("polish-strength")
+        ui.input("Klangbeschreibung auf Englisch", placeholder="leer = passend zum Stil") \
+            .bind_value(s, "polish_caption").classes("w-full").props("dense stack-label").mark("polish-caption")
+        hint("ACE-Step spielt die Band neu ein, Takt, Akkorde und Melodie bleiben, der Gesang wird nicht verändert. "
+             "Das Ergebnis ist eine zweite Fassung neben dem normalen Song („Veredelt“ im Player).")
 
 
 # ── Pfade ───────────────────────────────────────────────────────────────────────
@@ -540,6 +624,15 @@ def paths_panel(s: SongSettings, pick: PickFn, status: Callable[[], None]) -> No
     ui.switch("Bessere Klänge aus den zusätzlichen SoundFonts (setup_soundfonts.py)") \
         .bind_value(s, "sound_library").mark("sound-library-switch") \
         .tooltip("Flügel, Streicher, Bläser, E-Gitarren und echte Schlagzeuge; gilt nur ohne eigenen SoundFont")
+    ui.switch("Orchester aus echten Aufnahmen (setup_samples.py)") \
+        .bind_value(s, "samples").mark("samples-switch") \
+        .tooltip("Streicher, Bläser, Harfe, Pauken und Stabspiele aus VSCO 2; gilt nur ohne eigenen SoundFont")
+    ui.switch("Mehrere Fassungen automatisch bewerten (setup_bewertung.py)") \
+        .bind_value(s, "auto_rating").mark("rating-switch") \
+        .tooltip("Audiobox Aesthetics hört jede Fassung an und gibt ihr eine Note; die beste wird geladen")
+    ui.switch("Klang der Band mit ACE-Step veredeln (setup_ace_step.py, Versuch)") \
+        .bind_value(s, "polish").mark("polish-switch").on_value_change(lambda: status()) \
+        .tooltip("Zweite Fassung jedes Songs mit neu eingespielter Band; braucht eine NVIDIA-Grafikkarte")
 
 
 def _reference_library() -> str:

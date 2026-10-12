@@ -42,6 +42,9 @@ def stems(result) -> dict:
     mix = result.audio
     if mix and os.path.exists(mix):
         found["Mix"] = mix
+    polished = getattr(result, "polished_mp3", None) or getattr(result, "polished_wav", None)
+    if polished and os.path.exists(polished):
+        found["Veredelt (ACE-Step)"] = polished
     if result.vocals_wav and os.path.exists(result.vocals_wav):
         found[labels.CHANNELS["vocals"]] = result.vocals_wav
     if result.harmony_wav and os.path.exists(result.harmony_wav):
@@ -84,6 +87,8 @@ def piano_roll(result) -> dict:
         data["notes"] += [[round(n.start, 3), round(n.end, 3), n.pitch, index] for n in notes]
     if data["notes"]:
         data["duration"] = max(n[1] for n in data["notes"])
+    if result.settings is not None:
+        data["step"] = 60.0 / result.settings.bpm / 4       # ein Sechzehntel: so fein ändert sich die Länge
     return data
 
 

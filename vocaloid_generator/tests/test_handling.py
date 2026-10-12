@@ -221,6 +221,30 @@ def test_edits_are_checked_and_dropped_with_a_new_melody():
     assert s.rerolled("melody").melody_edits == {} and s.rerolled("chords:Chorus").melody_edits == {}
 
 
+def test_notes_get_shorter_or_longer_up_to_the_next_one(tmp_path):
+    s = make_settings(tmp_path)
+    before, _ = compose(s)
+    notes, spb = chorus_notes(before)
+    short = next(n for n in notes if n.end - n.start >= 0.75 * spb)
+    gap = next(i for i in range(len(notes) - 1) if notes[i + 1].start - notes[i].end > 0.2 * spb)
+    longer = notes[gap]
+    after, _ = compose(s.with_updates(melody_lengths={edit_key(short.start / spb): 0.25,
+                                                      edit_key(longer.start / spb): 16}))
+    ends = {n.start: n.end for n in after["vocal_melody"]}
+    assert ends[short.start] - short.start == pytest.approx(0.25 * spb)
+    assert ends[longer.start] == pytest.approx(notes[gap + 1].start)            # bis zum nächsten Ton, nicht weiter
+    changed = [a.start for a, b in zip(before["vocal_melody"], after["vocal_melody"])
+               if abs(a.end - b.end) > 1e-6 or a.pitch != b.pitch]
+    assert changed == sorted([short.start, longer.start])
+
+
+def test_lengths_are_checked_and_dropped_with_a_new_melody():
+    s = SongSettings(seed=3, melody_lengths={"12.26": 0.3, "3": 0, "4": 40, "x": 1})
+    assert s.melody_lengths == {"12.25": 0.25, "3": 0.25, "4": 16.0}
+    assert s.rerolled("bass").melody_lengths == s.melody_lengths
+    assert s.rerolled("melody").melody_lengths == {} and s.rerolled("chords:Chorus").melody_lengths == {}
+
+
 # ── Kommandozeile ───────────────────────────────────────────────────────────────────
 @pytest.fixture
 def captured(monkeypatch, tmp_path):

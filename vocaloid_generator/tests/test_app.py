@@ -156,7 +156,8 @@ async def test_several_versions_land_in_the_history(user, fake_generation):
     await user.should_see("Seed 1002", retries=80)
     assert len(fake_generation) == 3
     user.find(marker="tab-Verlauf").click()
-    assert len(user.find(marker="history-play").elements) == 3
+    await user.should_see(marker="history-play", retries=80)      # der Verlauf baut sich nach dem Song auf
+    await until(lambda: len(user.find(marker="history-play").elements) == 3)
 
 
 async def test_the_best_rated_version_is_loaded(user, fake_generation, monkeypatch):
@@ -600,19 +601,28 @@ async def test_sung_notes_can_be_made_longer_and_heard_at_once(user, sung_genera
     await until(lambda: (SongSettings.load().melody_edits, SongSettings.load().melody_lengths) == ({}, {}))
 
 
-async def test_a_hummed_melody_becomes_the_own_melody(user, tmp_path):
+async def test_a_hummed_melody_becomes_the_own_melody(user, monkeypatch):
+    # Das Erkennen selbst prüft test_humming.py; hier zählt, was die Oberfläche daraus macht
+    import humming
     from nicegui.elements.upload_files import SmallFileUpload
-    from test_humming import BPM as HUMMED_BPM
-    from test_humming import TUNE, hum
-    SongSettings.load().with_updates(bpm=HUMMED_BPM).save()
+    heard = []
+
+    def transcribe(path, bpm, target):
+        heard.append((os.path.basename(path), bpm))
+        with open(path, "rb") as f:
+            if not f.read().startswith(b"summ"):
+                return None
+        open(target, "wb").close()
+        return 7
+    monkeypatch.setattr(humming, "transcribe", transcribe)
+    SongSettings.load().with_updates(bpm=100).save()
     await user.open("/")
     [upload] = user.find(marker="hum-upload").elements
-    recording = hum(tmp_path / "idee.wav")
-    with open(recording, "rb") as f:
-        await upload.handle_uploads([SmallFileUpload("idee.wav", "audio/wav", f.read())])
-    await user.should_see(f"Gesummte Melodie: {len(TUNE)} Töne", retries=100)
+    await upload.handle_uploads([SmallFileUpload("idee.wav", "audio/wav", b"summ summ")])
+    await user.should_see("Gesummte Melodie: 7 Töne", retries=100)
     out = SongSettings.load().output_dir()
     await until(lambda: SongSettings.load().melody_midi == os.path.join(out, "summen", "idee.mid"))
+    assert heard == [("idee.wav", 100)]
     await upload.handle_uploads([SmallFileUpload("kaputt.wav", "audio/wav", b"RIFF kaputt")])
     await user.should_see("keine Melodie zu hören", retries=100)
     assert SongSettings.load().melody_midi == os.path.join(out, "summen", "idee.mid")

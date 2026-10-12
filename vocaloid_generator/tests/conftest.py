@@ -45,6 +45,7 @@ def without_polish(tmp_path, monkeypatch):
     """Ein eingerichteter Klang-Veredler (setup_ace_step.py) veredelt in den Tests nicht mit."""
     import polish
     monkeypatch.setattr(polish, "FOLDER", str(tmp_path / "ace-step"))
+    monkeypatch.setattr(polish, "TIMEOUT", 120)     # das nachgebaute Modell braucht Sekunden, nicht eine Stunde
 
 
 @pytest.fixture(autouse=True)

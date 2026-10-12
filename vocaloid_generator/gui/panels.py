@@ -66,6 +66,9 @@ def song_panel(s: SongSettings, pick: PickFn, apply_template: Callable[[SongSett
     section_title("Eigene Melodie")
     melody_editor(s, pick)
 
+    section_title("Motive der Melodie")
+    motif_editor(s, pick)
+
     section_title("Vorbild-Songs")
     reference_editor(s, pick, apply_template)
 
@@ -164,6 +167,37 @@ def melody_editor(s: SongSettings, pick: PickFn) -> None:
     ui.select(sung, label="Singt in").bind_value(s, "melody_midi_section").classes("w-48").mark("melody-section")
     hint("Die Spur mit den meisten Tönen zählt, auf Sechzehntel gerundet; sie wiederholt sich, bis die Sektion "
          "voll ist, und rückt in die Stimmlage. Schreib sie in der Tonart des Songs.")
+
+
+def motif_editor(s: SongSettings, pick: PickFn) -> None:
+    import motifs
+
+    def folder() -> str:
+        return motifs.folder(s)
+
+    def show() -> None:
+        info.set_text(motifs.status(s))
+
+    def open_folder() -> None:
+        from gui import media
+        os.makedirs(folder(), exist_ok=True)
+        media.open_folder(folder())
+
+    ui.switch("Mehr eingebaute Rhythmen und Gesten").bind_value(s, "more_motifs").mark("more-motifs") \
+        .tooltip("Synkopen wie im J-Pop, Schlüsse mit Vorhalt, Zickzack und Umspielungen")
+    ui.switch("Motive aus deinen MIDI-Dateien lernen", on_change=lambda: show()) \
+        .bind_value(s, "learned_motifs").mark("learned-motifs") \
+        .tooltip("Rhythmen und Bewegungen der Melodien in deinem Motiv-Ordner")
+    with ui.row().classes("w-full items-center no-wrap"):
+        ui.input("Ordner mit MIDI-Melodien", placeholder=f"leer = {motifs.FOLDER}").bind_value(s, "motif_folder") \
+            .classes("col").props("dense stack-label clearable").mark("motif-folder").on("blur", lambda: show())
+        ui.button(icon="folder_open", on_click=open_folder).props("flat round dense") \
+            .tooltip("Ordner öffnen: MIDI-Dateien mit Melodien hineinlegen, die dir gefallen")
+        pick_button(pick, s, "motif_folder", folder=True, then=show)
+    info = ui.label("").classes("text-caption").mark("motif-status")
+    show()
+    hint("Jeder Takt einer Melodie in Gesangslage liefert seinen Rhythmus und seine Bewegung; etwa die Hälfte "
+         "der Takte singt dann solche. Neue Dateien ändern auch Songs mit festem Seed.")
 
 
 REFERENCE_SWITCHES = (

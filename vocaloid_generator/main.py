@@ -92,6 +92,9 @@ def parse_args(argv=None):
     p.add_argument("--lyric-video", nargs="?", const="", metavar="DATEI",
                    help="dazu ein Lyric-Video (MP4) mit dem Text zum Mitlesen; ohne DATEI neben dem Song")
     p.add_argument("--melodie-sektion", metavar="SEKTION", help="dort singt die eigene Melodie (Standard: Chorus)")
+    p.add_argument("--motive", metavar="ORDNER", help="Rhythmen und Gesten aus den MIDI-Melodien in diesem Ordner lernen")
+    p.add_argument("--ohne-motive", action="store_true",
+                   help="nur die alten eingebauten Rhythmen und Gesten (ohne zusätzliche und gelernte)")
     p.add_argument("--ohne-bewertung", action="store_true",
                    help="mehrere Fassungen nicht automatisch bewerten (sonst mit setup_bewertung.py)")
     p.add_argument("--varianten", type=int, default=1, metavar="N",
@@ -131,7 +134,10 @@ def main(argv=None) -> int:
                  "samples": False if args.ohne_samples else None,
                  "auto_rating": False if args.ohne_bewertung else None,
                  "lofi_texture": False if args.ohne_lofi_klang else None,
-                 "melody_midi": args.melodie_midi, "melody_midi_section": args.melodie_sektion}
+                 "melody_midi": args.melodie_midi, "melody_midi_section": args.melodie_sektion,
+                 "motif_folder": args.motive,
+                 "more_motifs": False if args.ohne_motive else None,
+                 "learned_motifs": False if args.ohne_motive else None}
     if args.akkorde:
         overrides["custom_chords"] = {**settings.custom_chords, **dict(args.akkorde)}
     if args.takte:

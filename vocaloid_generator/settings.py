@@ -137,6 +137,9 @@ class SongSettings(BaseModel):
     custom_chords: dict[str, str] = Field(default_factory=dict)
     melody_midi: str = ""              # eigene Melodie als MIDI-Datei (leer = komponiert)
     melody_midi_section: str = "Chorus"    # in dieser Sektionsart singt die eigene Melodie
+    more_motifs: bool = True           # mehr eingebaute Rhythmen und Gesten für die Gesangsmelodie (motifs.py)
+    learned_motifs: bool = True        # Rhythmen und Gesten aus den MIDI-Dateien in motif_folder lernen
+    motif_folder: str = ""             # Ordner mit MIDI-Melodien (leer = vocaloid_generator/motive)
 
     active_sections: list[str] = Field(default_factory=lambda: [
         "Intro", "Verse", "PreChorus", "Chorus", "Verse", "PreChorus", "Chorus", "Bridge", "Chorus", "Outro"

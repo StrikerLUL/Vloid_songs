@@ -96,6 +96,7 @@ SPECIAL_MORAE = ("ん", "っ")
 # Anteil der Phrasen, deren langer Schlusston ein Melisma bekommt (mal melisma des Stils)
 MELISMA_SHARE = {"Chorus": 0.35, "Verse": 0.2, "PreChorus": 0.25, "Bridge": 0.45}
 MELISMA_MIN_STEPS = 6
+LEARNED_SHARE = 0.5     # so oft singt ein Takt einen aus MIDI-Dateien gelernten Rhythmus (motifs.py), wenn es einen gibt
 
 
 @dataclass
@@ -149,10 +150,12 @@ def _local_scale(tonic: int, mode: str, chord: Chord) -> set:
 
 
 class SectionMelodyWriter:
-    def __init__(self, plan: SongPlan, section: Section, rng: random.Random):
+    def __init__(self, plan: SongPlan, section: Section, rng: random.Random, motifs=None):
+        """motifs: zusätzliche Rhythmen und Gesten (motifs.Motifs); None = nur die eingebauten."""
         self.plan = plan
         self.sec = section
         self.rng = rng
+        self.extra = motifs
         self.kind = section.kind if section.kind in ROLE_SEQUENCES else "Verse"
         lo, hi = plan.vocal_range
         center = plan.style.vocal_center + KIND_OFFSET.get(self.kind, 0)
@@ -199,9 +202,14 @@ class SectionMelodyWriter:
                 return self.motifs[key]
         if count in BODY_RHYTHMS:
             options = list(BODY_RHYTHMS[count])
+            if self.extra:
+                options += self.extra.body.get(count, [])
+                learned = self.extra.learned.get(count, [])
+                if learned and self.rng.random() < LEARNED_SHARE:
+                    options = list(learned)
             first = self.motifs.get((count, 0))
-            if variant and first in options and len(options) > 1:
-                options.remove(first)
+            if variant and first in options and len(set(options)) > 1:
+                options = [o for o in options if o != first]
             motif = self.rng.choice(options)
         else:
             extra = [3, 11, 7, 15, 1, 9, 5, 13][:count - 8]
@@ -213,6 +221,8 @@ class SectionMelodyWriter:
         key = ("end", role, count)
         if key not in self.motifs:
             options = END_RHYTHMS.get(min(count, 6))
+            if self.extra:
+                options = options + self.extra.end.get(min(count, 6), [])
             self.motifs[key] = self.rng.choice(options) if count <= 6 else self._motif(count)
         return self.motifs[key]
 
@@ -255,6 +265,8 @@ class SectionMelodyWriter:
         key = (role.rstrip("2"), bar)
         if key not in self.gestures:
             weights = GESTURE_WEIGHTS.get(self.kind, GESTURE_WEIGHTS["Verse"])
+            if self.extra:
+                weights = {**weights, **self.extra.weights(self.kind)}
             names = list(weights)
             self.gestures[key] = self.rng.choices(names, [weights[n] for n in names])[0]
         return self.gestures[key]
@@ -266,7 +278,8 @@ class SectionMelodyWriter:
         depth = GESTURE_DEPTH.get(self.kind, 0.8)
         offsets = [0.0] * len(slots)
         for bar, idxs in by_bar.items():
-            shape = GESTURES[self._gesture(role, bar)](len(idxs))
+            name = self._gesture(role, bar)
+            shape = GESTURES[name](len(idxs)) if name in GESTURES else self.extra.gesture(name, len(idxs))
             for i, off in zip(idxs, shape):
                 offsets[i] = off * depth
         return offsets
@@ -488,12 +501,13 @@ def _scale_shift(scale: list, pitch: int, steps: int) -> Optional[int]:
 
 # ── Ganzer Song ──────────────────────────────────────────────────────────────────
 def write_vocal_melody(plan: SongPlan, lyrics: dict, rng: random.Random, rerolls: Optional[dict] = None,
-                       imported: Optional[dict] = None) -> list:
+                       imported: Optional[dict] = None, motifs=None) -> list:
     """
     Melodie für alle Sektionen mit Gesang. Jede Sektionsart wird einmal komponiert; spätere Vorkommen
     singen dieselbe Melodie (im Schlussrefrain höher, wenn der Song die Tonart wechselt).
     Jede Sektionsart würfelt für sich; rerolls {Sektionsart: Zufall} schreibt nur ihre Melodie neu.
     imported {Sektionsart: Melodie aus melody_import.load}: dort singt die eigene Melodie, Ton für Ton.
+    motifs: zusätzliche Rhythmen und Gesten (motifs.Motifs), None = nur die eingebauten.
     """
     seed = rng.getrandbits(64)
     rerolls, imported = rerolls or {}, imported or {}
@@ -508,7 +522,7 @@ def write_vocal_melody(plan: SongPlan, lyrics: dict, rng: random.Random, rerolls
                 sec_notes = fit(imported[sec.kind], plan, sec, lyrics.get(sec.kind, []))
             else:
                 kind_rng = rerolls.get(sec.kind) or random.Random(f"{seed}:{sec.kind}")
-                sec_notes = SectionMelodyWriter(plan, sec, kind_rng).write(lyrics.get(sec.kind, []))
+                sec_notes = SectionMelodyWriter(plan, sec, kind_rng, motifs).write(lyrics.get(sec.kind, []))
             written[sec.kind] = (sec, sec_notes)
         else:
             first, first_notes = written[sec.kind]

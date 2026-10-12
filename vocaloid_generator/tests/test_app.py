@@ -288,6 +288,16 @@ async def test_paths_tab_tells_whether_the_extra_soundfonts_are_there(user):
     await until(lambda: SongSettings.load().auto_rating is False)
 
 
+async def test_melody_motifs_can_be_switched_and_say_what_they_learned(user):
+    await user.open("/")
+    await user.should_see("Gelernte Motive: keine MIDI-Dateien")
+    user.find(marker="more-motifs").elements.pop().set_value(False)
+    await until(lambda: SongSettings.load().more_motifs is False)
+    user.find(marker="learned-motifs").elements.pop().set_value(False)
+    await user.should_see("Gelernte Motive: aus")
+    await until(lambda: SongSettings.load().learned_motifs is False)
+
+
 async def test_references_from_the_library_suggest_tempo_key_and_style(user, monkeypatch):
     import reference
     os.makedirs(reference.LIBRARY)

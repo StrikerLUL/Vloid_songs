@@ -77,6 +77,7 @@ def compose(settings: SongSettings, seed: Optional[int] = None):
     if seed is None:
         seed = settings.seed if settings.seed is not None else new_seed()
     seed_everything(seed)
+    import motifs
     from vocal_synthesizer import stimmlage
     lo, hi, _ = stimmlage(settings.singer)
     tracks = orchestrate_song(
@@ -97,6 +98,7 @@ def compose(settings: SongSettings, seed: Optional[int] = None):
         custom_chords=settings.custom_chords,
         imported_melody=_own_melody(settings),
         melody_edits=settings.melody_edits,
+        motifs=motifs.for_settings(settings),
     )
     return tracks, seed
 

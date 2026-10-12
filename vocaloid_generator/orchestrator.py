@@ -46,7 +46,7 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
                      output_dir: str = None, lyrics: dict = None, swing: float = None,
                      jitter_scale: float = 1.0, instrument_styles: dict = None, style: str = None,
                      vocal_range: tuple = None, variations: dict = None, custom_chords: dict = None,
-                     imported_melody: dict = None, melody_edits: dict = None) -> dict:
+                     imported_melody: dict = None, melody_edits: dict = None, motifs=None) -> dict:
     """
     Komponiert den kompletten Song und schreibt eine MIDI-Datei pro Instrument nach output_dir.
 
@@ -60,6 +60,7 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
     custom_chords: {Sektionsart: eigene Akkorde}, siehe song_plan.parse_custom.
     imported_melody: {Sektionsart: Melodie aus melody_import.load}; dort singt sie statt der komponierten.
     melody_edits: {Schlag: Tonhöhe} (settings.edit_key): Töne der Gesangsmelodie, die von Hand geändert wurden.
+    motifs: zusätzliche Rhythmen und Gesten für die Gesangsmelodie (motifs.for_settings), None = nur eingebaute.
     Rückgabe: {Instrument: [pretty_midi.Note]}, dazu "melody_data", "silben", "vocal_melody", die zweite
     Stimme für den Refrain ("harmony_data", "harmony_silben") und "plan".
     """
@@ -77,7 +78,7 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
     if vocal_range:
         plan.vocal_range = tuple(vocal_range)
     vocal_notes = write_vocal_melody(plan, sung, dice.part("melody"), rerolls=dice.rerolled_kinds("melody"),
-                                     imported=imported_melody)
+                                     imported=imported_melody, motifs=motifs)
     _apply_edits(vocal_notes, melody_edits or {})
 
     arrangement = describe_arrangement(plan)

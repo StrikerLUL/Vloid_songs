@@ -27,6 +27,13 @@ def without_sound_library(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def isolated_motifs(tmp_path, monkeypatch):
+    """MIDI-Dateien im echten Motiv-Ordner ändern die Melodien der Tests nicht."""
+    import motifs
+    monkeypatch.setattr(motifs, "FOLDER", str(tmp_path / "motive"))
+
+
+@pytest.fixture(autouse=True)
 def without_rating(tmp_path, monkeypatch):
     """Eine eingerichtete Bewertung (setup_bewertung.py) bewertet in den Tests nicht mit."""
     import rating

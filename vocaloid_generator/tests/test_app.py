@@ -288,6 +288,13 @@ async def test_paths_tab_tells_whether_the_extra_soundfonts_are_there(user):
     await until(lambda: SongSettings.load().auto_rating is False)
 
 
+async def test_movement_in_the_mix_can_be_switched_off(user):
+    await user.open("/")
+    user.find(marker="tab-Mix").click()
+    user.find(marker="switch-mix_movement").elements.pop().set_value(False)
+    await until(lambda: SongSettings.load().mix_movement is False)
+
+
 async def test_melody_motifs_can_be_switched_and_say_what_they_learned(user):
     await user.open("/")
     await user.should_see("Gelernte Motive: keine MIDI-Dateien")

@@ -191,6 +191,7 @@ def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None,
         throw_windows=_throw_windows(settings, tracks) if result.vocals_wav else None,
         target_lufs=settings.master_lufs,
         texture=profile.texture if settings.lofi_texture else "",
+        movement=_movement(tracks.get("plan")) if settings.mix_movement else None,
         **_reference_targets(settings, tracks, out, has_vocals=result.vocals_wav is not None),
     )
 
@@ -756,6 +757,16 @@ def _chorus_windows(plan) -> list:
     # im leisen Anfang eines Refrains (Breakdown) bleibt der Gesang einfach
     return [((sec.resume if sec.feel == "breakdown" else sec.start) * spb, sec.end * spb)
             for sec in plan.sections if sec.kind == "Chorus"]
+
+
+def _movement(plan) -> Optional[list]:
+    """Die Sektionen für die Bewegung im Mix (mix_movement.Part), in Sekunden."""
+    if plan is None:
+        return None
+    from mix_movement import Part
+    from song_plan import BEATS_PER_BAR
+    spb = plan.seconds_per_beat
+    return [Part(sec.start * spb, sec.end * spb, sec.kind, BEATS_PER_BAR * spb) for sec in plan.sections]
 
 
 def _render_fx(settings: SongSettings, tracks: dict, out: str, seed: int) -> Optional[str]:

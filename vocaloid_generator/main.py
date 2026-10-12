@@ -67,6 +67,8 @@ def parse_args(argv=None):
     p.add_argument("--ohne-samples", action="store_true",
                    help="Orchester aus dem SoundFont statt aus den echten Aufnahmen (setup_samples.py)")
     p.add_argument("--ohne-lofi-klang", action="store_true", help="Lo-Fi ohne Knistern und Bandmaschine")
+    p.add_argument("--ohne-bewegung", action="store_true",
+                   help="Mix ohne Anlauf vor dem Refrain, Hall pro Sektion und breitere Refrains")
     p.add_argument("--vorbild", action="append", metavar="DATEI",
                    help="Vorbild-Song (mehrfach möglich); ersetzt die Vorbilder aus den Einstellungen")
     p.add_argument("--vom-vorbild", action="store_true",
@@ -134,6 +136,7 @@ def main(argv=None) -> int:
                  "samples": False if args.ohne_samples else None,
                  "auto_rating": False if args.ohne_bewertung else None,
                  "lofi_texture": False if args.ohne_lofi_klang else None,
+                 "mix_movement": False if args.ohne_bewegung else None,
                  "melody_midi": args.melodie_midi, "melody_midi_section": args.melodie_sektion,
                  "motif_folder": args.motive,
                  "more_motifs": False if args.ohne_motive else None,

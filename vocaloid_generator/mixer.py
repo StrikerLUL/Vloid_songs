@@ -387,6 +387,7 @@ def mische_spuren(
     energy_contrast_db: float = None,
     vocal_ratio_db: float = None,
     texture: str = "",
+    movement: list = None,
 ) -> None:
     """
     Mischt die Spuren zu einem Stereo-Master:
@@ -400,6 +401,8 @@ def mische_spuren(
     Stellen, den die Vorbilder haben; die Band wird in ruhigen Sektionen entsprechend leiser oder lauter.
     vocal_ratio_db: Gesang gegen Band, wie reference.vocal_ratio_db ihn in den Vorbildern schätzt.
     texture: "lofi" lässt die Band wie von einer alten Bandmaschine klingen, mit Schallplatten-Knistern.
+    movement: die Sektionen (mix_movement.Part); dann bewegt sich der Mix: Anlauf vor jedem Refrain, Hall je nach
+    Sektion, breitere Refrains.
     """
     from settings import DEFAULT_VOLUMES
 
@@ -445,6 +448,9 @@ def mische_spuren(
     if vocal_ratio_db is not None:
         _match_vocal_level(tracks, vocal_ratio_db)
 
+    if movement:
+        _move(tracks, movement, length)
+
     drums = [a for k, a in tracks.values() if k == "drums"]
     if drums and sidechain_depth > 0:
         duck = 1.0 - sidechain_depth * _kick_envelope(drums[0])
@@ -472,6 +478,9 @@ def mische_spuren(
         mix += throws
         send += throws * 0.3
 
+    if movement:
+        from mix_movement import reverb_curve
+        send *= reverb_curve(movement, length)
     hall = Pedalboard([HighpassFilter(250), Reverb(room_size=0.78, damping=0.45, wet_level=1.0, dry_level=0.0, width=1.0),
                        LowpassFilter(9000)])
     mix += hall(send, SAMPLE_RATE)
@@ -490,6 +499,19 @@ def mische_spuren(
 
 
 MAX_REFERENCE_DB = 6.0       # so weit dürfen die Vorbilder einen Pegel höchstens verschieben
+
+
+def _move(tracks: dict, parts: list, length: int) -> None:
+    """Anlauf vor jedem Refrain und breitere Refrains für die Band (ohne Gesang und Effekte)."""
+    import mix_movement
+    rises = mix_movement.rise_windows(parts)
+    width = mix_movement.width_curve(parts, length)
+    for path, (key, audio) in tracks.items():
+        if key in VOCAL_KEYS or key == "fx":
+            continue
+        if rises:
+            audio = mix_movement.rise(audio, rises)
+        tracks[path] = (key, mix_movement.widen(audio, width))
 
 
 def _shape_energy(tracks: dict, sections: list, target_db: float, length: int) -> None:

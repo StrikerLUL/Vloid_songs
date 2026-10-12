@@ -542,6 +542,8 @@ def mix_panel(s: SongSettings) -> None:
             ui.label(text).classes("w-56")
             ui.slider(min=lo, max=hi, step=step).bind_value(s, attr).props("label").classes("col")
     hint("Die Lautheit gilt immer, auch beim Mastering nach Vorbild-Songs; der Limiter hält die Spitzen unten.")
+    ui.switch("Bewegung im Mix").bind_value(s, "mix_movement").mark("switch-mix_movement") \
+        .tooltip("Anlauf mit Filter vor jedem Refrain, Hall je nach Sektion, breitere Refrains")
 
 
 # ── Pfade ───────────────────────────────────────────────────────────────────────

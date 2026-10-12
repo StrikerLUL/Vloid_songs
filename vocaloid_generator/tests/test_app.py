@@ -511,6 +511,7 @@ async def test_two_songs_from_the_history_can_be_compared(user, fake_generation)
     user.find(marker="generate").click()
     await user.should_see("Seed 1001", retries=80)
     user.find(marker="tab-Verlauf").click()
+    await user.should_see(marker="history-A-1", retries=50)     # der Verlauf baut sich nach dem Song neu auf
     user.find(marker="history-A-1").click()
     user.find(marker="history-B-2").click()
     await user.should_see(marker="compare-B")

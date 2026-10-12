@@ -185,9 +185,8 @@ def motif_editor(s: SongSettings, pick: PickFn) -> None:
 
     ui.switch("Mehr eingebaute Rhythmen und Gesten").bind_value(s, "more_motifs").mark("more-motifs") \
         .tooltip("Synkopen wie im J-Pop, Schlüsse mit Vorhalt, Zickzack und Umspielungen")
-    ui.switch("Motive aus deinen MIDI-Dateien lernen", on_change=lambda: show()) \
-        .bind_value(s, "learned_motifs").mark("learned-motifs") \
-        .tooltip("Rhythmen und Bewegungen der Melodien in deinem Motiv-Ordner")
+    learned = ui.switch("Motive aus deinen MIDI-Dateien lernen").bind_value(s, "learned_motifs") \
+        .mark("learned-motifs").tooltip("Rhythmen und Bewegungen der Melodien in deinem Motiv-Ordner")
     with ui.row().classes("w-full items-center no-wrap"):
         ui.input("Ordner mit MIDI-Melodien", placeholder=f"leer = {motifs.FOLDER}").bind_value(s, "motif_folder") \
             .classes("col").props("dense stack-label clearable").mark("motif-folder").on("blur", lambda: show())
@@ -195,6 +194,7 @@ def motif_editor(s: SongSettings, pick: PickFn) -> None:
             .tooltip("Ordner öffnen: MIDI-Dateien mit Melodien hineinlegen, die dir gefallen")
         pick_button(pick, s, "motif_folder", folder=True, then=show)
     info = ui.label("").classes("text-caption").mark("motif-status")
+    learned.on_value_change(lambda: show())       # erst jetzt: das Binden beim Aufbau ruft es sonst ohne info auf
     show()
     hint("Jeder Takt einer Melodie in Gesangslage liefert seinen Rhythmus und seine Bewegung; etwa die Hälfte "
          "der Takte singt dann solche. Neue Dateien ändern auch Songs mit festem Seed.")

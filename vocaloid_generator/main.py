@@ -5,7 +5,8 @@ import logging
 import sys
 
 import history
-from pipeline import from_references, generate_song, generate_variants, hook_choices, hook_kind, lyric_video
+from pipeline import (best, from_references, generate_song, generate_variants, hook_choices, hook_kind,
+                      lyric_video)
 from settings import KEYS, REROLLABLE, ReferenceTrack, SongSettings, is_rerollable
 
 log = logging.getLogger("vocaloid")
@@ -63,6 +64,8 @@ def parse_args(argv=None):
     p.add_argument("--ohne-verstaerker", action="store_true",
                    help="verzerrte Gitarren aus dem SoundFont statt über Verstärker und Box")
     p.add_argument("--box", metavar="WAV", help="Impulsantwort einer Gitarrenbox")
+    p.add_argument("--ohne-samples", action="store_true",
+                   help="Orchester aus dem SoundFont statt aus den echten Aufnahmen (setup_samples.py)")
     p.add_argument("--ohne-lofi-klang", action="store_true", help="Lo-Fi ohne Knistern und Bandmaschine")
     p.add_argument("--vorbild", action="append", metavar="DATEI",
                    help="Vorbild-Song (mehrfach möglich); ersetzt die Vorbilder aus den Einstellungen")
@@ -89,6 +92,8 @@ def parse_args(argv=None):
     p.add_argument("--lyric-video", nargs="?", const="", metavar="DATEI",
                    help="dazu ein Lyric-Video (MP4) mit dem Text zum Mitlesen; ohne DATEI neben dem Song")
     p.add_argument("--melodie-sektion", metavar="SEKTION", help="dort singt die eigene Melodie (Standard: Chorus)")
+    p.add_argument("--ohne-bewertung", action="store_true",
+                   help="mehrere Fassungen nicht automatisch bewerten (sonst mit setup_bewertung.py)")
     p.add_argument("--varianten", type=int, default=1, metavar="N",
                    help="N Songs am Stück erzeugen; mit --neu N Fassungen der gewählten Teile")
     p.add_argument("--zip", metavar="DATEI", help="den Song mit allen Spuren als ZIP für eine DAW exportieren")
@@ -123,6 +128,8 @@ def main(argv=None) -> int:
                  "breaths": False if args.ohne_atmer else None, "echo_throws": False if args.ohne_echo else None,
                  "final_choir": False if args.ohne_chor else None,
                  "guitar_amp": False if args.ohne_verstaerker else None, "cabinet_ir": args.box,
+                 "samples": False if args.ohne_samples else None,
+                 "auto_rating": False if args.ohne_bewertung else None,
                  "lofi_texture": False if args.ohne_lofi_klang else None,
                  "melody_midi": args.melodie_midi, "melody_midi_section": args.melodie_sektion}
     if args.akkorde:
@@ -158,15 +165,18 @@ def main(argv=None) -> int:
 
     for result in results:
         log.info("Fertig! Seed %d: %s", result.seed, result.history or result.audio)
+    chosen = best(results)
+    if chosen.rating:
+        log.info("Beste Fassung: Seed %d, %s", chosen.seed, chosen.rating.describe())
     if args.lyric_video is not None:
         try:
-            log.info("Lyric-Video: %s", lyric_video(results[-1], args.lyric_video or None))
+            log.info("Lyric-Video: %s", lyric_video(chosen, args.lyric_video or None))
         except RuntimeError as e:
             log.error("%s", e)
             return 1
     if args.zip:
         from exporter import exportiere_projekt
-        log.info("ZIP: %s", exportiere_projekt(results[-1], args.zip))
+        log.info("ZIP: %s", exportiere_projekt(chosen, args.zip))
     return 0
 
 

@@ -158,6 +158,20 @@ async def test_several_versions_land_in_the_history(user, fake_generation):
     assert len(user.find(marker="history-play").elements) == 3
 
 
+async def test_the_best_rated_version_is_loaded(user, fake_generation, monkeypatch):
+    import rating
+    notes = iter([4.0, 8.0, 6.0])
+    monkeypatch.setattr(rating, "available", lambda: True)
+    monkeypatch.setattr(rating, "rate", lambda paths: [rating.Rating(n, 5.0, 5.0, n) for n, _ in zip(notes, paths)])
+    await user.open("/")
+    user.find(marker="count").elements.pop().value = 3
+    user.find(marker="generate").click()
+    await user.should_see("Geladen ist die beste: Note 8.0", retries=80)
+    await user.should_see("Seed 1001")
+    user.find(marker="tab-Verlauf").click()
+    assert sorted(b.text for b in user.find(marker="history-rating").elements) == ["4.0", "6.0", "8.0"]
+
+
 async def test_restoring_from_history_takes_settings_and_seed(user, fake_generation, tmp_path):
     out = str(tmp_path / "out")
     old = SongSettings(output_ordner=out, bpm=99, style="Rock", seed=77, variations={"bass": 2})
@@ -264,8 +278,14 @@ async def test_paths_tab_tells_whether_the_extra_soundfonts_are_there(user):
     await user.open("/")
     user.find(marker="tab-Pfade").click()
     await user.should_see("setup_soundfonts.py ausführen")
+    await user.should_see("setup_samples.py ausführen")
     user.find(marker="sound-library-switch").elements.pop().set_value(False)
     await until(lambda: SongSettings.load().sound_library is False)
+    user.find(marker="samples-switch").elements.pop().set_value(False)
+    await until(lambda: SongSettings.load().samples is False)
+    await user.should_see("setup_bewertung.py ausführen")
+    user.find(marker="rating-switch").elements.pop().set_value(False)
+    await until(lambda: SongSettings.load().auto_rating is False)
 
 
 async def test_references_from_the_library_suggest_tempo_key_and_style(user, monkeypatch):

@@ -13,6 +13,7 @@ from nicegui import app, run, ui
 
 import history
 import pipeline
+import rating
 from gui import labels, media, panels
 from gui.components import Karaoke, PianoRoll, WavePlayer, add_style
 from settings import ChannelSettings, SongSettings, edit_key
@@ -271,14 +272,19 @@ def build() -> None:
         results = [r for r in results or [] if r is not None]   # None: abgebrochen, weil die App schließt
         if not results:
             return
-        state["result"] = results[-1]
-        settings.variations = results[-1].settings.variations
-        settings.melody_edits = results[-1].settings.melody_edits
-        await show_result(results[-1])
+        chosen = pipeline.best(results)
+        state["result"] = chosen
+        settings.variations = chosen.settings.variations
+        settings.melody_edits = chosen.settings.melody_edits
+        await show_result(chosen)
         show_history()
         if len(results) > 1:
             panel_box.set_value("Verlauf")
-            ui.notify(f"{len(results)} Fassungen im Verlauf: anhören und die beste behalten", type="positive")
+            if chosen.rating:
+                ui.notify(f"{len(results)} Fassungen im Verlauf. Geladen ist die beste: {chosen.rating.describe()}",
+                          type="positive")
+            else:
+                ui.notify(f"{len(results)} Fassungen im Verlauf: anhören und die beste behalten", type="positive")
 
     async def hooks() -> None:
         if job.running:
@@ -500,6 +506,7 @@ def build() -> None:
             log.warning("Einstellungen nicht gespeichert: %s", e)
 
     def show_status() -> None:
+        import sample_library
         import sound_library
         from renderer import engine_name
         from vocal_synthesizer import neutrino_info
@@ -508,6 +515,8 @@ def build() -> None:
             ui.label(neutrino_info(settings.neutrino_dir())).classes("text-caption").mark("neutrino-info")
             ui.label(f"Instrumente mit {engine_name()}").classes("text-caption")
             ui.label(sound_library.status()).classes("text-caption").mark("sound-library")
+            ui.label(sample_library.status()).classes("text-caption").mark("sample-library")
+            ui.label(rating.status()).classes("text-caption").mark("rating-status")
         singer_select.set_options(sorted(set(_singers(settings)) | {settings.singer}), value=settings.singer)
         duet_select.set_options(panels.duet_options(_singers(settings), settings), value=settings.duet_singer)
         show_history()
@@ -529,6 +538,10 @@ def build() -> None:
                             .props("flat round dense").mark("history-play")
                         ui.label(f"{entry.created:%d.%m. %H:%M}  {describe(entry.settings)}") \
                             .classes("col text-body2")
+                        found = rating.Rating.from_dict(entry.rating) if entry.rating else None
+                        if found:
+                            ui.badge(f"{found.overall:.1f}", color="deep-purple").mark("history-rating") \
+                                .tooltip(found.describe())
                         for slot in ("A", "B"):
                             ui.button(slot, on_click=lambda _, sl=slot, e=entry: choose(sl, e)) \
                                 .props("flat dense round size=sm").mark(f"history-{slot}-{nr}") \

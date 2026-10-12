@@ -90,7 +90,15 @@ Das lädt etwa 250 MB nach `tools\soundfonts` (mit `--ohne-verzerrt` 130 MB weni
 | cleane und verzerrte E-Gitarre | FreePats Electric Guitar FSBS | CC0 |
 | Schlagzeug (Rock: Red Zeppelin, sonst Black Pearl) | AVL Drumkits von Glen MacArthur | CC-BY-SA 3.0 |
 
-Alles andere spielt weiter GeneralUser GS. Im Tab „Pfade“ steht, wie viele der zusätzlichen SoundFonts da sind, und ein Schalter stellt sie zum Vergleichen ab. Mit einem eigenen SoundFont in den Einstellungen bleiben sie aus.
+Alles andere spielt weiter GeneralUser GS. Im Tab „Pfade“ steht, wie viele der zusätzlichen SoundFonts da sind, und ein Schalter stellt sie zum Vergleichen ab. Mit einem eigenen SoundFont in den Einstellungen bleiben sie aus (zeigt die Einstellung auf den mitgelieferten `soundfont.sf2`, zählt das nicht als eigener).
+
+**Orchester aus echten Aufnahmen:** Am echtesten klingen Streicher, Bläser, Harfe, Pauken und Stabspiele aus den Aufnahmen von [VSCO 2 Community Edition](https://github.com/sgossner/VSCO-2-CE) (Versilian Studios, CC0). Einmal ausführen:
+
+```powershell
+uv run setup_samples.py
+```
+
+Das lädt etwa 1,2 GB nach `tools\samples` (mit `--nur Violin Harp` nur einzelne Instrumente). Bricht es ab, macht der nächste Start dort weiter. Danach spielen Streicher, Solo-Geige, Bratsche, Cello, Kontrabass, Tremolo, Pizzicato, Harfe, Pauken, Trompete, Posaune, Tuba, Horn, Bläsersatz, Flöte, Piccolo, Oboe, Klarinette, Fagott, Glockenspiel, Marimba, Xylophon und Röhrenglocken aus den Aufnahmen. Ein eingebauter Sampler spielt sie (`sfz.py`, liest das SFZ-Format): kurze Töne nehmen die kurz gespielten Aufnahmen (Spiccato, Staccato), Streicher- und Bläsersätze verteilen ihre Töne nach der Tonhöhe auf Geigen, Bratschen, Celli und Kontrabässe bzw. Trompeten, Posaunen und Tuba, und jedes Instrument wird auf dieselbe Lautstärke gebracht. Langsam anschwellende Streicher setzen etwas später in der Aufnahme ein, damit sie auf dem Schlag kommen. Der Schalter „Orchester aus echten Aufnahmen“ im Tab „Pfade“ (oder `--ohne-samples`) stellt das ab; wie bei den SoundFonts bleibt es mit einem eigenen SoundFont aus.
 
 Supersaw, Pluck, Pad, Lead, Chiptune-Klänge, Reese- und Sub-Bass und die breiten Future-Bass-Akkorde erzeugt die App selbst (`synth_engine.py`), ebenso Riser, Becken-Swells, Impacts und Downlifter vor den Refrains (`fx.py`).
 
@@ -181,6 +189,7 @@ uv run vocaloid_generator\main.py --style Rock --bpm 140 --key E --scale minor -
 | `--akkorde SEKTION=AKKORDE` | eigene Akkorde, z. B. `"Chorus=F G Em Am"`; mehrfach möglich, `"Chorus="` nimmt wieder die des Stils |
 | `--melodie-midi DATEI`, `--melodie-sektion SEKTION` | eigene Melodie aus einer MIDI-Datei, gesungen im Refrain oder in der angegebenen Sektion |
 | `--varianten N` | N Songs am Stück erzeugen; mit `--neu` N Fassungen der gewählten Teile |
+| `--ohne-bewertung` | mehrere Fassungen nicht automatisch benoten (sonst, wenn `setup_bewertung.py` gelaufen ist) |
 | `--verlauf` | die letzten Songs auflisten |
 | `--aus-verlauf NR` | Einstellungen und Seed eines Songs aus dem Verlauf nehmen (1 = der neueste) |
 | `--zip DATEI` | den Song mit allen Spuren als ZIP für eine DAW exportieren |
@@ -192,6 +201,7 @@ uv run vocaloid_generator\main.py --style Rock --bpm 140 --key E --scale minor -
 | `--ohne-atmer`, `--ohne-echo`, `--ohne-chor` | Atmer, Echo auf dem letzten Wort oder Chor im letzten Refrain abschalten |
 | `--schlagzeug KLANG` | Schlagzeug aus `soundfont`, `808` oder `909` statt wie der Stil |
 | `--ohne-verstaerker`, `--box WAV` | verzerrte Gitarren wie früher aus dem SoundFont, oder über die Box aus dieser Impulsantwort |
+| `--ohne-samples` | Orchester aus dem SoundFont statt aus den echten Aufnahmen |
 | `--ohne-lofi-klang` | Lo-Fi ohne Knistern und Bandmaschine |
 | `--vorbild DATEI` | Vorbild-Song für diesen Lauf, mehrfach möglich |
 | `--vom-vorbild` | Tempo, Tonart und Stil der Vorbilder übernehmen |
@@ -219,6 +229,15 @@ uv run vocaloid_generator\main.py --aus-verlauf 2 --zip song.zip
 ```
 
 Neue Akkorde ändern auch alles, was auf den Akkorden spielt; eine neue Melodie ändert die Gegenstimme mit, weil sie der Melodie antwortet. Die Refrain-Melodie spielt auch im Intro, Outro und Solo, also werden sie mit ihr neu.
+
+**Die beste Fassung von selbst finden:** Bei mehreren Fassungen kann die App jede anhören und benoten, mit [Audiobox Aesthetics](https://github.com/facebookresearch/audiobox-aesthetics) von Meta. Das Modell hört die lautesten 30 Sekunden (meist den Refrain) und schätzt von 1 bis 10, wie gern man zuhört und wie sauber der Song klingt; die Note ist der Mittelwert. Geladen wird danach die Fassung mit der besten Note, im Verlauf steht bei jeder ihre Note. Einmal einrichten:
+
+```powershell
+uv run setup_bewertung.py          # mit NVIDIA-Grafikkarte etwa 3 GB
+uv run setup_bewertung.py --cpu    # ohne Grafikkarte, kleiner und langsamer
+```
+
+Das legt in `tools\bewertung` eine eigene Umgebung mit PyTorch an (die App selbst bleibt unberührt) und lädt das Modell. Ausschalten: Schalter im Tab „Pfade“ oder `--ohne-bewertung`. Die Note ist eine Schätzung, kein Urteil: anhören lohnt sich trotzdem.
 
 Die ZIP-Datei enthält den Mix, jede Spur als WAV (`Spuren\`) und MIDI (`MIDI\`), die Gesangsnoten als MusicXML und UST (`Gesang\`), `einstellungen.json` und `song.txt` mit Tempo und Tonart. Alle Spuren starten bei 0:00 und lassen sich so in jede DAW ziehen.
 
@@ -286,6 +305,8 @@ uv run pytest -m "not slow"   # ohne den Test, der echtes Audio rendert
 | `orchestrator.py` | setzt alles zusammen und schreibt die MIDI-Spuren |
 | `renderer.py` | rendert MIDI mit dem SoundFont (FluidSynth oder tinysoundfont) |
 | `sound_library.py`, `setup_soundfonts.py` | welches Instrument aus welchem zusätzlichen SoundFont spielt, und deren Download |
+| `sfz.py`, `sample_library.py`, `setup_samples.py` | Sampler für SFZ-Instrumente, welches Instrument aus welchen Orchester-Aufnahmen spielt, und deren Download |
+| `rating.py`, `rating_worker.py`, `setup_bewertung.py` | mehrere Fassungen benoten (Audiobox Aesthetics in eigener Umgebung) und diese einrichten |
 | `synth_engine.py` | eigene Synths: Supersaw, Pluck, Pad, Lead, Chiptune, Reese- und Sub-Bass, Future-Bass-Akkorde |
 | `drum_machine.py` | Schlagzeug wie aus der TR-808 und TR-909, ohne Samples |
 | `guitar_amp.py` | verzerrte E-Gitarren über Verstärker und Box (eingebaut oder Impulsantwort) |

@@ -540,6 +540,12 @@ def paths_panel(s: SongSettings, pick: PickFn, status: Callable[[], None]) -> No
     ui.switch("Bessere Klänge aus den zusätzlichen SoundFonts (setup_soundfonts.py)") \
         .bind_value(s, "sound_library").mark("sound-library-switch") \
         .tooltip("Flügel, Streicher, Bläser, E-Gitarren und echte Schlagzeuge; gilt nur ohne eigenen SoundFont")
+    ui.switch("Orchester aus echten Aufnahmen (setup_samples.py)") \
+        .bind_value(s, "samples").mark("samples-switch") \
+        .tooltip("Streicher, Bläser, Harfe, Pauken und Stabspiele aus VSCO 2; gilt nur ohne eigenen SoundFont")
+    ui.switch("Mehrere Fassungen automatisch bewerten (setup_bewertung.py)") \
+        .bind_value(s, "auto_rating").mark("rating-switch") \
+        .tooltip("Audiobox Aesthetics hört jede Fassung an und gibt ihr eine Note; die beste wird geladen")
 
 
 def _reference_library() -> str:

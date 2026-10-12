@@ -40,7 +40,7 @@ VINYL_LUFS, VINYL_CLICKS_PER_SECOND = -40.0, 7.0
 def midi_zu_wav(midi_pfad: str, wav_pfad: str, is_drum: bool = False, instrument_type: str = "piano",
                 vst_pfad: str = None, soundfont_pfad: str = None, voices: dict = None,
                 library: bool = True, drum_machine: str = None, amp: bool = False, cabinet_ir: str = "",
-                vst_state: str = "") -> None:
+                vst_state: str = "", samples: bool = False) -> None:
     """
     MIDI → Stereo-WAV. Reihenfolge: eigenes VST3-Instrument (wenn angegeben), SoundFont über
     FluidSynth oder tinysoundfont, zuletzt eine einfache eingebaute Klangerzeugung. Die Spur wird nicht normalisiert,
@@ -51,6 +51,7 @@ def midi_zu_wav(midi_pfad: str, wav_pfad: str, is_drum: bool = False, instrument
     amp: verzerrte E-Gitarren spielen sauber und gehen dann über Verstärker und Box (guitar_amp),
     cabinet_ir ist die Impulsantwort einer echten Box (leer = eingebaute Box).
     vst_state: gespeicherter Klang des VST-Instruments (vst_sounds), leer = sein Standardklang.
+    samples: Orchester-Instrumente spielen aus echten Aufnahmen (sample_library), soweit vorhanden.
     """
     soundfont_pfad = soundfont_pfad or SOUNDFONT_PFAD
     midi = pretty_midi.PrettyMIDI(midi_pfad)
@@ -75,6 +76,13 @@ def midi_zu_wav(midi_pfad: str, wav_pfad: str, is_drum: bool = False, instrument
         own = [i for i in midi.instruments if not i.is_drum and _layer(i.name) in voices]
         synths += [render_notes(i.notes, voices[_layer(i.name)]) for i in own if i.notes]
         midi.instruments = [i for i in midi.instruments if i not in own]
+    if samples and not vst_pfad:
+        import sample_library
+        for inst in [i for i in midi.instruments if sample_library.covers(i)]:
+            audio = sample_library.render(inst, SAMPLE_RATE)
+            if audio is not None:
+                synths.append(audio)
+                midi.instruments.remove(inst)
     if synths and not any(i.notes for i in midi.instruments):
         _write(wav_pfad, _sum(synths))
         return

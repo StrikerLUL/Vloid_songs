@@ -32,6 +32,7 @@ class Entry:
     created: datetime
     favorite: bool
     settings: SongSettings
+    rating: Optional[dict] = None      # Note der automatischen Bewertung (rating.Rating.to_dict)
 
     @property
     def title(self) -> str:
@@ -97,6 +98,19 @@ def set_favorite(entry: Entry, favorite: bool) -> Entry:
     return entry
 
 
+def set_rating(audio: str, rating: dict) -> None:
+    """Merkt sich die Note der automatischen Bewertung beim Song audio im Verlauf."""
+    info = os.path.splitext(audio)[0] + ".json"
+    try:
+        with open(info, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        data.setdefault("verlauf", {})["bewertung"] = rating
+        with open(info, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    except (OSError, ValueError) as e:
+        log.warning("Bewertung nicht im Verlauf gespeichert: %s", e)
+
+
 def delete(entry: Entry) -> None:
     for path in (entry.audio, entry.info):
         try:
@@ -124,7 +138,8 @@ def _read(info: str) -> Optional[Entry]:
     except (OSError, ValueError, json.JSONDecodeError) as e:
         log.warning("Verlaufseintrag %s nicht lesbar: %s", info, e)
         return None
-    return Entry(name, audio, info, created, bool(meta.get("favorit")), SongSettings.load(info))
+    rating = meta.get("bewertung") if isinstance(meta.get("bewertung"), dict) else None
+    return Entry(name, audio, info, created, bool(meta.get("favorit")), SongSettings.load(info), rating)
 
 
 def _prune(output_dir: str, keep: int) -> None:

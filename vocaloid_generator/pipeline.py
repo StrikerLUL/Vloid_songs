@@ -50,6 +50,7 @@ class SongResult:
     mp3: Optional[str] = None
     settings: Optional[SongSettings] = None    # die benutzten Einstellungen, mit Seed
     history: Optional[str] = None              # Kopie im Verlauf
+    rating: Optional[object] = None            # rating.Rating, wenn mehrere Fassungen bewertet wurden
 
     @property
     def audio(self) -> Optional[str]:
@@ -228,21 +229,57 @@ def from_references(settings: SongSettings) -> SongSettings:
 def generate_variants(settings: SongSettings, count: int, parts: tuple = (),
                       progress: Optional[ProgressFn] = None) -> list:
     """Mehrere Songs am Stück, alle im Verlauf. Ohne parts mit neuem Seed je Song; mit parts derselbe Song,
-    nur diese Teile jedes Mal neu gewürfelt (z. B. drei Melodien zur Auswahl)."""
+    nur diese Teile jedes Mal neu gewürfelt (z. B. drei Melodien zur Auswahl). Ist die automatische Bewertung
+    eingerichtet und an, bekommt jede Fassung eine Note (rating.py); best() sucht dann die beste heraus."""
+    import tempfile
+
+    import rating
     report = progress or (lambda fraction, message: None)
     if not parts:
         settings = settings.with_updates(seed=None, variations={})
     elif settings.seed is None:
         raise ValueError("Zum Neu-Würfeln einzelner Teile braucht der Song einen festen Seed.")
-    results = []
-    for i in range(count):
-        for part in parts:
-            settings = settings.rerolled(part)
+    judge = settings.auto_rating and count > 1 and rating.available()
+    results, clips = [], []
+    with tempfile.TemporaryDirectory() as folder:
+        for i in range(count):
+            for part in parts:
+                settings = settings.rerolled(part)
 
-        def step(fraction, message, i=i):
-            report((i + fraction) / count, f"Variante {i + 1}/{count}: {message}" if count > 1 else message)
-        results.append(generate_song(settings, progress=step))
+            def step(fraction, message, i=i):
+                share = 0.95 if judge else 1.0
+                report((i + fraction) / count * share, f"Variante {i + 1}/{count}: {message}" if count > 1 else message)
+            result = generate_song(settings, progress=step)
+            results.append(result)
+            if judge and result is not None and result.mix_wav:
+                # jetzt ausschneiden: die nächste Fassung überschreibt den Mix
+                clips.append((result, rating.excerpt(result.mix_wav, os.path.join(folder, f"{i + 1}.wav"))))
+        if clips:
+            report(0.96, "Bewerte die Fassungen...")
+            _rate(clips)
     return results
+
+
+def _rate(clips: list) -> None:
+    import history
+    import rating
+    ready = [(result, clip) for result, clip in clips if clip]
+    for (result, _), found in zip(ready, rating.rate([clip for _, clip in ready])):
+        result.rating = found
+        if found and result.history:
+            history.set_rating(result.history, found.to_dict())
+    rated = sorted((r for r, _ in ready if r.rating), key=lambda r: -r.rating.overall)
+    if rated:
+        log.info("Bewertung: %s", "; ".join(f"Seed {r.seed}: {r.rating.describe()}" for r in rated))
+
+
+def best(results: list):
+    """Die Fassung mit der besten Note; ohne Noten die letzte."""
+    results = [r for r in results if r is not None]
+    rated = [r for r in results if r.rating]
+    if rated:
+        return max(rated, key=lambda r: r.rating.overall)
+    return results[-1] if results else None
 
 
 def lyric_video(result: SongResult, path: Optional[str] = None) -> str:
@@ -742,9 +779,15 @@ def _render_instruments(settings: SongSettings, tracks: dict, out: str, report: 
     from renderer import engine_name
     import sound_library
     log.info("Instrumente aus dem SoundFont mit %s", engine_name())
-    extra = sound_library.installed() if settings.sound_library and not settings.soundfont_pfad else []
+    extra = sound_library.installed() if settings.sound_library and not settings.own_soundfont() else []
     if extra:
         log.info("Zusätzliche SoundFonts: %s", ", ".join(extra))
+    if _samples(settings):
+        import sample_library
+        orchestra = sample_library.installed()
+        if orchestra:
+            log.info("Orchester-Aufnahmen: %d Instrumente", len(orchestra))
+        extra = extra + orchestra
     active = [inst for inst in INSTRUMENTS if settings.channels[inst].enabled and tracks.get(inst)]
     jobs = {inst: _render_job(settings, out, inst) for inst in active}
     keys = {inst: _render_key(jobs[inst], extra) for inst in active}
@@ -784,7 +827,7 @@ def _render_instruments(settings: SongSettings, tracks: dict, out: str, report: 
 
 # Der Code, der Klang macht: ändert er sich (neue Version der App), wird alles neu gerendert
 RENDER_CODE = ("renderer.py", "mixer.py", "synth_engine.py", "drum_machine.py", "guitar_amp.py", "sound_library.py",
-               "styles.py")
+               "styles.py", "sfz.py", "sample_library.py")
 
 
 def _render_key(job: dict, library: list) -> str:
@@ -838,11 +881,17 @@ def _render_job(settings: SongSettings, out: str, inst: str) -> dict:
         vst_state=state,
         soundfont_pfad=settings.soundfont_file(),
         voices=profile.voices.get(inst),
-        library=settings.sound_library and not settings.soundfont_pfad,
+        library=settings.sound_library and not settings.own_soundfont(),
         drum_machine=_drum_machine(settings) if inst == "drums" else None,
         amp=settings.guitar_amp,
         cabinet_ir=settings.cabinet_ir,
+        samples=_samples(settings),
     )
+
+
+def _samples(settings: SongSettings) -> bool:
+    """Orchester-Aufnahmen statt SoundFont: eingeschaltet und kein eigener SoundFont gewählt."""
+    return settings.samples and not settings.own_soundfont()
 
 
 def _vst_for(settings: SongSettings, inst: str) -> tuple:

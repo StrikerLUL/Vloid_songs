@@ -61,10 +61,10 @@ def test_vocal_options(captured):
 def test_sound_options(captured):
     SongSettings(channels={"piano": {"volume": 0.3}}).save()
     assert main.main(["--style", "Lo-Fi", "--schlagzeug", "909", "--ohne-verstaerker", "--box", "C:/box.wav",
-                      "--ohne-lofi-klang"]) == 0
+                      "--ohne-lofi-klang", "--ohne-samples"]) == 0
     s = captured["settings"]
-    assert (s.style, s.channels["drums"].style, s.guitar_amp, s.cabinet_ir, s.lofi_texture) == \
-        ("Lo-Fi", "909", False, "C:/box.wav", False)
+    assert (s.style, s.channels["drums"].style, s.guitar_amp, s.cabinet_ir, s.lofi_texture, s.samples) == \
+        ("Lo-Fi", "909", False, "C:/box.wav", False, False)
     assert s.channels["piano"].volume == 0.3
 
 

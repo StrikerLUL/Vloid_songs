@@ -170,6 +170,8 @@ class SongSettings(BaseModel):
     vst_path: str = ""
     vst_sounds: dict[str, str] = Field(default_factory=dict)   # Spur → gespeicherter Klang des VST-Instruments
     sound_library: bool = True         # bessere Klänge aus tools/soundfonts (setup_soundfonts.py), wenn vorhanden
+    samples: bool = True               # Orchester aus echten Aufnahmen (setup_samples.py, VSCO 2), wenn vorhanden
+    auto_rating: bool = True           # mehrere Fassungen automatisch bewerten (setup_bewertung.py), wenn eingerichtet
     guitar_amp: bool = True            # verzerrte E-Gitarren über Verstärker und Box statt verzerrter Samples
     cabinet_ir: str = ""               # Impulsantwort einer Gitarrenbox (WAV); leer = eingebaute Box
     lofi_texture: bool = True          # im Stil Lo-Fi: Knistern, leiernde Bandmaschine, gedämpfte Höhen
@@ -272,6 +274,22 @@ class SongSettings(BaseModel):
 
     def soundfont_file(self) -> str:
         return _existing_or_default(self.soundfont_pfad, config.SOUNDFONT_PFAD, "SoundFont")
+
+    def own_soundfont(self) -> bool:
+        """
+        Spielt ein selbst gewählter SoundFont statt des mitgelieferten? Alte Einstellungen zeigen oft auf den
+        mitgelieferten, nur an anderer Stelle; das zählt nicht als eigener.
+        """
+        if not self.soundfont_pfad or not os.path.exists(self.soundfont_pfad):
+            return False
+        path, default = self.soundfont_pfad, config.SOUNDFONT_PFAD
+        if os.path.normcase(os.path.abspath(path)) == os.path.normcase(os.path.abspath(default)):
+            return False
+        try:
+            return not (os.path.basename(path).lower() == os.path.basename(default).lower()
+                        and os.path.getsize(path) == os.path.getsize(default))
+        except OSError:
+            return True
 
     def output_dir(self) -> str:
         configured = self.output_ordner

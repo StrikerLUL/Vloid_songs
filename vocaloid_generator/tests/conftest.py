@@ -19,9 +19,18 @@ def isolated_settings(tmp_path, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def without_sound_library(tmp_path, monkeypatch):
-    """Tests klingen gleich, ob setup_soundfonts.py gelaufen ist oder nicht: ohne zusätzliche SoundFonts."""
+    """Tests klingen gleich, ob setup_soundfonts.py und setup_samples.py gelaufen sind oder nicht: ohne beides."""
+    import sample_library
     import sound_library
     monkeypatch.setattr(sound_library, "FOLDER", str(tmp_path / "soundfonts"))
+    monkeypatch.setattr(sample_library, "FOLDER", str(tmp_path / "samples"))
+
+
+@pytest.fixture(autouse=True)
+def without_rating(tmp_path, monkeypatch):
+    """Eine eingerichtete Bewertung (setup_bewertung.py) bewertet in den Tests nicht mit."""
+    import rating
+    monkeypatch.setattr(rating, "FOLDER", str(tmp_path / "bewertung"))
 
 
 @pytest.fixture(autouse=True)

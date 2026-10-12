@@ -100,6 +100,7 @@ def compose(settings: SongSettings, seed: Optional[int] = None):
         custom_chords=settings.custom_chords,
         imported_melody=_own_melody(settings),
         melody_edits=settings.melody_edits,
+        melody_lengths=settings.melody_lengths,
         motifs=motifs.for_settings(settings),
     )
     return tracks, seed

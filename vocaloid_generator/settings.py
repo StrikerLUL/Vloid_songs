@@ -103,6 +103,7 @@ class ReferenceTrack(BaseModel):
 
 
 MIN_BARS, MAX_BARS = 1, 64        # Länge einer Sektion in Takten
+MAX_NOTE_BEATS = 16.0             # so lang darf ein Ton der Melodie von Hand werden
 
 
 def edit_key(beat: float) -> str:
@@ -147,6 +148,7 @@ class SongSettings(BaseModel):
     section_bars: dict[str, int] = Field(default_factory=dict)   # Takte pro Sektionsart; fehlt sie, wie config.py
     # Geänderte Töne der Gesangsmelodie: {Schlag ab Songanfang: Tonhöhe}, gelten für Seed und Zähler dieses Songs
     melody_edits: dict[str, int] = Field(default_factory=dict)
+    melody_lengths: dict[str, float] = Field(default_factory=dict)   # {Schlag: neue Länge in Schlägen}
     lyrics: str = DEFAULT_LYRICS
 
     singer: str = "MERROW"
@@ -251,6 +253,17 @@ class SongSettings(BaseModel):
                 continue
         return edits
 
+    @field_validator("melody_lengths", mode="before")
+    @classmethod
+    def _check_melody_lengths(cls, value: dict) -> dict:
+        lengths = {}
+        for beat, length in (value or {}).items():
+            try:
+                lengths[edit_key(float(beat))] = min(max(round(float(length) * 4) / 4, 0.25), MAX_NOTE_BEATS)
+            except (TypeError, ValueError):
+                continue
+        return lengths
+
     @field_validator("custom_chords", mode="before")
     @classmethod
     def _check_custom_chords(cls, value: dict) -> dict:
@@ -317,9 +330,10 @@ class SongSettings(BaseModel):
         """
         if not is_rerollable(part):
             raise ValueError(f"Unbekannter Teil: {part}")
-        edits = {} if part.partition(":")[0] in ("melody", "chords") else self.melody_edits
+        new_melody = part.partition(":")[0] in ("melody", "chords")
         return self.with_updates(variations={**self.variations, part: self.variations.get(part, 0) + 1},
-                                 melody_edits=edits)
+                                 melody_edits={} if new_melody else self.melody_edits,
+                                 melody_lengths={} if new_melody else self.melody_lengths)
 
     def section_config(self) -> dict:
         """config.SECTION_CONFIG mit den eigenen Längen der Sektionen."""

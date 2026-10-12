@@ -55,15 +55,17 @@ class PianoRoll(Element, component="piano_roll.js"):
     """
     Noten aller Spuren; Spuren lassen sich ausblenden. Mit editable lassen sich die Töne der Gesangsmelodie
     nach oben und unten ziehen (oder mit den Pfeiltasten verschieben); jede Änderung meldet das Ereignis "edit"
-    mit {start, pitch} (Anfang in Sekunden, neue Tonhöhe).
+    mit {start, pitch} (Anfang in Sekunden, neue Tonhöhe). Am rechten Rand gezogen (oder mit Pfeil links/rechts)
+    wird ein Ton kürzer oder länger; das meldet "resize" mit {start, end} (Sekunden).
     """
 
     def __init__(self) -> None:
         super().__init__()
-        self._props.update(notes=[], tracks=[], hidden=[], duration=0, editable=False)
+        self._props.update(notes=[], tracks=[], hidden=[], duration=0, editable=False, step=0.125)
 
     def show(self, data: dict) -> None:
-        self._props.update(notes=data["notes"], tracks=data["tracks"], duration=data["duration"], hidden=[])
+        self._props.update(notes=data["notes"], tracks=data["tracks"], duration=data["duration"], hidden=[],
+                           step=data.get("step", 0.125))
         self.update()
 
     @property
@@ -84,6 +86,14 @@ class PianoRoll(Element, component="piano_roll.js"):
         for note in self._props["notes"]:
             if note[3] == vocal and abs(note[0] - start) < 1e-3:
                 note[2] = pitch
+        self.update()
+
+    def resize(self, start: float, end: float) -> None:
+        """Der Ton der Gesangsmelodie, der bei start (Sekunden) beginnt, endet bei end (auch in Python)."""
+        vocal = next((i for i, t in enumerate(self.tracks) if t.get("key") == "vocals"), None)
+        for note in self._props["notes"]:
+            if note[3] == vocal and abs(note[0] - start) < 1e-3:
+                note[1] = end
         self.update()
 
     @property

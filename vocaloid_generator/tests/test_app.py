@@ -564,3 +564,55 @@ async def test_sung_notes_can_be_moved_and_sung_again(user, sung_generation):
     user.find(marker="drop-edits").click()
     await until(lambda: SongSettings.load().melody_edits == {})
     await until(lambda: [n[2] for n in roll.notes if n[3] == 0] == [64, 65, 66, 67])
+
+
+async def test_sung_notes_can_be_made_longer_and_heard_at_once(user, sung_generation):
+    await user.open("/")
+    user.find(marker="generate").click()
+    await user.should_see("Seed 1000", retries=50)
+    [roll] = user.find(PianoRoll).elements
+    await until(lambda: roll.tracks)
+    user.find(marker="edit-melody").click()
+    await until(lambda: roll.editable)
+
+    # Der dritte Ton (1,0 s) wird länger, der zweite höher: zwei geänderte Töne
+    user.find(PianoRoll).trigger("resize", {"start": 1.0, "end": 1.45})
+    await user.should_see("1 Ton geändert")
+    assert [n[1] for n in roll.notes if n[3] == 0] == [0.4, 0.9, 1.45, 1.9]
+    user.find(PianoRoll).trigger("edit", {"start": 0.5, "pitch": 67})
+    await user.should_see("2 Töne geändert")
+    bpm = SongSettings.load().bpm
+    beats = min(max(round(0.45 * bpm / 60 * 4) / 4, 0.25), 16)
+    await until(lambda: SongSettings.load().melody_lengths == {edit_key(1.0 * bpm / 60): beats})
+
+    # Vorschau: Synth über der Band, ohne neu zu singen
+    out = SongSettings.load().output_dir()
+    user.find(marker="preview-edits").click()
+    await until(lambda: os.path.exists(os.path.join(out, "vorschau_aenderungen.wav")), seconds=20)
+    assert len(sung_generation) == 1
+
+    # Neu singen nimmt beides mit, Verwerfen setzt beides zurück
+    user.find(marker="resing").click()
+    await until(lambda: len(sung_generation) == 2)
+    assert sung_generation[-1].melody_lengths == {edit_key(1.0 * bpm / 60): beats}
+    await user.should_see("Seed 1000 · 2 Töne geändert", retries=50)
+    user.find(marker="drop-edits").click()
+    await until(lambda: (SongSettings.load().melody_edits, SongSettings.load().melody_lengths) == ({}, {}))
+
+
+async def test_a_hummed_melody_becomes_the_own_melody(user, tmp_path):
+    from nicegui.elements.upload_files import SmallFileUpload
+    from test_humming import BPM as HUMMED_BPM
+    from test_humming import TUNE, hum
+    SongSettings.load().with_updates(bpm=HUMMED_BPM).save()
+    await user.open("/")
+    [upload] = user.find(marker="hum-upload").elements
+    recording = hum(tmp_path / "idee.wav")
+    with open(recording, "rb") as f:
+        await upload.handle_uploads([SmallFileUpload("idee.wav", "audio/wav", f.read())])
+    await user.should_see(f"Gesummte Melodie: {len(TUNE)} Töne", retries=100)
+    out = SongSettings.load().output_dir()
+    await until(lambda: SongSettings.load().melody_midi == os.path.join(out, "summen", "idee.mid"))
+    await upload.handle_uploads([SmallFileUpload("kaputt.wav", "audio/wav", b"RIFF kaputt")])
+    await user.should_see("keine Melodie zu hören", retries=100)
+    assert SongSettings.load().melody_midi == os.path.join(out, "summen", "idee.mid")

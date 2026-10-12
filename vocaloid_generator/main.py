@@ -94,6 +94,8 @@ def parse_args(argv=None):
                    help="eigene Akkorde, z. B. 'Chorus=F G Em Am' oder 'Verse=vi IV I V' (mehrfach möglich, "
                         "'Chorus=' nimmt wieder die des Stils)")
     p.add_argument("--melodie-midi", metavar="DATEI", help="eigene Melodie als MIDI-Datei ('' = komponieren)")
+    p.add_argument("--summen", metavar="AUFNAHME",
+                   help="eine gesummte Melodie (WAV, MP3 …) in Noten verwandeln und singen lassen")
     p.add_argument("--takte", action="append", type=_section_bars, metavar="SEKTION=N",
                    help="Länge einer Sektion in Takten, z. B. 'Chorus=8' (mehrfach möglich)")
     p.add_argument("--lyric-video", nargs="?", const="", metavar="DATEI",
@@ -159,6 +161,10 @@ def main(argv=None) -> int:
         channels["drums"]["style"] = args.schlagzeug
         overrides["channels"] = channels
     settings = settings.with_updates(**{k: v for k, v in overrides.items() if v is not None})
+    if args.summen:
+        settings = _hummed(settings, args.summen)
+        if settings is None:
+            return 1
     parts = tuple(args.neu or ())
 
     log.info("=== Vocaloid Song Generator ===")
@@ -196,6 +202,18 @@ def main(argv=None) -> int:
         from exporter import exportiere_projekt
         log.info("ZIP: %s", exportiere_projekt(chosen, args.zip))
     return 0
+
+
+def _hummed(settings: SongSettings, recording: str):
+    """Die Einstellungen mit der gesummten Melodie als eigener Melodie; None, wenn keine zu hören ist."""
+    import humming
+    target = humming.target_for(recording, settings.output_dir())
+    count = humming.transcribe(recording, settings.bpm, target)
+    if not count:
+        log.error("In %s ist keine Melodie zu hören", recording)
+        return None
+    log.info("Gesummte Melodie: %d Töne in %s", count, target)
+    return settings.with_updates(melody_midi=target)
 
 
 def _hooks(settings: SongSettings, count: int, progress) -> int:

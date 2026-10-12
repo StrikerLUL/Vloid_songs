@@ -14,6 +14,7 @@ from nicegui import app, run, ui
 import history
 import pipeline
 import polish
+import preview
 import rating
 from gui import labels, media, panels
 from gui.components import Karaoke, PianoRoll, WavePlayer, add_style
@@ -166,10 +167,14 @@ def build() -> None:
                     ui.switch("Gesang bearbeiten", on_change=lambda e: roll.set_editable(e.value)) \
                         .props("dense").mark("edit-melody") \
                         .tooltip("Töne der Gesangsmelodie nach oben oder unten ziehen, oder anklicken und mit den "
-                                 "Pfeiltasten verschieben (mit Umschalt um eine Oktave)")
+                                 "Pfeiltasten verschieben (mit Umschalt um eine Oktave). Am rechten Rand gezogen "
+                                 "oder mit Pfeil links/rechts wird ein Ton kürzer oder länger.")
                 roll = PianoRoll().classes("w-full")
                 with ui.row().classes("items-center gap-1") as edit_row:
                     edits_label = ui.label().classes("text-caption").mark("edits")
+                    preview_button = ui.button("Vorschau", icon="hearing", on_click=lambda: listen()) \
+                        .props("outline dense no-caps").mark("preview-edits") \
+                        .tooltip("Die geänderten Stellen sofort anhören, mit einem Synth statt Gesang")
                     resing_button = ui.button("Neu singen", icon="record_voice_over", on_click=lambda: resing()) \
                         .props("unelevated dense no-caps color=secondary").mark("resing")
                     ui.button("Änderungen verwerfen", icon="undo", on_click=lambda: drop_edits()) \
@@ -252,7 +257,7 @@ def build() -> None:
                 return
             current = current.with_updates(seed=result.seed, variations=result.settings.variations)
         elif current.seed is None:
-            current = current.with_updates(variations={}, melody_edits={})
+            current = current.with_updates(variations={}, melody_edits={}, melody_lengths={})
         save_settings()
         job.start()
         set_busy(True)
@@ -277,6 +282,7 @@ def build() -> None:
         state["result"] = chosen
         settings.variations = chosen.settings.variations
         settings.melody_edits = chosen.settings.melody_edits
+        settings.melody_lengths = chosen.settings.melody_lengths
         await show_result(chosen)
         show_history()
         if len(results) > 1:
@@ -338,11 +344,33 @@ def build() -> None:
         roll.move(start, pitch)
         show_edits()
 
+    def on_resize(e) -> None:
+        result = state["result"]
+        if result is None:
+            return
+        start, end = float(e.args["start"]), float(e.args["end"])
+        beats = (end - start) * result.settings.bpm / 60
+        settings.melody_lengths = {**settings.melody_lengths, edit_key(start * result.settings.bpm / 60): beats}
+        roll.resize(start, end)
+        show_edits()
+
     def show_edits() -> None:
-        n = len(settings.melody_edits)
+        n = _edited(settings)
         edits_label.set_text(_edits(n))
         edit_row.set_visibility(n > 0)
         resing_button.set_enabled(n > 0 and not job.running)
+        preview_button.set_enabled(n > 0 and not job.running)
+
+    async def listen() -> None:
+        """Die geänderten Stellen sofort anhören: Synth über der Band, ohne neu zu singen."""
+        result = state["result"]
+        if result is None:
+            return
+        path = await run.io_bound(preview.render, result, dict(settings.melody_edits), dict(settings.melody_lengths))
+        if path is None:
+            ui.notify("Keine Änderung zum Anhören gefunden.", type="warning")
+            return
+        await play("Vorschau der Änderungen", path)
 
     async def resing() -> None:
         """Derselbe Song mit den geänderten Tönen; unveränderte Spuren werden nicht neu gerendert."""
@@ -351,6 +379,7 @@ def build() -> None:
 
     async def drop_edits() -> None:
         settings.melody_edits = {}
+        settings.melody_lengths = {}
         show_edits()
         result = state["result"]
         if result is not None:
@@ -359,6 +388,7 @@ def build() -> None:
                 roll.show(data)
 
     roll.on("edit", on_edit)
+    roll.on("resize", on_resize)
 
     # ── Lyric-Video und Vergleich ─────────────────────────────────────────────────
     async def make_video() -> None:
@@ -475,7 +505,8 @@ def build() -> None:
     def set_busy(busy: bool) -> None:
         for button in (generate_button, zip_button, video_button, hooks_button, *reroll_buttons.values()):
             button.set_enabled(not busy)
-        resing_button.set_enabled(not busy and bool(settings.melody_edits))
+        resing_button.set_enabled(not busy and _edited(settings) > 0)
+        preview_button.set_enabled(not busy and _edited(settings) > 0)
         show_steps()
 
     def show_steps() -> None:
@@ -579,7 +610,12 @@ def describe(s: SongSettings) -> str:
     rerolled = ", ".join(f"{_part_name(p)} {n}×" for p, n in sorted(s.variations.items()))
     return (f"{s.style} · {s.bpm} BPM · {s.key} {labels.SCALES.get(s.scale, s.scale)} · Seed {s.seed}"
             + (f" · neu gewürfelt: {rerolled}" if rerolled else "")
-            + (f" · {_edits(len(s.melody_edits))}" if s.melody_edits else ""))
+            + (f" · {_edits(_edited(s))}" if _edited(s) else ""))
+
+
+def _edited(s: SongSettings) -> int:
+    """Zahl der von Hand geänderten Töne (Höhe oder Länge)."""
+    return len(set(s.melody_edits) | set(s.melody_lengths))
 
 
 def _edits(n: int) -> str:

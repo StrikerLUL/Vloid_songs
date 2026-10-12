@@ -87,6 +87,8 @@ def piano_roll(result) -> dict:
         data["notes"] += [[round(n.start, 3), round(n.end, 3), n.pitch, index] for n in notes]
     if data["notes"]:
         data["duration"] = max(n[1] for n in data["notes"])
+    if result.settings is not None:
+        data["step"] = 60.0 / result.settings.bpm / 4       # ein Sechzehntel: so fein ändert sich die Länge
     return data
 
 

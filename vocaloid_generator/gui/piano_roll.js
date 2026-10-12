@@ -1,10 +1,12 @@
 // piano_roll.js – Noten aller Spuren über die Zeit. Folgt dem Player ("vg-time"), ein Klick springt
 // im Player an diese Stelle ("vg-seek"). Mit editable lassen sich die Töne der Gesangsmelodie nach oben und
-// unten ziehen oder mit den Pfeiltasten verschieben (Umschalt: Oktave); jede Änderung meldet "edit".
+// unten ziehen oder mit den Pfeiltasten verschieben (Umschalt: Oktave); jede Änderung meldet "edit". Am rechten
+// Rand gezogen (oder mit Pfeil links/rechts) wird ein Ton kürzer oder länger, in Sechzehnteln ("step"); das meldet
+// "resize". Länger als bis zum nächsten Ton geht nicht.
 export default {
   template: `
     <div ref="box" class="vg-roll" :class="{ editing: editable }" :style="{ height: height + 'px' }" tabindex="0"
-         @click="seek" @mousedown="grab" @keydown="key">
+         @click="seek" @mousedown="grab" @mousemove="hover" @keydown="key">
       <canvas ref="canvas"></canvas>
       <div ref="head" class="vg-head"></div>
     </div>`,
@@ -14,6 +16,7 @@ export default {
     hidden: Array, // Indizes ausgeblendeter Spuren
     duration: Number,
     editable: Boolean,
+    step: { type: Number, default: 0.125 }, // Sekunden pro Sechzehntel
     pxPerSecond: { type: Number, default: 36 },
     height: { type: Number, default: 240 },
   },
@@ -121,6 +124,33 @@ export default {
         return y >= top - 3 && y <= top + Math.max(2, g.row - 1) + 3;
       }) || null;
     },
+    atEnd(e, note) {
+      const box = this.$refs.box;
+      const x = e.clientX - box.getBoundingClientRect().left + box.scrollLeft;
+      return note && Math.abs(x - note[1] * this.pxPerSecond) <= 6;
+    },
+    hover(e) {
+      if (!this.editable) return;
+      const note = this.noteAt(e);
+      this.$refs.box.style.cursor = this.atEnd(e, note) ? "ew-resize" : note ? "ns-resize" : "";
+    },
+    limit(note) {
+      // spätestens am Anfang des nächsten Tons der Gesangsmelodie
+      const vocal = this.vocalTrack();
+      let next = Infinity;
+      for (const n of this.notes || []) {
+        if (n[3] === vocal && n[0] > note[0] + 1e-6) next = Math.min(next, n[0]);
+      }
+      return next;
+    },
+    setEnd(note, end) {
+      const steps = Math.max(1, Math.round((end - note[0]) / this.step));
+      const value = Math.min(note[0] + steps * this.step, this.limit(note));
+      if (Math.abs(value - note[1]) < 1e-6) return false;
+      note[1] = value;
+      this.draw();
+      return true;
+    },
     grab(e) {
       if (!this.editable) return;
       const note = this.noteAt(e);
@@ -129,6 +159,7 @@ export default {
       this.$refs.box.focus();
       this.selected = note;
       this.draw();
+      if (this.atEnd(e, note)) return this.stretch(e, note);
       const startY = e.clientY;
       const before = note[2];
       const move = (m) => {
@@ -148,7 +179,30 @@ export default {
       window.addEventListener("mousemove", move);
       window.addEventListener("mouseup", up);
     },
+    stretch(e, note) {
+      const box = this.$refs.box;
+      const before = note[1];
+      const move = (m) => {
+        const x = m.clientX - box.getBoundingClientRect().left + box.scrollLeft;
+        this.setEnd(note, x / this.pxPerSecond);
+      };
+      const up = () => {
+        window.removeEventListener("mousemove", move);
+        window.removeEventListener("mouseup", up);
+        this.dragged = true;
+        if (Math.abs(note[1] - before) > 1e-6) this.$emit("resize", { start: note[0], end: note[1] });
+      };
+      window.addEventListener("mousemove", move);
+      window.addEventListener("mouseup", up);
+    },
     key(e) {
+      if (this.editable && this.selected && ["ArrowLeft", "ArrowRight"].includes(e.key)) {
+        e.preventDefault();
+        const note = this.selected;
+        const end = note[1] + (e.key === "ArrowRight" ? 1 : -1) * this.step;
+        if (this.setEnd(note, end)) this.$emit("resize", { start: note[0], end: note[1] });
+        return;
+      }
       if (!this.editable || !this.selected || !["ArrowUp", "ArrowDown"].includes(e.key)) return;
       e.preventDefault();
       const step = (e.key === "ArrowUp" ? 1 : -1) * (e.shiftKey ? 12 : 1);

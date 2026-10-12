@@ -167,6 +167,44 @@ def melody_editor(s: SongSettings, pick: PickFn) -> None:
     ui.select(sung, label="Singt in").bind_value(s, "melody_midi_section").classes("w-48").mark("melody-section")
     hint("Die Spur mit den meisten Tönen zählt, auf Sechzehntel gerundet; sie wiederholt sich, bis die Sektion "
          "voll ist, und rückt in die Stimmlage. Schreib sie in der Tonart des Songs.")
+    humming_editor(s, pick)
+
+
+def humming_editor(s: SongSettings, pick: PickFn) -> None:
+    """Eine gesummte Melodie (Aufnahme) wird zur MIDI-Datei, die der Song singt."""
+    import humming
+
+    async def hum(path: str) -> None:
+        if not path:
+            return
+        target = humming.target_for(path, s.output_dir())
+        count = await run.io_bound(humming.transcribe, path, s.bpm, target)
+        if not count:
+            ui.notify("In der Aufnahme ist keine Melodie zu hören (oder die Datei ist nicht lesbar). "
+                      "Summ deutlich, Ton für Ton (da-da-da).",
+                      type="warning", multi_line=True)
+            return
+        s.melody_midi = target
+        ui.notify(f"Gesummte Melodie: {count} Töne, gespeichert als {os.path.basename(target)}", type="positive")
+
+    async def choose() -> None:
+        await hum(await pick(file_types=humming.FILE_TYPES))
+
+    async def upload(e) -> None:
+        folder = os.path.join(s.output_dir(), "summen")
+        os.makedirs(folder, exist_ok=True)
+        target = os.path.join(folder, os.path.basename(e.file.name))
+        await e.file.save(target)
+        await hum(target)
+
+    if pick.available:
+        ui.button("Melodie summen (Aufnahme wählen)", icon="mic", on_click=choose) \
+            .props("outline dense no-caps").mark("hum-pick")
+    else:
+        ui.upload(label="Gesummte Melodie hochladen", auto_upload=True, on_upload=upload) \
+            .props("dense flat accept=audio/*").classes("w-full").mark("hum-upload")
+    hint("Summ oder sing deine Melodie im Tempo des Songs ins Handy, Ton für Ton (da-da-da). Daraus werden Noten "
+         "für das Feld oben, auf Sechzehntel gerundet; der erste Ton liegt auf der Eins.")
 
 
 def motif_editor(s: SongSettings, pick: PickFn) -> None:

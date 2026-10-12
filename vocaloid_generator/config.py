@@ -26,6 +26,7 @@ SECTION_CONFIG = {
     "Chorus":    {"bars": 16, "has_vocals": True},
     "Bridge":    {"bars": 8,  "has_vocals": True},
     "Drop":      {"bars": 2,  "has_vocals": False},
+    "Solo":      {"bars": 8,  "has_vocals": False},   # Instrumental-Solo der Lead-Stimme über den Refrain-Akkorden
     "Outro":     {"bars": 8,  "has_vocals": False},
 }
 

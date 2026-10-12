@@ -42,6 +42,22 @@ GROOVES = {
     "ballad_light": {KICK: [(0, 0.7), (10, 0.5)], RIM: [(4, 0.6), (12, 0.6)], HAT: _eighths(0.38, 0.28)},
     "citypop":     {KICK: [(0, 1.0), (7, 0.6), (10, 0.85)], SNARE: [(4, 1.0), (12, 1.0)],
                     HAT: _sixteenths(0.7, 0.55, 0.35), "ghost": [(3, 1.0), (15, 1.0)]},
+    # Future Bass: Snare und Clap nur auf der Drei (halbes Tempo), darüber schnelle Hi-Hats
+    "fb_verse":    {KICK: [(0, 1.0), (10, 0.75)], SNARE: [(8, 0.95)], CLAP: [(8, 0.9)], HAT: _eighths(0.6, 0.45)},
+    "fb_chorus":   {KICK: [(0, 1.0), (3, 0.6), (10, 0.9)], SNARE: [(8, 1.0)], CLAP: [(8, 1.0)],
+                    HAT: [h for h in _sixteenths(0.7, 0.5, 0.35) if h[0] != 14], OPEN_HAT: [(14, 0.6)]},
+    # Drum and Bass: der Two-Step, Bassdrum auf 1 und 3+, Snare auf 2 und 4, leise Ghost-Notes dazwischen
+    "dnb":         {KICK: [(0, 1.0), (10, 0.9)], SNARE: [(4, 1.0), (12, 1.0)],
+                    HAT: [(s, 0.7 if s % 4 == 2 else 0.5) for s in range(0, 16, 2)],
+                    "ghost": [(7, 1.0), (9, 1.0), (15, 1.0)]},
+    "dnb_verse":   {KICK: [(0, 1.0), (10, 0.85)], SNARE: [(4, 0.9), (12, 0.9)], HAT: [(s, 0.55) for s in range(2, 16, 4)],
+                    "ghost": [(7, 1.0), (15, 1.0)]},
+    # Lo-Fi: Boom-Bap, gemütlich und mit Swing
+    "lofi":        {KICK: [(0, 1.0), (7, 0.55), (10, 0.85)], SNARE: [(4, 0.9), (12, 0.9)], HAT: _eighths(0.5, 0.35),
+                    "ghost": [(15, 1.0)]},
+    "lofi_light":  {KICK: [(0, 0.8), (10, 0.6)], RIM: [(4, 0.6), (12, 0.6)], HAT: _eighths(0.4, 0.28)},
+    "idol_verse":  {KICK: [(0, 1.0), (8, 0.9), (10, 0.7)], SNARE: [(4, 1.0), (12, 1.0)], HAT: _sixteenths(0.7, 0.5, 0.3),
+                    TAMBOURINE: [(4, 0.55), (12, 0.55)]},
 }
 
 

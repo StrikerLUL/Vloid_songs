@@ -48,7 +48,7 @@ def exportiere_projekt(result, zip_pfad: str) -> str:
             dateien.append((pfad, os.path.basename(pfad)))
     for name, pfad in sorted(result.wav_files.items()):
         dateien.append((pfad, f"Spuren/{name}.wav"))
-    for pfad in (result.vocals_wav, result.harmony_wav):
+    for pfad in (result.vocals_wav, result.harmony_wav, getattr(result, "choir_wav", None)):
         if pfad:
             dateien.append((pfad, f"Spuren/{os.path.basename(pfad)}"))
     for name, pfad in sorted(result.midi_files.items()):

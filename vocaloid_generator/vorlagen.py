@@ -13,7 +13,8 @@ from settings import SongSettings
 log = logging.getLogger(__name__)
 
 FOLDER = os.path.join(config.BASE_DIR, "vorlagen")
-NOT_IN_TEMPLATE = ("seed", "variations", "lyrics", "neutrino_pfad", "soundfont_pfad", "output_ordner", "vst_path")
+NOT_IN_TEMPLATE = ("seed", "variations", "lyrics", "neutrino_pfad", "soundfont_pfad", "output_ordner", "vst_path",
+                   "cabinet_ir", "melody_midi", "melody_midi_section")
 
 
 def names(folder: str = None) -> list:

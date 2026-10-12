@@ -87,7 +87,8 @@ def diffsinger_synthese(melodie_daten, silben, bpm, output_wav_pfad):
 
 # ── Fallback (Pedalboard Synth) ─────────────────────────────────────────────
 def generiere_lokale_vocals(melodie_daten, silben, bpm, output_wav_pfad, **kwargs):
-    """Lokale Vorschau-Stimme (TTS + pyworld). kwargs: breathiness (0.0-0.12), shimmer (Chorus an/aus)."""
+    """Lokale Vorschau-Stimme (TTS + pyworld). kwargs: breathiness (0.0-0.12), shimmer (Chorus an/aus),
+    vibrato (0 = gerade Töne, 1 = normal, 2 = doppelt so tief), glide (0 = springen, 1 = normal, 2 = doppelt so lang)."""
     import tempfile
     import pyttsx3
     import pyworld as pw
@@ -100,6 +101,8 @@ def generiere_lokale_vocals(melodie_daten, silben, bpm, output_wav_pfad, **kwarg
     quarter_sec = 60.0 / bpm
     breath_level = float(kwargs.get("breathiness", 0.04)) / 10.0
     shimmer = bool(kwargs.get("shimmer", True))
+    vibrato = float(kwargs.get("vibrato", 1.0))
+    glide = float(kwargs.get("glide", 1.0))
     silben_idx = 0
     final_audio = []
     temp_wav = os.path.join(tempfile.gettempdir(), "temp_tts_voc.wav")
@@ -176,21 +179,21 @@ def generiere_lokale_vocals(melodie_daten, silben, bpm, output_wav_pfad, **kwarg
             target_hz = 440.0 * (2.0 ** ((pitch - 69.0) / 12.0))
             f0_vocoded = np.where(f0_stretched > 0, target_hz, 0.0).astype(np.float64)
             
-            if prev_pitch_hz is not None and prev_pitch_hz > 0:
-                glide_frames = min(int(0.060 / frame_period), len(f0_vocoded) // 3)
+            if prev_pitch_hz is not None and prev_pitch_hz > 0 and glide > 0:
+                glide_frames = min(int(0.060 * glide / frame_period), len(f0_vocoded) // 3)
                 for j in range(glide_frames):
                     if f0_vocoded[j] > 0:
                         alpha = (1 - np.cos(np.pi * j / glide_frames)) / 2
                         f0_vocoded[j] = prev_pitch_hz * (1.0 - alpha) + target_hz * alpha
             
             vibrato_onset_frames = int(0.300 / frame_period)
-            if target_duration > 0.400 and len(f0_vocoded) > vibrato_onset_frames:
+            if vibrato > 0 and target_duration > 0.400 and len(f0_vocoded) > vibrato_onset_frames:
                 for j in range(len(f0_vocoded)):
                     if f0_vocoded[j] > 0:
                         t_sec = j * frame_period
                         vib_env = min(1.0, max(0.0, (j - vibrato_onset_frames) / (0.200 / frame_period)))
                         rate = 5.2 + 0.3 * np.sin(2 * np.pi * 0.8 * t_sec)
-                        depth = 0.45 * vib_env
+                        depth = 0.45 * vibrato * vib_env
                         mod = depth * np.sin(2.0 * np.pi * rate * t_sec)
                         f0_vocoded[j] = f0_vocoded[j] * (2.0 ** (mod / 12.0))
             

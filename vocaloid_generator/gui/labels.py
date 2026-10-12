@@ -15,10 +15,11 @@ PART_HINTS = {
     "chords": "Neue Akkorde und neuer Ablauf; alles, was auf den Akkorden spielt, ändert sich mit.",
 }
 SCALES = {"minor": "Moll", "major": "Dur", "dorian": "Dorisch", "phrygian": "Phrygisch"}
-ENGINES = {"NEUTRINO": "NEUTRINO", "Vorschau": "Vorschau-Stimme (ohne NEUTRINO)"}
+ENGINES = {"NEUTRINO": "NEUTRINO", "VOICEVOX": "VOICEVOX (kostenlos, läuft als App)",
+           "Vorschau": "Vorschau-Stimme (ohne NEUTRINO und VOICEVOX)"}
 SECTIONS = {
     "Intro": "Intro", "Build-up": "Build-up", "Verse": "Strophe", "PreChorus": "Pre-Chorus", "Chorus": "Refrain",
-    "Bridge": "Bridge", "Drop": "Drop", "Outro": "Outro",
+    "Bridge": "Bridge", "Drop": "Drop", "Solo": "Solo", "Outro": "Outro",
 }
 STRUCTURES = {
     "Kurz": ["Intro", "Verse", "PreChorus", "Chorus", "Outro"],
@@ -40,6 +41,8 @@ PLAYING = {
     "answer": "antwortet dem Gesang", "guide": "begleitet den Gesang", "solo": "Solo", "shaker": "Shaker",
     "claps": "Claps", "tambourine": "Tamburin", "congas": "Congas", "cowbell": "Kuhglocke",
     "harp": "Harfe", "timpani": "Pauken", "horns": "Hörner",
+    "rolling": "rollend (Drum and Bass)", "fb_chords": "Future-Bass-Akkorde",
+    "soundfont": "SoundFont-Schlagzeug", "808": "Drum-Machine 808", "909": "Drum-Machine 909",
 }
 # Farben der Spuren in der Piano-Roll
 COLORS = {

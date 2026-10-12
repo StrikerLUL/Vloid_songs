@@ -129,6 +129,30 @@ def parse_roman(symbol: str, tonic: int) -> Chord:
     return chord
 
 
+# Akkordnamen wie "F#m7", "Bbmaj7", "C/E": Grundton, Zusatz, Basston
+_NAME = re.compile(r"^(?P<root>[A-Ga-g][#b]?)(?P<suffix>[^/]*)(?:/(?P<bass>[A-Ga-g][#b]?))?$")
+_NAME_SUFFIXES = {
+    "": "maj", "maj": "maj", "M": "maj", "m": "min", "min": "min", "-": "min", "7": "7", "dom7": "7",
+    "maj7": "maj7", "M7": "maj7", "Δ": "maj7", "m7": "m7", "min7": "m7", "-7": "m7", "dim": "dim", "o": "dim",
+    "m7b5": "m7b5", "ø": "m7b5", "aug": "aug", "+": "aug", "sus": "sus4", "sus4": "sus4", "sus2": "sus2",
+    "7sus4": "7sus4", "6": "6", "add9": "add9", "(add9)": "add9", "madd9": "madd9", "m(add9)": "madd9",
+    "9": "7", "maj9": "maj9", "m9": "m9",
+}
+
+
+def _note_pc(name: str) -> int:
+    return KEY_OFFSETS[name[0].upper() + name[1:]]
+
+
+def parse_chord_name(name: str) -> Chord:
+    """'F#m7' → Fis-Moll-Septakkord, 'C/E' → C-Dur mit E im Bass, 'Bb' → B-Dur."""
+    m = _NAME.match(name.strip())
+    if not m or m.group("suffix") not in _NAME_SUFFIXES:
+        raise ValueError(f"Unbekannter Akkord: {name}")
+    bass = _note_pc(m.group("bass")) if m.group("bass") else None
+    return Chord(_note_pc(m.group("root")), _NAME_SUFFIXES[m.group("suffix")], bass)
+
+
 def nearest_pitch(pc: int, target: int) -> int:
     """Der Ton mit Tonklasse pc, der target am nächsten liegt."""
     base = target - ((target - pc) % 12)

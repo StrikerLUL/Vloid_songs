@@ -46,6 +46,8 @@ def stems(result) -> dict:
         found[labels.CHANNELS["vocals"]] = result.vocals_wav
     if result.harmony_wav and os.path.exists(result.harmony_wav):
         found["Zweite Stimme"] = result.harmony_wav
+    if getattr(result, "choir_wav", None) and os.path.exists(result.choir_wav):
+        found["Chor im letzten Refrain"] = result.choir_wav
     for inst, path in result.wav_files.items():
         if os.path.exists(path):
             found[labels.CHANNELS.get(inst, inst)] = path
@@ -83,6 +85,14 @@ def piano_roll(result) -> dict:
     if data["notes"]:
         data["duration"] = max(n[1] for n in data["notes"])
     return data
+
+
+def lyrics(result) -> list:
+    """Die Zeilen zum Mitlesen (karaoke.lines) des Songs; leer ohne Gesang."""
+    import karaoke
+    if result is None:
+        return []
+    return karaoke.load(os.path.join(result.output_dir, karaoke.FILE))
 
 
 def open_folder(path: str) -> bool:

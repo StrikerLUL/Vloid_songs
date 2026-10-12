@@ -11,12 +11,13 @@ from nicegui import ui
 from nicegui.testing.user_simulation import user_simulation
 
 import history
+import karaoke
 import pipeline
 import vorlagen
 from gui import media, page
-from gui.components import PianoRoll, WavePlayer
+from gui.components import Karaoke, PianoRoll, WavePlayer
 from pipeline import SongResult
-from settings import SongSettings
+from settings import SongSettings, edit_key
 
 
 @pytest_asyncio.fixture
@@ -70,6 +71,27 @@ def fake_generation(monkeypatch):
 
     monkeypatch.setattr(pipeline, "generate_song", fake_song)
     return calls
+
+
+@pytest.fixture
+def sung_generation(fake_generation, monkeypatch):
+    """Wie fake_generation, aber der Song hat Gesang: eine Gesangsmelodie und den Text zum Mitlesen."""
+    fake_song = pipeline.generate_song
+
+    def sung_song(settings, progress=None, seed=None):
+        result = fake_song(settings, progress, seed)
+        midi = pretty_midi.PrettyMIDI()
+        inst = pretty_midi.Instrument(0)
+        inst.notes += [pretty_midi.Note(100, 64 + i, 0.5 * i, 0.5 * i + 0.4) for i in range(4)]
+        midi.instruments.append(inst)
+        midi.write(os.path.join(result.output_dir, "vocal_melody.mid"))
+        karaoke.save(os.path.join(result.output_dir, karaoke.FILE),
+                     [{"start": 0.0, "end": 0.9, "syllables": [[0.0, 0.4, "よ"], [0.5, 0.9, "る"]]},
+                      {"start": 1.0, "end": 1.9, "syllables": [[1.0, 1.4, "の"], [1.5, 1.9, "ま"]]}])
+        return result
+
+    monkeypatch.setattr(pipeline, "generate_song", sung_song)
+    return fake_generation
 
 
 async def test_page_shows_settings_and_waits_for_a_song(user):
@@ -244,3 +266,241 @@ async def test_paths_tab_tells_whether_the_extra_soundfonts_are_there(user):
     await user.should_see("setup_soundfonts.py ausführen")
     user.find(marker="sound-library-switch").elements.pop().set_value(False)
     await until(lambda: SongSettings.load().sound_library is False)
+
+
+async def test_references_from_the_library_suggest_tempo_key_and_style(user, monkeypatch):
+    import reference
+    os.makedirs(reference.LIBRARY)
+    path = os.path.join(reference.LIBRARY, "lieblingssong.wav")
+    sf.write(path, np.zeros((22050, 2), dtype=np.float32), 22050)
+    summary = reference.Summary(bpm=172, key="D", scale="minor", style="Dark Vocaloid", contrast_db=4.0,
+                                vocal_db=-3.0, names=["lieblingssong.wav"])
+    monkeypatch.setattr(reference, "summarize", lambda refs, styles=None: summary if reference.active(refs) else None)
+    await user.open("/")
+    user.find(marker="reference-library").elements.pop().set_value(path)
+    await until(lambda: [r.path for r in SongSettings.load().reference_tracks] == [path])
+    await user.should_see("Vorbilder: 172 BPM, D Moll, klingt nach Dark Vocaloid", retries=50)
+    user.find(marker="reference-take-tempo").click()
+    user.find(marker="reference-take-style").click()
+    await until(lambda: (SongSettings.load().bpm, SongSettings.load().style) == (172, "Dark Vocaloid"))
+    assert (SongSettings.load().key, SongSettings.load().scale) == ("D", "minor")
+
+
+async def test_reference_suggestions_can_be_switched_off(user, monkeypatch):
+    import reference
+    summary = reference.Summary(bpm=172, key="D", scale="minor", style="Dark Vocaloid", contrast_db=4.0,
+                                vocal_db=-3.0, names=["a.wav"])
+    monkeypatch.setattr(reference, "summarize", lambda refs, styles=None: summary)
+    monkeypatch.setattr(reference, "active", lambda refs: [("a.wav", 1.0)])
+    await user.open("/")
+    await user.should_see(marker="reference-take-tempo")
+    user.find(marker="switch-ref_tempo_key").elements.pop().set_value(False)
+    await user.should_not_see(marker="reference-take-tempo")
+    await until(lambda: SongSettings.load().ref_tempo_key is False)
+
+
+async def test_lively_singing_can_be_switched_and_voicevox_singers_are_listed(user, monkeypatch):
+    import voicevox
+    monkeypatch.setattr(voicevox, "singers", lambda url=None, timeout=None: {3002: "四国めたん (ノーマル)"})
+    await user.open("/")
+    await user.should_see("VOICEVOX läuft, 1 Singstimmen.", retries=50)   # Timer, dann ein Thread
+    select = user.find(marker="voicevox-singer").elements.pop()
+    assert select.options[3002] == "四国めたん (ノーマル)"
+    select.set_value(3002)
+    user.find(marker="switch-final_choir").elements.pop().set_value(False)
+    user.find(marker="slider-vibrato").elements.pop().set_value(0.4)
+    await until(lambda: (SongSettings.load().voicevox_singer, SongSettings.load().final_choir,
+                         SongSettings.load().vibrato) == (3002, False, 0.4))
+
+
+async def test_without_voicevox_the_app_says_how_to_get_it(user):
+    await user.open("/")
+    await user.should_see("VOICEVOX läuft nicht. Kostenlos unter voicevox.hiroshiba.jp; App starten, dann neu laden.",
+                          retries=50)
+
+
+async def test_sound_switches_and_a_vst_sound_per_part(user, monkeypatch, tmp_path):
+    import vst_sounds
+    plugin = tmp_path / "Surge XT.vst3"
+    plugin.mkdir()
+    monkeypatch.setattr(vst_sounds, "_surge_candidates", lambda: (str(plugin),))
+    monkeypatch.setattr(vst_sounds, "choose", lambda path, state="": "QUJD" if path == str(plugin) else None)
+    await user.open("/")
+    user.find(marker="switch-guitar_amp").elements.pop().set_value(False)
+    user.find(marker="style-drums").elements.pop().set_value("909")
+    await until(lambda: (SongSettings.load().guitar_amp, SongSettings.load().channels["drums"].style) == (False, "909"))
+    assert not user.find(marker="vst-choose-bass").elements.pop().enabled
+    user.find(marker="use-surge").click()
+    await until(lambda: SongSettings.load().vst_path == str(plugin))
+    user.find(marker="vst-choose-bass").click()
+    await until(lambda: SongSettings.load().vst_sounds == {"bass": "QUJD"})
+    assert user.find(marker="vst-status-bass").elements.pop().text == "eigener Klang"
+    user.find(marker="vst-forget-bass").click()
+    await until(lambda: SongSettings.load().vst_sounds == {})
+
+
+async def test_rerolling_only_in_one_section(user, fake_generation):
+    await user.open("/")
+    user.find(marker="generate").click()
+    await user.should_see("Seed 1000", retries=50)
+    user.find(marker="reroll-where").elements.pop().set_value("Chorus")
+    user.find(marker="reroll-melody").click()
+    await user.should_see("Melodie (Refrain) 1×", retries=50)
+    assert fake_generation[-1].seed == 1000 and fake_generation[-1].variations == {"melody:Chorus": 1}
+
+    # Eine Sektion, die der Song nicht hat, würfelt nichts
+    user.find(marker="reroll-where").elements.pop().set_value("Solo")
+    user.find(marker="reroll-drums").click()
+    await user.should_see("keine Sektion Solo", retries=20)
+    assert len(fake_generation) == 2
+
+
+async def test_choosing_one_of_three_chorus_melodies(user, fake_generation, monkeypatch, tmp_path):
+    asked = []
+
+    def fake_hooks(settings, count=3, progress=None):
+        asked.append(settings)
+        choices = []
+        for n in range(1, count + 1):
+            preview = tmp_path / f"refrain{n}.wav"
+            sf.write(str(preview), np.zeros((2205, 2), dtype=np.float32), 22050)
+            choices.append(pipeline.HookChoice(n, settings.with_updates(seed=55, variations={"melody:Chorus": n}),
+                                               str(preview)))
+        return choices
+
+    monkeypatch.setattr(pipeline, "hook_choices", fake_hooks)
+    await user.open("/")
+    user.find(marker="hooks").click()
+    await user.should_see(marker="hook-take-3", retries=50)
+    [player] = user.find(WavePlayer).elements
+    assert player.title == "Refrain 1"
+    user.find(marker="hook-play-2").click()
+    await until(lambda: player.title == "Refrain 2")
+    user.find(marker="hook-take-2").click()
+    await until(lambda: len(fake_generation) == 1)
+    assert fake_generation[0].seed == 55 and fake_generation[0].variations == {"melody:Chorus": 2}
+    await user.should_see("Melodie (Refrain) 2×", retries=50)
+
+
+async def test_hooks_that_cannot_be_made_explain_why(user, monkeypatch):
+    def refuse(settings, count=3, progress=None):
+        raise ValueError("Im Chorus singt deine eigene MIDI-Melodie")
+
+    monkeypatch.setattr(pipeline, "hook_choices", refuse)
+    await user.open("/")
+    user.find(marker="hooks").click()
+    await user.should_see("eigene MIDI-Melodie", retries=50)
+
+
+async def test_own_chords_and_melody_are_saved(user):
+    await user.open("/")
+    user.find(marker="chords-Chorus").type("F G Em Am")
+    user.find(marker="chords-Verse").type("vi IV I V")
+    await until(lambda: SongSettings.load().custom_chords == {"Chorus": "F G Em Am", "Verse": "vi IV I V"})
+    user.find(marker="chords-Chorus").clear()
+    await until(lambda: SongSettings.load().custom_chords == {"Verse": "vi IV I V"})
+    user.find(marker="chords-Bridge").type("F Fxyz")
+    await user.should_see("Unbekannter Akkord: Fxyz", retries=20)
+    user.find(marker="melody-midi").type("C:/melodie.mid")
+    user.find(marker="melody-section").elements.pop().set_value("Verse")
+    await until(lambda: (SongSettings.load().melody_midi, SongSettings.load().melody_midi_section)
+                == ("C:/melodie.mid", "Verse"))
+
+
+# ── Bedienung: Mitlesen, Lyric-Video, Vergleich, Ablauf, Töne ändern ──────────────
+async def test_lyrics_to_read_along_and_the_switch_to_hide_them(user, sung_generation):
+    await user.open("/")
+    user.find(marker="generate").click()
+    await user.should_see("Seed 1000", retries=50)
+    [view] = user.find(Karaoke).elements
+    await until(lambda: view.lines)         # den Text liest ein Hintergrund-Thread
+    assert [karaoke.text(line) for line in view.lines] == ["よる", "のま"]
+    assert view.visible
+    user.find(marker="switch-karaoke").click()
+    await until(lambda: not view.visible)
+    await until(lambda: SongSettings.load().show_karaoke is False)
+
+
+async def test_lyric_video_is_made_for_the_current_song(user, fake_generation, monkeypatch, tmp_path):
+    made = []
+
+    def fake_video(result, path=None):
+        made.append(result.seed)
+        path = str(tmp_path / "lyric_video.mp4")
+        open(path, "wb").close()
+        return path
+
+    monkeypatch.setattr(pipeline, "lyric_video", fake_video)
+    await user.open("/")
+    user.find(marker="generate").click()
+    await user.should_see("Seed 1000", retries=50)
+    user.find(marker="video").click()
+    await user.should_see("Lyric-Video gespeichert", retries=50)
+    assert made == [1000]
+
+    def no_ffmpeg(result, path=None):
+        raise RuntimeError("Für das Lyric-Video fehlt ffmpeg")
+
+    monkeypatch.setattr(pipeline, "lyric_video", no_ffmpeg)
+    user.find(marker="video").click()
+    await user.should_see("fehlt ffmpeg", retries=50)
+
+
+async def test_two_songs_from_the_history_can_be_compared(user, fake_generation):
+    await user.open("/")
+    user.find(marker="count").elements.pop().value = 2
+    user.find(marker="generate").click()
+    await user.should_see("Seed 1001", retries=80)
+    user.find(marker="tab-Verlauf").click()
+    user.find(marker="history-A-1").click()
+    user.find(marker="history-B-2").click()
+    await user.should_see(marker="compare-B")
+    [player] = user.find(WavePlayer).elements
+    user.find(marker="compare-B").click()
+    await until(lambda: player.title.startswith("B · "))
+    user.find(marker="compare-A").click()
+    await until(lambda: player.title.startswith("A · "))
+    user.find(marker="compare-close").click()
+    await user.should_not_see(marker="compare-A")
+
+
+async def test_sections_can_be_dragged_and_their_length_chosen(user):
+    await user.open("/")
+    before = SongSettings.load().active_sections
+    user.find(marker="section-0").trigger("dragstart")
+    user.find(marker="section-2").trigger("drop")
+    await until(lambda: SongSettings.load().active_sections == before[1:3] + before[:1] + before[3:])
+    user.find(marker="bars-Chorus-8").click()
+    await until(lambda: SongSettings.load().section_bars == {"Chorus": 8})
+    await user.should_see("Refrain · 8")
+    user.find(marker="bars-Chorus-16").click()      # die Standardlänge braucht keinen Eintrag
+    await until(lambda: SongSettings.load().section_bars == {})
+
+
+async def test_sung_notes_can_be_moved_and_sung_again(user, sung_generation):
+    await user.open("/")
+    user.find(marker="generate").click()
+    await user.should_see("Seed 1000", retries=50)
+    [roll] = user.find(PianoRoll).elements
+    await until(lambda: roll.tracks)
+    assert roll.tracks[0]["key"] == "vocals"
+    user.find(marker="edit-melody").click()
+    await until(lambda: roll.editable)
+
+    # Der zweite Ton (0,5 s) geht von 65 auf 67
+    user.find(PianoRoll).trigger("edit", {"start": 0.5, "pitch": 67})
+    await user.should_see("1 Ton geändert")
+    assert [n[2] for n in roll.notes if n[3] == 0] == [64, 67, 66, 67]
+    beat = edit_key(0.5 * SongSettings.load().bpm / 60)
+    await until(lambda: SongSettings.load().melody_edits == {beat: 67})
+
+    # Neu singen: derselbe Song mit dem geänderten Ton
+    user.find(marker="resing").click()
+    await until(lambda: len(sung_generation) == 2)
+    assert sung_generation[-1].seed == 1000 and sung_generation[-1].melody_edits == {beat: 67}
+    await user.should_see("Seed 1000 · 1 Ton geändert", retries=50)
+
+    # Verwerfen: die Töne stehen wieder wie gesungen
+    user.find(marker="drop-edits").click()
+    await until(lambda: SongSettings.load().melody_edits == {})
+    await until(lambda: [n[2] for n in roll.notes if n[3] == 0] == [64, 65, 66, 67])

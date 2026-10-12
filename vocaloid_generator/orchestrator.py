@@ -8,8 +8,9 @@ import pretty_midi
 
 from drums import CRASH, KICK, OPEN_HAT, HAT, PEDAL_HAT, RIDE, TAMBOURINE, TOMS, drum_section, lead_in
 from lyrics import parse_lyrics
+from melody_import import imported_bars
 from melody_writer import harmony_line, melody_data, required_bars, write_vocal_melody
-from parts import LAYER_PROGRAMS, PARTS, Ev, lead_hook
+from parts import LAYER_PROGRAMS, PARTS, Ev, lead_hook, lead_solo
 from song_plan import BEATS_PER_BAR, build_plan, describe_arrangement
 from styles import get_style
 
@@ -44,31 +45,40 @@ def _default_lyrics() -> dict:
 def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: str, section_config: dict,
                      output_dir: str = None, lyrics: dict = None, swing: float = None,
                      jitter_scale: float = 1.0, instrument_styles: dict = None, style: str = None,
-                     vocal_range: tuple = None, variations: dict = None) -> dict:
+                     vocal_range: tuple = None, variations: dict = None, custom_chords: dict = None,
+                     imported_melody: dict = None, melody_edits: dict = None) -> dict:
     """
     Komponiert den kompletten Song und schreibt eine MIDI-Datei pro Instrument nach output_dir.
 
     style: Name des Stils (z. B. "Dark Vocaloid"); ohne Angabe entscheidet genre.
     lyrics: {Sektion: [Silben]}; Sektionen ohne Text singen den Standardtext.
+    swing: verschiebt jede zweite Sechzehntel nach hinten (0 bis 0,5), zusätzlich zum Swing des Stils.
     instrument_styles: {Instrument: Spielweise}; "default" nimmt die Spielweise des Stils.
     vocal_range: (tiefster, höchster Ton) der Gesangsmelodie, passend zur Stimme.
     variations: {Teil: Zähler} aus REROLLABLE; ein höherer Zähler würfelt nur diesen Teil neu, der Rest des
-    Songs bleibt bei gleichem Seed gleich.
+    Songs bleibt bei gleichem Seed gleich. "Teil:Sektionsart" (z. B. "melody:Chorus") würfelt ihn nur dort neu.
+    custom_chords: {Sektionsart: eigene Akkorde}, siehe song_plan.parse_custom.
+    imported_melody: {Sektionsart: Melodie aus melody_import.load}; dort singt sie statt der komponierten.
+    melody_edits: {Schlag: Tonhöhe} (settings.edit_key): Töne der Gesangsmelodie, die von Hand geändert wurden.
     Rückgabe: {Instrument: [pretty_midi.Note]}, dazu "melody_data", "silben", "vocal_melody", die zweite
     Stimme für den Refrain ("harmony_data", "harmony_silben") und "plan".
     """
     profile = get_style(style or genre)
-    rngs = _part_rngs(random.getrandbits(32), variations or {})
-    swing = profile.swing if swing is None else swing
+    dice = Dice(random.getrandbits(32), variations or {})
+    swing = min(1.0, profile.swing + (swing or 0.0))     # Stile mit eigenem Swing (Lo-Fi) legen ihn dazu
     log.info("Komponiere: Stil %s, %s BPM, %s-%s", profile.name, bpm, key, mode)
 
     sung = {**_default_lyrics(), **(lyrics or {})}
-    min_bars = {kind: required_bars(len(sung.get(kind, [])))
+    imported_melody = {kind: m for kind, m in (imported_melody or {}).items() if m and kind in structure}
+    min_bars = {kind: max(required_bars(len(sung.get(kind, []))), imported_bars(imported_melody.get(kind, [])))
                 for kind in set(structure) if section_config.get(kind, {}).get("has_vocals", True)}
-    plan = build_plan(profile, bpm, structure, key, mode, section_config, rngs["chords"], min_bars)
+    plan = build_plan(profile, bpm, structure, key, mode, section_config, dice.part("chords"), min_bars,
+                      custom_chords=custom_chords, rerolls=dice.rerolled_kinds("chords"))
     if vocal_range:
         plan.vocal_range = tuple(vocal_range)
-    vocal_notes = write_vocal_melody(plan, sung, rngs["melody"])
+    vocal_notes = write_vocal_melody(plan, sung, dice.part("melody"), rerolls=dice.rerolled_kinds("melody"),
+                                     imported=imported_melody)
+    _apply_edits(vocal_notes, melody_edits or {})
 
     arrangement = describe_arrangement(plan)
     if arrangement:
@@ -76,15 +86,21 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
 
     events = {inst: [] for inst in INSTRUMENTS}
     contexts = {inst: {"vocal": vocal_notes} for inst in PARTS}
+    seen = {}
     for sec in plan.sections:
+        seen[sec.kind] = seen.get(sec.kind, 0) + 1
+        rngs = {inst: dice.section(inst, sec.kind, seen[sec.kind]) for inst in INSTRUMENTS}
         for piece in _pieces(sec):
             for inst, part in PARTS.items():
                 pattern = _pattern(profile, piece, inst, instrument_styles)
                 for single in (pattern or "").split("+"):
                     if single:
                         events[inst] += part(single, piece, plan, rngs[inst], contexts[inst])
-            if _pattern(profile, piece, "melody") == "hook":
+            lead = _pattern(profile, piece, "melody")
+            if lead == "hook":
                 events["melody"] += lead_hook(piece, plan, vocal_notes)
+            elif lead == "solo":
+                events["melody"] += lead_solo(piece, plan, vocal_notes, rngs["melody"])
             if piece.feel == "breakdown":
                 events["drums"] += lead_in(piece, rngs["drums"])
             else:
@@ -97,7 +113,7 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
 
     tracks = {}
     for inst in INSTRUMENTS:
-        tracks[inst] = _to_notes(events[inst], bpm, inst, rngs[inst], swing, jitter_scale)
+        tracks[inst] = _to_notes(events[inst], bpm, inst, dice.label(inst), swing, jitter_scale)
     out_dir = output_dir or _default_output()
     os.makedirs(out_dir, exist_ok=True)
     for inst in INSTRUMENTS:
@@ -139,9 +155,49 @@ def _piece_at(plan, beat: float):
     return next((p for p in pieces if p.start <= beat < p.end), pieces[-1])
 
 
-def _part_rngs(base: int, variations: dict) -> dict:
-    """Ein eigener Zufall pro Teil: was ein Teil würfelt, ändert nichts an den anderen."""
-    return {name: random.Random(f"{base}:{name}:{int(variations.get(name, 0))}") for name in REROLLABLE}
+def _apply_edits(vocal_notes: list, edits: dict) -> None:
+    """Von Hand geänderte Töne übernehmen; Band, zweite Stimme und Chor folgen ihnen."""
+    from settings import edit_key
+    changed = 0
+    for n in vocal_notes:
+        pitch = edits.get(edit_key(n.start))
+        if pitch is not None:
+            n.pitch = pitch
+            changed += 1
+    if edits:
+        log.info("Geänderte Töne in der Melodie: %d von %d", changed, len(edits))
+
+
+class Dice:
+    """
+    Der Zufall des Songs, aufgeteilt nach Teil und Sektion: was ein Teil in einer Sektion würfelt, ändert nichts
+    an den anderen Teilen und Sektionen. Ein Zähler in variations ("bass" oder "bass:Chorus") gibt dem Teil im
+    ganzen Song oder nur in dieser Sektionsart einen neuen Zufall.
+    """
+
+    def __init__(self, base: int, variations: dict):
+        self.base = base
+        self.variations = variations
+
+    def label(self, part: str) -> str:
+        return f"{self.base}:{part}:{int(self.variations.get(part, 0))}"
+
+    def part(self, part: str) -> random.Random:
+        return random.Random(self.label(part))
+
+    def section(self, part: str, kind: str, occurrence: int) -> random.Random:
+        """Der Zufall eines Teils in einer Sektion (occurrence: der wievielte Refrain usw.)."""
+        again = int(self.variations.get(f"{part}:{kind}", 0))
+        return random.Random(f"{self.label(part)}:{kind}{occurrence}:{again}")
+
+    def rerolled_kinds(self, part: str) -> dict:
+        """{Sektionsart: neuer Zufall} für die Sektionsarten, in denen dieser Teil neu gewürfelt wurde."""
+        out = {}
+        for key, n in self.variations.items():
+            name, _, kind = key.partition(":")
+            if name == part and kind:
+                out[kind] = random.Random(f"{self.label(part)}:{kind}:{int(n)}")
+        return out
 
 
 def _default_output() -> str:
@@ -225,11 +281,14 @@ def _spread_stereo(plan, profile, events: dict, overrides: dict = None) -> None:
     events["guitar"] += doubled
 
 
-def _to_notes(evs: list, bpm: float, inst: str, rng: random.Random, swing: float, jitter_scale: float) -> list:
+def _to_notes(evs: list, bpm: float, inst: str, label: str, swing: float, jitter_scale: float) -> list:
+    """Schläge in Sekunden, mit Swing und kleinen Ungenauigkeiten. Jeder Ton würfelt für sich (label, Zeit, Höhe),
+    damit ein neu gewürfelter Refrain die Töne in den anderen Sektionen nicht verschiebt."""
     spb = 60.0 / bpm
     spread = TIMING_SPREAD.get(inst, 0.004) * jitter_scale
     notes = []
     for e in sorted(evs, key=lambda e: (e.start, e.pitch)):
+        rng = random.Random(f"{label}:{e.start:.4f}:{e.pitch}:{e.layer}")
         beat = e.start
         sixteenth = beat * 4
         if abs(sixteenth - round(sixteenth)) < 1e-6 and round(sixteenth) % 2 == 1:
@@ -257,7 +316,8 @@ def _write_midi(path: str, inst: str, evs: list, notes: list, profile, bpm: floa
         elif inst == "perc":
             program, is_drum = profile.program("perc"), True
         else:
-            program, is_drum = LAYER_PROGRAMS.get(layer, profile.program(inst)), False
+            # Unterspuren mit eigenem Klang: Pad, Pizzicato usw. für alle Stile, das Solo je nach Stil
+            program, is_drum = LAYER_PROGRAMS.get(layer, profile.programs.get(layer, profile.program(inst))), False
         name = TRACK_NAMES[inst] + (f" {layer}" if layer else "")
         track = pretty_midi.Instrument(program=program, is_drum=is_drum, name=name)
         track.notes = layer_notes

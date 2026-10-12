@@ -48,3 +48,53 @@ def test_failure_returns_exit_code_1(monkeypatch):
         raise RuntimeError("Keine Audiospuren zum Mischen vorhanden.")
     monkeypatch.setattr(main, "generate_song", boom)
     assert main.main([]) == 1
+
+
+def test_vocal_options(captured):
+    assert main.main(["--engine", "VOICEVOX", "--voicevox-stimme", "3002", "--fassungen", "3", "--vibrato", "0",
+                      "--uebergaenge", "1.5", "--ohne-atmer", "--ohne-chor"]) == 0
+    s = captured["settings"]
+    assert (s.vocal_engine, s.voicevox_singer, s.vocal_takes, s.vibrato, s.glide) == ("VOICEVOX", 3002, 3, 0.0, 1.5)
+    assert (s.breaths, s.echo_throws, s.final_choir) == (False, True, False)
+
+
+def test_sound_options(captured):
+    SongSettings(channels={"piano": {"volume": 0.3}}).save()
+    assert main.main(["--style", "Lo-Fi", "--schlagzeug", "909", "--ohne-verstaerker", "--box", "C:/box.wav",
+                      "--ohne-lofi-klang"]) == 0
+    s = captured["settings"]
+    assert (s.style, s.channels["drums"].style, s.guitar_amp, s.cabinet_ir, s.lofi_texture) == \
+        ("Lo-Fi", "909", False, "C:/box.wav", False)
+    assert s.channels["piano"].volume == 0.3
+
+
+def test_composition_options(captured, tmp_path):
+    SongSettings(custom_chords={"Bridge": "F G"}).save()
+    assert main.main(["--seed", "4", "--akkorde", "Chorus=F G Em Am", "--akkorde", "Verse=vi IV I V",
+                      "--melodie-midi", "C:/melodie.mid", "--melodie-sektion", "Verse", "--refrain", "2"]) == 0
+    s = captured["settings"]
+    assert s.custom_chords == {"Bridge": "F G", "Chorus": "F G Em Am", "Verse": "vi IV I V"}
+    assert (s.melody_midi, s.melody_midi_section) == ("C:/melodie.mid", "Verse")
+    assert s.variations == {"melody:Chorus": 2}
+    assert main.main(["--akkorde", "Bridge="]) == 0
+    assert captured["settings"].custom_chords == {}
+
+
+@pytest.mark.parametrize("args", [["--akkorde", "Chorus=F Fxyz"], ["--akkorde", "Refrain=F G"],
+                                  ["--akkorde", "F G"], ["--neu", "melody:Refrain"], ["--neu", "kazoo"]])
+def test_bad_composition_options_are_rejected(captured, args):
+    with pytest.raises(SystemExit):
+        main.main(args)
+
+
+def test_chorus_choices_from_the_command_line(monkeypatch, tmp_path, caplog):
+    import pipeline
+
+    def fake_hooks(settings, count, progress=None):
+        return [pipeline.HookChoice(n, settings.with_updates(seed=9, variations={"melody:Chorus": n}),
+                                    str(tmp_path / f"{n}.wav")) for n in range(1, count + 1)]
+
+    monkeypatch.setattr(main, "hook_choices", fake_hooks)
+    caplog.set_level("INFO")
+    assert main.main(["--refrains", "2"]) == 0
+    assert "--seed 9 --refrain 2" in caplog.text

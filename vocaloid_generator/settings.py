@@ -4,7 +4,7 @@ import logging
 import os
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 import config
 
@@ -14,25 +14,30 @@ INSTRUMENTS = ("piano", "bass", "guitar", "strings", "synth", "brass", "bells", 
                "drums", "melody")
 # fx: Riser, Becken-Swells und Impacts an den Übergängen (Audio, kein MIDI)
 CHANNELS = INSTRUMENTS + ("fx", "vocals", "master")
-# Teile, die sich einzeln neu würfeln lassen ("melody" ist die Gesangsmelodie, "chords" Akkorde und Ablauf)
+# Teile, die sich einzeln neu würfeln lassen ("melody" ist die Gesangsmelodie, "chords" Akkorde und Ablauf),
+# im ganzen Song ("bass") oder nur in einer Sektionsart ("melody:Chorus")
 REROLLABLE = ("chords",) + INSTRUMENTS
 CHANNEL_FIELDS = ("volume", "pan", "enabled", "mute", "solo")
 # Wählbare Spielweisen pro Instrument; "default" nimmt das Muster des Genres
 STYLE_OPTIONS = {
     "piano": ("default", "chords", "eighths", "stabs", "arpeggio", "arpeggio16", "ballad_arp", "jazz_ch"),
-    "bass": ("default", "root", "driving", "sync", "octaves", "wobble", "sub_pulse", "lazy"),
+    "bass": ("default", "root", "driving", "sync", "octaves", "wobble", "sub_pulse", "lazy", "rolling"),
     "guitar": ("default", "chill_riff", "strummed", "palm_mute", "power_chords", "cutting"),
     "strings": ("default", "legato", "build", "pizzicato", "staccato", "harp"),
-    "synth": ("default", "pad", "riser", "staccato_pluck", "wide_saw", "pluck", "arp", "supersaw"),
+    "synth": ("default", "pad", "riser", "staccato_pluck", "wide_saw", "pluck", "arp", "supersaw", "fb_chords"),
     "brass": ("default", "stabs", "accents", "horns"),
     "bells": ("default", "sparkle", "sparkle16", "hook_octave", "accents", "music_box"),
     "choir": ("default", "aahs", "oohs"),
     "counter": ("default", "answer", "guide", "solo"),
     "perc": ("default", "shaker", "claps", "tambourine", "congas", "cowbell"),
-    # Drums folgen dem Stil, die Lead-Stimme spielt den Refrain-Hook im Intro und Outro
-    "drums": ("default",),
+    # Drums spielen die Grooves des Stils; wählbar ist der Klang: SoundFont-Kit oder Drum-Machine 808/909.
+    # Die Lead-Stimme spielt den Refrain-Hook im Intro und Outro
+    "drums": ("default", "soundfont", "808", "909"),
     "melody": ("default",),
 }
+# Ziel-Lautheit des Masters je nach Plattform (LUFS); Streaming-Dienste regeln lautere Songs herunter
+MASTER_TARGETS = {-12.0: "Standard (-12 LUFS)", -14.0: "YouTube und Spotify (-14 LUFS)",
+                  -16.0: "Apple Music (-16 LUFS)", -9.0: "Laut wie im Club (-9 LUFS)"}
 KEYS = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
 _FLAT_TO_SHARP = {"Db": "C#", "Eb": "D#", "Gb": "F#", "Ab": "G#", "Bb": "A#"}
 
@@ -88,6 +93,29 @@ class ChannelSettings(BaseModel):
     style: str = "default"
 
 
+class ReferenceTrack(BaseModel):
+    """Ein Vorbild-Song: Datei, Gewicht (wie stark er zählt) und an/aus."""
+    model_config = ConfigDict(validate_assignment=True, extra="ignore")
+
+    path: str
+    weight: float = Field(1.0, ge=0.0, le=3.0)
+    enabled: bool = True
+
+
+MIN_BARS, MAX_BARS = 1, 64        # Länge einer Sektion in Takten
+
+
+def edit_key(beat: float) -> str:
+    """Schlüssel eines geänderten Tons: sein Anfang in Schlägen, auf Sechzehntel gerundet ("12.25")."""
+    return f"{round(beat * 4) / 4:g}"
+
+
+def is_rerollable(key: str) -> bool:
+    """Ein Teil aus REROLLABLE, wahlweise mit Sektionsart: "bass" oder "bass:Chorus"."""
+    part, _, kind = key.partition(":")
+    return part in REROLLABLE and (not kind or kind in config.SECTION_CONFIG)
+
+
 def _default_channels() -> dict:
     return {ch: ChannelSettings(volume=DEFAULT_VOLUMES[ch], pan=_DEFAULT_PANS[ch]) for ch in CHANNELS}
 
@@ -102,22 +130,50 @@ class SongSettings(BaseModel):
     key: str = "A"
     scale: Literal["minor", "major", "dorian", "phrygian"] = "minor"
     seed: Optional[int] = Field(None, ge=0)
-    # Wie oft ein Teil bei gleichem Seed neu gewürfelt wurde; ohne Eintrag bleibt er, wie der Seed ihn macht
+    # Wie oft ein Teil bei gleichem Seed neu gewürfelt wurde; ohne Eintrag bleibt er, wie der Seed ihn macht.
+    # Schlüssel: Teil ("bass") oder Teil in einer Sektionsart ("melody:Chorus")
     variations: dict[str, int] = Field(default_factory=dict)
+    # Eigene Akkorde pro Sektionsart ("F G Em Am" oder "IV V iii vi"); leer = die Akkorde des Stils
+    custom_chords: dict[str, str] = Field(default_factory=dict)
+    melody_midi: str = ""              # eigene Melodie als MIDI-Datei (leer = komponiert)
+    melody_midi_section: str = "Chorus"    # in dieser Sektionsart singt die eigene Melodie
 
     active_sections: list[str] = Field(default_factory=lambda: [
         "Intro", "Verse", "PreChorus", "Chorus", "Verse", "PreChorus", "Chorus", "Bridge", "Chorus", "Outro"
     ])
+    section_bars: dict[str, int] = Field(default_factory=dict)   # Takte pro Sektionsart; fehlt sie, wie config.py
+    # Geänderte Töne der Gesangsmelodie: {Schlag ab Songanfang: Tonhöhe}, gelten für Seed und Zähler dieses Songs
+    melody_edits: dict[str, int] = Field(default_factory=dict)
     lyrics: str = DEFAULT_LYRICS
 
     singer: str = "MERROW"
-    vocal_engine: str = "NEUTRINO"
-    harmonies: bool = True             # zweite Stimme im Refrain (nur mit NEUTRINO)
+    vocal_engine: str = "NEUTRINO"     # NEUTRINO, VOICEVOX oder Vorschau; fehlt eine, singt die andere
+    harmonies: bool = True             # zweite Stimme im Refrain (mit NEUTRINO oder VOICEVOX)
     duet_singer: str = ""              # zweite NEUTRINO-Stimme fürs Duett (leer = kein Duett)
     style_shift: int = Field(0, ge=-6, le=6)   # NEUTRINO StyleShift: + heller, - dunkler
-    reference_track: str = ""          # Vorbild-Song fürs Mastering (leer = normales Mastering)
+    vocal_takes: int = Field(1, ge=1, le=3)    # NEUTRINO singt so oft (StyleShift ±1), die sauberste Fassung zählt
+    vibrato: float = Field(1.0, ge=0.0, le=2.0)   # 0 = gerade Töne, 1 = wie gesungen, 2 = doppelt so viel
+    glide: float = Field(1.0, ge=0.0, le=2.0)     # Übergänge zwischen Tönen: 0 = springen, 1 = wie gesungen, 2 = länger
+    breaths: bool = True               # hörbares Einatmen vor den Phrasen
+    echo_throws: bool = True           # Echo auf dem letzten Wort einer Phrase
+    final_choir: bool = True           # im letzten Refrain singt ein Chor mit
+    voicevox_url: str = ""             # Adresse von VOICEVOX (leer = http://127.0.0.1:50021, App oder Engine)
+    voicevox_singer: int = Field(0, ge=0)          # VOICEVOX-Singstimme (Stil-ID, 0 = die erste)
+    # Vorbild-Songs (reference.py) und was sie bestimmen dürfen; jedes lässt sich abschalten
+    reference_tracks: list[ReferenceTrack] = Field(default_factory=list)
+    reference_folder: str = ""         # Ordner mit Lieblingssongs zum Anhaken (leer = vocaloid_generator/vorbilder)
+    ref_mastering: bool = True         # Klang und Lautheit des Masters wie die Vorbilder
+    ref_energy: bool = True            # leise und laute Teile so weit auseinander wie in den Vorbildern
+    ref_vocal_level: bool = True       # Gesang so laut gegen die Band wie in den Vorbildern
+    ref_tempo_key: bool = True         # Tempo und Tonart der Vorbilder vorschlagen
+    ref_style: bool = True             # passenden Stil vorschlagen
     vst_path: str = ""
+    vst_sounds: dict[str, str] = Field(default_factory=dict)   # Spur → gespeicherter Klang des VST-Instruments
     sound_library: bool = True         # bessere Klänge aus tools/soundfonts (setup_soundfonts.py), wenn vorhanden
+    guitar_amp: bool = True            # verzerrte E-Gitarren über Verstärker und Box statt verzerrter Samples
+    cabinet_ir: str = ""               # Impulsantwort einer Gitarrenbox (WAV); leer = eingebaute Box
+    lofi_texture: bool = True          # im Stil Lo-Fi: Knistern, leiernde Bandmaschine, gedämpfte Höhen
+    show_karaoke: bool = True          # Text zum Mitlesen unter dem Player
     breathiness: float = Field(0.028, ge=0.0, le=0.2)
     shimmer: bool = True
     swing: float = Field(0.12, ge=0.0, le=0.5)
@@ -130,8 +186,17 @@ class SongSettings(BaseModel):
     compressor_threshold: float = Field(-20.0, ge=-60.0, le=0.0)
     compressor_ratio: float = Field(2.0, ge=1.0, le=20.0)
     limiter_threshold: float = Field(-0.3, ge=-20.0, le=0.0)
+    master_lufs: float = Field(-12.0, ge=-20.0, le=-6.0)   # Ziel-Lautheit des Masters (MASTER_TARGETS)
 
     channels: dict[str, ChannelSettings] = Field(default_factory=_default_channels)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _single_reference(cls, data):
+        """Ältere Einstellungen kennen nur einen Vorbild-Song (reference_track)."""
+        if isinstance(data, dict) and data.get("reference_track") and not data.get("reference_tracks"):
+            data = {**data, "reference_tracks": [{"path": data["reference_track"]}]}
+        return data
 
     @field_validator("key")
     @classmethod
@@ -149,10 +214,46 @@ class SongSettings(BaseModel):
             raise ValueError(f"Unbekannte Sektionen: {unknown}")
         return list(value)
 
+    @field_validator("vst_sounds", mode="before")
+    @classmethod
+    def _check_vst_sounds(cls, value: dict) -> dict:
+        from vst_sounds import PARTS
+        return {part: str(state) for part, state in (value or {}).items() if part in PARTS and state}
+
     @field_validator("variations", mode="before")
     @classmethod
     def _check_variations(cls, value: dict) -> dict:
-        return {part: int(n) for part, n in (value or {}).items() if part in REROLLABLE and int(n) > 0}
+        return {part: int(n) for part, n in (value or {}).items() if is_rerollable(part) and int(n) > 0}
+
+    @field_validator("section_bars", mode="before")
+    @classmethod
+    def _check_section_bars(cls, value: dict) -> dict:
+        return {kind: int(bars) for kind, bars in (value or {}).items()
+                if kind in config.SECTION_CONFIG and MIN_BARS <= int(bars) <= MAX_BARS}
+
+    @field_validator("melody_edits", mode="before")
+    @classmethod
+    def _check_melody_edits(cls, value: dict) -> dict:
+        edits = {}
+        for beat, pitch in (value or {}).items():
+            try:
+                edits[edit_key(float(beat))] = max(0, min(127, int(pitch)))
+            except (TypeError, ValueError):
+                continue
+        return edits
+
+    @field_validator("custom_chords", mode="before")
+    @classmethod
+    def _check_custom_chords(cls, value: dict) -> dict:
+        return {kind: str(text) for kind, text in (value or {}).items()
+                if kind in config.SECTION_CONFIG and str(text).strip()}
+
+    @field_validator("melody_midi_section")
+    @classmethod
+    def _check_melody_section(cls, value: str) -> str:
+        if value not in config.SECTION_CONFIG:
+            raise ValueError(f"Unbekannte Sektion: {value}")
+        return value
 
     @field_validator("channels", mode="before")
     @classmethod
@@ -185,10 +286,20 @@ class SongSettings(BaseModel):
         return {inst: self.channels[inst].style for inst in INSTRUMENTS}
 
     def rerolled(self, part: str) -> "SongSettings":
-        """Gleicher Song, nur dieser Teil wird neu gewürfelt."""
-        if part not in REROLLABLE:
+        """
+        Gleicher Song, nur dieser Teil wird neu gewürfelt ("bass" im ganzen Song, "bass:Chorus" nur im Refrain).
+        Neue Melodie oder neue Akkorde verwerfen die geänderten Töne, sie gehörten zur alten Melodie.
+        """
+        if not is_rerollable(part):
             raise ValueError(f"Unbekannter Teil: {part}")
-        return self.with_updates(variations={**self.variations, part: self.variations.get(part, 0) + 1})
+        edits = {} if part.partition(":")[0] in ("melody", "chords") else self.melody_edits
+        return self.with_updates(variations={**self.variations, part: self.variations.get(part, 0) + 1},
+                                 melody_edits=edits)
+
+    def section_config(self) -> dict:
+        """config.SECTION_CONFIG mit den eigenen Längen der Sektionen."""
+        return {kind: {**cfg, "bars": self.section_bars.get(kind, cfg["bars"])}
+                for kind, cfg in config.SECTION_CONFIG.items()}
 
     def with_updates(self, **updates) -> "SongSettings":
         """Kopie mit geänderten Werten, die wieder geprüft wird."""

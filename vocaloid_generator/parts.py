@@ -186,6 +186,13 @@ def bass(pattern: str, sec: Section, plan: SongPlan, rng: random.Random, ctx: di
     elif pattern == "lazy":
         for t, accent, dur in _pattern_hits(sec, [(0, 1.0), (6, 0.7), (10, 0.85)]):
             note(t, dur * 0.85, _chord_for(sec, t), accent, fifth=abs((t % 4) - 2.5) < 1e-6)
+    elif pattern == "rolling":
+        # Drum and Bass: lange Töne mit der Bassdrum (auf 1 und 3+) und bei jedem Akkordwechsel
+        hits = sorted({round(t, 6) for t, _, _ in _pattern_hits(sec, [(0, 1.0), (10, 0.85)])} |
+                      {round(slot.start, 6) for slot in sec.chords})
+        for i, t in enumerate(hits):
+            end = hits[i + 1] if i + 1 < len(hits) else sec.end
+            note(t, (end - t) * 0.95, _chord_for(sec, t), 1.0 if abs(t % 4) < 1e-6 else 0.85)
     ctx["bass"] = prev
     return out
 
@@ -364,6 +371,14 @@ def synth(pattern: str, sec: Section, plan: SongPlan, rng: random.Random, ctx: d
         for slot in sec.chords:
             v = _voicing(ctx, "synth", slot.chord, 60, 84, 4)
             out += [Ev(slot.start, slot.dur * 0.98, p, _vel(sec, 0.65)) for p in v]
+    elif pattern == "fb_chords":
+        # Future Bass: breite Akkorde, synkopisch zerhackt, unten mit dem Grundton
+        steps = [(0, 1.0), (3, 0.85), (6, 0.9), (10, 0.95), (12, 0.75), (14, 0.85)]
+        for t, accent, dur in _pattern_hits(sec, steps):
+            chord = _chord_for(sec, t)
+            v = _voicing(ctx, "saw", chord, 60, 81, 4)
+            root = _bass_pitch(chord.root, None, 48, 59)
+            out += [Ev(t, dur * 0.85, p, _vel(sec, 0.68 * accent), layer="saw") for p in [root] + v]
     elif pattern == "supersaw":
         # breite Akkordfläche im Refrain, oben mit der Oktave des Spitzentons
         for slot in sec.chords:
@@ -596,6 +611,77 @@ def lead_hook(sec: Section, plan: SongPlan, vocal_notes: list) -> list:
             rel = n.start - chorus.start
             if lo <= rel < hi:
                 out.append(Ev(sec.start + target + rel - lo, n.dur * 0.95, n.pitch + shift, _vel(sec, 0.85)))
+    return out
+
+
+# Solo-Rhythmen für zwei Takte (6 Schläge spielen, dann Luft), von ruhig bis dicht
+SOLO_RHYTHMS = (
+    [1.0, 0.5, 0.5, 1.0, 0.5, 0.5, 2.0],
+    [0.5, 0.5, 0.25, 0.25, 0.5, 0.5, 0.25, 0.25, 0.5, 0.5, 2.0],
+    [0.25] * 16 + [2.0],
+)
+
+
+def lead_solo(sec: Section, plan: SongPlan, vocal_notes: list, rng: random.Random) -> list:
+    """
+    Instrumental-Solo der Lead-Stimme in Zwei-Takt-Phrasen: Frage und Antwort. Die Fragen spielen die Hook des
+    Refrains an (die zweite eine Stufe höher), die Antworten laufen frei über die Tonleiter, werden zum Ende dichter
+    und höher, und der letzte Takt hält den Grundton.
+    """
+    chorus = next((s for s in plan.sections if s.kind == "Chorus" and s.has_vocals), None)
+    hook = [n for n in vocal_notes if chorus and chorus.start <= n.start < chorus.start + 2 * BEATS_PER_BAR]
+    center = plan.style.vocal_center + 5
+    lo, hi = center - 7, center + 17
+    shift = 0
+    if hook:
+        shift = (sec.tonic - chorus.tonic + 6) % 12 - 6
+        shift += 12 if sum(n.pitch for n in hook) / len(hook) + shift < center - 6 else 0
+    out, prev = [], center
+    phrases = max(sec.bars // 2, 1)
+    for k in range(phrases):
+        start = sec.start + k * 2 * BEATS_PER_BAR
+        progress = k / max(phrases - 1, 1)
+        if k == phrases - 1:
+            out += _solo_ending(sec, start, prev, lo, hi)
+            break
+        if k % 2 == 0 and hook:
+            steps = (k // 2) % 3            # die Hook, dann eine und zwei Leiterstufen höher
+            for n in hook:
+                t = start + n.start - chorus.start
+                ladder = _ladder(sec, sec.chord_at(t), lo - 5, hi + 5)
+                p = _fit(n.pitch + shift, ladder, 1)
+                p = ladder[min(ladder.index(p) + steps, len(ladder) - 1)]
+                out.append(Ev(t, n.dur * 0.92, p, _vel(sec, 0.85 if n.strong else 0.75), layer="solo"))
+                prev = p
+            continue
+        rhythm = SOLO_RHYTHMS[min(int(progress * len(SOLO_RHYTHMS)), len(SOLO_RHYTHMS) - 1)]
+        target = int(center + 9 * progress)
+        t, direction = start, 1 if prev < target else -1
+        for i, d in enumerate(rhythm):
+            chord = sec.chord_at(t)
+            ladder = _ladder(sec, chord, lo, hi)
+            if i == len(rhythm) - 1 or abs(t - round(t)) < 1e-6 and rng.random() < 0.5:
+                p = min((q for q in ladder if q % 12 in chord.triad_pcs), key=lambda q: abs(q - prev - direction))
+            else:
+                j = min(range(len(ladder)), key=lambda m: abs(ladder[m] - prev)) + direction
+                if not 0 <= j < len(ladder) or rng.random() < 0.15:
+                    direction = -direction
+                    j = max(0, min(len(ladder) - 1, j + 2 * direction))
+                p = ladder[j]
+            out.append(Ev(t, d * 0.9, p, _vel(sec, 0.8 if i == 0 else 0.72), layer="solo"))
+            prev, t = p, t + d
+    return out
+
+
+def _solo_ending(sec: Section, start: float, prev: int, lo: int, hi: int) -> list:
+    """Letzte Phrase: ein Lauf in Sechzehnteln hinauf, dann der Grundton lang."""
+    chord = sec.chord_at(start + BEATS_PER_BAR)
+    root = min((p for p in range(lo + 5, hi + 1) if p % 12 == chord.root), key=lambda p: abs(p - prev - 5))
+    ladder = [p for p in _ladder(sec, sec.chord_at(start), lo - 5, hi) if p < root]
+    run = ladder[-12:] if len(ladder) >= 12 else ladder
+    out = [Ev(start + i * 0.25, 0.23, p, _vel(sec, 0.65 + 0.25 * i / max(len(run), 1)), layer="solo")
+           for i, p in enumerate(run)]
+    out.append(Ev(start + BEATS_PER_BAR, BEATS_PER_BAR * 0.95, root, _vel(sec, 0.92), layer="solo"))
     return out
 
 

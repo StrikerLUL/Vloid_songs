@@ -89,6 +89,10 @@ def test_rock_stays_in_key():
 def test_every_style_arranges_every_section():
     for style in STYLES.values():
         for kind in config.SECTION_CONFIG:
+            if kind == "Solo":      # die Band spielt wie im Refrain, die Lead-Stimme spielt das Solo
+                assert style.part(kind, "melody") == "solo" and style.groove(kind) == style.groove("Chorus")
+                assert style.part(kind, "bass") == style.part("Chorus", "bass"), style.name
+                continue
             assert style.parts.get(kind), (style.name, kind)
             assert kind in style.grooves, (style.name, kind)
 

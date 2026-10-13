@@ -552,6 +552,8 @@ def voicevox_editor(s: SongSettings) -> None:
 
     async def load() -> None:
         found = await run.io_bound(voicevox.singers, s.voicevox_url or voicevox.URL)
+        if found is None:       # die App wird gerade beendet
+            return
         select.set_options(options(found), value=s.voicevox_singer)
         status.set_text(f"VOICEVOX läuft, {len(found)} Singstimmen." if found else
                         "VOICEVOX läuft nicht. Kostenlos unter voicevox.hiroshiba.jp; App starten, dann neu laden.")

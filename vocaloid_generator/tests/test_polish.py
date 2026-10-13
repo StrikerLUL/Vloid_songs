@@ -121,8 +121,11 @@ def test_polish_runs_ace_step_in_its_own_folder(fake_ace_step):
     assert rate == RATE and len(data) == len(clicks())
     assert abs(polish.offset(clicks().mean(axis=1), data.mean(axis=1), RATE)) <= 2 * (RATE // 1000)
     assert [f for f in os.listdir(tmp / "out") if f.startswith("veredler_")] == []        # Zwischenordner weg
+    log_file = os.path.join(polish.FOLDER, polish.LOG_FILE)
+    assert "lade Modell" in open(log_file, encoding="utf-8").read()                     # zum Nachlesen
     assert polish.polish(str(tmp / "band.wav"), str(tmp / "x.wav"), s.with_updates(polish_caption="kaputt"),
                          plan, seed=1) is None
+    assert "CUDA out of memory" in open(log_file, encoding="utf-8").read()
 
 
 def test_the_mixer_swaps_the_band_and_keeps_the_voice(tmp_path):

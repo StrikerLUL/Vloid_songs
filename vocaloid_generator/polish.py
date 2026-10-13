@@ -26,6 +26,7 @@ FOLDER = os.path.join(config.REPO_ROOT, "tools", "ace-step")
 WORKER = os.path.join(config.BASE_DIR, "polish_worker.py")
 MARKER = "VEREDELT "
 READY_FILE = "bereit.json"      # schreibt setup_ace_step.py, wenn Modell und Probe geklappt haben
+LOG_FILE = "letzter_lauf.log"   # was ACE-Step beim letzten Mal ausgegeben hat, zum Nachlesen bei Fehlern
 TIMEOUT = 3600                  # Sekunden; auf kleinen Grafikkarten lagert ACE-Step viel in den Arbeitsspeicher aus
 MAX_SHIFT = 0.25                # so weit (Sekunden) darf die neue Band verrutscht sein, bevor sie angelegt wird
 SAMPLE_RATE = 44100
@@ -112,16 +113,23 @@ def run(job: dict, folder: str) -> Optional[dict]:
     with open(path, "w", encoding="utf-8") as f:
         json.dump({"root": source(), **job}, f)
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)       # unter Windows ohne schwarzes Fenster
+    os.makedirs(FOLDER, exist_ok=True)
+    log_path = os.path.join(FOLDER, LOG_FILE)
     try:
-        # -P: der Ordner des Workers (die App) gehört nicht auf den Suchpfad von ACE-Step
-        done = subprocess.run([python(), "-P", WORKER, path], cwd=source(), capture_output=True, timeout=TIMEOUT,
-                              env=environment(), encoding="utf-8", errors="replace", creationflags=flags)
+        # Die Ausgabe geht in eine Datei, nicht in Pipes: Pipes liest Windows erst zu Ende, wenn jeder Prozess fertig
+        # ist, der sie geerbt hat. -P: der Ordner des Workers (die App) gehört nicht auf den Suchpfad von ACE-Step.
+        with open(log_path, "w", encoding="utf-8") as output:
+            done = subprocess.run([python(), "-P", WORKER, path], cwd=source(), stdin=subprocess.DEVNULL,
+                                  stdout=output, stderr=subprocess.STDOUT, timeout=TIMEOUT, env=environment(),
+                                  creationflags=flags)
     except (OSError, subprocess.TimeoutExpired) as e:
         log.warning("Klang-Veredler fehlgeschlagen: %s", e)
         return None
-    line = next((ln for ln in reversed(done.stdout.splitlines()) if ln.startswith(MARKER)), None)
+    with open(log_path, encoding="utf-8", errors="replace") as f:
+        text = f.read()
+    line = next((ln for ln in reversed(text.splitlines()) if ln.startswith(MARKER)), None)
     if done.returncode != 0 or line is None:
-        log.warning("Klang-Veredler fehlgeschlagen: %s", (done.stderr or done.stdout).strip()[-800:])
+        log.warning("Klang-Veredler fehlgeschlagen (ganze Ausgabe in %s): %s", log_path, text.strip()[-800:])
         return None
     try:
         found = json.loads(line[len(MARKER):])

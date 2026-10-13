@@ -44,6 +44,8 @@ package = false
 [tool.pytest.ini_options]
 testpaths = ["vocaloid_generator/tests"]
 pythonpath = ["vocaloid_generator"]
+# Hängt ein Test länger, stehen die Stacks aller Threads im Log (kein Test braucht so lange)
+faulthandler_timeout = 240
 markers = [
     "slow: rendert echtes Audio (abwählen mit -m 'not slow')",
 ]

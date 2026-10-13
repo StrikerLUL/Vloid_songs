@@ -150,7 +150,14 @@ def test_the_mixer_swaps_the_band_and_keeps_the_voice(tmp_path):
 
 
 @pytest.fixture
-def song(tmp_path):
+def song(tmp_path, monkeypatch):
+    # Statt der lokalen Vorschau-Stimme ein Ton: die Windows-Sprachausgabe wartet in der CI ohne angemeldeten
+    # Benutzer ewig (siehe test_vocals.py)
+    def sing(settings, tracks, wav):
+        t = np.arange(4 * RATE) / RATE
+        sf.write(wav, 0.2 * np.sin(2 * np.pi * 440 * t), RATE)
+        return True
+    monkeypatch.setattr(pipeline, "_sing_preview", sing)
     return SongSettings(output_ordner=str(tmp_path / "out"), seed=4, active_sections=["Chorus"],
                         section_bars={"Chorus": 2})
 

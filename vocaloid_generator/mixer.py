@@ -2,6 +2,7 @@
 import functools
 import logging
 import os
+from typing import Optional
 
 import numpy as np
 import pretty_midi
@@ -468,6 +469,8 @@ def mische_spuren(
     band: str = None,
     vocal_chain: bool = False,
     vocal_space: list = None,
+    unmask: bool = False,
+    ride: bool = False,
 ) -> None:
     """
     Mischt die Spuren zu einem Stereo-Master:
@@ -489,6 +492,8 @@ def mische_spuren(
     Effekten, so laut wie diese zusammen.
     vocal_chain: Studio-Kette für den Gesang: leichte Sättigung, eine echte Doppelung (vocals_double.wav) statt der
     verstimmten Kopie und, mit vocal_space [(Start, Ende in Sekunden, Sektionsart)], eigener Hall und Delay je Sektion.
+    unmask: die Band wird in den Frequenzen leiser, in denen der Gesang gerade laut ist (vocal_mix.unmask).
+    ride: der Gesang wird nachgeführt, damit er gleich weit über der Band steht (vocal_mix.ride_gain).
     """
     from settings import DEFAULT_VOLUMES
 
@@ -553,12 +558,15 @@ def mische_spuren(
                 tracks[path] = (key, audio * duck)
     if band:
         _replace_band(tracks, band, length)
+    room = _seat_vocals(tracks, ride, unmask) if ride or unmask else None
 
     mix = np.zeros((2, length), dtype=np.float32)
     send = np.zeros_like(mix)
     vocal_send = np.zeros_like(mix)
     plate_send = np.zeros_like(mix)
     space = _vocal_space(vocal_space, length) if vocal_chain and vocal_space else None
+    if room is not None:
+        mix += room
     for key, audio in tracks.values():
         mix += audio
         if space is not None and key in ("vocals", "double"):
@@ -603,6 +611,29 @@ def mische_spuren(
     mix = master(mix, compressor_threshold, compressor_ratio, limiter_threshold, target_lufs=target_lufs)
     sf.write(output_pfad, mix.T, SAMPLE_RATE, subtype="PCM_24")
     log.info("Mix fertig: %s (%.1f LUFS)", output_pfad, _loudness(mix))
+
+
+def _seat_vocals(tracks: dict, ride: bool, unmask: bool) -> Optional[np.ndarray]:
+    """Der Gesang sitzt vorn: erst wird er auf der Band geritten (ändert die Gesangsspuren), dann macht die Band ihm
+    Platz. Rückgabe: was zum trockenen Mix dazukommt, damit die Band leiser wird, wo er laut ist (oder None)."""
+    import vocal_mix
+    lead = [p for p, (k, _) in tracks.items() if k == "vocals"]
+    others = [p for p, (k, _) in tracks.items() if k not in VOCAL_KEYS]
+    if not lead or not others:
+        return None
+    band = _sum([tracks[p][1] for p in others])
+    if ride:
+        gain = vocal_mix.ride_gain(_sum([tracks[p][1] for p in lead]), band, SAMPLE_RATE)
+        for p, (key, audio) in list(tracks.items()):
+            if key in ("vocals", "double"):
+                tracks[p] = (key, audio * gain[None, :audio.shape[1]])
+        log.info("Gesang auf der Band geritten: %+.1f bis %+.1f dB", 20 * np.log10(gain.min()),
+                 20 * np.log10(gain.max()))
+    if not unmask:
+        return None
+    vocal = _sum([a for k, a in tracks.values() if k in ("vocals", "double")])
+    log.info("Die Band macht dem Gesang Platz (bis %.0f dB)", vocal_mix.UNMASK_DB)
+    return vocal_mix.unmask(band, vocal, SAMPLE_RATE) - band
 
 
 MAX_REFERENCE_DB = 6.0       # so weit dürfen die Vorbilder einen Pegel höchstens verschieben

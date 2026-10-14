@@ -250,6 +250,8 @@ def _produce(settings: SongSettings, tracks: dict, out: str, report: ProgressFn,
         texture=profile.texture if settings.lofi_texture else "",
         movement=_movement(tracks.get("plan")) if settings.mix_movement else None,
         vocal_chain=settings.vocal_chain,
+        unmask=settings.vocal_unmask,
+        ride=settings.vocal_ride,
         vocal_space=_sections_in_seconds(tracks["plan"]) if tracks.get("plan") is not None else None,
         **({} if settings.draft else
            _reference_targets(settings, tracks, out, has_vocals=result.vocals_wav is not None)),
@@ -434,8 +436,8 @@ def hook_kind(settings: SongSettings) -> str:
     return "Chorus" if "Chorus" in sung else sung[0]
 
 
-def _hook_preview(tracks: dict, kind: str, path: str) -> None:
-    """Die ersten HOOK_BARS Takte der Sektion: Melodie als Lead-Synth, dazu Akkorde als Fläche und Bass."""
+def _hook_preview(tracks: dict, kind: str, path: str, lead: bool = True) -> None:
+    """Die ersten HOOK_BARS Takte der Sektion: Melodie als Lead-Synth (ohne lead nicht), Akkorde als Fläche und Bass."""
     import pretty_midi
     import soundfile as sf
     from song_plan import BEATS_PER_BAR
@@ -449,7 +451,7 @@ def _hook_preview(tracks: dict, kind: str, path: str) -> None:
     def note(velocity: int, pitch: int, start: float, end: float) -> pretty_midi.Note:
         return pretty_midi.Note(velocity=velocity, pitch=pitch, start=start - t0, end=min(end, t1) - t0)
 
-    lead = [note(105, n.pitch, n.start, n.end) for n in tracks["vocal_melody"] if t0 <= n.start < t1]
+    lead = [note(105, n.pitch, n.start, n.end) for n in tracks["vocal_melody"] if t0 <= n.start < t1] if lead else []
     pad, bass, previous = [], [], None
     for slot in sec.chords:
         start, end = slot.start * spb, (slot.start + slot.dur) * spb
@@ -477,7 +479,8 @@ VOCAL_KEY = "vocals.key"
 VOCAL_CODE = ("pipeline.py", "vocal_synthesizer.py", "voice_fx.py", "voicevox.py", "neutrino_score.py")
 VOCAL_FIELDS = ("bpm", "seed", "singer", "vocal_engine", "harmonies", "duet_singer", "style_shift", "vocal_takes",
                 "vibrato", "glide", "breaths", "final_choir", "voicevox_url", "voicevox_singer", "neutrino_pfad",
-                "vocal_comping", "phrase_expression", "long_vowel_mark", "breath_marks", "fast_diphthongs")
+                "vocal_comping", "phrase_expression", "long_vowel_mark", "breath_marks", "fast_diphthongs",
+                "english_kana", "section_style", "verse_style_shift", "chorus_style_shift", "even_takes")
 
 
 def _vocal_key(settings: SongSettings, tracks: dict) -> str:
@@ -530,7 +533,8 @@ def _synthesize_vocals(settings: SongSettings, tracks: dict, out: str) -> Option
     if key and _sung_before(out, key):
         log.info("Gesang unverändert, nicht neu gesungen")
         return vocals_wav
-    for name in VOCAL_FILES + (VOCAL_KEY,):
+    import vocal_check
+    for name in VOCAL_FILES + (VOCAL_KEY, vocal_check.SUNG_FILE):
         _remove(os.path.join(out, name))
     if not settings.channels["vocals"].enabled:
         log.info("Gesang ist ausgeschaltet.")
@@ -548,8 +552,9 @@ def _synthesize_vocals(settings: SongSettings, tracks: dict, out: str) -> Option
     sung = False
     for name in ENGINE_ORDER.get(settings.vocal_engine, ENGINE_ORDER["NEUTRINO"]):
         try:
-            engines[name](settings, tracks, out, vocals_wav, xml)
+            voice = engines[name](settings, tracks, out, vocals_wav, xml)
             sung = True
+            vocal_check.record(out, settings, name, voice or "")
             break
         except Exception as e:  # noqa: BLE001 – dann singt die nächste Engine
             log.warning("%s nicht verfügbar: %s", name, e)
@@ -560,6 +565,7 @@ def _synthesize_vocals(settings: SongSettings, tracks: dict, out: str) -> Option
             log.warning("Weder NEUTRINO noch VOICEVOX singen, nutze die lokale Vorschau-Stimme.")
         if not _sing_preview(settings, tracks, vocals_wav):
             return None
+        vocal_check.record(out, settings, "Vorschau")
     _liven(settings, tracks, out, vocals_wav)
     if sung and key:
         _remember_vocals(out, key)     # die Vorschau-Stimme nicht: fehlte NEUTRINO nur kurz, singt es beim nächsten Mal
@@ -619,18 +625,23 @@ def _final_chorus(plan) -> Optional[tuple]:
 
 
 # ── NEUTRINO ────────────────────────────────────────────────────────────────────
-def _sing_neutrino(settings: SongSettings, tracks: dict, out: str, vocals_wav: str, xml: str) -> None:
-    from vocal_synthesizer import neutrino_info, stimmlage
+def _sing_neutrino(settings: SongSettings, tracks: dict, out: str, vocals_wav: str, xml: str) -> str:
+    """Rückgabe: wer gesungen hat (die Stimme, im Duett beide)."""
+    from vocal_synthesizer import neutrino_hinweis, neutrino_info, stimmlage
     if not xml:
         raise RuntimeError("ohne music21 gibt es keine Noten für NEUTRINO")
     neutrino_dir = settings.neutrino_dir()
     duet = _duet_partner(settings, neutrino_dir)
-    log.info("%s; singe mit %s", neutrino_info(neutrino_dir), settings.singer + (f" und {duet}" if duet else ""))
+    voice = settings.singer + (f" und {duet}" if duet else "")
+    log.info("%s; singe mit %s", neutrino_info(neutrino_dir), voice)
+    if neutrino_hinweis(neutrino_dir):
+        log.warning(neutrino_hinweis(neutrino_dir))
     if duet:
         _sing_duet(settings, tracks, out, neutrino_dir, duet, vocals_wav)
     else:
+        plan = tracks.get("plan")
         _neutrino_lead(settings, tracks["melody_data"], xml, vocals_wav, neutrino_dir, settings.singer,
-                       _chorus_windows(tracks.get("plan")))
+                       _chorus_windows(plan), tracks["silben"], _sections_in_seconds(plan) if plan else ())
     harmony_wav = os.path.join(out, "vocals_harmony.wav")
     if (settings.harmonies or duet) and tracks.get("harmony_data"):
         # im Duett singt die zweite Stimme die zweite Stimme im Refrain
@@ -639,51 +650,188 @@ def _sing_neutrino(settings: SongSettings, tracks: dict, out: str, vocals_wav: s
                       stimmlage(singer)[2], harmony_wav)
     if settings.final_choir:
         _neutrino_choir(settings, tracks, out, neutrino_dir, duet)
+    return voice
 
 
 def _neutrino_lead(settings: SongSettings, data: list, xml: str, wav: str, neutrino_dir: str, singer: str,
-                   double_windows: list = ()) -> None:
-    """Eine Hauptstimme mit NEUTRINO, danach Vibrato und Übergänge. Bei mehreren Fassungen kommt jede Phrase aus der
-    saubersten (Comping, ohne: die sauberste ganze Fassung); in den double_windows (Sekunden) wird aus den
-    zweitbesten Phrasen eine echte Doppelung (vocals_double.wav)."""
+                   double_windows: list = (), silben: Optional[list] = None, sections: list = ()) -> None:
+    """Eine Hauptstimme mit NEUTRINO, danach Vibrato und Übergänge.
+    StyleShift pro Sektion (sections: [(Start, Ende in Sekunden, Art)], braucht silben): jede Gruppe von Phrasen mit
+    demselben StyleShift singt NEUTRINO aus einer eigenen MusicXML, in der die anderen Töne Pausen sind; geschnitten
+    wird in den Pausen wie beim Comping. Bei mehreren Fassungen kommt jede Phrase aus der saubersten (Comping, ohne:
+    die sauberste ganze Fassung je Gruppe); in den double_windows (Sekunden) wird aus den zweitbesten Phrasen eine
+    echte Doppelung (vocals_double.wav)."""
     import voice_fx
-    from vocal_synthesizer import neutrino_synthese, stimmlage
+    from vocal_synthesizer import erstelle_musicxml, stimmlage
     transpose = stimmlage(singer)[2]
     model_dir = os.path.join(neutrino_dir, "model", singer)
     notes = voice_fx.timeline(data, settings.bpm, transpose)
-    shifts = voice_fx.take_shifts(settings.style_shift, settings.vocal_takes)
-    if len(shifts) == 1:
-        neutrino_synthese(xml, wav, neutrino_dir, model_dir, style_shift=shifts[0])
-    else:
-        takes = []
-        for k, shift in enumerate(shifts):
-            take = wav[:-4] + f"_fassung_{k + 1}.wav"
+    shifts = _phrase_shifts(settings, notes, sections if silben is not None else ())
+    groups = {}                                       # StyleShift → Nummern der Töne, die damit gesungen werden
+    for i, shift in enumerate(shifts):
+        groups.setdefault(shift, set()).add(i)
+    parts = [(settings.style_shift if not groups else next(iter(groups)), xml, set(range(len(notes))))]
+    if len(groups) > 1:
+        parts = []
+        for k, (shift, keep) in enumerate(sorted(groups.items())):
+            part_data, part_silben = voice_fx.only_notes(data, silben, keep)
+            part_xml = erstelle_musicxml(part_data, part_silben, settings.bpm, wav[:-4] + f"_stil_{k + 1}.xml",
+                                         transpose, neutrino_score.options(settings))
+            parts.append((shift, part_xml, keep))
+    try:
+        takes = _sing_takes(settings, parts, wav, neutrino_dir, model_dir)
+        _choose_takes(settings, takes, parts, notes, wav, singer, double_windows)
+    finally:
+        for _, part_xml, _ in parts:
+            if part_xml != xml:
+                _remove(part_xml)
+    double = os.path.join(os.path.dirname(wav), "vocals_double.wav")
+    if os.path.exists(double):
+        voice_fx.reshape(double, notes, settings.vibrato, settings.glide)
+    voice_fx.reshape(wav, notes, settings.vibrato, settings.glide)
+
+
+def _phrase_shifts(settings: SongSettings, notes: list, sections: list) -> list:
+    """StyleShift je Ton: der gewählte, mit StyleShift pro Sektion plus der Versatz der Sektion seiner Phrase."""
+    import voice_fx
+    base = settings.style_shift
+    if not settings.section_style or not sections:
+        return [base] * len(notes)
+    offsets = {"Verse": settings.verse_style_shift, "Chorus": settings.chorus_style_shift}
+    groups = voice_fx.phrases(notes)
+    out, used = [], {}
+    for group, kind in zip(groups, voice_fx.phrase_kinds(groups, sections)):
+        shift = int(np.clip(base + offsets.get(kind, 0), -6, 6))
+        used[kind or "ohne Sektion"] = shift
+        out += [shift] * len(group)
+    if len(set(out)) > 1:
+        log.info("StyleShift pro Sektion: %s", ", ".join(f"{kind} {shift:+d}" for kind, shift in used.items()))
+    return out
+
+
+def _sing_takes(settings: SongSettings, parts: list, wav: str, neutrino_dir: str, model_dir: str) -> list:
+    """Alle Fassungen aller Gruppen singen. Fassungen ohne Farbsprung (even_takes) singen mit demselben StyleShift;
+    singt NEUTRINO dabei jedes Mal dasselbe (beim ersten Mal geprüft und gemerkt), eine Stufe heller und dunkler.
+    Rückgabe: [(Gruppe, StyleShift, WAV)]."""
+    import voice_fx
+    from vocal_synthesizer import LETZTER_LAUF, neutrino_synthese
+    count = max(1, settings.vocal_takes)
+    even = settings.even_takes and count > 1
+    repeats = _neutrino_repeats(neutrino_dir) if even else None
+    takes, warned = [], False
+    for p, (shift, part_xml, _) in enumerate(parts):
+        plan = [shift] * count if even and repeats is not True else voice_fx.take_shifts(shift, count)
+        k = 0
+        while k < len(plan):
+            take = wav if len(parts) == 1 and count == 1 else wav[:-4] + f"_fassung_{p + 1}_{k + 1}.wav"
+            LETZTER_LAUF["styleshift"] = None
             try:
-                neutrino_synthese(xml, take, neutrino_dir, model_dir, style_shift=shift)
+                neutrino_synthese(part_xml, take, neutrino_dir, model_dir, style_shift=plan[k])
             except Exception as e:  # noqa: BLE001 – eine misslungene Fassung ist kein Grund aufzuhören
                 if k == 0:
                     raise
                 log.warning("Fassung %d nicht gesungen: %s", k + 1, e)
+                k += 1
                 continue
-            score = voice_fx.pitch_error(take, notes)
-            log.info("Fassung %d (StyleShift %+d): %.0f Cent neben den Noten", k + 1, shift, score)
-            takes.append((score, k, take, shift))
-        double = os.path.join(os.path.dirname(wav), "vocals_double.wav")
-        if settings.vocal_comping and len(takes) > 1:
-            paths = [take for _, _, take, _ in takes]
-            choice = voice_fx.comp(paths, notes, wav, double, double_windows)
-            counts = {takes[k][1] + 1: choice.count(k) for k in sorted(set(choice))}
+            if LETZTER_LAUF.get("styleshift") is False and not warned:
+                warned = True
+                log.warning("Diese NEUTRINO-Ausgabe nimmt keinen StyleShift an (z. B. die mit Tuning-Tool): "
+                            "Strophe und Refrain klingen gleich, der Rest läuft wie gewohnt")
+            if even and repeats is None and k == 1 and plan[1] == plan[0]:
+                repeats = voice_fx.same_audio(takes[-1][2], take)
+                _remember_repeats(neutrino_dir, repeats)
+                if repeats:
+                    log.info("NEUTRINO singt bei gleichem StyleShift jedes Mal dasselbe; die weiteren Fassungen "
+                             "singen eine Stufe heller und dunkler")
+                    _remove(take)
+                    plan = plan[:1] + voice_fx.take_shifts(shift, count)[1:]
+                    continue
+            takes.append((p, plan[k], take))
+            k += 1
+    return takes
+
+
+def _choose_takes(settings: SongSettings, takes: list, parts: list, notes: list, wav: str, singer: str,
+                  double_windows: list) -> None:
+    """Aus den Fassungen die Hauptstimme nach wav schreiben und die Fassungen löschen."""
+    import voice_fx
+    if len(takes) == 1:
+        if takes[0][2] != wav:
+            os.replace(takes[0][2], wav)
+        return
+    tolerance = voice_fx.GROSS_CENTS if settings.even_takes else 0.0
+    double = os.path.join(os.path.dirname(wav), "vocals_double.wav")
+    try:
+        if settings.vocal_comping:
+            choice = voice_fx.comp([t for _, _, t in takes], notes, wav, double, double_windows, tolerance)
+            counts = {}
+            for k in choice:
+                counts[k] = counts.get(k, 0) + 1
             log.info("%s: Phrasen aus den saubersten Fassungen (%s)", singer,
-                     ", ".join(f"Fassung {n}: {c}×" for n, c in counts.items()))
+                     ", ".join(f"StyleShift {takes[k][1]:+d}: {c}×" for k, c in sorted(counts.items())))
+            return
+        best = []                                   # die sauberste ganze Fassung je Gruppe
+        for p, (_, _, keep) in enumerate(parts):
+            mine = [t for t in takes if t[0] == p]
+            if not mine:
+                continue
+            group_notes = [n for i, n in enumerate(notes) if i in keep]
+            scores = [voice_fx.pitch_error(t[2], group_notes, tolerance) for t in mine]
+            k = int(np.argmin(scores))
+            best.append(mine[k][2])
+            log.info("%s: Fassung %d klingt am saubersten (StyleShift %+d)", singer, k + 1, mine[k][1])
+        if len(best) == 1:
+            os.replace(best[0], wav)
         else:
-            _, k, best, shift = min(takes)
-            os.replace(best, wav)
-            log.info("%s: Fassung %d klingt am saubersten (StyleShift %+d)", singer, k + 1, shift)
-        for _, _, take, _ in takes:
-            _remove(take)
-        if os.path.exists(double):
-            voice_fx.reshape(double, notes, settings.vibrato, settings.glide)
-    voice_fx.reshape(wav, notes, settings.vibrato, settings.glide)
+            voice_fx.comp(best, notes, wav)
+    finally:
+        for _, _, take in takes:
+            if take != wav:
+                _remove(take)
+
+
+NEUTRINO_NOTES = "neutrino.json"     # im Datenordner: was über die installierte NEUTRINO-Ausgabe bekannt ist
+
+
+def _neutrino_id(neutrino_dir: str) -> str:
+    exe = os.path.join(neutrino_dir, "bin", "NEUTRINO.exe")
+    try:
+        return f"{os.path.abspath(neutrino_dir)}|{os.path.getsize(exe)}|{int(os.path.getmtime(exe))}"
+    except OSError:
+        return os.path.abspath(neutrino_dir)
+
+
+def _neutrino_repeats(neutrino_dir: str) -> Optional[bool]:
+    """Singt diese NEUTRINO-Ausgabe bei gleichem StyleShift jedes Mal dasselbe? None = noch nicht geprüft."""
+    import json
+    try:
+        with open(os.path.join(config.DATA_DIR, NEUTRINO_NOTES), encoding="utf-8") as f:
+            return json.load(f).get("repeats", {}).get(_neutrino_id(neutrino_dir))
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def _remember_repeats(neutrino_dir: str, repeats: bool) -> None:
+    import json
+    path = os.path.join(config.DATA_DIR, NEUTRINO_NOTES)
+    try:
+        with open(path, encoding="utf-8") as f:
+            notes = json.load(f)
+    except (OSError, ValueError):
+        notes = {}
+    notes.setdefault("repeats", {})[_neutrino_id(neutrino_dir)] = bool(repeats)
+    try:
+        os.makedirs(config.DATA_DIR, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(notes, f, indent=1)
+    except OSError as e:
+        log.debug("%s nicht gespeichert: %s", NEUTRINO_NOTES, e)
+
+
+def _chorus_shift(settings: SongSettings) -> int:
+    """StyleShift für alles, was nur im Refrain singt (zweite Stimme, Chor)."""
+    shift = settings.style_shift + (settings.chorus_style_shift if settings.section_style else 0)
+    return int(np.clip(shift, -6, 6))
 
 
 def _neutrino_choir(settings: SongSettings, tracks: dict, out: str, neutrino_dir: str, duet: Optional[str]) -> None:
@@ -701,8 +849,8 @@ def _neutrino_choir(settings: SongSettings, tracks: dict, out: str, neutrino_dir
     singers = [n for n in installed_singers(neutrino_dir) if n != settings.singer
                and os.path.isdir(os.path.join(neutrino_dir, "model", n))]
     singers.sort(key=lambda n: n != duet)
-    voices = [(n, settings.style_shift) for n in singers[:2]] or [
-        (settings.singer, max(-6, settings.style_shift - 2)), (settings.singer, min(6, settings.style_shift + 2))]
+    shift = _chorus_shift(settings)
+    voices = [(n, shift) for n in singers[:2]] or [(settings.singer, max(-6, shift - 2)), (settings.singer, min(6, shift + 2))]
     sung, rate = [], 48000
     for k, (singer, shift) in enumerate(voices):
         xml = os.path.join(out, f"vocals_chor_{k + 1}.xml")
@@ -723,7 +871,7 @@ def _neutrino_choir(settings: SongSettings, tracks: dict, out: str, neutrino_dir
 
 
 # ── VOICEVOX ────────────────────────────────────────────────────────────────────
-def _sing_voicevox(settings: SongSettings, tracks: dict, out: str, vocals_wav: str, xml: str = "") -> None:
+def _sing_voicevox(settings: SongSettings, tracks: dict, out: str, vocals_wav: str, xml: str = "") -> str:
     import voice_fx
     import voicevox
     url = settings.voicevox_url or voicevox.URL
@@ -745,6 +893,7 @@ def _sing_voicevox(settings: SongSettings, tracks: dict, out: str, vocals_wav: s
     window = _final_chorus(tracks.get("plan"))
     if settings.final_choir and window:
         _voicevox_choir(settings, tracks, out, url, singer, window)
+    return name
 
 
 def _voicevox_choir(settings: SongSettings, tracks: dict, out: str, url: str, singer: int, window: tuple) -> None:
@@ -793,7 +942,7 @@ def _sing_duet(settings: SongSettings, tracks: dict, out: str, neutrino_dir: str
         wav = os.path.join(out, f"vocals_duett_{k + 1}.wav")
         xml = erstelle_musicxml(data, silben, settings.bpm, os.path.join(out, f"vocals_duett_{k + 1}.xml"),
                                 stimmlage(singer)[2], neutrino_score.options(settings))
-        _neutrino_lead(settings, data, xml, wav, neutrino_dir, singer)
+        _neutrino_lead(settings, data, xml, wav, neutrino_dir, singer, (), silben, _sections_in_seconds(tracks["plan"]))
         data_k, rate = sf.read(wav, dtype="float32", always_2d=True)
         mono = data_k.mean(axis=1)
         angle = (1 + (-DUET_PAN if k == 0 else DUET_PAN)) * np.pi / 4
@@ -810,7 +959,7 @@ def _sing_harmony(settings, tracks, out, neutrino_dir, model_dir, transpose, har
     xml = erstelle_musicxml(tracks["harmony_data"], tracks["harmony_silben"], settings.bpm,
                             os.path.join(out, "vocals_harmony.xml"), transpose, neutrino_score.options(settings))
     try:
-        neutrino_synthese(xml, harmony_wav, neutrino_dir, model_dir, style_shift=settings.style_shift)
+        neutrino_synthese(xml, harmony_wav, neutrino_dir, model_dir, style_shift=_chorus_shift(settings))
         log.info("Zweite Stimme im Refrain gesungen.")
     except Exception as e:
         log.warning("Zweite Stimme fehlgeschlagen, der Song bekommt nur die Hauptstimme: %s", e)

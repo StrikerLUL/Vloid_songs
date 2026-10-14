@@ -88,6 +88,7 @@ def setup_wizard(s: SongSettings, pick: PickFn, on_change: Callable[[], None]) -
 
         ui.label("NEUTRINO").classes("text-subtitle1 q-mt-sm")
         neutrino_status = ui.label().classes("text-body2").mark("wizard-neutrino")
+        neutrino_hint = ui.label().classes("text-caption text-warning").mark("wizard-neutrino-hint")
         with ui.row().classes("w-full items-center no-wrap gap-2"):
             ui.input("NEUTRINO-Ordner (darin liegen bin und model)").bind_value(s, "neutrino_pfad") \
                 .classes("col").props("dense stack-label clearable").on("blur", lambda: show())
@@ -127,8 +128,10 @@ def setup_wizard(s: SongSettings, pick: PickFn, on_change: Callable[[], None]) -
             ui.button("Fertig", icon="check", on_click=lambda: finish()).props("flat no-caps").mark("wizard-done")
 
     def show() -> None:
-        from vocal_synthesizer import neutrino_info
+        from vocal_synthesizer import neutrino_hinweis, neutrino_info
         neutrino_status.set_text(neutrino_info(s.neutrino_dir()))
+        neutrino_hint.set_text(neutrino_hinweis(s.neutrino_dir()))
+        neutrino_hint.set_visibility(bool(neutrino_hint.text))
         rows.clear()
         checks.clear()
         with rows:

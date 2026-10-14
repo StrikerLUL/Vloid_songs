@@ -171,6 +171,17 @@ class SongSettings(BaseModel):
     breath_marks: bool = True          # Atemzeichen in langen Phrasen (NEUTRINO trennt dort, braucht weniger Speicher)
     fast_diphthongs: bool = True       # zwei schnelle Töne mit Doppelvokal (か + い) auf einem Ton
     english_kana: bool = True          # englische Wörter als Katakana singen (love → ラブ)
+    # StyleShift pro Sektion: Strophe ruhiger und tiefer, Refrain kräftiger und heller (Versatz zum StyleShift)
+    section_style: bool = True
+    verse_style_shift: int = Field(-1, ge=-3, le=3)
+    chorus_style_shift: int = Field(1, ge=-3, le=3)
+    even_takes: bool = True            # Fassungen mit demselben StyleShift, gewertet nur nach groben Fehlern
+    # Gesang sitzt vorn (vocal_mix.py)
+    vocal_unmask: bool = True          # die Band wird dort leiser, wo der Gesang gerade laut ist (wie Trackspacer)
+    vocal_ride: bool = True            # der Gesang wird nachgeführt, damit er gleich weit über der Band steht
+    # Stimmen-Casting (casting.py): Lieblingsstimme je Stil, beim Wechsel des Stils gewählt
+    style_singer: bool = True
+    style_singers: dict[str, str] = Field(default_factory=dict)
     voicevox_url: str = ""             # Adresse von VOICEVOX (leer = http://127.0.0.1:50021, App oder Engine)
     voicevox_singer: int = Field(0, ge=0)          # VOICEVOX-Singstimme (Stil-ID, 0 = die erste)
     # Vorbild-Songs (reference.py) und was sie bestimmen dürfen; jedes lässt sich abschalten

@@ -154,7 +154,7 @@ def test_two_takes_are_comped_and_double_the_chorus(tmp_path, neutrino_attrappe,
     root, calls = neutrino_attrappe
     s = SongSettings(active_sections=["Verse", "Chorus"], section_bars={"Verse": 4, "Chorus": 4},
                      output_ordner=str(tmp_path / "out"), neutrino_pfad=str(root), singer="MERROW", seed=5,
-                     vocal_takes=2, harmonies=False, final_choir=False)
+                     vocal_takes=2, harmonies=False, final_choir=False, section_style=False, even_takes=False)
     tracks, _ = pipeline.compose(s)
     out = s.output_dir()
     with caplog.at_level(logging.INFO):

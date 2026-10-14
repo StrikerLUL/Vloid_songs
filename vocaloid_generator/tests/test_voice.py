@@ -226,7 +226,7 @@ def test_the_take_on_pitch_wins(tmp_path, monkeypatch):
         return True
 
     monkeypatch.setattr(vocal_synthesizer, "neutrino_synthese", sing)
-    s = SongSettings(vocal_takes=3, bpm=120)
+    s = SongSettings(vocal_takes=3, bpm=120, even_takes=False)
     wav = str(tmp_path / "vocals.wav")
     pipeline._neutrino_lead(s, data, "vocals.xml", wav, str(tmp_path), "MERROW")
     assert sung_with == [0, 1, -1]
@@ -301,13 +301,15 @@ def test_without_other_voices_the_choir_is_the_same_voice_brighter_and_darker(tm
                      harmonies=False, style_shift=1)
     tracks, _ = pipeline.compose(s, seed=3)
     pipeline._synthesize_vocals(s, tracks, s.output_dir())
-    assert [(c[1], c[2]) for c in calls if c[0].startswith("vocals_chor")] == [("MERROW", -1), ("MERROW", 3)]
+    # der Chor singt wie der Refrain (StyleShift 1 + 1), eine Stimme dunkler, eine heller
+    assert [(c[1], c[2]) for c in calls if c[0].startswith("vocals_chor")] == [("MERROW", 0), ("MERROW", 4)]
 
 
 def test_choir_and_echo_can_be_switched_off(tmp_path, fake_neutrino):
     root, calls = fake_neutrino
     s = SongSettings(active_sections=["Verse", "Chorus"], output_ordner=str(tmp_path / "out"),
-                     neutrino_pfad=str(root), harmonies=False, final_choir=False, echo_throws=False)
+                     neutrino_pfad=str(root), harmonies=False, final_choir=False, echo_throws=False,
+                     section_style=False)
     tracks, _ = pipeline.compose(s, seed=3)
     pipeline._synthesize_vocals(s, tracks, s.output_dir())
     assert [c[0] for c in calls] == ["vocals.xml"]

@@ -13,6 +13,7 @@ from nicegui import app, run, ui
 
 import album
 import cancel
+import casting
 import einrichten
 import history
 import pipeline
@@ -187,6 +188,7 @@ def build() -> None:
                         .props("flat dense no-caps").mark("lock-seed") \
                         .tooltip("Der Song bleibt, auch wenn du Mix, Gesang oder Text änderst.")
                 player = WavePlayer().classes("w-full").mark("player")
+                sung_label = ui.label().classes("text-caption text-grey-5").mark("sung-by")
                 lyrics_view = Karaoke().classes("w-full").mark("karaoke") \
                     .bind_visibility_from(settings, "show_karaoke")
                 stem_row = ui.row().classes("gap-1 q-mt-sm")
@@ -230,6 +232,12 @@ def build() -> None:
                                              on_click=lambda: hooks()).props("outline no-caps dense").mark("hooks") \
                         .tooltip("Drei neue Melodien für den Refrain, kurz zum Anhören; der Rest des Songs bleibt")
                     hook_row = ui.row().classes("items-center gap-1")
+                with ui.row().classes("w-full items-center gap-1 q-mt-sm"):
+                    cast_button = ui.button("Stimmen-Casting", icon="groups", on_click=lambda: cast_voices()) \
+                        .props("outline no-caps dense").mark("casting") \
+                        .tooltip("Jede installierte NEUTRINO-Stimme singt den Refrain, kurz zum Anhören. Die "
+                                 "Lieblingsstimme merkt sich die App für den Stil.")
+                    cast_row = ui.row().classes("items-center gap-1")
                 with ui.row().classes("gap-2 q-mt-sm"):
                     zip_button = ui.button("Als ZIP für die DAW", icon="archive", on_click=lambda: export_zip()) \
                         .props("flat no-caps").mark("zip")
@@ -442,6 +450,51 @@ def build() -> None:
                         .props("outline no-caps dense color=secondary").mark(f"hook-take-{choice.number}")
         await play("Refrain 1", choices[0].preview)
 
+    async def cast_voices() -> None:
+        if job.running:
+            return
+        current = settings.model_copy(deep=True)
+        result = state["result"]
+        if result is not None:
+            current = current.with_updates(seed=result.seed, variations=result.settings.variations)
+        job.start()
+        set_busy(True)
+        try:
+            auditions = await run.io_bound(casting.cast, current, job.report)
+        except ValueError as e:
+            ui.notify(str(e), type="warning")
+            auditions = None
+        except cancel.Cancelled:
+            job.report(job.fraction, CANCELLED)
+            ui.notify("Abgebrochen.", type="warning")
+            auditions = None
+        except Exception as e:  # noqa: BLE001 – jeder Fehler gehört ins Protokoll und auf den Schirm
+            log.error("Stimmen-Casting fehlgeschlagen: %s", e)
+            ui.notify(f"Fehler: {e}", type="negative", multi_line=True)
+            auditions = None
+        finally:
+            job.running = False
+            set_busy(False)
+        if not auditions:
+            return
+        cast_row.clear()
+        with cast_row:
+            for a in auditions:
+                with ui.button_group().props("outline"):
+                    ui.button(a.singer, icon="play_arrow", on_click=lambda _, a=a: play(a.singer, a.wav)) \
+                        .props("outline no-caps dense").mark(f"cast-play-{a.singer}")
+                    ui.button(icon="favorite", on_click=lambda _, a=a: keep_voice(a.singer)) \
+                        .props("outline dense color=secondary").mark(f"cast-keep-{a.singer}") \
+                        .tooltip(f"{a.singer} singt ab jetzt {current.style}")
+        await play(auditions[0].singer, auditions[0].wav)
+
+    def keep_voice(singer: str) -> None:
+        casting.remember(settings, singer)
+        settings.singer = singer
+        save_settings()
+        ui.notify(f"{singer} singt ab jetzt {settings.style}. Beim Wechsel des Stils wählt die App die gemerkte Stimme.",
+                  type="positive")
+
     async def take(choice) -> None:
         """Den ganzen Song mit dieser Refrain-Melodie erzeugen."""
         settings.seed = choice.settings.seed
@@ -581,6 +634,10 @@ def build() -> None:
         song_label.set_text(("Entwurf · " if result.settings.draft else "") + describe(result.settings))
         full_button.set_visibility(result.settings.draft)
         lyrics_view.show(await run.io_bound(media.lyrics, result) or [])
+        text, warn = media.sung_by(result)
+        sung_label.set_text(text)
+        sung_label.set_visibility(bool(text))
+        sung_label.classes(replace="text-caption " + ("text-negative text-weight-bold" if warn else "text-grey-5"))
         found = media.stems(result)
         stem_row.clear()
         with stem_row:
@@ -651,7 +708,7 @@ def build() -> None:
         if not busy:
             cancel.reset()
         for button in (generate_button, draft_button, full_button, album_button, zip_button, video_button,
-                       youtube_button, hooks_button, *reroll_buttons.values()):
+                       youtube_button, hooks_button, cast_button, *reroll_buttons.values()):
             button.set_enabled(not busy)
         resing_button.set_enabled(not busy and _edited(settings) > 0)
         preview_button.set_enabled(not busy and _edited(settings) > 0)

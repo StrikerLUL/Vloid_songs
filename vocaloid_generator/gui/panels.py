@@ -37,7 +37,8 @@ def song_panel(s: SongSettings, pick: PickFn, apply_template: Callable[[SongSett
 
     with ui.grid(columns=2).classes("w-full gap-x-4"):
         with ui.row().classes("items-end no-wrap"):
-            ui.select(list(STYLES), label="Stil").bind_value(s, "style").classes("col").mark("style")
+            ui.select(list(STYLES), label="Stil").bind_value(s, "style").classes("col").mark("style") \
+                .on("update:model-value", lambda: ui.timer(0.05, lambda: favorite_voice(s), once=True))
             ui.button(icon="auto_fix_high", on_click=typical).props("flat round dense").mark("typical") \
                 .tooltip("Typische Werte für diesen Stil: Tempo, Tonart, Ablauf und Lautstärken")
         ui.select(list(KEYS), label="Tonart").bind_value(s, "key")
@@ -499,6 +500,15 @@ def vst_editor(s: SongSettings) -> None:
                 .bind_visibility_from(s, "vst_sounds", backward=lambda d, p=part: p in d).mark(f"vst-forget-{part}")
 
 
+def favorite_voice(s: SongSettings) -> None:
+    """Nach einem Wechsel des Stils: die Lieblingsstimme aus dem Stimmen-Casting wählen, wenn eine gemerkt ist."""
+    import casting
+    chosen = casting.favorite(s).singer
+    if chosen != s.singer:
+        s.singer = chosen
+        ui.notify(f"Lieblingsstimme für {s.style}: {chosen}")
+
+
 # ── Gesang ──────────────────────────────────────────────────────────────────────
 LIVELY_SWITCHES = (
     ("breaths", "Atmer vor den Phrasen", "Vor jeder Zeile ist ein leises Einatmen zu hören"),
@@ -508,6 +518,11 @@ LIVELY_SWITCHES = (
                                                "sonst wird die eigene Stimme zum Chor vervielfacht"),
     ("phrase_expression", "Ausdruck pro Phrase", "Jede Zeile wird zu ihrem höchsten Ton hin lauter und heller und "
                                                  "klingt am Ende weicher aus; Strophen leiser als Refrains"),
+    ("vocal_unmask", "Band macht dem Gesang Platz", "Wie das Plugin Trackspacer: die Band wird genau in den "
+                                                    "Frequenzen bis zu 3 dB leiser, in denen der Gesang gerade laut "
+                                                    "ist. Der Gesang ist verständlich, ohne lauter zu werden."),
+    ("vocal_ride", "Gesang reitet auf der Band", "Alle 50 ms wird gemessen, wie weit der Gesang über der Band steht; "
+                                                 "wo er untergeht oder heraussticht, wird er bis zu 4 dB nachgeführt"),
     ("vocal_chain", "Studio-Gesangskette", "Leichte Bandsättigung, Hall und Delay je Sektion (Strophe trockener, "
                                            "Refrain und Bridge weiter) und im Refrain eine echte Doppelung aus der "
                                            "zweiten Fassung"),
@@ -539,6 +554,8 @@ def voice_panel(s: SongSettings, singers: list) -> tuple:
     hint("Im Duett wechseln sich die Stimmen in den Strophen ab, die Bridge singt die zweite, im Refrain singt "
          "sie die zweite Stimme. Braucht NEUTRINO.")
     ui.switch("Zweite Stimme im Refrain").bind_value(s, "harmonies")
+    ui.switch("Lieblingsstimme je Stil").bind_value(s, "style_singer").props("dense").mark("switch-style_singer") \
+        .tooltip("Beim Wechsel des Stils wählt die App die Stimme, die du im Stimmen-Casting für ihn gemerkt hast")
     with ui.row().classes("w-full items-center gap-4"):
         ui.label("StyleShift").classes("w-28")
         ui.slider(min=-6, max=6, step=1).bind_value(s, "style_shift").props("label markers").classes("col")
@@ -550,6 +567,21 @@ def voice_panel(s: SongSettings, singers: list) -> tuple:
         .mark("switch-vocal_comping") \
         .tooltip("Wie im Studio: jede Zeile kommt aus der Fassung, die ihre Töne am besten trifft. Aus ist es die "
                  "sauberste ganze Fassung. Die zweitbeste Fassung doppelt den Refrain (mit der Studio-Gesangskette).")
+    ui.switch("Fassungen ohne Farbsprung").bind_value(s, "even_takes").props("dense").mark("switch-even_takes") \
+        .tooltip("Alle Fassungen singen mit demselben StyleShift, und eine Phrase wechselt die Fassung nur bei groben "
+                 "Fehlern (falscher Ton, Kiekser), nicht wegen schöner Schleifer. Singt NEUTRINO jedes Mal dasselbe, "
+                 "merkt die App das und singt die weiteren Fassungen eine Stufe heller und dunkler.")
+    section_title("Strophe ruhig, Refrain kräftig")
+    ui.switch("StyleShift pro Sektion").bind_value(s, "section_style").props("dense").mark("switch-section_style") \
+        .tooltip("NEUTRINO singt die Strophen tiefer und ruhiger, die Refrains heller und kräftiger. Jede Sektion "
+                 "wird einzeln gesungen und in den Pausen zusammengesetzt; das dauert etwas länger.")
+    for text, attr in (("Strophe", "verse_style_shift"), ("Refrain", "chorus_style_shift")):
+        with ui.row().classes("w-full items-center gap-4"):
+            ui.label(text).classes("w-28")
+            ui.slider(min=-3, max=3, step=1).bind_value(s, attr).props("label markers").classes("col") \
+                .bind_enabled_from(s, "section_style").mark(f"slider-{attr}")
+    hint("Zum StyleShift oben dazu: minus = dunkler und ruhiger, plus = heller und kräftiger. Zweite Stimme und Chor "
+         "singen wie der Refrain. Die NEUTRINO-Ausgabe mit Tuning-Tool (.ex) kennt keinen StyleShift.")
     section_title("Noten für NEUTRINO")
     for attr, text, tip in SCORE_SWITCHES:
         ui.switch(text).bind_value(s, attr).props("dense").tooltip(tip).mark(f"switch-{attr}")

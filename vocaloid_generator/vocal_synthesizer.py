@@ -295,6 +295,62 @@ def neutrino_info(neutrino_pfad: str) -> str:
             + f", Stimmen: {', '.join(stimmen) or 'keine'}")
 
 
+NEUESTE_AUSGABE = (3, 2, 2)     # die neueste normale Windows-Ausgabe (neuer Vocoder seit 3.2.2)
+
+
+def neutrino_ausgabe(neutrino_pfad: str) -> str:
+    """Die Versionsnummer der installierten NEUTRINO-Ausgabe (z. B. "3.2.2"), soweit sie sich finden lässt: im Namen
+    des Ordners, der Dateien darin oder in den Textdateien (Readme). Leer, wenn nicht."""
+    import re
+    muster = re.compile(r"(?i)(?:\bver(?:sion)?\.?\s*|[v_-])(\d+\.\d+(?:\.\d+)?)")
+    def neutrino(text: str) -> list:
+        return [v for v in muster.findall(text) if v.startswith(("2.", "3.", "4."))]
+
+    ordner = os.path.abspath(neutrino_pfad)
+    gefunden = neutrino(os.path.basename(ordner)) + neutrino(os.path.basename(os.path.dirname(ordner)))
+    try:
+        eintraege = sorted(os.listdir(neutrino_pfad))
+    except OSError:
+        eintraege = []
+    for name in eintraege:
+        gefunden += neutrino(name)
+    if not gefunden:
+        for name in eintraege:
+            pfad = os.path.join(neutrino_pfad, name)
+            if name.lower().endswith((".txt", ".md")) and os.path.isfile(pfad) and os.path.getsize(pfad) < 200_000:
+                with open(pfad, "rb") as f:
+                    gefunden += neutrino(f.read().decode("utf-8", errors="replace"))
+                if gefunden:
+                    break
+    return max(gefunden, key=_versionsnummer) if gefunden else ""
+
+
+def _versionsnummer(text: str) -> tuple:
+    return tuple(int(t) for t in text.split(".") if t.isdigit())
+
+
+def neutrino_hinweis(neutrino_pfad: str) -> str:
+    """Ein Hinweis zur installierten NEUTRINO-Ausgabe (leer, wenn alles passt oder sich nichts sagen lässt)."""
+    if not os.path.exists(os.path.join(neutrino_pfad, "bin", "NEUTRINO.exe")):
+        return ""
+    ausgabe = neutrino_ausgabe(neutrino_pfad)
+    neueste = ".".join(map(str, NEUESTE_AUSGABE))
+    if neutrino_version(neutrino_pfad) == 2 or (ausgabe and _versionsnummer(ausgabe) < NEUESTE_AUSGABE):
+        return (f"NEUTRINO {ausgabe or 'v2'} ist älter als {neueste}. Seit {neueste} singt NEUTRINO mit einem neuen "
+                "Vocoder deutlich sauberer; die neue Ausgabe gibt es kostenlos auf studio-neutrino.com.")
+    if ausgabe and _versionsnummer(ausgabe) > NEUESTE_AUSGABE:
+        return (f"NEUTRINO {ausgabe} gibt es für Windows nur mit dem Tuning-Tool (.ex). Diese Ausgabe kennt keinen "
+                "StyleShift: Strophe und Refrain klingen gleich, sonst läuft alles.")
+    return ""
+
+
+# Wie der letzte NEUTRINO-Lauf gesungen hat (für den Gesangs-Check und StyleShift pro Sektion):
+# grafikkarte: auf der Grafikkarte (False = Prozessor), styleshift: der gewünschte StyleShift kam an
+LETZTER_LAUF = {"grafikkarte": None, "styleshift": None, "version": ""}
+CPU_MELDUNG = "CPU モード"         # so meldet NEUTRINO, dass es ohne Grafikkarte singt
+_AUF_DEM_PROZESSOR: set = set()     # schon gewarnt (je NEUTRINO-Ordner einmal pro Programmstart)
+
+
 def _run(cmd: list, cwd: str, timeout: int) -> subprocess.CompletedProcess:
     import cancel
     log.debug("NEUTRINO: %s", " ".join(cmd))
@@ -340,13 +396,23 @@ def neutrino_synthese(xml_pfad, output_wav_pfad, neutrino_pfad, model_pfad, thre
             dateien = {"full": full, "timing": timing, ".f0": f0, ".melspec": mel, ".wav": wav, "model": model,
                        ".mgc": os.path.join(td, "vocals.mgc"), ".bap": os.path.join(td, "vocals.bap")}
             shift = ["-k", str(style_shift)] if style_shift else []
-            versuche = [_run_bat_aufruf(neutrino_pfad, neutrino_exe, dateien, threads, style_shift),
+            bat = _run_bat_aufruf(neutrino_pfad, neutrino_exe, dateien, threads, style_shift)
+            versuche = [bat,
                         cmd + shift + ["-m"],                          # -m: Grafikkarte, sonst Prozessor
                         cmd + shift,
                         cmd if shift else None]
             for versuch in filter(None, versuche):
                 run = _run(versuch, neutrino_pfad, timeout)
                 if run.returncode == 0 and os.path.exists(wav):
+                    ausgabe = f"{run.stdout or ''}{run.stderr or ''}"
+                    mit_shift = (versuch is not versuche[3] and (versuch is not bat or not style_shift
+                                                                   or _bat_kennt_styleshift(neutrino_pfad)))
+                    LETZTER_LAUF.update(grafikkarte="-m" in versuch and CPU_MELDUNG not in ausgabe,
+                                        styleshift=mit_shift if style_shift else None)
+                    if not LETZTER_LAUF["grafikkarte"] and neutrino_pfad not in _AUF_DEM_PROZESSOR:
+                        _AUF_DEM_PROZESSOR.add(neutrino_pfad)
+                        log.warning("NEUTRINO singt auf dem Prozessor statt auf der Grafikkarte, das dauert deutlich "
+                                    "länger. Hilft ein aktueller Grafiktreiber (NVIDIA)?")
                     break
         else:
             log.info("[NEUTRINO v2] Singe...")
@@ -367,6 +433,15 @@ def neutrino_synthese(xml_pfad, output_wav_pfad, neutrino_pfad, model_pfad, thre
     sf.write(output_wav_pfad, audio, sr, subtype="FLOAT")
     log.info(f"[OK] NEUTRINO-Gesang: {output_wav_pfad}")
     return True
+
+
+def _bat_kennt_styleshift(neutrino_pfad: str) -> bool:
+    """Reicht die Run.bat einen StyleShift an NEUTRINO.exe weiter?"""
+    try:
+        with open(os.path.join(neutrino_pfad, "Run.bat"), "rb") as f:
+            return "styleshift" in f.read().decode("utf-8", errors="replace").lower()
+    except OSError:
+        return False
 
 
 def _run_bat_aufruf(neutrino_pfad: str, neutrino_exe: str, dateien: dict, threads: str, style_shift: int = 0):

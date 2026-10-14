@@ -65,6 +65,44 @@ def phrases(notes: list, gap: float = PHRASE_GAP) -> list:
     return out
 
 
+def phrase_kinds(groups: list, sections: list) -> list:
+    """Sektionsart je Phrase: die Sektion (Start, Ende in Sekunden, Art), in der die Phrase am längsten liegt.
+    Ein Auftakt vor dem Refrain gehört so zur Strophe davor, eine Zeile, die im Refrain weiterläuft, zum Refrain."""
+    out = []
+    for group in groups:
+        a, b = group[0].start, group[-1].end
+        best = max(sections, key=lambda s: min(b, s[1]) - max(a, s[0]), default=None)
+        out.append(best[2] if best is not None and min(b, best[1]) > max(a, best[0]) else "")
+    return out
+
+
+def only_notes(melody_data: list, silben: list, keep: set) -> tuple:
+    """Die Melodie gleich lang, aber nur mit den gesungenen Tönen, deren Nummer (0 = erster Ton) in keep steht; die
+    anderen werden Pausen. Rückgabe: (melody_data, Silben der übrigen Töne)."""
+    data, syllables, i = [], [], 0
+    for pitch, dur in melody_data:
+        if pitch is None:
+            data.append((None, dur))
+            continue
+        if i in keep:
+            data.append((pitch, dur))
+            syllables.append(silben[i] if i < len(silben) else "ら")
+        else:
+            data.append((None, dur))
+        i += 1
+    return data, syllables
+
+
+def same_audio(a: str, b: str, tolerance: float = 1e-3) -> bool:
+    """Klingen zwei Fassungen gleich (NEUTRINO singt bei gleichem StyleShift jedes Mal dasselbe)?"""
+    x, _ = sf.read(a, dtype="float32", always_2d=True)
+    y, _ = sf.read(b, dtype="float32", always_2d=True)
+    n = min(len(x), len(y))
+    if n == 0 or abs(len(x) - len(y)) > 1:
+        return n == 0 and len(x) == len(y)
+    return float(np.max(np.abs(x[:n] - y[:n]))) <= tolerance
+
+
 def excerpt(melody_data: list, silben: list, start: float, end: float) -> tuple:
     """Nur die Noten, die zwischen den Schlägen start und end beginnen, als melody_data ab start, mit ihren Silben."""
     data, syllables, t, pos, i = [], [], 0.0, start, 0
@@ -310,8 +348,16 @@ def _pitch_track(path: str) -> tuple:
     return f0, times, clipped, audio, rate
 
 
-def _note_errors(f0: np.ndarray, times: np.ndarray, notes: list) -> list:
-    """[(Fehler mal Dauer, Dauer)] je Note: mittlere Abweichung in Cent, Aussetzer zählen wie 600 Cent."""
+# Grobe Fehler (Fassungen ohne Farbsprung): bis zu dieser Abweichung (Cent) ist ein Ton nicht falsch, sondern gesungen
+GROSS_CENTS = 50.0
+CRACK_CENTS = 300.0          # ein Sprung der Tonhöhe von einem Rahmen zum nächsten mitten im Ton: ein Kiekser
+CRACK_COST = 300.0           # so viel Cent kostet jeder Kiekser
+SILENT_SCORE = 500.0         # ab diesem Fehler singt eine Fassung die Phrase nicht (z. B. eine andere Sektion)
+
+
+def _note_errors(f0: np.ndarray, times: np.ndarray, notes: list, tolerance: float = 0.0) -> list:
+    """[(Fehler mal Dauer, Dauer)] je Note: mittlere Abweichung in Cent, Aussetzer zählen wie 600 Cent.
+    tolerance: Abweichungen bis zu so vielen Cent zählen nicht; dann kosten auch Kiekser (Sprünge mitten im Ton)."""
     out = []
     for n in notes:
         dur = n.end - n.start
@@ -322,15 +368,19 @@ def _note_errors(f0: np.ndarray, times: np.ndarray, notes: list) -> list:
         sung = sel[sel > 0]
         target = 440.0 * 2 ** ((n.pitch - 69) / 12)
         cents = float(np.median(np.abs(1200 * np.log2(sung / target)))) if len(sung) else 600.0
+        cents = max(0.0, cents - tolerance) if len(sung) else cents
+        if tolerance and len(sung) > 1:
+            cents += CRACK_COST * int(np.sum(np.abs(np.diff(1200 * np.log2(sung))) > CRACK_CENTS))
         out.append(((min(cents, 600.0) + 600.0 * (1 - len(sung) / len(sel))) * dur, dur))
     return out
 
 
-def pitch_error(path: str, notes: list) -> float:
+def pitch_error(path: str, notes: list, tolerance: float = 0.0) -> float:
     """Wie weit eine Fassung danebenliegt (kleiner ist besser): mittlere Abweichung von den Noten in Cent,
-    Aussetzer (stumm, wo gesungen werden soll) zählen wie 600 Cent, übersteuerte Stellen kosten extra."""
+    Aussetzer (stumm, wo gesungen werden soll) zählen wie 600 Cent, übersteuerte Stellen kosten extra.
+    tolerance: siehe _note_errors (grobe Fehler statt jeder Abweichung)."""
     f0, times, clipped, _, _ = _pitch_track(path)
-    errors = _note_errors(f0, times, notes)
+    errors = _note_errors(f0, times, notes, tolerance)
     weight = sum(d for _, d in errors)
     return (sum(e for e, _ in errors) / weight if weight else 600.0) + float(np.mean(clipped)) * 1e4
 
@@ -339,10 +389,10 @@ def pitch_error(path: str, notes: list) -> float:
 COMP_FADE = 0.03             # Überblendung an den Schnitten (Sekunden), mitten in der Pause zwischen zwei Phrasen
 
 
-def phrase_errors(track: tuple, notes: list, groups: list) -> list:
+def phrase_errors(track: tuple, notes: list, groups: list, tolerance: float = 0.0) -> list:
     """Fehler je Phrase (wie pitch_error, nur über die Noten der Phrase und ihre Zeit)."""
     f0, times, clipped = track[:3]
-    errors = _note_errors(f0, times, notes)
+    errors = _note_errors(f0, times, notes, tolerance)
     index = {id(n): i for i, n in enumerate(notes)}
     out = []
     for group in groups:
@@ -372,11 +422,13 @@ def _segment_masks(choice: list, cuts: list, takes: int, length: int, rate: int,
     return np.stack([smooth(m, int(COMP_FADE * rate)) for m in masks])
 
 
-def comp(takes: list, notes: list, out_path: str, double_path: str = None, double_windows: list = ()) -> list:
+def comp(takes: list, notes: list, out_path: str, double_path: str = None, double_windows: list = (),
+         tolerance: float = 0.0) -> list:
     """
     Setzt die Hauptstimme Phrase für Phrase aus der saubersten Fassung zusammen und schreibt sie nach out_path.
     double_path: dort landet in den double_windows (Sekunden, z. B. die Refrains) die zweitbeste Fassung jeder Phrase,
-    eine echte Doppelung statt einer Kopie. Rückgabe: die gewählte Fassung (Index in takes) je Phrase.
+    eine echte Doppelung statt einer Kopie; eine Fassung, die die Phrase gar nicht singt, doppelt nicht.
+    tolerance: grobe Fehler statt jeder Abweichung (siehe _note_errors). Rückgabe: die Fassung je Phrase.
     """
     groups = phrases(notes)
     tracks = [_pitch_track(t) for t in takes]
@@ -387,7 +439,7 @@ def comp(takes: list, notes: list, out_path: str, double_path: str = None, doubl
         if tr[4] != rate:
             raise ValueError("Die Fassungen haben verschiedene Abtastraten")
         audio[k, :len(tr[3])] = tr[3]
-    scores = np.array([phrase_errors(tr, notes, groups) for tr in tracks])      # [Fassung, Phrase]
+    scores = np.array([phrase_errors(tr, notes, groups, tolerance) for tr in tracks])      # [Fassung, Phrase]
     order = np.argsort(scores, axis=0, kind="stable")
     choice = [int(order[0, p]) for p in range(len(groups))]
     cuts = _cut_points(groups)
@@ -397,7 +449,7 @@ def comp(takes: list, notes: list, out_path: str, double_path: str = None, doubl
         keep = np.zeros(length, dtype=np.float32)
         for start, end in double_windows:
             keep[max(0, int(start * rate)):min(length, int(end * rate))] = 1.0
-        second = [int(order[1, p]) for p in range(len(groups))]
+        second = [int(order[1, p]) if scores[order[1, p], p] < SILENT_SCORE else None for p in range(len(groups))]
         masks = _segment_masks(second, cuts, len(takes), length, rate, keep)
         double = np.einsum("kt,ktc->tc", masks, audio)
         if np.max(np.abs(double)) > 1e-4:

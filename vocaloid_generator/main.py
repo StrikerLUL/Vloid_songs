@@ -83,6 +83,18 @@ def parse_args(argv=None):
     p.add_argument("--ohne-atemzeichen", action="store_true", help="keine Atemzeichen in langen Zeilen")
     p.add_argument("--ohne-doppelvokale", action="store_true", help="schnelle Töne nicht auf einem Ton zusammenlegen")
     p.add_argument("--ohne-englisch", action="store_true", help="englische Wörter nicht als Katakana singen")
+    p.add_argument("--ohne-sektions-stil", action="store_true",
+                   help="Strophe und Refrain mit demselben StyleShift singen")
+    p.add_argument("--strophe-stil", type=int, choices=range(-3, 4), metavar="-3..3",
+                   help="StyleShift der Strophen zum StyleShift dazu (Standard -1)")
+    p.add_argument("--refrain-stil", type=int, choices=range(-3, 4), metavar="-3..3",
+                   help="StyleShift der Refrains zum StyleShift dazu (Standard +1)")
+    p.add_argument("--ohne-platz", action="store_true",
+                   help="die Band macht dem Gesang keinen Platz (keine Absenkung in seinen Frequenzen)")
+    p.add_argument("--ohne-nachfuehren", action="store_true",
+                   help="die Lautstärke des Gesangs nicht auf der Band nachführen")
+    p.add_argument("--ohne-gleiche-fassungen", action="store_true",
+                   help="Fassungen eine Stufe heller und dunkler singen und nach jeder Abweichung werten")
     p.add_argument("--schlagzeug", choices=["soundfont", "808", "909"],
                    help="Klang des Schlagzeugs: SoundFont oder Drum-Machine (sonst wie der Stil)")
     p.add_argument("--ohne-verstaerker", action="store_true",
@@ -127,6 +139,8 @@ def parse_args(argv=None):
                    + "; mit :SEKTION nur dort, z. B. melody:Chorus. Ohne --seed und --aus-verlauf gilt der letzte Song.")
     p.add_argument("--refrains", type=int, metavar="N",
                    help="N neue Refrain-Melodien als kurze Vorschau (WAV) schreiben, ohne den ganzen Song")
+    p.add_argument("--casting", action="store_true",
+                   help="Stimmen-Casting: den Refrain-Hook mit jeder installierten NEUTRINO-Stimme singen (WAVs)")
     p.add_argument("--refrain", type=int, metavar="NR",
                    help="den ganzen Song mit dieser Refrain-Melodie erzeugen (Nummer aus der Ausgabe von --refrains, "
                         "mit demselben --seed)")
@@ -209,6 +223,11 @@ def main(argv=None) -> int:
                  "breath_marks": False if args.ohne_atemzeichen else None,
                  "fast_diphthongs": False if args.ohne_doppelvokale else None,
                  "english_kana": False if args.ohne_englisch else None,
+                 "section_style": False if args.ohne_sektions_stil else None,
+                 "verse_style_shift": args.strophe_stil, "chorus_style_shift": args.refrain_stil,
+                 "even_takes": False if args.ohne_gleiche_fassungen else None,
+                 "vocal_unmask": False if args.ohne_platz else None,
+                 "vocal_ride": False if args.ohne_nachfuehren else None,
                  "guitar_amp": False if args.ohne_verstaerker else None, "cabinet_ir": args.box,
                  "samples": False if args.ohne_samples else None,
                  "real_drums": False if args.ohne_echtes_schlagzeug else None,
@@ -242,6 +261,9 @@ def main(argv=None) -> int:
         if settings is None:
             return 1
     parts = tuple(args.neu or ())
+    if args.style and not args.stimme:
+        import casting
+        settings = casting.favorite(settings)
     if args.entwurf:
         settings = draft_settings(settings)
 
@@ -254,6 +276,8 @@ def main(argv=None) -> int:
 
     if args.refrains:
         return _hooks(settings, args.refrains, progress)
+    if args.casting:
+        return _casting(settings, progress)
     if args.album:
         return _album(settings.with_updates(album_vary=not args.album_gleich), args, progress)
     try:
@@ -354,6 +378,18 @@ def _hooks(settings: SongSettings, count: int, progress) -> int:
     for choice in choices:
         log.info("Refrain %d: %s  (ganzer Song: --seed %d --refrain %d)", choice.number, choice.preview,
                  choice.settings.seed, choice.settings.variations[key])
+    return 0
+
+
+def _casting(settings: SongSettings, progress) -> int:
+    import casting
+    try:
+        auditions = casting.cast(settings, progress)
+    except ValueError as e:
+        log.error("%s", e)
+        return 1
+    for a in auditions:
+        log.info("%s: %s", a.singer, a.wav)
     return 0
 
 

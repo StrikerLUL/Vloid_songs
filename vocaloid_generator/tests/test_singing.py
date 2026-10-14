@@ -148,7 +148,7 @@ def fake_neutrino(tmp_path, monkeypatch):
 
 def duet_settings(tmp_path, root, partner="REINA", sections=("Verse", "Chorus", "Verse", "Chorus")):
     return SongSettings(active_sections=list(sections), output_ordner=str(tmp_path / "out"), neutrino_pfad=str(root),
-                        singer="MERROW", duet_singer=partner, harmonies=False, final_choir=False)
+                        singer="MERROW", duet_singer=partner, harmonies=False, final_choir=False, section_style=False)
 
 
 def test_duet_sings_with_both_voices(tmp_path, fake_neutrino):

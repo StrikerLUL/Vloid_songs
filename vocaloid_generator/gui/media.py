@@ -100,6 +100,14 @@ def lyrics(result) -> list:
     return karaoke.load(os.path.join(result.output_dir, karaoke.FILE))
 
 
+def sung_by(result) -> tuple:
+    """(Zeile unter dem Player, Warnung?): wer den Gesang gesungen hat (vocal_check)."""
+    import vocal_check
+    if result is None or not result.vocals_wav:
+        return "", False
+    return vocal_check.describe(vocal_check.read(result.output_dir))
+
+
 def open_folder(path: str) -> bool:
     """Öffnet einen Ordner im Explorer (oder im Dateimanager)."""
     if not os.path.isdir(path):

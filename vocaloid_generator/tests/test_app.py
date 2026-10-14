@@ -437,6 +437,9 @@ async def test_reference_suggestions_can_be_switched_off(user, monkeypatch):
     user.find(marker="switch-ref_tempo_key").elements.pop().set_value(False)
     await user.should_not_see(marker="reference-take-tempo")
     await until(lambda: SongSettings.load().ref_tempo_key is False)
+    await user.should_see("Demucs fehlt")
+    user.find(marker="switch-ref_stems").elements.pop().set_value(False)
+    await until(lambda: SongSettings.load().ref_stems is False)
 
 
 async def test_lively_singing_can_be_switched_and_voicevox_singers_are_listed(user, monkeypatch):

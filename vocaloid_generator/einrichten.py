@@ -52,6 +52,11 @@ def _rating() -> bool:
     return rating.available()
 
 
+def _demucs() -> bool:
+    import separation
+    return separation.available()
+
+
 def _ace_step() -> bool:
     import polish
     return polish.available()
@@ -85,6 +90,9 @@ COMPONENTS = (
               "Dataset)", "etwa 3 MB", "setup_grooves.py", _grooves),
     Component("rating", "Automatische Bewertung", "Bei mehreren Fassungen hört ein Modell zu und lädt die beste",
               "etwa 3 GB", "setup_bewertung.py", _rating),
+    Component("demucs", "Mix wie die Vorbilder", "Demucs zerlegt deine Vorbild-Songs; Gesang, Schlagzeug, Bass und "
+              "Rest werden dann einzeln so gemischt wie dort", "etwa 3 GB", "setup_demucs.py", _demucs,
+              recommended=False),
     Component("ace_step", "Klang-Veredler ACE-Step (Versuch)", "Eine zweite Fassung jedes Songs mit neu "
               "eingespielter Band", "etwa 20 GB, braucht eine NVIDIA-Grafikkarte", "setup_ace_step.py", _ace_step,
               recommended=False, gpu=True),

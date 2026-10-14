@@ -462,6 +462,7 @@ def mische_spuren(
     sections: list = None,
     energy_contrast_db: float = None,
     vocal_ratio_db: float = None,
+    group_targets: dict = None,
     texture: str = "",
     movement: list = None,
     band: str = None,
@@ -479,6 +480,8 @@ def mische_spuren(
     sections, energy_contrast_db: [(Start, Ende in Sekunden, Energie)] und der Abstand zwischen lauten und leisen
     Stellen, den die Vorbilder haben; die Band wird in ruhigen Sektionen entsprechend leiser oder lauter.
     vocal_ratio_db: Gesang gegen Band, wie reference.vocal_ratio_db ihn in den Vorbildern schätzt.
+    group_targets: Gesang, Schlagzeug, Bass und Rest der Vorbilder, einzeln gemessen ({Gruppe: {"level", "tilt"}},
+    separation.summarize); jede Gruppe wird so laut und so hell wie dort.
     texture: "lofi" lässt die Band wie von einer alten Bandmaschine klingen, mit Schallplatten-Knistern.
     movement: die Sektionen (mix_movement.Part); dann bewegt sich der Mix: Anlauf vor jedem Refrain, Hall je nach
     Sektion, breitere Refrains.
@@ -534,6 +537,8 @@ def mische_spuren(
 
     if energy_contrast_db is not None and sections:
         _shape_energy(tracks, sections, energy_contrast_db, length)
+    if group_targets:
+        _match_groups(tracks, group_targets)
     if vocal_ratio_db is not None:
         _match_vocal_level(tracks, vocal_ratio_db)
 
@@ -660,6 +665,77 @@ def _shape_energy(tracks: dict, sections: list, target_db: float, length: int) -
             tracks[path] = (key, audio * 10 ** (step / 20))
         total += step
     log.info("Lautstärke-Verlauf wie im Vorbild: ruhigste Sektion %+.1f dB", float(total[int(np.argmax(curve))]))
+
+
+MAX_TILT_DB = 4.0            # so weit dürfen die Vorbilder die Höhen einer Gruppe heben oder senken
+TILT_HZ = 4000.0
+GROUP_EXCERPT = 45.0         # wie separation.EXCERPT_SECONDS: gemessen wird im lautesten Abschnitt
+
+
+def _group_of(key: str) -> str:
+    """Die Gruppe, in die Demucs die Spur stecken würde."""
+    if key in VOCAL_KEYS:
+        return "vocals"
+    if key in ("drums", "perc"):
+        return "drums"
+    return "bass" if key == "bass" else "other"
+
+
+def _match_groups(tracks: dict, targets: dict) -> None:
+    """Gesang, Schlagzeug, Bass und Rest so laut gegen den ganzen Song und so hell wie in den Vorbildern.
+    Gemessen wird wie dort (separation.measure) im lautesten Abschnitt; jede Gruppe wandert höchstens
+    MAX_REFERENCE_DB lauter oder leiser und bekommt höchstens MAX_TILT_DB mehr oder weniger Höhen."""
+    import separation
+    from reference import _loudest_start
+    groups = {}
+    for path, (key, _) in tracks.items():
+        if key != "fx" and _group_of(key) in targets:
+            groups.setdefault(_group_of(key), []).append(path)
+    if not groups:
+        return
+    length = next(iter(tracks.values()))[1].shape[1]
+    n = min(length, int(GROUP_EXCERPT * SAMPLE_RATE))
+    start = _loudest_start(sum(a for _, a in tracks.values()).mean(axis=0), SAMPLE_RATE, GROUP_EXCERPT)
+    window = slice(start, start + n)
+
+    def measured() -> dict:
+        parts = {g: sum(tracks[p][1][:, window] for p in paths) for g, paths in groups.items()}
+        rest = [a[:, window] for p, (_, a) in tracks.items() if not any(p in ps for ps in groups.values())]
+        if rest:
+            parts["_rest"] = sum(rest)
+        return separation.measure(parts)
+
+    changes = {}
+    now = measured()
+    for group, paths in groups.items():
+        if group not in now:
+            continue
+        tilt = float(np.clip(targets[group]["tilt"] - now[group]["tilt"], -MAX_TILT_DB, MAX_TILT_DB))
+        if abs(tilt) >= 0.5:
+            shelf = Pedalboard([HighShelfFilter(TILT_HZ, tilt, 0.7)])
+            for path in paths:
+                key, audio = tracks[path]
+                tracks[path] = (key, shelf(audio, SAMPLE_RATE))
+            changes[group] = [0.0, tilt]
+    total = {g: 0.0 for g in groups}
+    for _ in range(3):
+        now = measured()
+        steps = {}
+        for group in groups:
+            if group in now:
+                wanted = total[group] + targets[group]["level"] - now[group]["level"]
+                steps[group] = float(np.clip(wanted, -MAX_REFERENCE_DB, MAX_REFERENCE_DB)) - total[group]
+        if all(abs(step) < 0.5 for step in steps.values()):
+            break
+        for group, step in steps.items():
+            for path in groups[group]:
+                key, audio = tracks[path]
+                tracks[path] = (key, audio * np.float32(10 ** (step / 20)))
+            total[group] += step
+    for group, step in total.items():
+        changes.setdefault(group, [0.0, 0.0])[0] = step
+    log.info("Mix wie die Vorbilder: %s", ", ".join(
+        f"{separation.NAMES[g]} {level:+.1f} dB, Höhen {tilt:+.1f} dB" for g, (level, tilt) in changes.items()))
 
 
 def _match_vocal_level(tracks: dict, target_db: float) -> None:

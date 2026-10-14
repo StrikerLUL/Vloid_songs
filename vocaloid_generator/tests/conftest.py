@@ -59,6 +59,14 @@ def without_rating(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def without_demucs(tmp_path, monkeypatch):
+    """Ein eingerichtetes Demucs (setup_demucs.py) zerlegt in den Tests keine Vorbilder."""
+    import separation
+    monkeypatch.setattr(separation, "FOLDER", str(tmp_path / "demucs"))
+    monkeypatch.setattr(separation, "CACHE", str(tmp_path / "vorbild_gruppen.json"))
+
+
+@pytest.fixture(autouse=True)
 def without_polish(tmp_path, monkeypatch):
     """Ein eingerichteter Klang-Veredler (setup_ace_step.py) veredelt in den Tests nicht mit."""
     import polish

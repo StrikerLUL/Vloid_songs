@@ -174,6 +174,7 @@ class SongSettings(BaseModel):
     ref_mastering: bool = True         # Klang und Lautheit des Masters wie die Vorbilder
     ref_energy: bool = True            # leise und laute Teile so weit auseinander wie in den Vorbildern
     ref_vocal_level: bool = True       # Gesang so laut gegen die Band wie in den Vorbildern
+    ref_stems: bool = True             # Gesang, Schlagzeug, Bass und Rest einzeln wie die Vorbilder (mit Demucs)
     ref_tempo_key: bool = True         # Tempo und Tonart der Vorbilder vorschlagen
     ref_style: bool = True             # passenden Stil vorschlagen
     vst_path: str = ""

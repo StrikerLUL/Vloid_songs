@@ -191,6 +191,15 @@ def check_rating(settings, folder: str) -> tuple:
                                                                                   "(Protokoll ansehen)")
 
 
+def check_demucs(settings, folder: str) -> tuple:
+    import separation
+    if not separation.available():
+        return None, "Mix wie die Vorbilder (Demucs) nicht eingerichtet"
+    done = separation.separate([_tone(os.path.join(folder, "zerlegen.wav"))], [os.path.join(folder, "zerlegt")])
+    return (True, "Probeton in Gesang, Schlagzeug, Bass und Rest zerlegt") if done else \
+        (False, "Demucs lief nicht (Protokoll ansehen)")
+
+
 def check_polish(settings, folder: str) -> tuple:
     import polish
     if not polish.available():
@@ -238,6 +247,7 @@ CHECKS = (
     ("neutrino", "NEUTRINO", check_neutrino, False),
     ("voicevox", "VOICEVOX", check_voicevox, False),
     ("rating", "Automatische Bewertung", check_rating, False),
+    ("demucs", "Mix wie die Vorbilder", check_demucs, False),
     ("polish", "Klang-Veredler", check_polish, True),         # lädt ACE-Step: nur bei „gründlich“
     ("song", "Ganzer Song", check_song, False),
 )

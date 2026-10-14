@@ -874,7 +874,8 @@ def _lead_sings_melody(tracks: dict, out: str) -> None:
 
 
 def _reference_targets(settings: SongSettings, tracks: dict, out: str, has_vocals: bool) -> dict:
-    """Was die Vorbild-Songs am Mix bestimmen dürfen: Mastering, Lautstärke-Verlauf, Gesangspegel."""
+    """Was die Vorbild-Songs am Mix bestimmen dürfen: Mastering, Lautstärke-Verlauf, Gesangspegel und, mit Demucs,
+    Pegel und Helligkeit von Gesang, Schlagzeug, Bass und Rest einzeln."""
     import reference
     from styles import STYLES
     refs = settings.reference_tracks
@@ -899,7 +900,28 @@ def _reference_targets(settings: SongSettings, tracks: dict, out: str, has_vocal
             log.info("In den Vorbildern ist kein Gesang zu hören; die Gesangslautstärke bleibt, wie sie ist.")
         elif wants_voice:
             targets["vocal_ratio_db"] = summary.vocal_db
+    if settings.ref_stems:
+        groups = _group_targets(refs, has_vocals)
+        if groups:
+            targets["group_targets"] = groups
+            if "vocals" in groups:
+                targets.pop("vocal_ratio_db", None)     # die Zerlegung misst den Gesang genauer als die Schätzung
     return targets
+
+
+def _group_targets(refs, has_vocals: bool) -> Optional[dict]:
+    import separation
+    try:
+        groups = separation.summarize(refs)
+    except Exception as e:  # noqa: BLE001 – ohne Zerlegung bleibt der Mix wie bisher
+        log.warning("Vorbilder nicht zerlegbar: %s", e)
+        return None
+    if groups is None:
+        return None
+    if not has_vocals:
+        groups.pop("vocals", None)
+    log.info("Vorbilder einzeln: %s", separation.describe(groups))
+    return groups or None
 
 
 def _section_energies(plan) -> list:

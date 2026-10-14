@@ -243,6 +243,8 @@ REFERENCE_SWITCHES = (
                                    "die Lautheit stellst du im Tab Mix ein"),
     ("ref_energy", "Lautstärke-Verlauf", "Strophe und Refrain liegen so weit auseinander wie in den Vorbildern"),
     ("ref_vocal_level", "Gesangslautstärke", "Gesang so laut gegen die Band wie in den Vorbildern (geschätzt)"),
+    ("ref_stems", "Mix pro Instrument", "Gesang, Schlagzeug, Bass und Rest einzeln so laut und so hell wie in den "
+                                        "Vorbildern; braucht Demucs (Hilfe › Einrichten), das zerlegt die Vorbilder"),
     ("ref_tempo_key", "Tempo und Tonart vorschlagen", "Ein Klick übernimmt Tempo und Tonart der Vorbilder"),
     ("ref_style", "Stil vorschlagen", "Ein Klick übernimmt den Stil, der am besten zu den Vorbildern passt"),
 )
@@ -344,6 +346,8 @@ def reference_editor(s: SongSettings, pick: PickFn, apply_template: Callable[[So
         for attr, text, tip in REFERENCE_SWITCHES:
             ui.switch(text).bind_value(s, attr).props("dense").tooltip(tip).mark(f"switch-{attr}") \
                 .on_value_change(lambda: summary_box.refresh())
+        import separation
+        hint(separation.status())
     summary_box()
     ui.timer(0.1, measure, once=True)
 

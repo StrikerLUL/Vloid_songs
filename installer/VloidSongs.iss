@@ -60,8 +60,9 @@ Name: "{autodesktop}\Vloid Songs"; Filename: "{app}\Vloid Songs starten.bat"; Wo
 Type: filesandordirs; Name: "{app}\.venv"
 
 [Run]
-; Alle Bibliotheken, mit dem Python aus dem Ordner python
-Filename: "{app}\Vloid Songs starten.bat"; Parameters: "--einrichten"; WorkingDir: "{app}"; StatusMsg: "Lade die Bibliotheken (beim ersten Mal einige Minuten)..."; Flags: runhidden
+; Alle Bibliotheken, mit dem Python aus dem Ordner python. Das schwarze Fenster zeigt, was uv gerade lädt; geht etwas
+; schief, bleibt es mit der Meldung offen.
+Filename: "{app}\Vloid Songs starten.bat"; Parameters: "--einrichten"; WorkingDir: "{app}"; StatusMsg: "Lade die Bibliotheken, den Fortschritt zeigt das schwarze Fenster (beim ersten Mal einige Minuten)..."
 Filename: "{app}\Vloid Songs starten.bat"; WorkingDir: "{app}"; Description: "Vloid Songs jetzt starten"; Flags: postinstall nowait skipifsilent shellexec runminimized
 ; Nach einem Update aus der App (still, mit /NEUSTART=1) startet die App von selbst wieder
 Filename: "{app}\Vloid Songs starten.bat"; WorkingDir: "{app}"; Flags: nowait shellexec runminimized; Check: RestartWanted

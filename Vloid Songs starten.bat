@@ -23,8 +23,16 @@ if exist "%~dp0python\python.exe" (
     set "UV_PYTHON_INSTALL_DIR=%~dp0uv\python"
 )
 if "%~1"=="--einrichten" (
+    title Vloid Songs: Bibliotheken laden
+    echo Vloid Songs laedt die Bibliotheken. Beim ersten Mal dauert das einige Minuten.
+    echo.
     "%UV%" sync --frozen --no-dev
-    if errorlevel 1 exit /b 1
+    if errorlevel 1 (
+        echo.
+        echo Das Laden hat nicht geklappt. Bitte ein Bild von diesem Fenster schicken.
+        timeout /t 600
+        exit /b 1
+    )
     exit /b 0
 )
 "%UV%" run --no-dev vocaloid_generator\app.py %*

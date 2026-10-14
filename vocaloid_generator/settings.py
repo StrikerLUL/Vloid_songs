@@ -193,6 +193,7 @@ class SongSettings(BaseModel):
     mix_movement: bool = True          # Anlauf vor dem Refrain, Hall pro Sektion, breitere Refrains (mix_movement.py)
     polish: bool = True                # zweite Fassung mit von ACE-Step veredelter Band (setup_ace_step.py), wenn da
     polish_strength: float = Field(0.4, ge=0.05, le=0.95)   # wie viel ACE-Step am Klang der Band ändert
+    ai_accompaniment: bool = False     # Begleitstimmen vom Anticipatory Music Transformer (setup_begleitung.py)
     polish_caption: str = ""           # eigene Klangbeschreibung für ACE-Step (Englisch); leer = passend zum Stil
     show_karaoke: bool = True          # Text zum Mitlesen unter dem Player
     # Verlässlichkeit (1.0.0); jedes hat einen Schalter

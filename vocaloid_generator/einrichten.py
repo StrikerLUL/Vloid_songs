@@ -57,6 +57,11 @@ def _demucs() -> bool:
     return separation.available()
 
 
+def _accompaniment() -> bool:
+    import accompaniment
+    return accompaniment.available()
+
+
 def _ace_step() -> bool:
     import polish
     return polish.available()
@@ -93,6 +98,9 @@ COMPONENTS = (
     Component("demucs", "Mix wie die Vorbilder", "Demucs zerlegt deine Vorbild-Songs; Gesang, Schlagzeug, Bass und "
               "Rest werden dann einzeln so gemischt wie dort", "etwa 3 GB", "setup_demucs.py", _demucs,
               recommended=False),
+    Component("begleitung", "KI-Begleitung (Versuch)", "Der Anticipatory Music Transformer schreibt Klavier, Gitarre, "
+              "Streicher und Synths zu deiner Melodie; einschalten unter Pfade", "etwa 4 GB, mit NVIDIA-Grafikkarte "
+              "deutlich schneller", "setup_begleitung.py", _accompaniment, recommended=False),
     Component("ace_step", "Klang-Veredler ACE-Step (Versuch)", "Eine zweite Fassung jedes Songs mit neu "
               "eingespielter Band", "etwa 20 GB, braucht eine NVIDIA-Grafikkarte", "setup_ace_step.py", _ace_step,
               recommended=False, gpu=True),

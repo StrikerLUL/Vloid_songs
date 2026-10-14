@@ -200,6 +200,17 @@ def check_demucs(settings, folder: str) -> tuple:
         (False, "Demucs lief nicht (Protokoll ansehen)")
 
 
+def check_accompaniment(settings, folder: str) -> tuple:
+    import accompaniment
+    if not accompaniment.available():
+        return None, "KI-Begleitung nicht eingerichtet"
+    melody = [[0.5 * i, 0.5 * i + 0.4, 60 + 2 * (i % 4), accompaniment.MELODY] for i in range(16)]
+    notes = accompaniment.write(melody, 8.0, 7, folder, reuse=False)
+    if notes is None:
+        return False, f"Das Modell lief nicht (Ausgabe in {os.path.join(accompaniment.FOLDER, accompaniment.LOG_FILE)})"
+    return True, f"Acht Sekunden Begleitung mit {len(notes)} Tönen geschrieben"
+
+
 def check_polish(settings, folder: str) -> tuple:
     import polish
     if not polish.available():
@@ -248,6 +259,7 @@ CHECKS = (
     ("voicevox", "VOICEVOX", check_voicevox, False),
     ("rating", "Automatische Bewertung", check_rating, False),
     ("demucs", "Mix wie die Vorbilder", check_demucs, False),
+    ("accompaniment", "KI-Begleitung", check_accompaniment, True),    # lädt das Modell: nur bei „gründlich“
     ("polish", "Klang-Veredler", check_polish, True),         # lädt ACE-Step: nur bei „gründlich“
     ("song", "Ganzer Song", check_song, False),
 )

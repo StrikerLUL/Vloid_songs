@@ -67,6 +67,13 @@ def without_demucs(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def without_accompaniment(tmp_path, monkeypatch):
+    """Eine eingerichtete KI-Begleitung (setup_begleitung.py) schreibt in den Tests nicht mit."""
+    import accompaniment
+    monkeypatch.setattr(accompaniment, "FOLDER", str(tmp_path / "begleitung"))
+
+
+@pytest.fixture(autouse=True)
 def without_polish(tmp_path, monkeypatch):
     """Ein eingerichteter Klang-Veredler (setup_ace_step.py) veredelt in den Tests nicht mit."""
     import polish

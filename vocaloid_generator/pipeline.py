@@ -188,6 +188,9 @@ def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None,
 def _produce(settings: SongSettings, tracks: dict, out: str, report: ProgressFn, keep_history: bool) -> SongResult:
     seed = settings.seed
     result = SongResult(seed=seed, output_dir=out, settings=settings)
+    if settings.ai_accompaniment and not settings.draft:
+        report(0.10, "KI schreibt die Begleitung (Versuch)...")
+        _ai_accompaniment(settings, tracks, out, seed)
     result.midi_files = {inst: os.path.join(out, f"{inst}.mid") for inst in INSTRUMENTS if tracks.get(inst)}
 
     _write_ust(settings, tracks, out)
@@ -922,6 +925,16 @@ def _group_targets(refs, has_vocals: bool) -> Optional[dict]:
         groups.pop("vocals", None)
     log.info("Vorbilder einzeln: %s", separation.describe(groups))
     return groups or None
+
+
+def _ai_accompaniment(settings: SongSettings, tracks: dict, out: str, seed: int) -> None:
+    """Die Begleitstimmen vom Anticipatory Music Transformer; ohne ihn bleibt die komponierte Begleitung."""
+    import accompaniment
+    plan = tracks.get("plan")
+    sections = _section_energies(plan) if plan is not None else []
+    if not accompaniment.accompany(tracks, out, settings.bpm, seed, sections, reuse=settings.reuse_steps) \
+            and not accompaniment.available():
+        log.info("KI-Begleitung eingeschaltet, aber nicht eingerichtet (Hilfe › Einrichten); die komponierte bleibt.")
 
 
 def _section_energies(plan) -> list:

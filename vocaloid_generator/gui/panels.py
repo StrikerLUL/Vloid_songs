@@ -669,6 +669,10 @@ def paths_panel(s: SongSettings, pick: PickFn, status: Callable[[], None]) -> No
     ui.switch("Klang der Band mit ACE-Step veredeln (setup_ace_step.py, Versuch)") \
         .bind_value(s, "polish").mark("polish-switch").on_value_change(lambda: status()) \
         .tooltip("Zweite Fassung jedes Songs mit neu eingespielter Band; braucht eine NVIDIA-Grafikkarte")
+    ui.switch("Begleitung vom KI-Modell schreiben lassen (setup_begleitung.py, Versuch)") \
+        .bind_value(s, "ai_accompaniment").mark("accompaniment-switch") \
+        .tooltip("Der Anticipatory Music Transformer schreibt Klavier, Gitarre, Streicher, Synths und Bläser passend zu "
+                 "Melodie, Bass und Schlagzeug; ohne NVIDIA-Grafikkarte dauert ein Song lange")
     app_settings(s)
 
 

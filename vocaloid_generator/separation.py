@@ -8,7 +8,6 @@
 import json
 import logging
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -195,7 +194,3 @@ def _write_cache(cache: dict) -> None:
     except OSError as e:
         log.warning("Vorbild-Gruppen nicht gespeichert: %s", e)
 
-
-def remove() -> None:
-    """Demucs wieder entfernen (Ordner tools/demucs)."""
-    shutil.rmtree(FOLDER, ignore_errors=True)

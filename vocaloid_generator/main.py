@@ -103,6 +103,10 @@ def parse_args(argv=None):
     p.add_argument("--veredler-klang", metavar="TEXT", help="Klangbeschreibung für ACE-Step auf Englisch")
     p.add_argument("--vorbild", action="append", metavar="DATEI",
                    help="Vorbild-Song (mehrfach möglich); ersetzt die Vorbilder aus den Einstellungen")
+    p.add_argument("--ki-begleitung", action="store_true",
+                   help="die Begleitstimmen schreibt der Anticipatory Music Transformer (setup_begleitung.py, Versuch)")
+    p.add_argument("--ohne-ki-begleitung", action="store_true", help="die komponierte Begleitung, auch wenn die "
+                   "KI-Begleitung in den Einstellungen an ist")
     p.add_argument("--ohne-vorbild-gruppen", action="store_true",
                    help="Gesang, Schlagzeug, Bass und Rest nicht einzeln an die Vorbilder angleichen (Demucs)")
     p.add_argument("--vom-vorbild", action="store_true",
@@ -206,6 +210,7 @@ def main(argv=None) -> int:
                  "lofi_texture": False if args.ohne_lofi_klang else None,
                  "mix_movement": False if args.ohne_bewegung else None,
                  "ref_stems": False if args.ohne_vorbild_gruppen else None,
+                 "ai_accompaniment": False if args.ohne_ki_begleitung else (True if args.ki_begleitung else None),
                  "polish": False if args.ohne_veredler else None, "polish_strength": args.veredler_staerke,
                  "polish_caption": args.veredler_klang,
                  "melody_midi": args.melodie_midi, "melody_midi_section": args.melodie_sektion,

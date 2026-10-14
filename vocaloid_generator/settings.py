@@ -160,10 +160,12 @@ class SongSettings(BaseModel):
     vibrato: float = Field(1.0, ge=0.0, le=2.0)   # 0 = gerade Töne, 1 = wie gesungen, 2 = doppelt so viel
     glide: float = Field(1.0, ge=0.0, le=2.0)     # Übergänge zwischen Tönen: 0 = springen, 1 = wie gesungen, 2 = länger
     breaths: bool = True               # hörbares Einatmen vor den Phrasen
+    recorded_breaths: bool = True      # aufgenommene Atmer aus dem Ordner Atmer statt Rauschen (wenn welche da sind)
     echo_throws: bool = True           # Echo auf dem letzten Wort einer Phrase
     final_choir: bool = True           # im letzten Refrain singt ein Chor mit
     vocal_comping: bool = True         # bei mehreren Fassungen jede Phrase aus der saubersten (voice_fx.comp)
     phrase_expression: bool = True     # Ausdruck pro Phrase: zum Höhepunkt lauter und heller, am Ende weicher
+    syllable_dynamics: bool = True     # Lautstärke pro Silbe: Betonungen lauter, weicher Einsatz, Anlauf leiser
     vocal_chain: bool = True           # Studio-Kette: Sättigung, Hall und Delay je Sektion, echte Doppelung
     romaji: bool = True                # Liedtext in lateinischen Buchstaben (Romaji) japanisch singen
     # Gesang 1.1, jedes mit Schalter. Noten, die NEUTRINO gut singen kann (neutrino_score.py):
@@ -179,6 +181,13 @@ class SongSettings(BaseModel):
     # Gesang sitzt vorn (vocal_mix.py)
     vocal_unmask: bool = True          # die Band wird dort leiser, wo der Gesang gerade laut ist (wie Trackspacer)
     vocal_ride: bool = True            # der Gesang wird nachgeführt, damit er gleich weit über der Band steht
+    convolution_reverb: bool = True    # Gesangsplatte aus einer Impulsantwort, Pre-Delay im Tempo
+    ducked_delay: bool = True          # das Gesangs-Delay ist leiser, solange gesungen wird
+    # Begleitstimmen wie in Produktionen (backing_vocals.py), von NEUTRINO gesungen
+    harmony_variety: bool = True       # Harmonie je Refrain anders (Phrasenenden, Terz darunter, darüber, Oktave)
+    harmony_double: bool = True        # jede Harmonie zweimal gesungen, links und rechts
+    sung_pads: bool = True             # gesungene Flächen (う, あ) im Refrain statt des Keyboard-Chors
+    adlibs: bool = True                # Rufe und Echo-Antworten im letzten Refrain
     # Stimmen-Casting (casting.py): Lieblingsstimme je Stil, beim Wechsel des Stils gewählt
     style_singer: bool = True
     style_singers: dict[str, str] = Field(default_factory=dict)
@@ -191,6 +200,7 @@ class SongSettings(BaseModel):
     ref_energy: bool = True            # leise und laute Teile so weit auseinander wie in den Vorbildern
     ref_vocal_level: bool = True       # Gesang so laut gegen die Band wie in den Vorbildern
     ref_stems: bool = True             # Gesang, Schlagzeug, Bass und Rest einzeln wie die Vorbilder (mit Demucs)
+    ref_vocal_curve: bool = True       # die Klangkurve des Gesangs (Terzbänder, ±4 dB) wie im Vorbild-Gesang
     ref_tempo_key: bool = True         # Tempo und Tonart der Vorbilder vorschlagen
     ref_style: bool = True             # passenden Stil vorschlagen
     vst_path: str = ""

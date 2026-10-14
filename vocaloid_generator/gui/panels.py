@@ -246,6 +246,8 @@ REFERENCE_SWITCHES = (
     ("ref_vocal_level", "Gesangslautstärke", "Gesang so laut gegen die Band wie in den Vorbildern (geschätzt)"),
     ("ref_stems", "Mix pro Instrument", "Gesang, Schlagzeug, Bass und Rest einzeln so laut und so hell wie in den "
                                         "Vorbildern; braucht Demucs (Hilfe › Einrichten), das zerlegt die Vorbilder"),
+    ("ref_vocal_curve", "Gesangsklang wie im Vorbild", "Die Klangkurve des Gesangs in Terzbändern wie beim Gesang der "
+                                                       "Vorbilder, höchstens 4 dB je Band; braucht Demucs"),
     ("ref_tempo_key", "Tempo und Tonart vorschlagen", "Ein Klick übernimmt Tempo und Tonart der Vorbilder"),
     ("ref_style", "Stil vorschlagen", "Ein Klick übernimmt den Stil, der am besten zu den Vorbildern passt"),
 )
@@ -512,20 +514,41 @@ def favorite_voice(s: SongSettings) -> None:
 # ── Gesang ──────────────────────────────────────────────────────────────────────
 LIVELY_SWITCHES = (
     ("breaths", "Atmer vor den Phrasen", "Vor jeder Zeile ist ein leises Einatmen zu hören"),
+    ("recorded_breaths", "Echte Atmer", "Liegen Atem-Aufnahmen (WAV, z. B. CC0 von Freesound) im Datenordner unter "
+                                        "Atmer, atmet die Stimme mit ihnen, passend zur Länge der Zeile"),
     ("echo_throws", "Echo auf dem letzten Wort", "Am Ende jeder Sektion und jeder zweiten Refrain-Zeile hallt das "
                                                  "letzte Wort links und rechts nach"),
     ("final_choir", "Chor im letzten Refrain", "Mit NEUTRINO oder VOICEVOX singen zwei weitere Stimmen mit, "
                                                "sonst wird die eigene Stimme zum Chor vervielfacht"),
     ("phrase_expression", "Ausdruck pro Phrase", "Jede Zeile wird zu ihrem höchsten Ton hin lauter und heller und "
                                                  "klingt am Ende weicher aus; Strophen leiser als Refrains"),
+    ("syllable_dynamics", "Lautstärke pro Silbe", "Betonte Silben (Wortakzent, Schlag 1 und 3) etwas lauter, kurze "
+                                                  "Silben vor einem Hochton leiser, jede Zeile setzt weich ein"),
     ("vocal_unmask", "Band macht dem Gesang Platz", "Wie das Plugin Trackspacer: die Band wird genau in den "
                                                     "Frequenzen bis zu 3 dB leiser, in denen der Gesang gerade laut "
                                                     "ist. Der Gesang ist verständlich, ohne lauter zu werden."),
     ("vocal_ride", "Gesang reitet auf der Band", "Alle 50 ms wird gemessen, wie weit der Gesang über der Band steht; "
                                                  "wo er untergeht oder heraussticht, wird er bis zu 4 dB nachgeführt"),
+    ("convolution_reverb", "Platte aus Impulsantwort", "Der Hall des Gesangs aus einer Impulsantwort statt eines "
+                                                         "Algorithmus, mit Pre-Delay im Tempo. Eigene Impulsantworten "
+                                                         "(WAV) kommen in den Datenordner unter Hall: „platte“ im Namen "
+                                                         "für den Gesang, „raum“ für die Band."),
+    ("ducked_delay", "Delay weicht dem Gesang", "Das Echo auf dem Gesang ist leiser, solange gesungen wird, und "
+                                                "klingt in den Pausen voll nach; die Wörter verschwimmen nicht"),
     ("vocal_chain", "Studio-Gesangskette", "Leichte Bandsättigung, Hall und Delay je Sektion (Strophe trockener, "
                                            "Refrain und Bridge weiter) und im Refrain eine echte Doppelung aus der "
                                            "zweiten Fassung"),
+)
+
+# Begleitstimmen wie in Produktionen (backing_vocals.py), von NEUTRINO gesungen
+BACKING_SWITCHES = (
+    ("harmony_variety", "Harmonie je Refrain anders", "Erster Refrain: Terz nur auf den Phrasenenden, mittlere: Terz "
+                                                      "darunter, letzter: Terz darüber und, wenn sie in die Stimmlage "
+                                                      "passt, die Oktave"),
+    ("harmony_double", "Harmonie gedoppelt", "Die zweite Stimme singt zweimal, eine Fassung links, eine rechts"),
+    ("sung_pads", "Gesungene Flächen", "Drei Stimmen singen im Refrain die Akkordtöne auf う (im letzten auf あ) statt "
+                                       "des Keyboard-Chors; NEUTRINO singt dafür etwas länger"),
+    ("adlibs", "Ad-libs im letzten Refrain", "Kurze Rufe (いぇー, おー) und Echo-Antworten in den Lücken des Gesangs"),
 )
 
 # Noten, die NEUTRINO gut singen kann (neutrino_score.py) und Englisch im Liedtext
@@ -582,6 +605,9 @@ def voice_panel(s: SongSettings, singers: list) -> tuple:
                 .bind_enabled_from(s, "section_style").mark(f"slider-{attr}")
     hint("Zum StyleShift oben dazu: minus = dunkler und ruhiger, plus = heller und kräftiger. Zweite Stimme und Chor "
          "singen wie der Refrain. Die NEUTRINO-Ausgabe mit Tuning-Tool (.ex) kennt keinen StyleShift.")
+    section_title("Begleitstimmen (NEUTRINO)")
+    for attr, text, tip in BACKING_SWITCHES:
+        ui.switch(text).bind_value(s, attr).props("dense").tooltip(tip).mark(f"switch-{attr}")
     section_title("Noten für NEUTRINO")
     for attr, text, tip in SCORE_SWITCHES:
         ui.switch(text).bind_value(s, attr).props("dense").tooltip(tip).mark(f"switch-{attr}")

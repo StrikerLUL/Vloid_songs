@@ -58,7 +58,8 @@ def singing_neutrino(tmp_path, monkeypatch):
 def song(tmp_path, root, **kw):
     s = SongSettings(active_sections=["Verse", "Chorus"], section_bars={"Verse": 4, "Chorus": 4},
                      output_ordner=str(tmp_path / "out"), neutrino_pfad=str(root), singer="MERROW", seed=5,
-                     harmonies=False, final_choir=False, breaths=False, phrase_expression=False)
+                     harmonies=False, final_choir=False, breaths=False, phrase_expression=False,
+                     syllable_dynamics=False, harmony_double=False, sung_pads=False, adlibs=False)
     return s.with_updates(**kw)
 
 

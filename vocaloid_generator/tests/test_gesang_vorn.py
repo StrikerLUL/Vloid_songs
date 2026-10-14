@@ -96,3 +96,56 @@ def test_switches_for_the_vocal_in_front():
     assert s.vocal_unmask and s.vocal_ride
     args = main.parse_args(["--ohne-platz", "--ohne-nachfuehren"])
     assert args.ohne_platz and args.ohne_nachfuehren
+
+
+# ── Hall und Delay (D4) ────────────────────────────────────────────────────────
+def test_the_plate_has_a_tempo_predelay_and_decays():
+    assert vocal_mix.predelay(120) == pytest.approx(0.0625)
+    assert vocal_mix.predelay(300) == pytest.approx(0.025) and vocal_mix.predelay(40) == pytest.approx(0.08)
+    impulse = np.zeros((2, 3 * RATE), dtype=np.float32)
+    impulse[:, 0] = 1.0
+    wet = vocal_mix.plate(impulse, RATE, 120)
+    assert np.abs(wet[:, :int(0.06 * RATE)]).max() < 1e-4           # erst nach dem Pre-Delay
+    early = np.sqrt(np.mean(wet[:, int(0.1 * RATE):int(0.3 * RATE)] ** 2))
+    late = np.sqrt(np.mean(wet[:, int(1.4 * RATE):int(1.6 * RATE)] ** 2))
+    assert 20 * np.log10(late / early) < -30
+    assert not np.allclose(wet[0], wet[1])                            # breit
+
+
+def test_an_own_impulse_response_replaces_the_plate(tmp_path, monkeypatch):
+    import config
+    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
+    assert vocal_mix.user_impulse("plate", RATE) is None
+    (tmp_path / vocal_mix.IR_FOLDER).mkdir()
+    ir = np.zeros(4800, dtype=np.float32)
+    ir[2400] = 1.0                                                    # 50 ms Echo bei 48 kHz
+    sf.write(str(tmp_path / vocal_mix.IR_FOLDER / "EMT Platte.wav"), ir, 48000)
+    found = vocal_mix.user_impulse("plate", RATE)
+    assert found.shape[0] == 2 and np.argmax(np.abs(found[0])) == pytest.approx(0.05 * RATE, abs=3)
+    assert vocal_mix.user_impulse("room", RATE) is None
+
+
+def test_the_delay_steps_back_while_the_vocal_sings():
+    seconds = 4.0
+    vocal = stereo(tone(seconds, 440.0, on=(0.0, 2.0)))
+    wet = stereo(noise(seconds))
+    ducked = vocal_mix.duck(wet, vocal, RATE)
+
+    def db(a, start, end):
+        return 10 * np.log10(np.mean(a[:, int(start * RATE):int(end * RATE)] ** 2))
+
+    assert db(ducked, 0.5, 1.8) - db(wet, 0.5, 1.8) == pytest.approx(vocal_mix.DUCK_DB, abs=1.0)
+    assert abs(db(ducked, 3.2, 3.9) - db(wet, 3.2, 3.9)) < 0.5
+
+
+def test_mix_with_plate_and_ducked_delay(tmp_path):
+    seconds = 4.0
+    paths = []
+    for name, audio in (("vocals", tone(seconds, 600.0, on=(0.5, 2.5))), ("piano", noise(seconds, 2) * 0.3)):
+        paths.append(str(tmp_path / f"{name}.wav"))
+        sf.write(paths[-1], audio, RATE)
+    out = str(tmp_path / "mix.wav")
+    mixer.mische_spuren(paths, output_pfad=out, vocal_chain=True, vocal_space=[(0.0, 4.0, "Chorus")],
+                        convolution=True, ducked_delay=True)
+    audio, _ = sf.read(out)
+    assert np.isfinite(audio).all() and np.max(np.abs(audio)) > 0.1

@@ -309,7 +309,7 @@ def test_choir_and_echo_can_be_switched_off(tmp_path, fake_neutrino):
     root, calls = fake_neutrino
     s = SongSettings(active_sections=["Verse", "Chorus"], output_ordner=str(tmp_path / "out"),
                      neutrino_pfad=str(root), harmonies=False, final_choir=False, echo_throws=False,
-                     section_style=False)
+                     section_style=False, sung_pads=False, adlibs=False)
     tracks, _ = pipeline.compose(s, seed=3)
     pipeline._synthesize_vocals(s, tracks, s.output_dir())
     assert [c[0] for c in calls] == ["vocals.xml"]

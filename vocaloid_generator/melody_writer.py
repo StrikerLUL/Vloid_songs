@@ -547,17 +547,31 @@ def _fit_to_chords(plan: SongPlan, notes: list) -> None:
             n.pitch = min(candidates, key=lambda p: (abs(p - n.pitch), p))
 
 
-def harmony_line(plan: SongPlan, notes: list, kinds: tuple = ("Chorus",)) -> list:
+PHRASE_END_GAP = 1.0     # Schläge Pause, ab denen ein Ton eine Phrase beendet
+END_NOTES = 2            # so viele Töne am Phrasenende singt die Harmonie „nur auf Phrasenenden“
+
+
+def harmony_line(plan: SongPlan, notes: list, kinds: tuple = ("Chorus",), modes: Optional[dict] = None) -> list:
     """
     Zweite Stimme für den Refrain: die Terz über der Melodie aus der Tonleiter; auf langen Tönen ein
     Akkordton. Passt sie nicht mehr in die Stimmlage, singt sie darunter. Im Breakdown schweigt sie.
+    modes: {Start der Sektion: Art}; "above" (Terz darüber, Standard), "below" (Terz darunter, wenn sie in die
+    Stimmlage passt) oder "ends" (Terz darüber nur auf den letzten Tönen jeder Phrase).
     """
     lo, hi = plan.vocal_range
+    ordered = sorted(notes, key=lambda n: n.start)
+    ends = set()
+    for k, n in enumerate(ordered):
+        if k + 1 == len(ordered) or ordered[k + 1].start - (n.start + n.dur) >= PHRASE_END_GAP:
+            ends.update(id(m) for m in ordered[max(0, k - END_NOTES + 1):k + 1])
     out = []
     for n in notes:
         sec = plan.section_at(n.start)
         if sec.kind not in kinds or (sec.feel == "breakdown" and n.start < sec.resume):
             continue    # im leisen Teil singt die Stimme allein
+        mode = (modes or {}).get(sec.start, "above")
+        if mode == "ends" and id(n) not in ends:
+            continue
         chord = sec.chord_at(n.start)
         scale = sorted(set(scale_pcs(sec.tonic, sec.mode)) | set(chord.pcs))
         ladder = [p for p in range(n.pitch - 12, n.pitch + 13) if p % 12 in scale]
@@ -567,6 +581,8 @@ def harmony_line(plan: SongPlan, notes: list, kinds: tuple = ("Chorus",)) -> lis
             above = next((p for p in range(n.pitch + 3, n.pitch + 8) if p % 12 in chord.pcs), above)
             below = next((p for p in range(n.pitch - 3, n.pitch - 10, -1) if p % 12 in chord.pcs), below)
         pitch = above if above <= hi + 2 else below
+        if mode == "below" and below >= lo - 2:
+            pitch = below
         out.append(MelNote(n.start, n.dur, max(pitch, lo - 2), n.syllable, n.strong))
     return out
 

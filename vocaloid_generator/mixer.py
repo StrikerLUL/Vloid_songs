@@ -201,8 +201,10 @@ def _basic_synth(midi: pretty_midi.PrettyMIDI) -> np.ndarray:
 # ── Mischen ──────────────────────────────────────────────────────────────────────
 def _track_key(path: str) -> str:
     name = os.path.splitext(os.path.basename(path))[0].lower()
-    if "vocals_chor" in name:
+    if "vocals_chor" in name or "flaechen" in name:
         return "gang"
+    if "adlib" in name:
+        return "harmony"
     if "vocals_double" in name:
         return "double"
     if "harmon" in name:
@@ -471,6 +473,9 @@ def mische_spuren(
     vocal_space: list = None,
     unmask: bool = False,
     ride: bool = False,
+    sung_pads: list = None,
+    convolution: bool = False,
+    ducked_delay: bool = False,
 ) -> None:
     """
     Mischt die Spuren zu einem Stereo-Master:
@@ -494,6 +499,9 @@ def mische_spuren(
     verstimmten Kopie und, mit vocal_space [(Start, Ende in Sekunden, Sektionsart)], eigener Hall und Delay je Sektion.
     unmask: die Band wird in den Frequenzen leiser, in denen der Gesang gerade laut ist (vocal_mix.unmask).
     ride: der Gesang wird nachgeführt, damit er gleich weit über der Band steht (vocal_mix.ride_gain).
+    sung_pads: Zeitbereiche (Sekunden), in denen gesungene Flächen den Keyboard-Chor (choir) ersetzen.
+    convolution: die Gesangsplatte aus einer Impulsantwort mit Pre-Delay im Tempo (vocal_mix.plate); eine eigene
+    Raum-Impulsantwort ersetzt den gemeinsamen Hall. ducked_delay: das Gesangs-Delay ist leiser, solange gesungen wird.
     """
     from settings import DEFAULT_VOLUMES
 
@@ -517,11 +525,14 @@ def mische_spuren(
         if not audible:
             continue
         audio = _load(path, length)
+        mono = np.array_equal(audio[0], audio[1])
         loud = _loudness(audio)
         if loud == float("-inf"):
             continue
         fader = volumes.get(channel, DEFAULT_VOLUMES.get(channel, 1.0)) / max(DEFAULT_VOLUMES.get(channel, 1.0), 1e-6)
         audio *= 10 ** ((levels.get(key, -22.0) - loud) / 20) * fader
+        if key == "choir" and sung_pads:
+            audio *= 1.0 - _window_mask(length, sung_pads)
         if key in VOCAL_KEYS:
             audio = _deess(audio)
         if key in ("vocals", "double") and vocal_chain:
@@ -529,8 +540,8 @@ def mische_spuren(
         audio = _channel_chain("vocals" if key == "double" else key)(audio, SAMPLE_RATE)
         if key == "vocals" and double_windows and not real_double:
             audio = _double(audio, double_windows)
-        elif key == "harmony":
-            audio = _widen(audio)
+        elif key == "harmony" and mono:
+            audio = _widen(audio)          # eine gedoppelte Harmonie (links und rechts) ist schon breit
         elif key == "double":
             audio = _widen(audio, REAL_DOUBLE_DELAY)
         audio = _pan(audio, panning.get(channel, 0.0))
@@ -591,18 +602,30 @@ def mische_spuren(
     if movement:
         from mix_movement import reverb_curve
         send *= reverb_curve(movement, length)
-    hall = Pedalboard([HighpassFilter(250), Reverb(room_size=0.78, damping=0.45, wet_level=1.0, dry_level=0.0, width=1.0),
-                       LowpassFilter(9000)])
-    mix += hall(send, SAMPLE_RATE)
+    import vocal_mix
+    room = vocal_mix.user_impulse("room", SAMPLE_RATE) if convolution else None
+    if room is not None:
+        mix += LowpassFilter(9000)(vocal_mix.convolve(HighpassFilter(250)(send, SAMPLE_RATE), room, SAMPLE_RATE)
+                                   * np.float32(HALL_GAIN), SAMPLE_RATE)
+    else:
+        hall = Pedalboard([HighpassFilter(250), Reverb(room_size=0.78, damping=0.45, wet_level=1.0, dry_level=0.0,
+                                                       width=1.0), LowpassFilter(9000)])
+        mix += hall(send, SAMPLE_RATE)
     if np.any(plate_send):
-        plate = Pedalboard([Delay(delay_seconds=0.025, feedback=0.0, mix=1.0), HighpassFilter(350),
-                            Reverb(room_size=0.5, damping=0.25, wet_level=1.0, dry_level=0.0, width=0.9),
-                            LowpassFilter(11000)])
-        mix += plate(plate_send, SAMPLE_RATE)
+        if convolution:
+            mix += vocal_mix.plate(plate_send, SAMPLE_RATE, bpm)
+        else:
+            plate = Pedalboard([Delay(delay_seconds=0.025, feedback=0.0, mix=1.0), HighpassFilter(350),
+                                Reverb(room_size=0.5, damping=0.25, wet_level=1.0, dry_level=0.0, width=0.9),
+                                LowpassFilter(11000)])
+            mix += plate(plate_send, SAMPLE_RATE)
     if np.any(vocal_send):
         echo = Pedalboard([HighpassFilter(300), Delay(delay_seconds=0.75 * 60.0 / bpm, feedback=0.3, mix=1.0),
                            LowpassFilter(6000)])
-        mix += echo(vocal_send, SAMPLE_RATE)
+        wet = echo(vocal_send, SAMPLE_RATE)
+        if ducked_delay and lead:
+            wet = vocal_mix.duck(wet, lead[0], SAMPLE_RATE)
+        mix += wet
 
     master_volume = min(max(volumes.get("master", 1.0), 0.05), 1.0)
     target_lufs += 20 * np.log10(master_volume)
@@ -636,6 +659,7 @@ def _seat_vocals(tracks: dict, ride: bool, unmask: bool) -> Optional[np.ndarray]
     return vocal_mix.unmask(band, vocal, SAMPLE_RATE) - band
 
 
+HALL_GAIN = 1.26             # eine eigene Raum-Impulsantwort so laut wie der Algorithmus-Hall (weißes Rauschen)
 MAX_REFERENCE_DB = 6.0       # so weit dürfen die Vorbilder einen Pegel höchstens verschieben
 
 
@@ -741,6 +765,13 @@ def _match_groups(tracks: dict, targets: dict) -> None:
     for group, paths in groups.items():
         if group not in now:
             continue
+        if group == "vocals" and targets[group].get("bands"):
+            curve = _match_curve(sum(tracks[p][1][:, window] for p in paths), targets[group]["bands"])
+            if curve is not None:
+                for path in paths:
+                    key, audio = tracks[path]
+                    tracks[path] = (key, curve(audio, SAMPLE_RATE))
+                continue                   # die Kurve ersetzt die Höhen-Stufe
         tilt = float(np.clip(targets[group]["tilt"] - now[group]["tilt"], -MAX_TILT_DB, MAX_TILT_DB))
         if abs(tilt) >= 0.5:
             shelf = Pedalboard([HighShelfFilter(TILT_HZ, tilt, 0.7)])
@@ -767,6 +798,38 @@ def _match_groups(tracks: dict, targets: dict) -> None:
         changes.setdefault(group, [0.0, 0.0])[0] = step
     log.info("Mix wie die Vorbilder: %s", ", ".join(
         f"{separation.NAMES[g]} {level:+.1f} dB, Höhen {tilt:+.1f} dB" for g, (level, tilt) in changes.items()))
+
+
+MAX_CURVE_DB = 4.0           # so weit darf die Klangkurve des Vorbild-Gesangs ein Terzband heben oder senken
+
+
+def _match_curve(audio: np.ndarray, target: list) -> Optional[Pedalboard]:
+    """EQ, der die Klangkurve des Gesangs (Terzbänder) der des Vorbild-Gesangs angleicht, höchstens ±4 dB je Band,
+    geglättet über die Nachbarbänder. None, wenn kaum etwas zu tun ist."""
+    import separation
+    ours = separation.bands_db(audio, SAMPLE_RATE)
+    diff = np.array(target, dtype=float) - np.array(ours, dtype=float)
+    diff = np.convolve(np.pad(diff, 1, mode="edge"), np.ones(3) / 3, "valid")
+    gains = np.clip(diff - diff.mean(), -MAX_CURVE_DB, MAX_CURVE_DB)
+
+    def chain(g: np.ndarray) -> list:
+        return [PeakFilter(hz, float(x), 4.3) for hz, x in zip(separation.BAND_CENTERS, g) if abs(x) >= 0.5]
+
+    filters = chain(gains)
+    if not filters:
+        return None
+    # benachbarte Bänder addieren sich: die ganze Kurve bleibt innerhalb von ±MAX_CURVE_DB
+    impulse = np.zeros((1, 8192), dtype=np.float32)
+    impulse[0, 0] = 1.0
+    response = 20 * np.log10(np.abs(np.fft.rfft(Pedalboard(filters)(impulse, SAMPLE_RATE)[0])) + 1e-9)
+    freqs = np.fft.rfftfreq(8192, 1.0 / SAMPLE_RATE)
+    peak = max(abs(float(np.interp(hz, freqs, response))) for hz in separation.BAND_CENTERS)
+    if peak > MAX_CURVE_DB:
+        gains = gains * (MAX_CURVE_DB / peak)
+        filters = chain(gains)
+    log.info("Gesang klingt wie im Vorbild: %s", ", ".join(
+        f"{hz:.0f} Hz {g:+.1f}" for hz, g in zip(separation.BAND_CENTERS, gains) if abs(g) >= 1.5) or "kleine Schritte")
+    return Pedalboard(filters)
 
 
 def _match_vocal_level(tracks: dict, target_db: float) -> None:

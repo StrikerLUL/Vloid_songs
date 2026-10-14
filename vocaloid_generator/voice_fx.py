@@ -3,6 +3,7 @@
 # Chor im letzten Refrain.
 # Alles arbeitet auf fertig gesungenen Spuren und kennt dazu die Noten (in Sekunden ab Songanfang).
 import logging
+import os
 from dataclasses import dataclass
 
 import numpy as np
@@ -120,14 +121,63 @@ def excerpt(melody_data: list, silben: list, start: float, end: float) -> tuple:
 
 
 # ── Atmer ──────────────────────────────────────────────────────────────────────
-def add_breaths(path: str, notes: list, seed: int = 0) -> int:
+BREATH_FOLDER = "Atmer"       # im Datenordner: eigene Atem-Aufnahmen (WAV, FLAC), z. B. CC0 von Freesound
+
+
+def breath_samples(rate: int, folder: str = None) -> list:
+    """Aufgenommene Atmer aus dem Ordner Atmer: [(Länge in Sekunden, mono, Effektivwert 1)], kürzeste zuerst.
+    Stille am Anfang und Ende wird abgeschnitten."""
+    import config
+    from scipy.signal import resample_poly
+    folder = folder or os.path.join(config.DATA_DIR, BREATH_FOLDER)
+    try:
+        names = sorted(n for n in os.listdir(folder) if n.lower().endswith((".wav", ".flac", ".ogg", ".aiff")))
+    except OSError:
+        return []
+    out = []
+    for name in names:
+        try:
+            data, sr = sf.read(os.path.join(folder, name), dtype="float32", always_2d=True)
+        except Exception as e:  # noqa: BLE001 – eine kaputte Datei zählt nicht
+            log.warning("Atmer %s nicht lesbar: %s", name, e)
+            continue
+        mono = data.mean(axis=1)
+        if sr != rate:
+            mono = resample_poly(mono, rate, sr).astype(np.float32)
+        loud = np.flatnonzero(np.abs(mono) > np.abs(mono).max() * 0.02) if len(mono) else []
+        if len(loud) < rate * 0.1:
+            continue
+        mono = mono[loud[0]:loud[-1] + 1]
+        out.append((len(mono) / rate, (mono / (np.sqrt(np.mean(mono ** 2)) + 1e-12)).astype(np.float32)))
+    return sorted(out, key=lambda x: x[0])
+
+
+def _recorded_breath(samples: list, n: int, rate: int, rng: np.random.Generator) -> np.ndarray:
+    """Ein aufgenommener Atmer mit passender Länge (einer der zwei nächstgelegenen), auf n Samples gebracht:
+    zu lang wird vorn gekürzt (das Ende des Einatmens bleibt), zu kurz beginnt später."""
+    dur = n / rate
+    near = sorted(range(len(samples)), key=lambda k: abs(samples[k][0] - dur))[:2]
+    mono = samples[int(rng.choice(near))][1]
+    out = np.zeros(n, dtype=np.float32)
+    if len(mono) >= n:
+        out[:] = mono[len(mono) - n:]
+        fade = min(n // 4, int(0.05 * rate))
+        out[:fade] *= np.linspace(0, 1, fade, dtype=np.float32)
+    else:
+        out[n - len(mono):] = mono
+    return out
+
+
+def add_breaths(path: str, notes: list, seed: int = 0, recorded: bool = True) -> int:
     """Vor jeder Phrase, vor der genug Pause ist, ein hörbares Einatmen in die Gesangsspur mischen.
-    Längere Phrasen bekommen einen tieferen Atemzug. Rückgabe: Anzahl der Atmer."""
+    Längere Phrasen bekommen einen tieferen Atemzug. Mit recorded und Aufnahmen im Ordner Atmer klingen echte
+    Atmer, sonst gefiltertes Rauschen. Rückgabe: Anzahl der Atmer."""
     audio, rate = sf.read(path, dtype="float32", always_2d=True)
     level = _sung_level(audio.mean(axis=1), rate)
     if level <= 0:
         return 0
     rng = np.random.default_rng(seed)
+    samples = breath_samples(rate) if recorded else []
     track = np.zeros(len(audio), dtype=np.float32)
     count, prev_end = 0, 0.0
     for phrase in phrases(notes):
@@ -143,7 +193,7 @@ def add_breaths(path: str, notes: list, seed: int = 0) -> int:
         if a < 0 or a + n > len(track):
             continue
         gain = level * 10 ** (BREATH_DB / 20) * (0.6 + 0.4 * depth) * rng.uniform(0.85, 1.15)
-        track[a:a + n] += breath(n, rate, rng) * gain
+        track[a:a + n] += (_recorded_breath(samples, n, rate, rng) if samples else breath(n, rate, rng)) * gain
         count += 1
     sf.write(path, audio + track[:, None], rate, subtype="FLOAT")
     return count
@@ -509,6 +559,73 @@ def express(path: str, notes: list, sections: list, amount: float = 1.0) -> bool
     highs = sosfilt(butter(2, 2500, "highpass", fs=rate, output="sos"), audio, axis=0)
     shaped = audio * gain[:, None] + highs * ((gain - 1) * BRIGHT)[:, None]
     sf.write(path, shaped.astype(np.float32), rate, subtype="FLOAT")
+    return True
+
+
+# ── Lautstärke pro Silbe (C2) ──────────────────────────────────────────────────
+ACCENT_DB = 1.5              # betonte Silbe (Wortakzent oder starke Zählzeit) lauter
+BOTH_DB = 2.5                # Wortakzent auf der starken Zählzeit
+PICKUP_DB = -1.5             # kurze Silbe direkt vor einem Hochton leiser (Anlauf)
+ONSET_DB = -6.0              # weicher Einsatz am Phrasenanfang: so leise beginnt der erste Ton
+ONSET_SECONDS = 0.06
+SYLLABLE_FADE = 0.02         # Sekunden Übergang zwischen den Silben
+
+
+def syllable_gains(melody_data: list, silben: list, bpm: float) -> list:
+    """[(Start, Ende in Sekunden, dB)] je gesungenem Ton: wie stark die Silbe betont wird."""
+    from vocal_synthesizer import _gebunden
+    spb = 60.0 / bpm
+    sung, t, i = [], 0.0, 0
+    for pitch, dur in _gebunden(melody_data):
+        if pitch is not None:
+            syl = silben[i] if i < len(silben) else ""
+            sung.append((t, dur, int(pitch), syl))
+            i += 1
+        t += dur
+    out = []
+    for k, (beat, dur, pitch, syl) in enumerate(sung):
+        strong = abs(beat % 2.0) < 1e-6 or abs(beat % 2.0 - 2.0) < 1e-6        # Schlag 1 und 3
+        accent = getattr(syl, "tone", None) == "H" and getattr(syl, "word_start", False) or (
+            getattr(syl, "tone", None) == "H" and k > 0 and getattr(sung[k - 1][3], "tone", None) == "L")
+        held = getattr(syl, "melisma", False)
+        db = BOTH_DB if strong and accent else (ACCENT_DB if strong or accent else 0.0)
+        nxt = sung[k + 1] if k + 1 < len(sung) else None
+        if nxt is not None and dur <= 0.5 and nxt[2] >= pitch + 3 and abs(nxt[0] - beat - dur) < 1e-6:
+            db = PICKUP_DB
+        if held:
+            db = out[-1][2] if out else 0.0                     # ein gehaltener Vokal bleibt, wie er war
+        out.append((beat * spb, (beat + dur) * spb, db))
+    return out
+
+
+def syllable_curve(gains: list, notes: list, length: int, rate: int) -> np.ndarray:
+    """Pegel über die Zeit in dB aus syllable_gains, um den Mittelwert verschoben, mit weichem Phrasenanfang."""
+    curve = np.zeros(length, dtype=np.float32)
+    for start, end, db in gains:
+        curve[int(start * rate):int(end * rate)] = db
+    sung = np.zeros(length, dtype=bool)
+    for start, end, _ in gains:
+        sung[int(start * rate):int(end * rate)] = True
+    if sung.any():
+        curve[sung] -= float(np.mean(curve[sung]))
+    curve = smooth(curve, int(SYLLABLE_FADE * rate))
+    ramp = int(ONSET_SECONDS * rate)
+    for group in phrases(notes):
+        a = int(group[0].start * rate)
+        n = min(ramp, length - a)
+        if n > 0:
+            curve[a:a + n] += np.linspace(ONSET_DB, 0.0, n, dtype=np.float32)
+    return curve
+
+
+def syllable_dynamics(path: str, melody_data: list, silben: list, bpm: float) -> bool:
+    """Lautstärke pro Silbe auf eine fertige Gesangsspur. False, wenn es nichts zu tun gab."""
+    gains = syllable_gains(melody_data, silben, bpm)
+    if not gains:
+        return False
+    audio, rate = sf.read(path, dtype="float32", always_2d=True)
+    db = syllable_curve(gains, timeline(melody_data, bpm), len(audio), rate)
+    sf.write(path, (audio * (10 ** (db / 20))[:, None]).astype(np.float32), rate, subtype="FLOAT")
     return True
 
 

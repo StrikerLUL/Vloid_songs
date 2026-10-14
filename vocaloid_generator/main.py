@@ -89,6 +89,19 @@ def parse_args(argv=None):
                    help="StyleShift der Strophen zum StyleShift dazu (Standard -1)")
     p.add_argument("--refrain-stil", type=int, choices=range(-3, 4), metavar="-3..3",
                    help="StyleShift der Refrains zum StyleShift dazu (Standard +1)")
+    p.add_argument("--ohne-harmonie-wechsel", action="store_true",
+                   help="in jedem Refrain dieselbe Harmonie (die Terz darüber), keine Oktave")
+    p.add_argument("--ohne-doppel-harmonie", action="store_true", help="die zweite Stimme nur einmal singen")
+    p.add_argument("--ohne-flaechen", action="store_true", help="keine gesungenen Flächen im Refrain")
+    p.add_argument("--ohne-adlibs", action="store_true", help="keine Ad-libs im letzten Refrain")
+    p.add_argument("--ohne-echte-atmer", action="store_true",
+                   help="Atmer aus Rauschen, auch wenn im Ordner Atmer Aufnahmen liegen")
+    p.add_argument("--ohne-silben-lautstaerke", action="store_true",
+                   help="alle Silben gleich laut (keine Betonung, kein weicher Einsatz)")
+    p.add_argument("--ohne-platte", action="store_true",
+                   help="Gesangshall wie bisher (Algorithmus) statt der Platte aus einer Impulsantwort")
+    p.add_argument("--ohne-delay-ducking", action="store_true",
+                   help="das Gesangs-Delay nicht leiser machen, solange gesungen wird")
     p.add_argument("--ohne-platz", action="store_true",
                    help="die Band macht dem Gesang keinen Platz (keine Absenkung in seinen Frequenzen)")
     p.add_argument("--ohne-nachfuehren", action="store_true",
@@ -125,6 +138,8 @@ def parse_args(argv=None):
                    "KI-Begleitung in den Einstellungen an ist")
     p.add_argument("--ohne-vorbild-gruppen", action="store_true",
                    help="Gesang, Schlagzeug, Bass und Rest nicht einzeln an die Vorbilder angleichen (Demucs)")
+    p.add_argument("--ohne-vorbild-gesangsklang", action="store_true",
+                   help="die Klangkurve des Gesangs nicht an den Gesang der Vorbilder angleichen")
     p.add_argument("--vom-vorbild", action="store_true",
                    help="Tempo, Tonart und Stil der Vorbilder übernehmen (soweit in den Einstellungen erlaubt)")
     p.add_argument("--lautheit", type=float, metavar="LUFS", help="Ziel-Lautheit des Masters, z. B. -14 für YouTube")
@@ -226,6 +241,14 @@ def main(argv=None) -> int:
                  "section_style": False if args.ohne_sektions_stil else None,
                  "verse_style_shift": args.strophe_stil, "chorus_style_shift": args.refrain_stil,
                  "even_takes": False if args.ohne_gleiche_fassungen else None,
+                 "harmony_variety": False if args.ohne_harmonie_wechsel else None,
+                 "harmony_double": False if args.ohne_doppel_harmonie else None,
+                 "sung_pads": False if args.ohne_flaechen else None,
+                 "adlibs": False if args.ohne_adlibs else None,
+                 "syllable_dynamics": False if args.ohne_silben_lautstaerke else None,
+                 "recorded_breaths": False if args.ohne_echte_atmer else None,
+                 "convolution_reverb": False if args.ohne_platte else None,
+                 "ducked_delay": False if args.ohne_delay_ducking else None,
                  "vocal_unmask": False if args.ohne_platz else None,
                  "vocal_ride": False if args.ohne_nachfuehren else None,
                  "guitar_amp": False if args.ohne_verstaerker else None, "cabinet_ir": args.box,
@@ -238,6 +261,7 @@ def main(argv=None) -> int:
                  "lofi_texture": False if args.ohne_lofi_klang else None,
                  "mix_movement": False if args.ohne_bewegung else None,
                  "ref_stems": False if args.ohne_vorbild_gruppen else None,
+                 "ref_vocal_curve": False if args.ohne_vorbild_gesangsklang else None,
                  "ai_accompaniment": False if args.ohne_ki_begleitung else (True if args.ki_begleitung else None),
                  "polish": False if args.ohne_veredler else None, "polish_strength": args.veredler_staerke,
                  "polish_caption": args.veredler_klang,

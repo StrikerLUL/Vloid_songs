@@ -152,7 +152,7 @@ class SongSettings(BaseModel):
     lyrics: str = DEFAULT_LYRICS
 
     singer: str = "MERROW"
-    vocal_engine: str = "NEUTRINO"     # NEUTRINO, VOICEVOX oder Vorschau; fehlt eine, singt die andere
+    vocal_engine: str = "NEUTRINO"     # NEUTRINO, VOICEVOX, DiffSinger oder Vorschau; fehlt eine, singt die andere
     harmonies: bool = True             # zweite Stimme im Refrain (mit NEUTRINO oder VOICEVOX)
     duet_singer: str = ""              # zweite NEUTRINO-Stimme fürs Duett (leer = kein Duett)
     support_singer: str = ""           # B5: Support-Modell, eine zweite Stimme färbt die Hauptstimme (leer = aus)
@@ -209,6 +209,7 @@ class SongSettings(BaseModel):
     voicevox_url: str = ""             # Adresse von VOICEVOX (leer = http://127.0.0.1:50021, App oder Engine)
     voicevox_singer: int = Field(0, ge=0)          # VOICEVOX-Singstimme (Stil-ID, 0 = die erste)
     voicevox_dynamics: bool = True     # F2: VOICEVOX singt Silben- und Phrasen-Lautstärke selbst (statt nachher)
+    diffsinger_voice: str = ""         # F1: DiffSinger-Stimme (Ordner oder Name; leer = die erste gefundene)
     # Vorbild-Songs (reference.py) und was sie bestimmen dürfen; jedes lässt sich abschalten
     reference_tracks: list[ReferenceTrack] = Field(default_factory=list)
     reference_folder: str = ""         # Ordner mit Lieblingssongs zum Anhaken (leer = Vorbilder im Datenordner)

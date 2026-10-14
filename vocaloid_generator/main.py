@@ -56,7 +56,9 @@ def parse_args(argv=None):
     p.add_argument("--duett", metavar="NAME", help="zweite NEUTRINO-Stimme fürs Duett ('' = kein Duett)")
     p.add_argument("--support-stimme", metavar="NAME", help="NEUTRINO-Stimme, die als Support-Modell die Hauptstimme "
                    "färbt (Versuch, braucht Run_support_model.bat; '' = aus)")
-    p.add_argument("--engine", choices=["NEUTRINO", "VOICEVOX", "Vorschau"], help="wer singt")
+    p.add_argument("--engine", choices=["NEUTRINO", "VOICEVOX", "DiffSinger", "Vorschau"], help="wer singt")
+    p.add_argument("--diffsinger-stimme", metavar="ORDNER", help="DiffSinger-Stimme für OpenUtau: ihr Ordner oder Name "
+                   "(Versuch; leer = die erste gefundene)")
     p.add_argument("--voicevox-stimme", type=int, metavar="ID", help="VOICEVOX-Singstimme (Stil-ID)")
     p.add_argument("--ohne-voicevox-dynamik", action="store_true", help="VOICEVOX singt gleich laut; Silben und Phrasen werden erst danach lauter und leiser")
     p.add_argument("--fassungen", type=int, choices=[1, 2, 3], help="NEUTRINO singt so oft, die sauberste zählt")
@@ -250,7 +252,8 @@ def main(argv=None) -> int:
     overrides = {"seed": args.seed, "bpm": args.bpm, "style": args.style, "key": args.key, "scale": args.scale,
                  "singer": args.stimme, "duet_singer": args.duett, "support_singer": args.support_stimme, "master_lufs": args.lautheit,
                  "vocal_engine": args.engine, "voicevox_singer": args.voicevox_stimme,
-                 "voicevox_dynamics": False if args.ohne_voicevox_dynamik else None, "vocal_takes": args.fassungen,
+                 "voicevox_dynamics": False if args.ohne_voicevox_dynamik else None,
+                 "diffsinger_voice": args.diffsinger_stimme, "vocal_takes": args.fassungen,
                  "vibrato": args.vibrato, "glide": args.uebergaenge,
                  "psola_reshape": False if args.ohne_psola else None,
                  "breaths": False if args.ohne_atmer else None, "echo_throws": False if args.ohne_echo else None,

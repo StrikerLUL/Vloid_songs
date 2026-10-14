@@ -651,6 +651,15 @@ def voice_panel(s: SongSettings, singers: list, pick: PickFn | None = None) -> t
     hint("Für Feinarbeit im NEUTRINO-Tuning-Tool, in VoiSona oder für eine eigene Aufnahme: „Noten für Tuning-Tools“ "
          "exportieren, dort bearbeiten, die WAV hier wählen. Sie ersetzt die Hauptstimme und wird gemischt wie der "
          "eigene Gesang; der Vorlauftakt fällt beim Ausrichten weg. Die Begleitstimmen singt weiter die Engine.")
+    section_title("DiffSinger (Versuch)")
+    with ui.row().classes("w-full items-center no-wrap"):
+        ui.input("Stimme (Ordner mit dsconfig.yaml)", placeholder="leer = die erste aus OpenUtau") \
+            .bind_value(s, "diffsinger_voice").classes("col").props("dense stack-label clearable").mark("diffsinger")
+        if pick is not None:
+            pick_button(pick, s, "diffsinger_voice", folder=True)
+    hint("DiffSinger-Stimmen für OpenUtau (Ordner Singers, Vocoder unter Dependencies) singen ohne OpenUtau: die App "
+         "rechnet ihre Modelle selbst, wie OpenUtau. Ein Versuch: Konsonanten und Tonhöhe setzt die App nach festen "
+         "Regeln. Jede Stimme hat eigene Nutzungsregeln.")
     section_title("VOICEVOX")
     voicevox_editor(s)
     ui.switch("VOICEVOX singt laut und leise selbst").bind_value(s, "voicevox_dynamics").props("dense") \

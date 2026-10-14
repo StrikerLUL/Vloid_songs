@@ -15,6 +15,7 @@ dependencies = [
     "music21>=9",
     "nicegui>=2.20",
     "numpy>=1.24",
+    "onnxruntime>=1.18",
     "pedalboard>=0.9",
     "pillow>=10.1",
     "praat-parselmouth>=0.4.5",
@@ -27,6 +28,7 @@ dependencies = [
     "pyttsx3>=2.90",
     "pywebview>=5.4 ; sys_platform == 'win32'",
     "pyworld>=0.3.4",
+    "pyyaml>=6",
     "scipy>=1.10",
     # pyworld braucht pkg_resources, das ab setuptools 81 fehlt
     "setuptools<81",
@@ -37,6 +39,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "onnx>=1.16",
     "pytest>=8",
     "pytest-asyncio>=1.4.0",
     "ruff>=0.6",

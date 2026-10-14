@@ -484,7 +484,8 @@ EXTRA_VOCALS = ("vocals_harmony_2.wav", "vocals_flaechen.wav", "vocals_adlibs.wa
 VOCAL_FILES = ("vocals.wav", "vocals_duett_1.wav", "vocals_duett_2.wav", "vocals_harmony.wav", "vocals_chor.wav",
                "vocals_double.wav") + EXTRA_VOCALS
 # Welche Engine singt, wenn die gewählte fehlt; ganz zuletzt die lokale Vorschau-Stimme
-ENGINE_ORDER = {"NEUTRINO": ("NEUTRINO", "VOICEVOX"), "VOICEVOX": ("VOICEVOX", "NEUTRINO"), "Vorschau": ()}
+ENGINE_ORDER = {"NEUTRINO": ("NEUTRINO", "VOICEVOX"), "VOICEVOX": ("VOICEVOX", "NEUTRINO"),
+                "DiffSinger": ("DiffSinger", "NEUTRINO", "VOICEVOX"), "Vorschau": ()}
 # A6: ab diesem Swing (Stil plus Regler) swingt der Gesang mit; Lo-Fi ja, der Grundwert 0,12 allein nicht
 VOCAL_SWING_FROM = 0.2
 # Welche Gesangsspur nach welchen Noten swingt
@@ -495,9 +496,9 @@ VOCAL_SWING_LINES = {"melody_data": ("vocals.wav", "vocals_double.wav", "vocals_
 
 # Was den Gesang bestimmt: ändert sich nichts davon, bleibt der gesungene Gesang (z. B. beim Neu-Würfeln des Basses)
 VOCAL_KEY = "vocals.key"
-VOCAL_CODE = ("pipeline.py", "vocal_synthesizer.py", "voice_fx.py", "voicevox.py", "neutrino_score.py")
+VOCAL_CODE = ("pipeline.py", "vocal_synthesizer.py", "voice_fx.py", "voicevox.py", "neutrino_score.py", "diffsinger.py")
 VOCAL_FIELDS = ("bpm", "seed", "singer", "vocal_engine", "harmonies", "duet_singer", "support_singer", "style_shift", "vocal_takes",
-                "vibrato", "glide", "breaths", "final_choir", "voicevox_url", "voicevox_singer", "voicevox_dynamics",
+                "vibrato", "glide", "breaths", "final_choir", "voicevox_url", "voicevox_singer", "voicevox_dynamics", "diffsinger_voice",
                 "neutrino_pfad",
                 "vocal_comping", "phrase_expression", "long_vowel_mark", "breath_marks", "fast_diphthongs",
                 "english_kana", "section_style", "verse_style_shift", "chorus_style_shift", "even_takes",
@@ -579,7 +580,7 @@ def _synthesize_vocals(settings: SongSettings, tracks: dict, out: str) -> Option
     own = own_vocal.available(settings.own_vocal)
     if settings.own_vocal and not own:
         log.warning("Eigene Gesangsspur nicht gefunden: %s. Die Engine singt.", settings.own_vocal)
-    engines = {"NEUTRINO": _sing_neutrino, "VOICEVOX": _sing_voicevox}
+    engines = {"NEUTRINO": _sing_neutrino, "VOICEVOX": _sing_voicevox, "DiffSinger": _sing_diffsinger}
     sung = False
     engine = "Vorschau"
     _takes_used.clear()
@@ -1155,6 +1156,32 @@ def _neutrino_choir(settings: SongSettings, tracks: dict, out: str, neutrino_dir
 
 
 # ── VOICEVOX ────────────────────────────────────────────────────────────────────
+# ── DiffSinger (F1, Versuch) ────────────────────────────────────────────────────
+def _sing_diffsinger(settings: SongSettings, tracks: dict, out: str, vocals_wav: str, xml: str = "",
+                     lead: bool = True) -> str:
+    """Hauptstimme und zweite Stimme im Refrain mit einer DiffSinger-Stimme für OpenUtau (diffsinger.py)."""
+    import diffsinger
+    if not diffsinger.available():
+        raise RuntimeError("DiffSinger braucht onnxruntime")
+    folder = diffsinger.find(settings.diffsinger_voice)
+    if not folder:
+        raise FileNotFoundError("keine DiffSinger-Stimme gefunden (OpenUtau, Ordner Singers)")
+    name = os.path.basename(os.path.normpath(folder))
+    log.info("Singe mit DiffSinger: %s", name)
+    if lead:
+        diffsinger.sing(tracks["melody_data"], tracks["silben"], settings.bpm, vocals_wav, folder,
+                        vibrato=settings.vibrato, glide=settings.glide)
+    if settings.harmonies and tracks.get("harmony_data"):
+        try:
+            diffsinger.sing(tracks["harmony_data"], tracks["harmony_silben"], settings.bpm,
+                            os.path.join(out, "vocals_harmony.wav"), folder, vibrato=settings.vibrato,
+                            glide=settings.glide)
+            log.info("Zweite Stimme im Refrain gesungen.")
+        except Exception as e:  # noqa: BLE001
+            log.warning("Zweite Stimme fehlgeschlagen, der Song bekommt nur die Hauptstimme: %s", e)
+    return name
+
+
 def _voicevox_dynamics(settings: SongSettings) -> bool:
     """F2: singt VOICEVOX die Lautstärke pro Silbe und den Ausdruck pro Phrase selbst?"""
     return settings.voicevox_dynamics and (settings.syllable_dynamics or settings.phrase_expression)

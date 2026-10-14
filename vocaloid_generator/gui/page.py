@@ -276,7 +276,7 @@ def build() -> None:
                 with ui.tab_panel("Band"):
                     panels.band_panel(settings)
                 with ui.tab_panel("Gesang"):
-                    singer_select, duet_select = panels.voice_panel(settings, _singers(settings), picker)
+                    singer_select, duet_select, support_select = panels.voice_panel(settings, _singers(settings), picker)
                 with ui.tab_panel("Mix"):
                     panels.mix_panel(settings)
                 with ui.tab_panel("Verlauf"):
@@ -828,6 +828,7 @@ def build() -> None:
             ui.label(polish.status(settings)).classes("text-caption").mark("polish-status")
         singer_select.set_options(sorted(set(_singers(settings)) | {settings.singer}), value=settings.singer)
         duet_select.set_options(panels.duet_options(_singers(settings), settings), value=settings.duet_singer)
+        support_select.set_options(panels.support_options(_singers(settings), settings), value=settings.support_singer)
         show_history()
 
     # ── Verlauf ──────────────────────────────────────────────────────────────────────

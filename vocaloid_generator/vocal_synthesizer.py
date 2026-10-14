@@ -346,7 +346,9 @@ def neutrino_hinweis(neutrino_pfad: str) -> str:
 
 # Wie der letzte NEUTRINO-Lauf gesungen hat (für den Gesangs-Check und StyleShift pro Sektion):
 # grafikkarte: auf der Grafikkarte (False = Prozessor), styleshift: der gewünschte StyleShift kam an
-LETZTER_LAUF = {"grafikkarte": None, "styleshift": None, "version": ""}
+LETZTER_LAUF = {"grafikkarte": None, "styleshift": None, "version": "", "support": ""}
+# B5: die Batch-Datei, mit der NEUTRINO eine zweite Stimme als Support-Modell mitlaufen lässt (experimentell)
+SUPPORT_BAT = "Run_support_model.bat"
 CPU_MELDUNG = "CPU モード"         # so meldet NEUTRINO, dass es ohne Grafikkarte singt
 _AUF_DEM_PROZESSOR: set = set()     # schon gewarnt (je NEUTRINO-Ordner einmal pro Programmstart)
 
@@ -359,13 +361,15 @@ def _run(cmd: list, cwd: str, timeout: int) -> subprocess.CompletedProcess:
 
 
 def neutrino_synthese(xml_pfad, output_wav_pfad, neutrino_pfad, model_pfad, threads: int = None,
-                      timeout: int = 1800, style_shift: int = 0) -> bool:
+                      timeout: int = 1800, style_shift: int = 0, support_pfad: str = None) -> bool:
     """
     Rendert die Gesangsstimme mit NEUTRINO. v3 (Tau) schreibt die WAV selbst, v2 (Muon) braucht danach
     noch den Vocoder NSF.exe. Wirft RuntimeError mit NEUTRINOs Meldung, wenn etwas schiefgeht.
     Der Vorlauf-Takt aus erstelle_musicxml wird am Ende abgeschnitten.
     style_shift: NEUTRINOs StyleShift in Halbtönen; positiv klingt die Stimme heller, negativ dunkler.
     Versionen ohne StyleShift singen dann ohne.
+    support_pfad: Ordner einer zweiten Stimme, die als Support-Modell mitläuft (B5, nur v3 mit Run_support_model.bat);
+    klappt das nicht, singt die Stimme allein.
     """
     import tempfile
 
@@ -397,7 +401,13 @@ def neutrino_synthese(xml_pfad, output_wav_pfad, neutrino_pfad, model_pfad, thre
                        ".mgc": os.path.join(td, "vocals.mgc"), ".bap": os.path.join(td, "vocals.bap")}
             shift = ["-k", str(style_shift)] if style_shift else []
             bat = _run_bat_aufruf(neutrino_pfad, neutrino_exe, dateien, threads, style_shift)
-            versuche = [bat,
+            mit_support = None
+            if support_pfad and os.path.isdir(support_pfad):
+                dateien["support"] = os.path.join(os.path.abspath(support_pfad), "")
+                mit_support = _run_bat_aufruf(neutrino_pfad, neutrino_exe, dateien, threads, style_shift, SUPPORT_BAT)
+                if mit_support is None:
+                    log.warning("%s fehlt oder kennt keine Support-Stimme; NEUTRINO singt ohne", SUPPORT_BAT)
+            versuche = [mit_support, bat,
                         cmd + shift + ["-m"],                          # -m: Grafikkarte, sonst Prozessor
                         cmd + shift,
                         cmd if shift else None]
@@ -405,15 +415,20 @@ def neutrino_synthese(xml_pfad, output_wav_pfad, neutrino_pfad, model_pfad, thre
                 run = _run(versuch, neutrino_pfad, timeout)
                 if run.returncode == 0 and os.path.exists(wav):
                     ausgabe = f"{run.stdout or ''}{run.stderr or ''}"
-                    mit_shift = (versuch is not versuche[3] and (versuch is not bat or not style_shift
-                                                                   or _bat_kennt_styleshift(neutrino_pfad)))
+                    aus_bat = versuch is bat or versuch is mit_support
+                    mit_shift = versuch is not versuche[4] and (not aus_bat or not style_shift
+                                                                or _bat_kennt_styleshift(neutrino_pfad, versuch is bat))
+                    support = os.path.basename(os.path.normpath(support_pfad)) if versuch is mit_support else ""
                     LETZTER_LAUF.update(grafikkarte="-m" in versuch and CPU_MELDUNG not in ausgabe,
-                                        styleshift=mit_shift if style_shift else None)
+                                        styleshift=mit_shift if style_shift else None, support=support)
                     if not LETZTER_LAUF["grafikkarte"] and neutrino_pfad not in _AUF_DEM_PROZESSOR:
                         _AUF_DEM_PROZESSOR.add(neutrino_pfad)
                         log.warning("NEUTRINO singt auf dem Prozessor statt auf der Grafikkarte, das dauert deutlich "
                                     "länger. Hilft ein aktueller Grafiktreiber (NVIDIA)?")
                     break
+                if versuch is mit_support:
+                    log.warning("Support-Stimme abgelehnt, NEUTRINO singt ohne: %s",
+                                (run.stderr or run.stdout or "").strip()[-200:])
         else:
             log.info("[NEUTRINO v2] Singe...")
             run = _run([neutrino_exe, full, timing, f0, mel, model, "-n", "1", "-k", str(style_shift), "-o", threads,
@@ -435,22 +450,25 @@ def neutrino_synthese(xml_pfad, output_wav_pfad, neutrino_pfad, model_pfad, thre
     return True
 
 
-def _bat_kennt_styleshift(neutrino_pfad: str) -> bool:
-    """Reicht die Run.bat einen StyleShift an NEUTRINO.exe weiter?"""
+def _bat_kennt_styleshift(neutrino_pfad: str, run_bat: bool = True) -> bool:
+    """Reicht die Run.bat (sonst Run_support_model.bat) einen StyleShift an NEUTRINO.exe weiter?"""
     try:
-        with open(os.path.join(neutrino_pfad, "Run.bat"), "rb") as f:
+        with open(os.path.join(neutrino_pfad, "Run.bat" if run_bat else SUPPORT_BAT), "rb") as f:
             return "styleshift" in f.read().decode("utf-8", errors="replace").lower()
     except OSError:
         return False
 
 
-def _run_bat_aufruf(neutrino_pfad: str, neutrino_exe: str, dateien: dict, threads: str, style_shift: int = 0):
+def _run_bat_aufruf(neutrino_pfad: str, neutrino_exe: str, dateien: dict, threads: str, style_shift: int = 0,
+                    datei: str = "Run.bat"):
     """
     Der NEUTRINO.exe-Aufruf aus der Run.bat, die jeder NEUTRINO-Version beiliegt, mit unseren Dateien
     und Einstellungen. So passt er genau zur installierten Version. None ohne Run.bat oder ohne WAV-Ausgabe.
+    datei: eine andere Batch-Datei, z. B. Run_support_model.bat; dort wird der Ordner der Support-Stimme
+    (%SupportModelDir%) zu dateien["support"]. None, wenn sie keine Support-Stimme kennt.
     """
     import re
-    pfad = os.path.join(neutrino_pfad, "Run.bat")
+    pfad = os.path.join(neutrino_pfad, datei)
     if not os.path.exists(pfad):
         return None
     with open(pfad, "rb") as f:
@@ -469,9 +487,14 @@ def _run_bat_aufruf(neutrino_pfad: str, neutrino_exe: str, dateien: dict, thread
     tokens = zeile.split()
     start = next(k for k, t in enumerate(tokens) if t.lower().endswith("neutrino.exe"))
     cmd = [neutrino_exe]
+    support = False
     for token in tokens[start + 1:]:
         if token in ("&", "&&", "|", "||") or token.startswith((">", "2>")):
             break
+        if "support" in dateien and "supportmodeldir" in token.lower():
+            cmd.append(dateien["support"])
+            support = True
+            continue
         token = re.sub(r"[%!](\w+)[%!]", lambda m: werte.get(m.group(1).lower(), m.group(0)), token)
         name = token.lower().replace("/", "\\").lstrip(".\\")
         endung = os.path.splitext(name)[1]
@@ -483,6 +506,8 @@ def _run_bat_aufruf(neutrino_pfad: str, neutrino_exe: str, dateien: dict, thread
             cmd.append(dateien["model"])
         else:
             cmd.append(token)
+    if "support" in dateien and not support:
+        return None
     return cmd if dateien[".wav"] in cmd else None
 
 

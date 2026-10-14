@@ -22,6 +22,8 @@ def record(out: str, settings, engine: str, voice: str = "") -> dict:
         info["version"] = neutrino_ausgabe(settings.neutrino_dir())
         device = LETZTER_LAUF.get("grafikkarte")
         info["device"] = "" if device is None else ("Grafikkarte" if device else "Prozessor")
+        if LETZTER_LAUF.get("support"):
+            info["support"] = LETZTER_LAUF["support"]
     try:
         with open(os.path.join(out, SUNG_FILE), "w", encoding="utf-8") as f:
             json.dump(info, f, ensure_ascii=False)
@@ -54,7 +56,10 @@ def describe(info: Optional[dict]) -> tuple:
     if engine == "Eigene Spur":
         return f"Hauptstimme aus der eigenen Gesangsspur {info.get('voice', '')}".rstrip(), False
     parts = [f"NEUTRINO {info['version']}" if engine == "NEUTRINO" and info.get("version") else engine]
-    parts += [p for p in (info.get("voice"), info.get("device")) if p]
+    voice = info.get("voice", "")
+    if voice and info.get("support"):
+        voice += f" mit Support-Stimme {info['support']}"
+    parts += [p for p in (voice, info.get("device")) if p]
     text = "Gesungen von " + ", ".join(parts)
     if engine != info.get("chosen") and info.get("chosen"):
         text += f" ({info['chosen']} fehlte)"

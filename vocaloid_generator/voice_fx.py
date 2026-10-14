@@ -745,6 +745,24 @@ def syllable_dynamics(path: str, melody_data: list, silben: list, bpm: float) ->
     return True
 
 
+def dynamics_db(melody_data: list, silben: list, bpm: float, sections: list, times: np.ndarray,
+                syllables: bool = True, expression: bool = True) -> np.ndarray:
+    """Pegel (dB) aus Lautstärke pro Silbe und Ausdruck pro Phrase zu den Zeiten times (Sekunden ab Songanfang), für
+    eine Engine, die die Lautstärke selbst singt (VOICEVOX, F2)."""
+    rate = 1000
+    times = np.asarray(times, dtype=np.float64)
+    length = int((max(float(times.max()) if len(times) else 0.0, 0.0) + 1.0) * rate)
+    db = np.zeros(length, dtype=np.float32)
+    notes = timeline(melody_data, bpm)
+    if syllables:
+        gains = syllable_gains(melody_data, silben, bpm)
+        if gains:
+            db += syllable_curve(gains, notes, length, rate)
+    if expression and sections and notes:
+        db += expression_curve(notes, sections, length, rate)
+    return np.interp(times, np.arange(length) / rate, db)
+
+
 # ── Chor im letzten Refrain ────────────────────────────────────────────────────
 def choir_from_lead(lead_path: str, out_path: str, window: tuple) -> bool:
     """Ohne weitere Stimmen: vier leicht verstimmte, verschieden späte und sich langsam bewegende Kopien der

@@ -155,6 +155,7 @@ class SongSettings(BaseModel):
     vocal_engine: str = "NEUTRINO"     # NEUTRINO, VOICEVOX oder Vorschau; fehlt eine, singt die andere
     harmonies: bool = True             # zweite Stimme im Refrain (mit NEUTRINO oder VOICEVOX)
     duet_singer: str = ""              # zweite NEUTRINO-Stimme fürs Duett (leer = kein Duett)
+    support_singer: str = ""           # B5: Support-Modell, eine zweite Stimme färbt die Hauptstimme (leer = aus)
     style_shift: int = Field(0, ge=-6, le=6)   # NEUTRINO StyleShift: + heller, - dunkler
     vocal_takes: int = Field(1, ge=1, le=3)    # NEUTRINO singt so oft (StyleShift ±1), die sauberste Fassung zählt
     vibrato: float = Field(1.0, ge=0.0, le=2.0)   # 0 = gerade Töne, 1 = wie gesungen, 2 = doppelt so viel
@@ -207,6 +208,7 @@ class SongSettings(BaseModel):
     style_singers: dict[str, str] = Field(default_factory=dict)
     voicevox_url: str = ""             # Adresse von VOICEVOX (leer = http://127.0.0.1:50021, App oder Engine)
     voicevox_singer: int = Field(0, ge=0)          # VOICEVOX-Singstimme (Stil-ID, 0 = die erste)
+    voicevox_dynamics: bool = True     # F2: VOICEVOX singt Silben- und Phrasen-Lautstärke selbst (statt nachher)
     # Vorbild-Songs (reference.py) und was sie bestimmen dürfen; jedes lässt sich abschalten
     reference_tracks: list[ReferenceTrack] = Field(default_factory=list)
     reference_folder: str = ""         # Ordner mit Lieblingssongs zum Anhaken (leer = Vorbilder im Datenordner)

@@ -587,7 +587,8 @@ SCORE_SWITCHES = (
 
 
 def voice_panel(s: SongSettings, singers: list, pick: PickFn | None = None) -> tuple:
-    """Rückgabe: die Auswahl der Stimme und die der Duett-Stimme, damit die Seite ihre Listen erneuern kann."""
+    """Rückgabe: die Auswahl der Stimme, der Duett- und der Support-Stimme, damit die Seite ihre Listen erneuern
+    kann."""
     ui.select(labels.ENGINES, label="Gesang mit").bind_value(s, "vocal_engine").classes("w-full").mark("engine")
     hint("Fehlt die gewählte Engine, singt die andere; fehlen beide, die Vorschau-Stimme.")
     section_title("NEUTRINO")
@@ -598,6 +599,10 @@ def voice_panel(s: SongSettings, singers: list, pick: PickFn | None = None) -> t
         .classes("w-full").mark("duet")
     hint("Im Duett wechseln sich die Stimmen in den Strophen ab, die Bridge singt die zweite, im Refrain singt "
          "sie die zweite Stimme. Braucht NEUTRINO.")
+    support = ui.select(support_options(singers, s), label="Support-Stimme (Versuch)") \
+        .bind_value(s, "support_singer").classes("w-full").mark("support")
+    hint("Eine zweite Stimme läuft als Support-Modell mit und gibt der Hauptstimme eine andere Färbung, z. B. MERROW "
+         "mit SOMA. NEUTRINO nennt das selbst experimentell; braucht Run_support_model.bat (ab NEUTRINO 3).")
     ui.switch("Zweite Stimme im Refrain").bind_value(s, "harmonies")
     ui.switch("Lieblingsstimme je Stil").bind_value(s, "style_singer").props("dense").mark("switch-style_singer") \
         .tooltip("Beim Wechsel des Stils wählt die App die Stimme, die du im Stimmen-Casting für ihn gemerkt hast")
@@ -648,6 +653,10 @@ def voice_panel(s: SongSettings, singers: list, pick: PickFn | None = None) -> t
          "eigene Gesang; der Vorlauftakt fällt beim Ausrichten weg. Die Begleitstimmen singt weiter die Engine.")
     section_title("VOICEVOX")
     voicevox_editor(s)
+    ui.switch("VOICEVOX singt laut und leise selbst").bind_value(s, "voicevox_dynamics").props("dense") \
+        .mark("switch-voicevox_dynamics") \
+        .tooltip("Betonte Silben und der Weg zum Höhepunkt einer Zeile gehen als Lautstärke in den Gesang ein, statt "
+                 "danach lauter und leiser gedreht zu werden. Leiser klingt dann auch weicher.")
     section_title("Lebendiger Gesang")
     for attr, text, tip in LIVELY_SWITCHES:
         ui.switch(text).bind_value(s, attr).props("dense").tooltip(tip).mark(f"switch-{attr}")
@@ -667,7 +676,7 @@ def voice_panel(s: SongSettings, singers: list, pick: PickFn | None = None) -> t
         ui.label("Hauchigkeit").classes("w-28")
         ui.slider(min=0, max=0.2, step=0.002).bind_value(s, "breathiness").props("label").classes("col")
     ui.switch("Schimmer").bind_value(s, "shimmer")
-    return singer, duet
+    return singer, duet, support
 
 
 def voicevox_editor(s: SongSettings) -> None:
@@ -702,6 +711,11 @@ def voicevox_editor(s: SongSettings) -> None:
 def duet_options(singers: list, s: SongSettings) -> dict:
     names = sorted(set(singers) | ({s.duet_singer} if s.duet_singer else set()))
     return {"": "kein Duett", **{n: n for n in names}}
+
+
+def support_options(singers: list, s: SongSettings) -> dict:
+    names = sorted(set(singers) | ({s.support_singer} if s.support_singer else set()))
+    return {"": "aus", **{n: n for n in names}}
 
 
 # ── Mix ─────────────────────────────────────────────────────────────────────────

@@ -496,8 +496,9 @@ VOCAL_SWING_LINES = {"melody_data": ("vocals.wav", "vocals_double.wav", "vocals_
 # Was den Gesang bestimmt: ändert sich nichts davon, bleibt der gesungene Gesang (z. B. beim Neu-Würfeln des Basses)
 VOCAL_KEY = "vocals.key"
 VOCAL_CODE = ("pipeline.py", "vocal_synthesizer.py", "voice_fx.py", "voicevox.py", "neutrino_score.py")
-VOCAL_FIELDS = ("bpm", "seed", "singer", "vocal_engine", "harmonies", "duet_singer", "style_shift", "vocal_takes",
-                "vibrato", "glide", "breaths", "final_choir", "voicevox_url", "voicevox_singer", "neutrino_pfad",
+VOCAL_FIELDS = ("bpm", "seed", "singer", "vocal_engine", "harmonies", "duet_singer", "support_singer", "style_shift", "vocal_takes",
+                "vibrato", "glide", "breaths", "final_choir", "voicevox_url", "voicevox_singer", "voicevox_dynamics",
+                "neutrino_pfad",
                 "vocal_comping", "phrase_expression", "long_vowel_mark", "breath_marks", "fast_diphthongs",
                 "english_kana", "section_style", "verse_style_shift", "chorus_style_shift", "even_takes",
                 "harmony_variety", "harmony_double", "sung_pads", "adlibs", "syllable_dynamics",
@@ -580,11 +581,12 @@ def _synthesize_vocals(settings: SongSettings, tracks: dict, out: str) -> Option
         log.warning("Eigene Gesangsspur nicht gefunden: %s. Die Engine singt.", settings.own_vocal)
     engines = {"NEUTRINO": _sing_neutrino, "VOICEVOX": _sing_voicevox}
     sung = False
+    engine = "Vorschau"
     _takes_used.clear()
     for name in ENGINE_ORDER.get(settings.vocal_engine, ENGINE_ORDER["NEUTRINO"]):
         try:
             voice = engines[name](settings, tracks, out, vocals_wav, xml, lead=not own)
-            sung = True
+            sung, engine = True, name
             if name == "NEUTRINO":
                 _prune_takes(out)
             if not own:
@@ -602,7 +604,7 @@ def _synthesize_vocals(settings: SongSettings, tracks: dict, out: str) -> Option
         if not _sing_preview(settings, tracks, vocals_wav):
             return None
         vocal_check.record(out, settings, "Vorschau")
-    _liven(settings, tracks, out, vocals_wav)
+    _liven(settings, tracks, out, vocals_wav, sung_dynamics=engine == "VOICEVOX" and _voicevox_dynamics(settings))
     _style_effects(settings, tracks, vocals_wav)
     _vocal_swing(settings, tracks, out)
     if sung and key:
@@ -648,14 +650,17 @@ def _sing_preview(settings: SongSettings, tracks: dict, vocals_wav: str) -> bool
     return os.path.exists(vocals_wav)
 
 
-def _liven(settings: SongSettings, tracks: dict, out: str, vocals_wav: str) -> None:
+def _liven(settings: SongSettings, tracks: dict, out: str, vocals_wav: str, sung_dynamics: bool = False) -> None:
     """Was jede Engine bekommt: Chor im letzten Refrain (aus der eigenen Stimme, wenn die Engine keinen gesungen
-    hat), Ausdruck pro Phrase und Atmer vor den Phrasen."""
+    hat), Ausdruck pro Phrase und Atmer vor den Phrasen. sung_dynamics: die Engine hat Lautstärke pro Silbe und
+    Ausdruck pro Phrase schon selbst gesungen (VOICEVOX, F2)."""
     import voice_fx
-    if settings.syllable_dynamics and voice_fx.syllable_dynamics(vocals_wav, tracks["melody_data"], tracks["silben"],
-                                                                 settings.bpm):
+    if sung_dynamics:
+        log.info("VOICEVOX singt die Lautstärke pro Silbe und den Ausdruck pro Phrase selbst")
+    elif settings.syllable_dynamics and voice_fx.syllable_dynamics(vocals_wav, tracks["melody_data"],
+                                                                   tracks["silben"], settings.bpm):
         log.info("Lautstärke pro Silbe: betonte Silben lauter, weicher Einsatz am Phrasenanfang")
-    if settings.phrase_expression and tracks.get("plan") is not None:
+    if settings.phrase_expression and tracks.get("plan") is not None and not sung_dynamics:
         notes = voice_fx.timeline(tracks["melody_data"], settings.bpm)
         if voice_fx.express(vocals_wav, notes, _sections_in_seconds(tracks["plan"])):
             log.info("Ausdruck pro Phrase: zum Höhepunkt lauter, am Ende weicher")
@@ -995,7 +1000,9 @@ def _neutrino(settings: SongSettings, xml: str, wav: str, neutrino_dir: str, mod
 
     import vocal_synthesizer
     cached = None
-    key = _take_key(xml, neutrino_dir, model_dir, shift, slot or os.path.basename(wav)) if settings.reuse_steps else None
+    support = _support_model(settings, neutrino_dir, model_dir)
+    slot = (slot or os.path.basename(wav)) + (f"|{support}" if support else "")
+    key = _take_key(xml, neutrino_dir, model_dir, shift, slot) if settings.reuse_steps else None
     if key:
         cached = os.path.join(os.path.dirname(wav), TAKE_CACHE, key + ".flac")
         if os.path.exists(cached):
@@ -1006,7 +1013,8 @@ def _neutrino(settings: SongSettings, xml: str, wav: str, neutrino_dir: str, mod
                 return
             except Exception as e:  # noqa: BLE001 – dann eben neu singen
                 log.debug("Gesungene Aufnahme %s nicht lesbar: %s", cached, e)
-    vocal_synthesizer.neutrino_synthese(xml, wav, neutrino_dir, model_dir, style_shift=shift)
+    vocal_synthesizer.neutrino_synthese(xml, wav, neutrino_dir, model_dir, style_shift=shift,
+                                        **({"support_pfad": support} if support else {}))
     if cached:
         try:
             os.makedirs(os.path.dirname(cached), exist_ok=True)
@@ -1015,6 +1023,26 @@ def _neutrino(settings: SongSettings, xml: str, wav: str, neutrino_dir: str, mod
             _takes_used.add(os.path.abspath(cached))
         except Exception as e:  # noqa: BLE001
             log.debug("Aufnahme nicht zwischengespeichert: %s", e)
+
+
+def _support_model(settings: SongSettings, neutrino_dir: str, model_dir: str) -> Optional[str]:
+    """B5: Ordner der Support-Stimme, wenn eine gewählt ist und NEUTRINO mit der Hauptstimme singt (nicht im Duett
+    mit der zweiten Stimme); None sonst."""
+    name = (settings.support_singer or "").strip()
+    if not name or name.upper() == settings.singer.upper():
+        return None
+    if os.path.basename(os.path.normpath(model_dir)).upper() != settings.singer.upper():
+        return None
+    path = os.path.join(neutrino_dir, "model", name)
+    if not os.path.isdir(path):
+        if name not in _support_missing:
+            _support_missing.add(name)
+            log.warning("Support-Stimme %s nicht gefunden (Ordner model von NEUTRINO), singt ohne", name)
+        return None
+    return path
+
+
+_support_missing: set = set()
 
 
 def _take_key(xml: str, neutrino_dir: str, model_dir: str, shift: int, slot: str) -> Optional[str]:
@@ -1127,6 +1155,26 @@ def _neutrino_choir(settings: SongSettings, tracks: dict, out: str, neutrino_dir
 
 
 # ── VOICEVOX ────────────────────────────────────────────────────────────────────
+def _voicevox_dynamics(settings: SongSettings) -> bool:
+    """F2: singt VOICEVOX die Lautstärke pro Silbe und den Ausdruck pro Phrase selbst?"""
+    return settings.voicevox_dynamics and (settings.syllable_dynamics or settings.phrase_expression)
+
+
+def _voicevox_volume(settings: SongSettings, tracks: dict):
+    """Die Lautstärke je Rahmen für VOICEVOX (F2), oder None."""
+    if not _voicevox_dynamics(settings):
+        return None
+    import voice_fx
+    sections = _sections_in_seconds(tracks["plan"]) if settings.phrase_expression and tracks.get("plan") else []
+
+    def volume(loud, frame, offset):
+        times = offset + np.arange(len(loud)) * frame
+        db = voice_fx.dynamics_db(tracks["melody_data"], tracks["silben"], settings.bpm, sections, times,
+                                  syllables=settings.syllable_dynamics, expression=bool(sections))
+        return loud * 10 ** (db / 20)
+    return volume
+
+
 def _sing_voicevox(settings: SongSettings, tracks: dict, out: str, vocals_wav: str, xml: str = "",
                    lead: bool = True) -> str:
     import voice_fx
@@ -1140,7 +1188,8 @@ def _sing_voicevox(settings: SongSettings, tracks: dict, out: str, vocals_wav: s
         def shape(f0, frame, offset):
             return voice_fx.shape_pitch(f0, frame, notes, settings.vibrato, settings.glide, offset)
     if lead:
-        voicevox.sing(tracks["melody_data"], tracks["silben"], settings.bpm, vocals_wav, url, singer, pitch=shape)
+        voicevox.sing(tracks["melody_data"], tracks["silben"], settings.bpm, vocals_wav, url, singer, pitch=shape,
+                      volume=_voicevox_volume(settings, tracks))
     if settings.harmonies and tracks.get("harmony_data"):
         try:
             voicevox.sing(tracks["harmony_data"], tracks["harmony_silben"], settings.bpm,

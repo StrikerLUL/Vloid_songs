@@ -9,6 +9,9 @@ Lizenz. Was mit „lädt die App“ markiert ist, kommt erst über den Einrichte
   Sie stehen in der Readme jeder Stimme im Ordner `model`. https://studio-neutrino.com
 - **VOICEVOX**: Jede Figur verlangt einen Hinweis wie `VOICEVOX:ずんだもん` in der Beschreibung.
   https://voicevox.hiroshiba.jp/term/
+- **DiffSinger-Stimmen** (Versuch, lädst du selbst): Jede hat eigene Bedingungen, oft nur nicht kommerziell und mit
+  Namensnennung. Sie stehen in der Readme oder `character.yaml` im Ordner der Stimme.
+- **Eigene Atmer und Räume** (Ordner `Atmer` und `Hall`): Es gilt die Lizenz der Aufnahmen, die du dort hinlegst.
 - **Klänge mit CC-BY oder CC-BY-SA** (AVL-Schlagzeuge, DRS Kit, Groove MIDI Dataset): Für Songs, die du damit
   machst, verlangen diese Lizenzen nichts. Sie gelten für die Klang- und Notendateien selbst, falls du die
   weitergibst.
@@ -23,6 +26,12 @@ Lizenz. Was mit „lädt die App“ markiert ist, kommt erst über den Einrichte
 | pyttsx3 (Vorschau-Stimme) | Natesh M Bhat | MPL-2.0 |
 | fugashi, unidic-lite (japanischer Text) | Paul O'Leary McCann, NINJAL | MIT, BSD |
 | jaconv (Romaji in Kana) | Yukino Ikegami | MIT |
+| alkana (englische Wörter in Katakana) | cod | GPL-2.0 |
+| e2k (englische Wörter in Katakana, Modell) | Patchethium | Unlicense |
+| Praat und parselmouth (PSOLA, Swing, Formanten) | Paul Boersma, David Weenink; Yannick Jadoul | GPL-3.0 |
+| onnxruntime (DiffSinger) | Microsoft | MIT |
+| DiffSinger-Logik, nachgebaut aus OpenUtau | stakira und OpenUtau-Team; openvpi (DiffSinger) | MIT, Apache-2.0 |
+| PyYAML (Einstellungen der DiffSinger-Stimmen) | Kirill Simonov | MIT |
 
 ## Instrumente und Klänge
 
@@ -43,6 +52,7 @@ Lizenz. Was mit „lädt die App“ markiert ist, kommt erst über den Einrichte
 | Was | Von | Lizenz |
 | --- | --- | --- |
 | pedalboard | Spotify | GPL-3.0 |
+| Airwindows Consolidated (lädt die App) | Chris Johnson (Airwindows), Paul Walker (baconpaul) | MIT (Effekte), GPL-3.0 (Plugin) |
 | matchering | Sergey Grishakov | GPL-3.0 |
 | librosa | librosa-Team | ISC |
 | pyloudnorm | Christian Steinmetz | MIT |

@@ -5,7 +5,7 @@ In fünf Schritten zum ersten Song. Alles Weitere steht darunter; wenn etwas nic
 
 ## 1. Installieren
 
-`VloidSongs-Setup-1.0.2.exe` starten. Sie braucht keine Adminrechte, legt „Vloid Songs“ ins Startmenü (auf Wunsch
+`VloidSongs-Setup-1.1.0.exe` starten. Sie braucht keine Adminrechte, legt „Vloid Songs“ ins Startmenü (auf Wunsch
 auch auf den Desktop) und lädt beim ersten Mal alle Bibliotheken; das dauert ein paar Minuten. Danach
 startet die App über das Startmenü.
 
@@ -79,6 +79,28 @@ saubersten zusammen (Comping). Die Studio-Kette gibt der Stimme leichte Bandsät
 (Strophe trockener, Refrain weiter) und im Refrain eine echte Doppelung aus der zweiten Fassung. Mit „Ausdruck pro
 Phrase“ wird jede Zeile zu ihrem höchsten Ton hin lauter und heller, Strophen bleiben leiser als Refrains.
 
+**Gesang ab 1.1.** Die App schreibt die Noten so, wie NEUTRINO sie gut singen kann: ー für lange Vokale, Atemzeichen
+in langen Zeilen, schnelle Stellen auf einem Ton und englische Wörter als Katakana (love → ラブ). Strophen singt
+NEUTRINO ruhiger, Refrains heller und kräftiger (StyleShift pro Sektion). Die zweite Stimme wechselt von Refrain zu
+Refrain und ist gedoppelt, dazu kommen gesungene Flächen und Ad-libs im letzten Refrain. Im Mix macht die Band dem
+Gesang Platz, statt dass er nur lauter wird. Unter dem Player steht, wer gesungen hat (Gesangs-Check).
+
+**Stimmen-Casting.** Der Knopf über den Noten lässt jede installierte Stimme den Refrain singen. Mit dem Herz merkst
+du dir eine Lieblingsstimme für den Stil; mit „Lieblingsstimme je Stil“ wählt die App sie beim Wechsel des Stils.
+
+**Selbst nachbessern.** Doppelklick auf einen Ton in den Noten singt nur seine Phrase neu, mit anderem StyleShift oder
+anderer Stimme. „Noten für Tuning-Tools“ über den Noten packt MusicXML, UST und MIDI in ein ZIP, z. B. für das
+NEUTRINO-Tuning-Tool oder OpenUtau. Was du dort gesungen oder bearbeitet hast, setzt du im Tab Gesang unter „Eigene
+Gesangsspur“ als WAV wieder ein; die App richtet sie an den Noten aus und mischt sie wie ihren eigenen Gesang.
+
+**DiffSinger (Versuch).** Eine dritte Engine für DiffSinger-Stimmen aus OpenUtau. Die App findet sie in OpenUtau oder
+in `Dokumente\Vloid Songs\DiffSinger`; im Tab Gesang „Gesang mit“ DiffSinger wählen. Sie singt auf dem Prozessor,
+etwa doppelt so lang wie der Song. Jede Stimme hat eigene Lizenzbedingungen, sie stehen in ihrem Ordner.
+
+**Eigene Atmer und Räume.** Legst du Atem-Aufnahmen (WAV, FLAC, z. B. CC0 von Freesound) in
+`Dokumente\Vloid Songs\Atmer`, nimmt die App sie statt des Rauschens. Eine Impulsantwort als WAV in
+`Dokumente\Vloid Songs\Hall` wird der Raum für den Gesang.
+
 **Echtes Schlagzeug und Grooves.** Mit dem DRS Kit spielen akustische Stile ein im Studio aufgenommenes Schlagzeug;
 mit den Grooves spielen Pop, Rock, Ballade, City Pop und Idol-Pop Phrasen und Fills echter Schlagzeuger. Der Bass
 hat Ghost-Notes und Slides, die Gitarre schlägt je nach Teil anders an.
@@ -110,6 +132,8 @@ holen“ lädt die neue Setup.exe und startet sie, deine Daten bleiben. Danach z
 | --- | --- |
 | Romaji japanisch singen | Tab Text |
 | Comping, Studio-Kette, Ausdruck pro Phrase | Tab Gesang |
+| Alles vom Gesang 1.1: Noten für NEUTRINO, StyleShift pro Sektion, Begleitstimmen, Stil-Effekte, Platz in der Band, Airwindows, PSOLA | Tab Gesang |
+| Gesangsklang wie im Vorbild | Tab Song, unter den Vorbildern |
 | Bass mit Ghost-Notes, Gitarren-Anschlag | Tab Band |
 | Echtes Schlagzeug, echte Grooves, Bewertung, Veredler, KI-Begleitung | Tab Pfade |
 | Mix pro Instrument (Demucs) und alles andere von den Vorbildern | Tab Song, unter den Vorbildern |
@@ -124,6 +148,7 @@ holen“ lädt die neue Setup.exe und startet sie, deine Daten bleiben. Danach z
 | `Vorlagen`, `Vorbilder`, `Motive` | deine Vorlagen, Lieblingssongs zum Anhaken und MIDI-Dateien für die Melodie |
 | `Protokolle` | was die App getan hat; gehört in jeden Fehlerbericht |
 | `Fehlerberichte` | ZIPs von „Fehlerbericht speichern“ |
+| `Atmer`, `Hall`, `DiffSinger` | wenn du sie anlegst: eigene Atem-Aufnahmen, Räume für den Gesang und DiffSinger-Stimmen |
 | `Einstellungen.json` | alle Einstellungen |
 
 Klänge und Modelle liegen im Programmordner unter `tools`, weil sie groß sind und zur App gehören.

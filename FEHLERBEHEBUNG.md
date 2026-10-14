@@ -32,6 +32,14 @@ und Systeminfo (keine Songs) und landet in `Dokumente\Vloid Songs\Fehlerberichte
 - **Ein Song dauert lange.** NEUTRINO braucht pro Fassung so lange wie für eine. Weniger Fassungen (Tab Gesang),
   zum Ausprobieren „Entwurf“ nehmen. Klang-Veredler und KI-Begleitung brauchen ohne NVIDIA-Grafikkarte sehr lange;
   unter Pfade ausschalten.
+- **Strophe und Refrain klingen gleich**, im Protokoll steht ein Hinweis zu StyleShift. Die NEUTRINO-Ausgabe mit
+  Tuning-Tool (.ex) kennt keinen StyleShift. Für StyleShift pro Sektion die normale Ausgabe installieren.
+- **Ein Effekt stört** (Telefon, Stottern, harter Tune, Flächen, Ad-libs …). Jeder hat einen Schalter im Tab Gesang.
+- **DiffSinger singt nicht, es singt NEUTRINO.** Im Protokoll steht warum. Meist fehlt der Vocoder (z. B. nsf_hifigan):
+  die `.oudep`-Datei, die bei der Stimme verlinkt ist, in OpenUtau ziehen; sie landet in `Dependencies`. Oder im Tab
+  Gesang den Ordner der Stimme wählen, in dem `dsconfig.yaml` liegt.
+- **Die Support-Stimme ändert nichts.** Sie braucht eine NEUTRINO-Ausgabe mit `Run_support_model.bat`; ohne singt die
+  Hauptstimme allein, und das Protokoll sagt es.
 
 ## Klang, MP3 und Video
 

@@ -53,7 +53,27 @@ Im Tab „Gesang“ wählst du die Stimme, ob im Refrain eine zweite Stimme mits
 
 Schlägt NEUTRINO fehl, steht die Meldung im Protokoll, und die App versucht es mit VOICEVOX; läuft das auch nicht, nimmt sie die lokale Vorschau-Stimme (Windows-Sprachausgabe plus Tonhöhen-Korrektur).
 
-**Fassungen:** Unter „Fassungen“ 2 oder 3 wählen (oder `--fassungen 3`). NEUTRINO singt den Song dann mehrmals, mit StyleShift eine Stufe heller und eine dunkler, und die App nimmt jede Phrase aus der Fassung, die ihre Töne am besten trifft und keine Aussetzer hat (Comping; ausgeschaltet die beste ganze Fassung, `--ohne-comping`). Im Protokoll steht für jede Fassung, wie viele Cent sie neben den Noten liegt. Jede Fassung dauert so lange wie die erste.
+**Strophe ruhig, Refrain kräftig:** Mit „StyleShift pro Sektion“ singt NEUTRINO die Strophen eine Stufe tiefer und ruhiger und die Refrains eine Stufe heller und kräftiger (Regler daneben, `--strophe-stil`, `--refrain-stil`, aus mit `--ohne-sektions-stil`). Dafür singt NEUTRINO zweimal, geschnitten wird in den Pausen; zweite Stimme und Chor singen wie der Refrain. Die NEUTRINO-Ausgabe mit Tuning-Tool (.ex) kennt keinen StyleShift; dann singt sie alles gleich, und im Protokoll steht ein Hinweis.
+
+**Fassungen:** Unter „Fassungen“ 2 oder 3 wählen (oder `--fassungen 3`). NEUTRINO singt den Song dann mehrmals, und die App nimmt jede Phrase aus der Fassung ohne grobe Fehler (falscher Ton, Kiekser, Aussetzer; Comping, ausgeschaltet die beste ganze Fassung, `--ohne-comping`). Alle Fassungen haben denselben StyleShift, damit die Farbe nicht von Phrase zu Phrase springt; singt NEUTRINO jedes Mal genau dasselbe, singt die App eine Stufe heller und dunkler. Mit `--ohne-gleiche-fassungen` geht es wie bis 1.0: eine Fassung heller, eine dunkler, gewertet nach jeder Abweichung von den Noten. Jede Fassung dauert so lange wie die erste.
+
+**Stimmen-Casting:** Der Knopf über den Noten (oder `--casting`) lässt jede installierte Stimme den Refrain des letzten Songs singen. Du hörst sie nebeneinander und merkst dir mit dem Herz eine Lieblingsstimme für diesen Stil; mit „Lieblingsstimme je Stil“ wählt die App sie beim Wechsel des Stils.
+
+**Support-Stimme (Versuch):** Eine zweite NEUTRINO-Stimme gibt der Hauptstimme eine andere Nuance, z. B. MERROW mit SOMA (`--support-stimme SOMA`). Das braucht eine NEUTRINO-Ausgabe mit `Run_support_model.bat`; fehlt die, singt die Hauptstimme allein und das Protokoll sagt warum. Ab Werk aus.
+
+**Gesangs-Check:** Unter dem Player steht, wer gesungen hat, z. B. „Gesungen von NEUTRINO 3.2.2, MERROW, Grafikkarte“. Hat nur die Vorschau-Stimme gesungen, steht dort eine rote Warnung. Hilfe › Einrichten zeigt die NEUTRINO-Version und rät bei älteren als 3.2.2 zum Update.
+
+**Noten für NEUTRINO:** Unter „Noten für NEUTRINO“ im Tab Gesang, jedes einzeln abschaltbar:
+
+| Schalter | Was passiert |
+| --- | --- |
+| Haltezeichen ー für lange Vokale | lange Vokale (タワー) und Melismen stehen als ー statt als neue Silbe in den Noten (`--ohne-haltezeichen`) |
+| Atemzeichen in langen Zeilen | nach spätestens zwei Takten Gesang wird in einer kurzen Pause geatmet, eine Zeile ohne Pause bekommt nach vier Takten ein Atemzeichen (`--ohne-atemzeichen`) |
+| Schnelle Stellen flüssig | zwei Töne unter 100 ms mit Doppelvokal (か + い) singt NEUTRINO auf einem Ton (`--ohne-doppelvokale`) |
+| Englisch als Katakana | love → ラブ, zuerst typische Song-Wörter, dann das Wörterbuch alkana, dann das Modell e2k (`--ohne-englisch`) |
+| Singbare Melodie | keine Sprünge über eine Quinte auf kurzen Silben, kein Spitzenton nur eine Sechzehntel lang, spätestens nach 8 Sekunden eine Atempause (`--ohne-singbarkeit`) |
+
+**Begleitstimmen:** Die zweite Stimme wechselt von Refrain zu Refrain (nur Phrasenenden, Terz darunter, darüber, Oktave) und ist links und rechts gedoppelt. Im Refrain singt NEUTRINO Flächen auf „Uuh“ und „Aah“ statt des Keyboard-Chors, im letzten Refrain kommen Ad-libs in die Lücken (`--ohne-harmonie-wechsel`, `--ohne-doppel-harmonie`, `--ohne-flaechen`, `--ohne-adlibs`).
 
 **Duett:** Im Tab „Gesang“ unter „Duett mit“ eine zweite Stimme wählen (oder `--duett NAME` auf der Kommandozeile). Die beiden Stimmen wechseln sich in den Strophen ab, die Bridge singt die zweite, im Refrain singt die erste die Melodie und die zweite die zweite Stimme. Jede singt mit ihrem eigenen Tonumfang und steht etwas links bzw. rechts im Mix.
 
@@ -65,7 +85,21 @@ Schlägt NEUTRINO fehl, steht die Meldung im Protokoll, und die App versucht es 
 
 [VOICEVOX](https://voicevox.hiroshiba.jp/) ist kostenlos und singt ab Version 0.16. VOICEVOX installieren und starten (die App reicht, sie läuft im Hintergrund), dann im Tab „Gesang“ bei „Gesang mit“ VOICEVOX wählen. Die Liste „VOICEVOX-Stimme“ zeigt alle Singstimmen, die VOICEVOX mitbringt; der Knopf daneben lädt sie neu. Läuft VOICEVOX auf einem anderen Rechner oder Port, die Adresse im Tab „Pfade“ eintragen (Standard `http://127.0.0.1:50021`).
 
-VOICEVOX singt die Hauptstimme, die zweite Stimme im Refrain und mit zwei anderen Figuren den Chor im letzten Refrain. Silben, die VOICEVOX nicht kennt (zum Beispiel lateinische Buchstaben), singt es als „ら“, ein kleines „っ“ wird eine kurze Pause. Ist NEUTRINO gewählt, aber nicht da, springt VOICEVOX automatisch ein.
+VOICEVOX singt die Hauptstimme, die zweite Stimme im Refrain und mit zwei anderen Figuren den Chor im letzten Refrain. Silben, die VOICEVOX nicht kennt (zum Beispiel lateinische Buchstaben), singt es als „ら“, ein kleines „っ“ wird eine kurze Pause. Ist NEUTRINO gewählt, aber nicht da, springt VOICEVOX automatisch ein. Lautstärke pro Silbe und Ausdruck pro Phrase gibt die App VOICEVOX direkt mit, es singt also selbst laut und leise (`--ohne-voicevox-dynamik`: erst danach).
+
+### Gesang mit DiffSinger (Versuch)
+
+[DiffSinger](https://github.com/openvpi/DiffSinger) ist eine freie Gesangs-KI; viele Stimmen dafür gibt es für [OpenUtau](https://www.openutau.com/). Eine Stimme ist ein Ordner mit `dsconfig.yaml`. Die App findet Stimmen in OpenUtau (`Singers`) und im Ordner `DiffSinger` im Datenordner; im Tab Gesang unter „DiffSinger (Versuch)“ lässt sich auch ein Ordner wählen. Dann bei „Gesang mit“ DiffSinger wählen (`--engine DiffSinger --diffsinger-stimme ORDNER`).
+
+Die App singt mit dem Modell der Stimme selbst (onnxruntime, nach der Logik von OpenUtau): Phoneme aus dem Wörterbuch der Stimme, Tonhöhe aus den Noten mit Vibrato und Übergängen, Energie und Hauch aus dem Varianz-Modell, wenn die Stimme eines hat, und den Vocoder aus der Stimme oder aus OpenUtaus `Dependencies`. Das läuft auf dem Prozessor und braucht etwa doppelt so lang wie der Song. Klappt es nicht, singt NEUTRINO, dann VOICEVOX. Jede Stimme hat ihre eigene Lizenz, sie steht in ihrem Ordner; viele erlauben keine kommerzielle Nutzung.
+
+### Eigene Gesangsspur und Tuning-Tools
+
+**Noten für Tuning-Tools:** Der Knopf über den Noten (oder `--noten-zip DATEI`) packt MusicXML (für NEUTRINO und sein Tuning-Tool), UST (OpenUtau), MIDI und eine kurze Anleitung in ein ZIP.
+
+**Eigene Gesangsspur:** Im Tab Gesang unter „Eigene Gesangsspur“ eine WAV wählen (`--eigener-gesang WAV`), die du woanders gesungen oder bearbeitet hast. Sie ersetzt die Hauptstimme, wird an den Noten ausgerichtet (`--ohne-ausrichten`: sie beginnt mit dem Song) und läuft durch dieselbe Kette. Zweite Stimme und Chor singt weiter die Engine.
+
+**Eine Phrase neu singen:** Doppelklick auf einen Ton in der Piano-Roll, dann einen anderen StyleShift oder eine andere Stimme wählen. NEUTRINO singt nur diese Phrase neu, der Rest kommt aus dem Gedächtnis (`_gesungen` im Song-Ordner).
 
 ### Lebendiger Gesang
 
@@ -80,8 +114,18 @@ Unter „Lebendiger Gesang“ im Tab „Gesang“, jedes einzeln abschaltbar:
 | Übergänge | 1 = wie gesungen, 0 = die Töne springen (wie hartes Autotune), 2 = die Stimme gleitet doppelt so lange |
 | Ausdruck pro Phrase | jede Zeile wird zu ihrem höchsten Ton hin lauter und heller und klingt weich aus; Strophen leiser als Refrains (`--ohne-ausdruck`) |
 | Studio-Gesangskette | leichte Bandsättigung, Hall und Delay je Sektion und im Refrain eine echte Doppelung aus der zweiten Fassung (`--ohne-gesangskette`) |
+| Echte Atmer | liegen Atem-Aufnahmen (WAV, FLAC) im Ordner `Atmer` im Datenordner, nimmt die App sie nach Phrasenlänge statt des Rauschens (`--ohne-echte-atmer`) |
+| Lautstärke pro Silbe | betonte Silben (Wortakzent, starke Zählzeit) etwas lauter, weicher Einsatz am Phrasenanfang (`--ohne-silben-lautstaerke`) |
+| Band macht dem Gesang Platz | wie das Plugin Trackspacer: die Band wird in den Frequenzen leiser, in denen gerade gesungen wird, bis 3 dB (`--ohne-platz`) |
+| Gesang reitet auf der Band | der Gesang steht immer gleich weit über der Band, bis 4 dB (`--ohne-nachfuehren`) |
+| Platte aus Impulsantwort | Faltungshall statt Algorithmus; eigene Räume als WAV im Ordner `Hall` im Datenordner (`--ohne-platte`) |
+| Delay weicht dem Gesang | das Delay wird leiser, solange gesungen wird (`--ohne-delay-ducking`) |
+| Kette pro Stimme und Stil | eigene Klangeinstellungen für helle und tiefe Stimmen, Ballade weicher, Rock mit mehr Sättigung (`--ohne-stimmkette`) |
+| Airwindows-Effekte | mit Airwindows Consolidated (Hilfe › Einrichten oder `setup_airwindows.py`): Bandsättigung ToTape9 auf dem Gesang, Console7 auf jeder Spur und der Summe (`--ohne-airwindows`) |
 
-Vibrato und Übergänge ändert die App bei VOICEVOX direkt in der Tonhöhenkurve, bevor gesungen wird. Bei NEUTRINO rechnet sie die fertige Aufnahme Phrase für Phrase mit dem WORLD-Vocoder neu; das klingt eine Spur rauer, deshalb bleibt die Aufnahme bei 1 und 1 unberührt.
+**Stil-Effekte** (eigene Gruppe im Tab Gesang): Telefon in der ersten Zeile, Stottern vor dem Refrain, harter Tune im Refrain und verschobene Formanten. Jeder Stil nimmt, was zu ihm passt, z. B. Future Bass die ersten drei, Lo-Fi nur das Telefon (`--ohne-telefon`, `--ohne-stutter`, `--ohne-hardtune`, `--ohne-formant`). **Gesang swingt mit:** Swingt die Band (Lo-Fi oder Swing ab 0,2), setzen die Töne auf der zweiten Sechzehntel genauso später ein (`--ohne-gesangsswing`).
+
+Vibrato und Übergänge ändert die App bei VOICEVOX direkt in der Tonhöhenkurve, bevor gesungen wird. Bei NEUTRINO rechnet sie die fertige Aufnahme Phrase für Phrase mit Praat-PSOLA (parselmouth) um; die Stimme behält dabei ihren Klang. Mit `--ohne-psola` nimmt sie wie bis 1.0 den WORLD-Vocoder, der eine Spur rauer klingt. Bei 1 und 1 bleibt die Aufnahme unberührt.
 
 ### Klang der Instrumente
 
@@ -142,6 +186,7 @@ Was die Vorbilder bestimmen, schaltest du einzeln an und aus:
 | Lautstärke-Verlauf | ruhige und laute Teile liegen so weit auseinander wie in den Vorbildern |
 | Gesangslautstärke | der Gesang steht so laut gegen die Band wie in den Vorbildern (eine Schätzung; Vorbilder ohne Gesang ändern nichts) |
 | Mix pro Instrument | mit Demucs (`setup_demucs.py`): Gesang, Schlagzeug, Bass und Rest einzeln so laut gegen den ganzen Song und so hell wie in den Vorbildern, höchstens 6 dB lauter oder leiser und 4 dB mehr oder weniger Höhen; ersetzt dann die Schätzung der Gesangslautstärke (`--ohne-vorbild-gruppen`) |
+| Gesangsklang wie im Vorbild | mit Demucs: die Klangkurve des Gesangs in Terzbändern wie beim Gesang der Vorbilder, höchstens 4 dB je Band (`--ohne-vorbild-gesangsklang`) |
 | Tempo und Tonart vorschlagen | ein Klick übernimmt das gemessene Tempo und die Tonart |
 | Stil vorschlagen | ein Klick übernimmt den Stil, der am besten zu den Vorbildern passt |
 
@@ -260,7 +305,22 @@ uv run vocaloid_generator\main.py --style Rock --bpm 140 --key E --scale minor -
 | `--aus-verlauf NR` | Einstellungen und Seed eines Songs aus dem Verlauf nehmen (1 = der neueste) |
 | `--zip DATEI` | den Song mit allen Spuren als ZIP für eine DAW exportieren |
 | `--stimme NAME`, `--duett NAME` | NEUTRINO-Stimme und zweite Stimme fürs Duett für diesen Lauf |
-| `--engine NAME` | wer singt: `NEUTRINO`, `VOICEVOX` oder `Vorschau` |
+| `--support-stimme NAME` | NEUTRINO-Stimme, die als Support-Modell die Hauptstimme färbt (Versuch, braucht `Run_support_model.bat`) |
+| `--engine NAME` | wer singt: `NEUTRINO`, `VOICEVOX`, `DiffSinger` oder `Vorschau` |
+| `--diffsinger-stimme ORDNER` | DiffSinger-Stimme: ihr Ordner oder Name (leer = die erste gefundene) |
+| `--casting` | Stimmen-Casting: den Refrain mit jeder installierten NEUTRINO-Stimme singen |
+| `--eigener-gesang WAV`, `--ohne-ausrichten` | eigene Gesangsspur statt der Hauptstimme, und ob sie an den Noten ausgerichtet wird |
+| `--noten-zip DATEI` | die Gesangsnoten als ZIP für Tuning-Tools (MusicXML, UST, MIDI) |
+| `--strophe-stil N`, `--refrain-stil N`, `--ohne-sektions-stil` | StyleShift der Strophen und Refrains (Standard −1 und +1), oder überall derselbe |
+| `--ohne-haltezeichen`, `--ohne-atemzeichen`, `--ohne-doppelvokale`, `--ohne-englisch`, `--ohne-singbarkeit` | die Vorbereitung der Noten für NEUTRINO einzeln abschalten |
+| `--ohne-harmonie-wechsel`, `--ohne-doppel-harmonie`, `--ohne-flaechen`, `--ohne-adlibs` | Begleitstimmen wie bis 1.0 |
+| `--ohne-gleiche-fassungen` | Fassungen heller und dunkler singen und nach jeder Abweichung werten |
+| `--ohne-echte-atmer`, `--ohne-silben-lautstaerke`, `--ohne-platz`, `--ohne-nachfuehren` | Atmer aus Rauschen, alle Silben gleich laut, Band ohne Platz für den Gesang, Gesang nicht nachgeführt |
+| `--ohne-platte`, `--ohne-delay-ducking`, `--ohne-stimmkette`, `--ohne-airwindows` | Hall wie bis 1.0, Delay ohne Ausweichen, eine Kette für alle Stimmen, kein Airwindows |
+| `--ohne-telefon`, `--ohne-stutter`, `--ohne-hardtune`, `--ohne-formant`, `--ohne-gesangsswing` | Stil-Effekte einzeln abschalten; der Gesang bleibt gerade, auch wenn die Band swingt |
+| `--ohne-psola` | Vibrato und Übergänge mit WORLD statt mit Praat-PSOLA ändern |
+| `--ohne-voicevox-dynamik` | VOICEVOX singt gleich laut, Silben und Phrasen werden erst danach lauter und leiser |
+| `--ohne-vorbild-gesangsklang` | die Klangkurve des Gesangs nicht an den Gesang der Vorbilder angleichen |
 | `--voicevox-stimme ID` | VOICEVOX-Singstimme (die Nummer steht in der App neben dem Namen) |
 | `--fassungen N` | NEUTRINO singt N-mal (1 bis 3), die sauberste Fassung zählt |
 | `--vibrato X`, `--uebergaenge X` | Vibrato und Übergänge zwischen den Tönen, 0 bis 2 (1 = wie gesungen) |
@@ -389,8 +449,15 @@ uv run pytest -m "not slow"   # ohne den Test, der echtes Audio rendert
 | `fx.py` | Riser, Becken-Swell, Impact und Downlifter |
 | `vocal_synthesizer.py` | MusicXML, NEUTRINO und die lokale Vorschau-Stimme |
 | `voicevox.py` | Singen über die Schnittstelle von VOICEVOX |
-| `voice_fx.py` | Atmer, Echo auf dem letzten Wort, Vibrato und Übergänge, beste Fassung, Chor im letzten Refrain |
+| `voice_fx.py` | Atmer, Echo auf dem letzten Wort, Vibrato und Übergänge (PSOLA), beste Fassung, Chor im letzten Refrain, Lautstärke pro Silbe, Gesangs-Swing |
 | `ust_export.py` | Gesangsnoten als UTAU-Projekt (.ust) für OpenUtau |
+| `neutrino_score.py` | Noten so schreiben, wie NEUTRINO sie gut singen kann: Haltezeichen, Atemzeichen, Doppelvokale, Englisch als Katakana |
+| `backing_vocals.py` | Begleitstimmen: Harmonie je Refrain, Doppelung, gesungene Flächen, Ad-libs |
+| `casting.py`, `vocal_check.py` | Stimmen-Casting und der Gesangs-Check unter dem Player |
+| `vocal_mix.py`, `vocal_tone.py` | der Gesang sitzt vorn (Platz in der Band, Nachführen, Platte, Delay, Klang wie im Vorbild) und die Kette pro Stimme und Stil |
+| `style_fx.py`, `airwindows.py`, `setup_airwindows.py` | Stil-Effekte auf dem Gesang, Airwindows Consolidated und dessen Download |
+| `own_vocal.py` | eigene Gesangsspur einsetzen und an den Noten ausrichten |
+| `diffsinger.py` | DiffSinger-Stimmen für OpenUtau singen lassen (onnxruntime, Versuch) |
 | `karaoke.py` | der Text zum Mitlesen mit der Zeit jeder Silbe, und das Lyric-Video über ffmpeg |
 | `mixer.py`, `exporter.py` | Mischen, Mastern, MP3- und ZIP-Export |
 | `reference.py` | Vorbild-Songs messen: Tempo, Tonart, Stil, Lautstärke-Verlauf, Gesangsanteil |

@@ -139,12 +139,34 @@ def _checked(progress: Optional[ProgressFn]) -> ProgressFn:
     return report
 
 
+DRAFT_FOLDER = "Entwurf"
+
+
+def draft_settings(settings: SongSettings) -> SongSettings:
+    """
+    Ein schneller Entwurf: der ganze Song, aber ohne Gesang-Synthese (die Lead-Stimme spielt die Gesangsmelodie),
+    Orchester und Synths aus dem SoundFont, ohne Veredler, Vorbild-Mastering, MP3 und Verlauf. Er liegt in einem
+    eigenen Ordner, damit der letzte richtige Song samt Gesang erhalten bleibt. Mit demselben Seed wird daraus der
+    richtige.
+    """
+    if settings.draft:
+        return settings
+    out = settings.output_dir()
+    os.makedirs(out, exist_ok=True)              # sonst gilt der Unterordner als unerreichbar (output_dir)
+    draft = settings.with_updates(draft=True, output_ordner=os.path.join(out, DRAFT_FOLDER), vocal_takes=1,
+                                  polish=False, samples=False, reuse_steps=False)
+    draft.channels["vocals"].enabled = False
+    draft.channels["melody"].enabled = True
+    return draft
+
+
 def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None, seed: Optional[int] = None,
                   keep_history: bool = True) -> SongResult:
     """Komponieren, Gesang, Rendern, Mischen, Exportieren und im Verlauf ablegen.
     Wirft RuntimeError, wenn keine Spur entsteht, und cancel.Cancelled, wenn abgebrochen wurde."""
     import resume
     report = _checked(progress)
+    keep_history = keep_history and not settings.draft
     out = settings.output_dir()
     os.makedirs(out, exist_ok=True)
 
@@ -225,18 +247,20 @@ def _produce(settings: SongSettings, tracks: dict, out: str, report: ProgressFn,
         movement=_movement(tracks.get("plan")) if settings.mix_movement else None,
         vocal_chain=settings.vocal_chain,
         vocal_space=_sections_in_seconds(tracks["plan"]) if tracks.get("plan") is not None else None,
-        **_reference_targets(settings, tracks, out, has_vocals=result.vocals_wav is not None),
+        **({} if settings.draft else
+           _reference_targets(settings, tracks, out, has_vocals=result.vocals_wav is not None)),
     )
     mische_spuren(spur_pfade=stems, output_pfad=result.mix_wav, **mix_args)
     _polish(settings, tracks, result, stems, mix_args, report)
 
     _remove(os.path.join(out, "vorbilder_zusammen.wav"))   # Zusammenschnitt der Vorbilder fürs Mastering
 
-    report(0.95, "Exportiere MP3...")
     from exporter import exportiere_song
     mp3 = os.path.join(out, "final_song.mp3")
     _remove(mp3)  # eine MP3 vom letzten Song darf nicht als neue gelten
-    result.mp3 = exportiere_song(wav_pfad=result.mix_wav, mp3_pfad=mp3)
+    if not settings.draft:                         # den Entwurf spielt der Player als WAV
+        report(0.95, "Exportiere MP3...")
+        result.mp3 = exportiere_song(wav_pfad=result.mix_wav, mp3_pfad=mp3)
     polished_mp3 = os.path.join(out, "final_song_veredelt.mp3")
     _remove(polished_mp3)
     if result.polished_wav:
@@ -244,7 +268,7 @@ def _produce(settings: SongSettings, tracks: dict, out: str, report: ProgressFn,
 
     if keep_history:
         import history
-        entry = history.record(result.audio, settings, out)
+        entry = history.record(result.audio, settings, out, keep=settings.history_keep)
         result.history = entry.audio if entry else None
     return result
 
@@ -1046,7 +1070,7 @@ def _render_job(settings: SongSettings, out: str, inst: str) -> dict:
         vst_pfad=vst,
         vst_state=state,
         soundfont_pfad=settings.soundfont_file(),
-        voices=profile.voices.get(inst),
+        voices=None if settings.draft else profile.voices.get(inst),     # eigene Synths brauchen Zeit
         library=settings.sound_library and not settings.own_soundfont(),
         drum_machine=_drum_machine(settings) if inst == "drums" else None,
         amp=settings.guitar_amp,

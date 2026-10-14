@@ -7,8 +7,8 @@ import sys
 import applog
 import history
 import userdata
-from pipeline import (best, from_references, generate_song, generate_variants, hook_choices, hook_kind,
-                      lyric_video)
+from pipeline import (best, draft_settings, from_references, generate_song, generate_variants, hook_choices,
+                      hook_kind, lyric_video)
 from settings import KEYS, REROLLABLE, ReferenceTrack, SongSettings, is_rerollable
 
 log = logging.getLogger("vocaloid")
@@ -55,6 +55,8 @@ def parse_args(argv=None):
     p.add_argument("--engine", choices=["NEUTRINO", "VOICEVOX", "Vorschau"], help="wer singt")
     p.add_argument("--voicevox-stimme", type=int, metavar="ID", help="VOICEVOX-Singstimme (Stil-ID)")
     p.add_argument("--fassungen", type=int, choices=[1, 2, 3], help="NEUTRINO singt so oft, die sauberste zählt")
+    p.add_argument("--entwurf", action="store_true",
+                   help="schneller Entwurf ohne Gesang-Synthese: die Lead-Stimme spielt die Melodie (Ordner Entwurf)")
     p.add_argument("--vibrato", type=float, metavar="X", help="0 = gerade Töne, 1 = wie gesungen, 2 = doppelt")
     p.add_argument("--uebergaenge", type=float, metavar="X",
                    help="Übergänge zwischen Tönen: 0 = springen, 1 = wie gesungen, 2 = doppelt so lang")
@@ -94,7 +96,10 @@ def parse_args(argv=None):
     p.add_argument("--vom-vorbild", action="store_true",
                    help="Tempo, Tonart und Stil der Vorbilder übernehmen (soweit in den Einstellungen erlaubt)")
     p.add_argument("--lautheit", type=float, metavar="LUFS", help="Ziel-Lautheit des Masters, z. B. -14 für YouTube")
-    p.add_argument("--verlauf", action="store_true", help="die letzten Songs auflisten und beenden")
+    p.add_argument("--verlauf", nargs="?", const="", metavar="SUCHE",
+                   help="die Songs im Verlauf auflisten und beenden; mit SUCHE nur passende (Name, Notiz, Stil, Seed)")
+    p.add_argument("--sortieren", choices=list(history.SORTS), default="neu",
+                   help="Reihenfolge für --verlauf: neu, bewertung (beste Note zuerst) oder name")
     p.add_argument("--aus-verlauf", type=int, metavar="NR",
                    help="Einstellungen und Seed eines Songs aus dem Verlauf nehmen (1 = der neueste)")
     p.add_argument("--neu", action="append", type=_rerollable, metavar="TEIL[:SEKTION]",
@@ -148,8 +153,8 @@ def main(argv=None) -> int:
     overrides = {"output_ordner": args.output, "reuse_steps": False if args.ohne_wiederverwenden else None}
     settings = settings.with_updates(**{k: v for k, v in overrides.items() if v is not None})
 
-    if args.verlauf:
-        return _list_history(settings)
+    if args.verlauf is not None:
+        return _list_history(settings, args.verlauf, args.sortieren)
     if args.fehlerbericht is not None:
         import fehlerbericht
         log.info("Fehlerbericht: %s", fehlerbericht.save(args.fehlerbericht or None, settings))
@@ -208,6 +213,8 @@ def main(argv=None) -> int:
         if settings is None:
             return 1
     parts = tuple(args.neu or ())
+    if args.entwurf:
+        settings = draft_settings(settings)
 
     log.info("=== Vocaloid Song Generator ===")
     log.info("Stil: %s | BPM: %d | Tonart: %s %s", settings.style, settings.bpm, settings.key, settings.scale)
@@ -311,12 +318,15 @@ def _hooks(settings: SongSettings, count: int, progress) -> int:
     return 0
 
 
-def _list_history(settings: SongSettings) -> int:
-    found = history.entries(settings.output_dir())
-    if not found:
+def _list_history(settings: SongSettings, text: str = "", sort: str = "neu") -> int:
+    every = history.entries(settings.output_dir())
+    if not every:
         log.info("Der Verlauf ist leer.")
-    for nr, entry in enumerate(found, 1):
-        log.info("%2d. %s%s", nr, "★ " if entry.favorite else "", entry.title)
+    numbers = {e.info: nr for nr, e in enumerate(every, 1)}         # die Nummer für --aus-verlauf
+    for entry in history.find(every, text, sort=sort):
+        score = f"  Note {entry.score:.1f}" if entry.score is not None else ""
+        note = f"  ({entry.note})" if entry.note else ""
+        log.info("%2d. %s%s%s%s", numbers[entry.info], "★ " if entry.favorite else "", entry.title, score, note)
     return 0
 
 

@@ -1,5 +1,7 @@
 # conftest.py – gemeinsame Test-Einrichtung
+import atexit
 import os
+import shutil
 import sys
 import tempfile
 
@@ -10,6 +12,7 @@ if APP_DIR not in sys.path:
     sys.path.insert(0, APP_DIR)
 # Vor jedem Import der App: die Tests schreiben nie in den echten Datenordner (Dokumente\Vloid Songs)
 os.environ["VLOID_DATEN"] = tempfile.mkdtemp(prefix="vloid-test-daten-")
+atexit.register(shutil.rmtree, os.environ["VLOID_DATEN"], ignore_errors=True)
 
 
 @pytest.fixture(autouse=True)

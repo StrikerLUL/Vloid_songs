@@ -120,6 +120,24 @@ async def test_generating_shows_the_song_and_its_tracks(user, fake_generation):
     assert (await user.http_client.get("/datei?pfad=/etc/passwd")).status_code == 404
 
 
+async def test_draft_first_then_the_real_song_with_the_same_seed(user, fake_generation):
+    await user.open("/")
+    user.find(marker="count").elements.pop().value = 3
+    user.find(marker="draft").click()
+    await user.should_see("Entwurf · ", retries=50)
+    [sketch] = fake_generation                                        # ein Entwurf, nicht drei
+    assert sketch.draft and not sketch.channels["vocals"].enabled
+    assert sketch.output_ordner.endswith(pipeline.DRAFT_FOLDER)
+    [full] = user.find(marker="draft-full").elements
+    assert full.visible
+    user.find(marker="draft-full").click()
+    await until(lambda: len(fake_generation) == 2)
+    real = fake_generation[-1]
+    assert real.seed == sketch.seed and not real.draft and real.channels["vocals"].enabled
+    await until(lambda: not full.visible)
+    assert not SongSettings.load().draft
+
+
 async def test_rerolling_keeps_the_seed_and_counts_up(user, fake_generation):
     await user.open("/")
     user.find(marker="generate").click()
@@ -185,6 +203,36 @@ async def test_restoring_from_history_takes_settings_and_seed(user, fake_generat
     user.find(marker="generate").click()
     await until(lambda: fake_generation)
     assert fake_generation[-1].bpm == 99 and fake_generation[-1].variations == {"bass": 2}
+
+
+async def test_library_names_finds_and_deletes_songs(user, tmp_path):
+    out = str(tmp_path / "out")
+    history.record(write_song(str(tmp_path / "a"), 11).mix_wav, SongSettings(style="Rock", seed=11), out)
+    history.record(write_song(str(tmp_path / "b"), 4711).mix_wav, SongSettings(style="Ballade", seed=4711), out)
+    await user.open("/")
+    user.find(marker="tab-Verlauf").click()
+    await until(lambda: len(user.find(marker="history-play").elements) == 2)
+
+    user.find(marker="library-search").type("rock")
+    await until(lambda: len(user.find(marker="history-play").elements) == 1)
+    user.find(marker="history-edit").click()
+    user.find(marker="edit-name").type("Sommerregen")
+    user.find(marker="edit-note").type("Bridge kürzer")
+    user.find(marker="edit-save").click()
+    await user.should_see("Sommerregen")
+    await user.should_see("Bridge kürzer")
+    assert [e.label for e in history.entries(out) if e.settings.seed == 11] == ["Sommerregen"]
+
+    user.find(marker="library-search").clear()
+    user.find(marker="library-search").type("4711")
+    await until(lambda: len(user.find(marker="history-play").elements) == 1)
+    user.find(marker="history-delete").click()
+    user.find(marker="delete-keep").click()
+    assert len(history.entries(out)) == 2
+    user.find(marker="history-delete").click()
+    user.find(marker="delete-confirm").click()
+    await user.should_see(marker="library-empty")
+    assert [e.settings.seed for e in history.entries(out)] == [11]
 
 
 async def test_settings_changes_are_saved(user):

@@ -669,7 +669,7 @@ def paths_panel(s: SongSettings, pick: PickFn, status: Callable[[], None]) -> No
 
 
 def app_settings(s: SongSettings) -> None:
-    """Schalter für die App selbst: Wiederverwenden, Protokoll, Updates, Assistent, Datenordner."""
+    """Schalter für die App selbst: Wiederverwenden, Protokoll, Updates, Assistent, Verlauf, Datenordner."""
     import userdata
     section_title("App")
     ui.switch("Fertige Schritte wiederverwenden (Gesang, Spuren, Weitermachen nach Absturz)") \
@@ -681,6 +681,9 @@ def app_settings(s: SongSettings) -> None:
     ui.switch("Nach Updates suchen (einmal am Tag) und nach einem Update zeigen, was neu ist").bind_value(s, "update_check").mark("update-switch")
     ui.switch("Einrichten-Assistent beim Start zeigen, bis er fertig ist").bind_value(s, "setup_wizard") \
         .mark("wizard-switch")
+    ui.number("So viele Songs behält der Verlauf (0 = alle)", min=0, max=1000, step=5, precision=0) \
+        .bind_value(s, "history_keep", forward=lambda v: int(v or 0)).classes("w-80").mark("history-keep") \
+        .tooltip("Ältere fallen heraus; Favoriten, Songs mit Namen und Album-Songs bleiben immer")
     ui.label(userdata.describe()).classes("text-caption").mark("data-folder")
     ui.switch("Daten im Programmordner lassen statt in Dokumente (gilt ab dem nächsten Start)",
               value=userdata.in_program_folder(), on_change=lambda e: userdata.choose_program_folder(e.value)) \

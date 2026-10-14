@@ -184,6 +184,7 @@ class SongSettings(BaseModel):
     real_grooves: bool = True          # Grooves und Fills echter Schlagzeuger (setup_grooves.py), wenn vorhanden
     lively_bass: bool = True           # Ghost-Notes und Slides im Bass
     guitar_strums: bool = True         # Gitarre schlägt je nach Energie andere Muster an, mit Abdämpfern
+    draft: bool = False                # nur für einen Lauf (pipeline.draft_settings): schneller Entwurf
     auto_rating: bool = True           # mehrere Fassungen automatisch bewerten (setup_bewertung.py), wenn eingerichtet
     guitar_amp: bool = True            # verzerrte E-Gitarren über Verstärker und Box statt verzerrter Samples
     cabinet_ir: str = ""               # Impulsantwort einer Gitarrenbox (WAV); leer = eingebaute Box
@@ -198,6 +199,8 @@ class SongSettings(BaseModel):
     log_file: bool = True              # Protokoll in Protokolle\vloid_songs.log im Datenordner (applog.py)
     update_check: bool = True          # beim Start nach einer neuen Version schauen (updates.py)
     setup_wizard: bool = True          # Einrichten-Assistent beim Start, solange er nicht abgeschlossen ist
+    # Alltag (1.0.0)
+    history_keep: int = Field(30, ge=0, le=1000)   # so viele Songs behält der Verlauf (0 = alle); benannte immer
     breathiness: float = Field(0.028, ge=0.0, le=0.2)
     shimmer: bool = True
     swing: float = Field(0.12, ge=0.0, le=0.5)

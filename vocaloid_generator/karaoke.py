@@ -1,7 +1,8 @@
 # karaoke.py – Der Liedtext zum Mitlesen: Zeilen mit der Zeit jeder Silbe, für den Player und das Lyric-Video
 #
 # Die Zeiten kommen aus der Gesangsmelodie, also stimmen sie mit dem fertigen Song überein. Das Lyric-Video baut
-# ffmpeg: einfarbiger Hintergrund, die Wellenform des Songs und der Text als Karaoke-Untertitel (ASS, libass).
+# ffmpeg: einfarbiger Hintergrund oder ein Bild (das Titelbild aus youtube.py), die Wellenform des Songs und der
+# Text als Karaoke-Untertitel (ASS, libass).
 import json
 import logging
 import os
@@ -160,28 +161,37 @@ def find_ffmpeg() -> Optional[str]:
     return shutil.which("ffmpeg")
 
 
-def video(audio: str, found: list, out: str, title: str = "", ffmpeg: Optional[str] = None) -> str:
+def video(audio: str, found: list, out: str, title: str = "", ffmpeg: Optional[str] = None,
+          background: Optional[str] = None) -> str:
     """
     Lyric-Video als MP4: Hintergrund, Wellenform des Songs unten und der Text als Karaoke. Gibt out zurück.
+    background: ein Bild statt der einfarbigen Fläche; mit Bild darf der Text fehlen (Video ohne Karaoke).
     Wirft RuntimeError ohne ffmpeg oder wenn ffmpeg scheitert.
     """
     exe = ffmpeg or find_ffmpeg()
     if not exe:
         raise RuntimeError("Für das Lyric-Video fehlt ffmpeg (winget install Gyan.FFmpeg).")
-    if not found:
+    if not found and not background:
         raise RuntimeError("Der Song hat keinen Text zum Mitlesen.")
     width, height = VIDEO_SIZE
     folder = os.path.dirname(os.path.abspath(out))
     os.makedirs(folder, exist_ok=True)
     subtitles = os.path.splitext(os.path.basename(out))[0] + ".ass"
-    with open(os.path.join(folder, subtitles), "w", encoding="utf-8") as f:
-        f.write(ass(found, title))
+    if found:
+        with open(os.path.join(folder, subtitles), "w", encoding="utf-8") as f:
+            f.write(ass(found, title))
     wave_height = height // 4
+    if background:
+        source = ["-loop", "1", "-framerate", str(VIDEO_FPS), "-i", os.path.abspath(background)]
+        picture = f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}[bg];"
+    else:
+        source = ["-f", "lavfi", "-i", f"color=c={BACKGROUND}:s={width}x{height}:r={VIDEO_FPS}"]
+        picture = "[0:v]null[bg];"
     # Die Untertitel liegen im selben Ordner wie das Video: so braucht der Filter keinen Pfad mit Laufwerk
-    graph = (f"[1:a]showwaves=s={width}x{wave_height}:mode=cline:rate={VIDEO_FPS}:colors={WAVE_COLOR}@0.5[wave];"
-             f"[0:v][wave]overlay=0:{height - wave_height}:shortest=1,ass={subtitles}[video]")
-    command = [exe, "-y", "-hide_banner", "-loglevel", "error",
-               "-f", "lavfi", "-i", f"color=c={BACKGROUND}:s={width}x{height}:r={VIDEO_FPS}", "-i", os.path.abspath(audio),
+    graph = (f"{picture}[1:a]showwaves=s={width}x{wave_height}:mode=cline:rate={VIDEO_FPS}:"
+             f"colors={WAVE_COLOR}@0.5[wave];"
+             f"[bg][wave]overlay=0:{height - wave_height}:shortest=1{f',ass={subtitles}' if found else ''}[video]")
+    command = [exe, "-y", "-hide_banner", "-loglevel", "error", *source, "-i", os.path.abspath(audio),
                "-filter_complex", graph, "-map", "[video]", "-map", "1:a",
                "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
                "-c:a", "aac", "-b:a", "192k", "-shortest", os.path.abspath(out)]

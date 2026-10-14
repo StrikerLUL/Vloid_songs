@@ -92,7 +92,7 @@ def make(settings: SongSettings, count: int, styles: list, lyrics_folder: str = 
     songs = plan(settings, count, styles, lyric_files(lyrics_folder))
     now = datetime.now()
     name = name.strip() or f"Nacht {now:%d.%m.%Y}"
-    folder = _free_folder(os.path.join(settings.output_dir(), FOLDER), f"{now:%Y-%m-%d %H-%M} {_safe(name)}")
+    folder = free_folder(os.path.join(settings.output_dir(), FOLDER), f"{now:%Y-%m-%d %H-%M} {safe_name(name)}")
     os.makedirs(folder, exist_ok=True)
     album = Album(name, folder)
     judge = settings.auto_rating and count > 1 and rating.available()
@@ -126,7 +126,7 @@ def make(settings: SongSettings, count: int, styles: list, lyrics_folder: str = 
             pipeline._rate(clips)
     ranked = sorted(finished, key=lambda f: -f[0].rating.overall) if all(r.rating for r, _ in finished) else finished
     for nr, (result, staged) in enumerate(ranked, 1):
-        target = os.path.join(folder, f"{nr:02d} {_safe(_title(result))}{os.path.splitext(staged)[1]}")
+        target = os.path.join(folder, f"{nr:02d} {safe_name(_title(result))}{os.path.splitext(staged)[1]}")
         os.replace(staged, target)
         album.results.append(result)
         album.files.append(target)
@@ -156,13 +156,13 @@ def _write_lists(album: Album) -> None:
         f.write("\nJeder Song liegt auch im Verlauf; ↺ dort holt seine Einstellungen samt Seed zurück.\n")
 
 
-def _safe(text: str) -> str:
+def safe_name(text: str, fallback: str = "Album") -> str:
     """Ein Datei- oder Ordnername, den Windows annimmt."""
     cleaned = "".join("-" if c in '<>:"/\\|?*' else c for c in text).strip(" .")
-    return cleaned[:80] or "Album"
+    return cleaned[:80] or fallback
 
 
-def _free_folder(parent: str, name: str) -> str:
+def free_folder(parent: str, name: str) -> str:
     candidate, n = os.path.join(parent, name), 2
     while os.path.exists(candidate):
         candidate, n = os.path.join(parent, f"{name} ({n})"), n + 1

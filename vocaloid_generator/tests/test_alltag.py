@@ -1,13 +1,19 @@
-# test_alltag.py – Für jeden Tag: schneller Entwurf, Song-Bibliothek, Album über Nacht
+# test_alltag.py – Für jeden Tag: Entwurf, Song-Bibliothek, Album über Nacht, Fertig für YouTube
 import os
+import shutil
+import subprocess
 
+import numpy as np
 import pytest
+import soundfile as sf
 
 import album
 import cancel
 import history
+import karaoke
 import main
 import pipeline
+import youtube
 from pipeline import SongResult, compose, draft_settings, generate_song
 from settings import INSTRUMENTS, SongSettings
 
@@ -265,3 +271,88 @@ def test_album_from_the_command_line(tmp_path, overnight, monkeypatch):
     assert folder.endswith("Test") and len(history.entries(out)) == 2
     assert main.main(["--output", out, "--album", "2", "--album-stile", "Polka"]) == 1
     assert main.main(["--output", out, "--album", "99"]) == 1
+
+
+# ── Fertig für YouTube ───────────────────────────────────────────────────────
+def _ffmpeg_can_render() -> bool:
+    exe = shutil.which("ffmpeg")
+    if not exe:
+        return False
+    filters = subprocess.run([exe, "-hide_banner", "-filters"], capture_output=True, text=True).stdout
+    return " ass " in filters and " showwaves " in filters
+
+
+def _finished_song(tmp_path, lyrics: bool = True, **updates) -> SongResult:
+    out = tmp_path / "out"
+    out.mkdir(parents=True)
+    t = np.arange(3 * 22050) / 22050
+    tone = (0.3 * np.sin(2 * np.pi * 330 * t) * np.linspace(0.2, 1.0, t.size)).astype(np.float32)
+    sf.write(str(out / "final_mix.wav"), np.stack([tone, tone], axis=1), 22050)
+    if lyrics:
+        found = [{"start": 0.5, "end": 2.5, "syllables": [[0.5, 1.5, "よ"], [1.5, 2.5, "る"]]}]
+        karaoke.save(str(out / karaoke.FILE), found)
+    s = SongSettings(output_ordner=str(out), seed=77, style="City Pop", bpm=96, key="F", scale="major",
+                     singer="KIRITAN", **updates)
+    return SongResult(seed=77, output_dir=str(out), mix_wav=str(out / "final_mix.wav"), settings=s)
+
+
+def test_title_image_has_the_size_and_colors_of_the_style(tmp_path):
+    from PIL import Image
+    audio = tmp_path / "song.wav"
+    sf.write(str(audio), np.random.default_rng(1).normal(0, 0.1, (44100, 2)).astype(np.float32), 44100)
+    path = youtube.title_image(str(tmp_path / "bild.png"), "Sommerregen", "City Pop · 96 BPM", "City Pop", str(audio))
+    image = Image.open(path).convert("RGB")
+    assert image.size == youtube.IMAGE_SIZE
+    top, bottom, _ = (youtube._rgb(c) for c in youtube.PALETTES["City Pop"])
+    assert np.allclose(image.getpixel((5, 0)), top, atol=3)
+    assert np.allclose(image.getpixel((5, youtube.IMAGE_SIZE[1] - 1)), bottom, atol=3)
+    centre = np.asarray(image.crop((300, 150, 980, 280)))
+    assert (centre.min(axis=2) > 240).any()                          # der Titel in Weiß
+    plain = youtube.title_image(str(tmp_path / "leer.png"), "", style="Unbekannt", bars=False)
+    assert Image.open(plain).size == youtube.IMAGE_SIZE
+
+
+def test_description_names_the_voice(tmp_path):
+    result = _finished_song(tmp_path, duet_singer="ITAKO")
+    text = youtube.description(result, "Sommerregen")
+    assert text.startswith("Sommerregen\n") and "City Pop · 96 BPM · F Dur" in text
+    assert "NEUTRINO, Stimme KIRITAN und ITAKO" in text and "Seed 77" in text
+    assert "VOICEVOX:" in youtube.description(_finished_song(tmp_path / "v", vocal_engine="VOICEVOX"), "x")
+    quiet = _finished_song(tmp_path / "q", channels={"vocals": {"enabled": False}})
+    assert "NEUTRINO" not in youtube.description(quiet, "x")
+
+
+@pytest.mark.skipif(not _ffmpeg_can_render(), reason="ffmpeg mit libass fehlt")
+@pytest.mark.parametrize("lyrics", [True, False])
+def test_youtube_folder_has_mp3_video_image_and_description(tmp_path, lyrics):
+    result = _finished_song(tmp_path, lyrics)
+    steps = []
+    package = youtube.make(result, "Sommerregen", progress=lambda f, m: steps.append(f))
+    assert package.folder.startswith(str(tmp_path / "out" / youtube.FOLDER)) and "Sommerregen" in package.folder
+    assert sorted(os.listdir(package.folder)) == ["Beschreibung.txt", "Sommerregen.mp3", "Sommerregen.mp4",
+                                                  "Titelbild.png"]
+    assert package.problems == [] and os.path.getsize(package.video) > 5000
+    assert steps == sorted(steps) and steps[-1] == 1.0
+    again = youtube.make(result)                                      # zweimal: eigener Ordner, Titel aus dem Stil
+    assert again.folder != package.folder and "City Pop (Seed 77)" in again.folder
+
+
+def test_youtube_folder_without_ffmpeg_still_has_image_and_text(tmp_path, monkeypatch):
+    from pydub import AudioSegment
+    monkeypatch.setattr(AudioSegment, "converter", str(tmp_path / "kein-ffmpeg"))
+    monkeypatch.setattr(karaoke, "find_ffmpeg", lambda: None)
+    package = youtube.make(_finished_song(tmp_path), "Ohne")
+    assert sorted(os.listdir(package.folder)) == ["Beschreibung.txt", "Ohne.wav", "Titelbild.png"]
+    assert package.video is None and "ohne ffmpeg nur als WAV" in package.describe() and "ffmpeg" in package.describe()
+    with pytest.raises(RuntimeError, match="Song fehlt"):
+        youtube.make(SongResult(seed=1, output_dir=str(tmp_path)))
+
+
+def test_youtube_from_the_command_line(tmp_path, monkeypatch):
+    made = []
+    result = _finished_song(tmp_path)
+    monkeypatch.setattr(main, "generate_song", lambda settings, progress=None, seed=None: result)
+    monkeypatch.setattr(youtube, "make", lambda r, title="", progress=None: made.append((r, title)) or
+                        youtube.Package(str(tmp_path), title))
+    assert main.main(["--youtube", "Mein Titel"]) == 0
+    assert made == [(result, "Mein Titel")]

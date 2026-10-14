@@ -21,6 +21,7 @@ import preview
 import rating
 import resume
 import updates
+import youtube
 from gui import dialogs, labels, media, panels
 from gui.components import Karaoke, PianoRoll, WavePlayer, add_style
 from settings import ChannelSettings, SongSettings, edit_key
@@ -235,6 +236,9 @@ def build() -> None:
                     video_button = ui.button("Lyric-Video (MP4)", icon="movie", on_click=lambda: make_video()) \
                         .props("flat no-caps").mark("video") \
                         .tooltip("Der Song mit dem Text zum Mitlesen als Video, z. B. für YouTube (braucht ffmpeg)")
+                    youtube_button = ui.button("Fertig für YouTube", icon="smart_display",
+                                               on_click=lambda: make_youtube()).props("flat no-caps").mark("youtube") \
+                        .tooltip("MP3, Video, Titelbild und Beschreibung zusammen in einem Ordner (ohne KI)")
                     ui.button("Ausgabeordner öffnen", icon="folder",
                               on_click=lambda: media.open_folder(settings.output_dir())).props("flat no-caps")
             with ui.card().classes("w-full bg-grey-9"):
@@ -526,6 +530,30 @@ def build() -> None:
             ui.notify(f"Lyric-Video gespeichert: {path}", type="positive", multi_line=True)
             ui.download.file(path)
 
+    async def make_youtube() -> None:
+        result = state["result"]
+        if result is None or job.running:
+            ui.notify("Erst einen Song erzeugen.", type="warning")
+            return
+        entry = next((e for e in history.entries(settings.output_dir()) if e.audio == result.history), None)
+        job.start()
+        set_busy(True)
+        try:
+            package = await run.io_bound(youtube.make, result, entry.label if entry else "", job.report)
+        except RuntimeError as e:
+            ui.notify(str(e), type="warning", multi_line=True)
+            package = None
+        except cancel.Cancelled:
+            ui.notify("Abgebrochen.", type="warning")
+            package = None
+        finally:
+            job.running = False
+            set_busy(False)
+        if package:
+            ui.notify(f"Fertig für YouTube: {package.describe()}", type="warning" if package.problems else "positive",
+                      multi_line=True)
+            media.open_folder(package.folder)
+
     def choose(slot: str, entry) -> None:
         state["compare"][slot] = entry
         show_compare()
@@ -623,7 +651,7 @@ def build() -> None:
         if not busy:
             cancel.reset()
         for button in (generate_button, draft_button, full_button, album_button, zip_button, video_button,
-                       hooks_button, *reroll_buttons.values()):
+                       youtube_button, hooks_button, *reroll_buttons.values()):
             button.set_enabled(not busy)
         resing_button.set_enabled(not busy and _edited(settings) > 0)
         preview_button.set_enabled(not busy and _edited(settings) > 0)

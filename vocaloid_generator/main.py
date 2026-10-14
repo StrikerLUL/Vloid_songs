@@ -128,6 +128,8 @@ def parse_args(argv=None):
                    help="eine gesummte Melodie (WAV, MP3 …) in Noten verwandeln und singen lassen")
     p.add_argument("--takte", action="append", type=_section_bars, metavar="SEKTION=N",
                    help="Länge einer Sektion in Takten, z. B. 'Chorus=8' (mehrfach möglich)")
+    p.add_argument("--youtube", nargs="?", const="", metavar="TITEL",
+                   help="danach MP3, Video, Titelbild und Beschreibung in einen Ordner unter YouTube legen")
     p.add_argument("--lyric-video", nargs="?", const="", metavar="DATEI",
                    help="dazu ein Lyric-Video (MP4) mit dem Text zum Mitlesen; ohne DATEI neben dem Song")
     p.add_argument("--melodie-sektion", metavar="SEKTION", help="dort singt die eigene Melodie (Standard: Chorus)")
@@ -259,6 +261,14 @@ def main(argv=None) -> int:
         except RuntimeError as e:
             log.error("%s", e)
             return 1
+    if args.youtube is not None:
+        import youtube
+        try:
+            package = youtube.make(chosen, args.youtube)
+        except RuntimeError as e:
+            log.error("%s", e)
+            return 1
+        log.info("Fertig für YouTube: %s", package.describe())
     if args.zip:
         from exporter import exportiere_projekt
         log.info("ZIP: %s", exportiere_projekt(chosen, args.zip))

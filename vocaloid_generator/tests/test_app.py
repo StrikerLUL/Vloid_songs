@@ -252,6 +252,21 @@ async def test_album_overnight_from_the_app(user, fake_generation, tmp_path):
     await until(lambda: len(user.find(marker="history-play").elements) == 3)
 
 
+async def test_youtube_folder_from_the_app_uses_the_song_name(user, fake_generation, monkeypatch, tmp_path):
+    import youtube
+    made, opened = [], []
+    monkeypatch.setattr(youtube, "make", lambda result, label="", progress=None: made.append((result.seed, label))
+                        or youtube.Package(str(tmp_path), label))
+    monkeypatch.setattr(media, "open_folder", lambda path: opened.append(path) or True)
+    await user.open("/")
+    user.find(marker="generate").click()
+    await user.should_see("Seed 1000", retries=50)
+    history.set_details(history.entries(str(tmp_path / "out"))[0], label="Sommerregen")
+    user.find(marker="youtube").click()
+    await until(lambda: opened)
+    assert made == [(1000, "Sommerregen")] and opened == [str(tmp_path)]
+
+
 async def test_settings_changes_are_saved(user):
     await user.open("/")
     user.find(marker="bpm").elements.pop().set_value(133)

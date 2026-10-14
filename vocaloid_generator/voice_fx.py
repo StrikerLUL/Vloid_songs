@@ -4,6 +4,7 @@
 # Alles arbeitet auf fertig gesungenen Spuren und kennt dazu die Noten (in Sekunden ab Songanfang).
 import logging
 import os
+from typing import Callable
 from dataclasses import dataclass
 
 import numpy as np
@@ -344,18 +345,30 @@ def reshape(path: str, notes: list, vibrato: float = 1.0, glide: float = 1.0, ps
     False, wenn nichts zu tun war."""
     if abs(vibrato - 1.0) < 1e-3 and abs(glide - 1.0) < 1e-3:
         return False
+
+    def curve(f0: np.ndarray, frame: float, phrase: list, offset: float) -> np.ndarray:
+        return shape_pitch(f0, frame, phrase, vibrato, glide, offset=offset)
+    repitch(path, notes, curve, psola)
+    log.info("Vibrato %.1f, Übergänge %.1f (%s)", vibrato, glide, "PSOLA" if psola and psola_available() else "WORLD")
+    return True
+
+
+def repitch(path: str, notes: list, curve: Callable, psola: bool = True) -> bool:
+    """Eine neue Tonhöhenkurve für jede Phrase der notes: curve(f0 in Hz je FRAME, FRAME, Phrase, Zeit des ersten
+    Rahmens) gibt sie zurück. Mit PSOLA, wenn psola und parselmouth da sind, sonst mit WORLD."""
     method = _psola if psola and psola_available() else _world
     audio, rate = sf.read(path, dtype="float64", always_2d=True)
     mono = audio.mean(axis=1)
     out = mono.copy()
     pad = 0.15
+    changed = False
     for phrase in phrases(notes):
         a = max(0, int((phrase[0].start - pad) * rate))
         b = min(len(mono), int((phrase[-1].end + pad) * rate))
         if b - a < int(0.1 * rate):
             continue
         x = np.ascontiguousarray(mono[a:b])
-        y = method(x, rate, phrase, a / rate, vibrato, glide)
+        y = method(x, rate, lambda f0, frame, offset, phrase=phrase: curve(f0, frame, phrase, offset), a / rate)
         if y is None:
             continue
         y = np.pad(y[:len(x)], (0, max(0, len(x) - len(y))))
@@ -364,9 +377,9 @@ def reshape(path: str, notes: list, vibrato: float = 1.0, glide: float = 1.0, ps
         y[:fade] = x[:fade] * (1 - ramp) + y[:fade] * ramp
         y[-fade:] = y[-fade:] * ramp[::-1] + x[-fade:] * (1 - ramp[::-1])
         out[a:b] = y
+        changed = True
     sf.write(path, np.repeat(out[:, None], audio.shape[1], axis=1).astype(np.float32), rate, subtype="FLOAT")
-    log.info("Vibrato %.1f, Übergänge %.1f (%s)", vibrato, glide, "PSOLA" if method is _psola else "WORLD")
-    return True
+    return changed
 
 
 def psola_available() -> bool:
@@ -384,18 +397,18 @@ def _f0(x: np.ndarray, rate: int) -> tuple:
     return pw.stonemask(x, f0, times, rate), times
 
 
-def _world(x: np.ndarray, rate: int, phrase: list, offset: float, vibrato: float, glide: float):
+def _world(x: np.ndarray, rate: int, curve: Callable, offset: float):
+    """curve(f0, FRAME, Zeit des ersten Rahmens) → neue Tonhöhe; WORLD baut die Phrase damit neu."""
     import pyworld as pw
     f0, times = _f0(x, rate)
     if not np.any(f0 > 0):
         return None
     sp = pw.cheaptrick(x, f0, times, rate)
     ap = pw.d4c(x, f0, times, rate)
-    new = shape_pitch(f0, FRAME, phrase, vibrato, glide, offset=offset)
-    return pw.synthesize(new, sp, ap, rate, frame_period=FRAME * 1000)
+    return pw.synthesize(curve(f0, FRAME, offset), sp, ap, rate, frame_period=FRAME * 1000)
 
 
-def _psola(x: np.ndarray, rate: int, phrase: list, offset: float, vibrato: float, glide: float):
+def _psola(x: np.ndarray, rate: int, curve: Callable, offset: float):
     """Die neue Tonhöhenkurve als PitchTier in eine Praat-Manipulation, dann Overlap-Add (PSOLA). Gemessen wird die
     Tonhöhe mit WORLD, neu gerechnet nicht: die Stimme behält ihren Klang."""
     import parselmouth
@@ -403,7 +416,7 @@ def _psola(x: np.ndarray, rate: int, phrase: list, offset: float, vibrato: float
     f0, times = _f0(x, rate)
     if not np.any(f0 > 0):
         return None
-    new = shape_pitch(f0, FRAME, phrase, vibrato, glide, offset=offset)
+    new = curve(f0, FRAME, offset)
     sound = parselmouth.Sound(x, sampling_frequency=rate)
     manipulation = call(sound, "To Manipulation", 0.01, 70.0, 1100.0)
     tier = call("Create PitchTier", "neu", sound.xmin, sound.xmax)
@@ -412,6 +425,64 @@ def _psola(x: np.ndarray, rate: int, phrase: list, offset: float, vibrato: float
             call(tier, "Add point", float(t), float(hz))
     call([manipulation, tier], "Replace pitch tier")
     return call(manipulation, "Get resynthesis (overlap-add)").values[0]
+
+
+# ── Swing (A6) ─────────────────────────────────────────────────────────────────
+def swung(notes: list, bpm: float) -> list:
+    """Die Töne, die auf einer zweiten Sechzehntel beginnen: diese verschiebt der Swing der Band."""
+    spb = 60.0 / bpm
+    out = []
+    for n in notes:
+        sixteenth = n.start / spb * 4
+        if abs(sixteenth - round(sixteenth)) < 1e-3 and round(sixteenth) % 2 == 1:
+            out.append(n)
+    return out
+
+
+def swing(path: str, notes: list, bpm: float, shift_beats: float) -> int:
+    """Der Gesang swingt wie die Band (orchestrator._to_notes): jeder Ton auf einer zweiten Sechzehntel setzt
+    shift_beats später ein. Die Sechzehntel davor wird dafür etwas gedehnt, die danach gestaucht (Praat-PSOLA mit
+    DurationTier); Tonhöhe, Klang und Gesamtlänge bleiben. Gerechnet wird nur in Phrasen mit solchen Tönen.
+    Rückgabe: Zahl der verschobenen Töne (0 ohne parselmouth)."""
+    if shift_beats <= 0 or not psola_available():
+        return 0
+    import parselmouth
+    from parselmouth.praat import call
+    q = 60.0 / bpm / 4                                  # eine Sechzehntel in Sekunden
+    d = min(shift_beats * 60.0 / bpm, q * 0.5)
+    audio, rate = sf.read(path, dtype="float64", always_2d=True)
+    mono = audio.mean(axis=1)
+    out = mono.copy()
+    pad = q + 0.05
+    moved = 0
+    for phrase in phrases(notes):
+        onsets = [n.start for n in swung(phrase, bpm)]
+        a = max(0, int((phrase[0].start - pad) * rate))
+        b = min(len(mono), int((phrase[-1].end + pad) * rate))
+        onsets = [s - a / rate for s in onsets if s - q > a / rate and s + q < b / rate]
+        if not onsets:
+            continue
+        x = np.ascontiguousarray(mono[a:b])
+        sound = parselmouth.Sound(x, sampling_frequency=rate)
+        manipulation = call(sound, "To Manipulation", 0.01, 70.0, 1100.0)
+        tier = call("Create DurationTier", "swing", sound.xmin, sound.xmax)
+        eps = min(0.002, q / 10)
+        for s in onsets:
+            for t, factor in ((s - q, 1.0), (s - q + eps, (q + d) / q), (s - eps, (q + d) / q),
+                              (s + eps, (q - d) / q), (s + q - eps, (q - d) / q), (s + q, 1.0)):
+                call(tier, "Add point", float(t), float(factor))
+        call([manipulation, tier], "Replace duration tier")
+        y = call(manipulation, "Get resynthesis (overlap-add)").values[0]
+        y = np.pad(y[:len(x)], (0, max(0, len(x) - len(y))))
+        fade = min(len(y) // 4, int(0.01 * rate))
+        ramp = np.linspace(0, 1, fade)
+        y[:fade] = x[:fade] * (1 - ramp) + y[:fade] * ramp
+        y[-fade:] = y[-fade:] * ramp[::-1] + x[-fade:] * (1 - ramp[::-1])
+        out[a:b] = y
+        moved += len(onsets)
+    if moved:
+        sf.write(path, np.repeat(out[:, None], audio.shape[1], axis=1).astype(np.float32), rate, subtype="FLOAT")
+    return moved
 
 
 # ── Fassungen ──────────────────────────────────────────────────────────────────

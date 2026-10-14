@@ -541,6 +541,22 @@ LIVELY_SWITCHES = (
     ("vocal_tone", "Kette pro Stimme und Stil", "EQ, Kompressor und Sättigung passen zur Stimme und zum Stil: helle "
                                                 "Stimmen weniger spitz, tiefe klarer, Ballade weicher, Rock mit mehr "
                                                 "Sättigung"),
+    ("airwindows", "Airwindows-Effekte", "Mit Airwindows Consolidated (Hilfe › Einrichten): Bandsättigung ToTape9 auf "
+                                         "dem Gesang und das Mischpult Console7 auf jeder Spur und der Summe"),
+)
+
+# Stil-Effekte auf dem Gesang (style_fx.py), jeweils nur in den Stilen, zu denen sie gehören
+STYLE_FX_SWITCHES = (
+    ("telephone_fx", "Telefon in der ersten Zeile", "Die erste Zeile klingt wie durchs Telefon (Future Bass, Drum and "
+                                                    "Bass, Dark Vocaloid, Lo-Fi)"),
+    ("stutter_fx", "Stutter vor dem Refrain", "Im letzten Schlag vor dem Refrain stottert die Stimme in Sechzehnteln "
+                                              "(Future Bass, Drum and Bass, Kawaii, J-Pop Energy)"),
+    ("hard_tune", "Harter Tune im Refrain", "Die Tonhöhe rastet hart auf den Noten ein, wie Auto-Tune auf schnellster "
+                                            "Stufe (Future Bass, Kawaii)"),
+    ("formant_fx", "Formanten verschieben", "Kindlicher bei Kawaii und Idol-Pop, dunkler bei Dark Vocaloid; die "
+                                            "Tonhöhe bleibt"),
+    ("vocal_swing", "Gesang swingt mit", "Swingt die Band (Lo-Fi oder Swing-Regler ab 0,2), setzen die Töne auf der "
+                                         "zweiten Sechzehntel genauso viel später ein; Tonhöhe und Klang bleiben"),
 )
 
 # Begleitstimmen wie in Produktionen (backing_vocals.py), von NEUTRINO gesungen
@@ -613,6 +629,9 @@ def voice_panel(s: SongSettings, singers: list, pick: PickFn | None = None) -> t
          "singen wie der Refrain. Die NEUTRINO-Ausgabe mit Tuning-Tool (.ex) kennt keinen StyleShift.")
     section_title("Begleitstimmen (NEUTRINO)")
     for attr, text, tip in BACKING_SWITCHES:
+        ui.switch(text).bind_value(s, attr).props("dense").tooltip(tip).mark(f"switch-{attr}")
+    section_title("Stil-Effekte")
+    for attr, text, tip in STYLE_FX_SWITCHES:
         ui.switch(text).bind_value(s, attr).props("dense").tooltip(tip).mark(f"switch-{attr}")
     section_title("Noten für NEUTRINO")
     for attr, text, tip in SCORE_SWITCHES:

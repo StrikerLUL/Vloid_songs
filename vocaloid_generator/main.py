@@ -82,6 +82,13 @@ def parse_args(argv=None):
                    help="ohne Sättigung, Hall und Delay je Sektion und echte Doppelung für den Gesang")
     p.add_argument("--ohne-stimmkette", action="store_true",
                    help="dieselbe Gesangskette für jede Stimme und jeden Stil (wie bis 1.0)")
+    p.add_argument("--ohne-airwindows", action="store_true",
+                   help="Airwindows Consolidated nicht benutzen, auch wenn es eingerichtet ist")
+    p.add_argument("--ohne-telefon", action="store_true", help="die erste Zeile nicht wie durchs Telefon")
+    p.add_argument("--ohne-stutter", action="store_true", help="kein Stottern der Stimme vor dem Refrain")
+    p.add_argument("--ohne-hardtune", action="store_true", help="kein harter Tune im Refrain")
+    p.add_argument("--ohne-formant", action="store_true", help="die Formanten der Stimme nicht verschieben")
+    p.add_argument("--ohne-gesangsswing", action="store_true", help="der Gesang bleibt gerade, auch wenn die Band swingt")
     p.add_argument("--ohne-romaji", action="store_true", help="Romaji im Liedtext nicht japanisch singen")
     p.add_argument("--ohne-haltezeichen", action="store_true", help="lange Vokale für NEUTRINO nicht als ー schreiben")
     p.add_argument("--ohne-atemzeichen", action="store_true", help="keine Atemzeichen in langen Zeilen")
@@ -248,6 +255,12 @@ def main(argv=None) -> int:
                  "phrase_expression": False if args.ohne_ausdruck else None,
                  "vocal_chain": False if args.ohne_gesangskette else None,
                  "vocal_tone": False if args.ohne_stimmkette else None,
+                 "airwindows": False if args.ohne_airwindows else None,
+                 "telephone_fx": False if args.ohne_telefon else None,
+                 "stutter_fx": False if args.ohne_stutter else None,
+                 "hard_tune": False if args.ohne_hardtune else None,
+                 "formant_fx": False if args.ohne_formant else None,
+                 "vocal_swing": False if args.ohne_gesangsswing else None,
                  "romaji": False if args.ohne_romaji else None,
                  "long_vowel_mark": False if args.ohne_haltezeichen else None,
                  "breath_marks": False if args.ohne_atemzeichen else None,

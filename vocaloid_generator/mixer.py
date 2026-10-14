@@ -484,6 +484,7 @@ def mische_spuren(
     convolution: bool = False,
     ducked_delay: bool = False,
     vocal_tone=None,
+    airwindows: bool = False,
 ) -> None:
     """
     Mischt die Spuren zu einem Stereo-Master:
@@ -511,6 +512,8 @@ def mische_spuren(
     convolution: die Gesangsplatte aus einer Impulsantwort mit Pre-Delay im Tempo (vocal_mix.plate); eine eigene
     Raum-Impulsantwort ersetzt den gemeinsamen Hall. ducked_delay: das Gesangs-Delay ist leiser, solange gesungen wird.
     vocal_tone: EQ, Kompressor und Sättigung des Gesangs für Stimme und Stil (vocal_tone.Tone); None = die feste Kette.
+    airwindows: mit Airwindows Consolidated (setup_airwindows.py), wenn es da ist: Bandsättigung ToTape9 statt der
+    eigenen auf dem Gesang, Console7 auf jeder Spur und der Summe.
     """
     from settings import DEFAULT_VOLUMES
 
@@ -525,6 +528,7 @@ def mische_spuren(
     length = max(sf.info(p).frames for p in paths)
     any_solo = any(solos.values())
     real_double = vocal_chain and any(_track_key(p) == "double" for p in paths)
+    tape, console, buss = _airwindows(vocal_tone, vocal_chain) if airwindows else (None, None, None)
 
     tracks = {}
     for path in paths:
@@ -545,9 +549,14 @@ def mische_spuren(
         if key in VOCAL_KEYS:
             audio = _deess(audio)
         if key in ("vocals", "double") and vocal_chain:
-            audio = _saturate(audio) if vocal_tone is None else _saturate(audio, vocal_tone.drive_db,
-                                                                            vocal_tone.drive_mix)
+            if tape is not None:
+                audio = _keep_level(tape(audio, SAMPLE_RATE), audio)
+            else:
+                audio = _saturate(audio) if vocal_tone is None else _saturate(audio, vocal_tone.drive_db,
+                                                                                vocal_tone.drive_mix)
         audio = _channel_chain("vocals" if key == "double" else key, vocal_tone)(audio, SAMPLE_RATE)
+        if console is not None:
+            audio = console(audio, SAMPLE_RATE)
         if key == "vocals" and double_windows and not real_double:
             audio = _double(audio, double_windows)
         elif key == "harmony" and mono:
@@ -637,6 +646,8 @@ def mische_spuren(
             wet = vocal_mix.duck(wet, lead[0], SAMPLE_RATE)
         mix += wet
 
+    if buss is not None:
+        mix = buss(mix, SAMPLE_RATE)
     master_volume = min(max(volumes.get("master", 1.0), 0.05), 1.0)
     target_lufs += 20 * np.log10(master_volume)
     if reference and _master_like(mix, reference, output_pfad, target_lufs, limiter_threshold):
@@ -644,6 +655,27 @@ def mische_spuren(
     mix = master(mix, compressor_threshold, compressor_ratio, limiter_threshold, target_lufs=target_lufs)
     sf.write(output_pfad, mix.T, SAMPLE_RATE, subtype="PCM_24")
     log.info("Mix fertig: %s (%.1f LUFS)", output_pfad, _loudness(mix))
+
+
+def _airwindows(tone, vocal_chain: bool) -> tuple:
+    """(Band für den Gesang, Console7 Channel, Console7 Buss) als Plugins; fehlt Airwindows, (None, None, None)."""
+    import airwindows
+    if not airwindows.available():
+        return None, None, None
+    try:
+        tape = airwindows.effect(airwindows.tape_for(tone.drive_mix if tone else 0.3)) if vocal_chain else None
+        channel, buss = airwindows.effect(airwindows.CONSOLE_CHANNEL), airwindows.effect(airwindows.CONSOLE_BUSS)
+    except Exception as e:  # noqa: BLE001 – ein Plugin, das nicht lädt, ist kein Grund für einen schlechteren Mix
+        log.warning("Airwindows nicht geladen, der Mix läuft ohne: %s", e)
+        return None, None, None
+    log.info("Airwindows: Band auf dem Gesang, Console7 auf jeder Spur und der Summe")
+    return tape, channel, buss
+
+
+def _keep_level(audio: np.ndarray, before: np.ndarray) -> np.ndarray:
+    """audio so laut (RMS) wie before."""
+    a, b = float(np.sqrt(np.mean(audio ** 2))), float(np.sqrt(np.mean(before ** 2)))
+    return (audio * np.float32(b / a)).astype(np.float32) if a > 1e-9 else audio
 
 
 def _seat_vocals(tracks: dict, ride: bool, unmask: bool) -> Optional[np.ndarray]:

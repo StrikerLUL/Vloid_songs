@@ -260,6 +260,7 @@ def _produce(settings: SongSettings, tracks: dict, out: str, report: ProgressFn,
         convolution=settings.convolution_reverb,
         ducked_delay=settings.ducked_delay,
         vocal_tone=_vocal_tone(settings, out) if result.vocals_wav else None,
+        airwindows=settings.airwindows,
         sung_pads=_chorus_windows(tracks.get("plan")) if result.vocals_wav and os.path.exists(
             os.path.join(out, "vocals_flaechen.wav")) else None,
         vocal_space=_sections_in_seconds(tracks["plan"]) if tracks.get("plan") is not None else None,
@@ -484,6 +485,12 @@ VOCAL_FILES = ("vocals.wav", "vocals_duett_1.wav", "vocals_duett_2.wav", "vocals
                "vocals_double.wav") + EXTRA_VOCALS
 # Welche Engine singt, wenn die gewählte fehlt; ganz zuletzt die lokale Vorschau-Stimme
 ENGINE_ORDER = {"NEUTRINO": ("NEUTRINO", "VOICEVOX"), "VOICEVOX": ("VOICEVOX", "NEUTRINO"), "Vorschau": ()}
+# A6: ab diesem Swing (Stil plus Regler) swingt der Gesang mit; Lo-Fi ja, der Grundwert 0,12 allein nicht
+VOCAL_SWING_FROM = 0.2
+# Welche Gesangsspur nach welchen Noten swingt
+VOCAL_SWING_LINES = {"melody_data": ("vocals.wav", "vocals_double.wav", "vocals_duett_1.wav", "vocals_duett_2.wav",
+                                     "vocals_chor.wav"),
+                     "harmony_data": ("vocals_harmony.wav",), "octave_data": ("vocals_harmony_2.wav",)}
 
 
 # Was den Gesang bestimmt: ändert sich nichts davon, bleibt der gesungene Gesang (z. B. beim Neu-Würfeln des Basses)
@@ -494,7 +501,8 @@ VOCAL_FIELDS = ("bpm", "seed", "singer", "vocal_engine", "harmonies", "duet_sing
                 "vocal_comping", "phrase_expression", "long_vowel_mark", "breath_marks", "fast_diphthongs",
                 "english_kana", "section_style", "verse_style_shift", "chorus_style_shift", "even_takes",
                 "harmony_variety", "harmony_double", "sung_pads", "adlibs", "syllable_dynamics",
-                "recorded_breaths", "psola_reshape", "own_vocal", "own_vocal_align", "phrase_fixes")
+                "recorded_breaths", "psola_reshape", "own_vocal", "own_vocal_align", "phrase_fixes", "style",
+                "telephone_fx", "stutter_fx", "hard_tune", "formant_fx", "vocal_swing")
 
 
 def _vocal_key(settings: SongSettings, tracks: dict) -> str:
@@ -515,6 +523,7 @@ def _vocal_key(settings: SongSettings, tracks: dict) -> str:
                                              "octave_silben", "pads", "adlib_data", "adlib_silben")]
     data["sections"] = [(sec.kind, sec.start, sec.end) for sec in plan.sections] if plan else []
     data["neutrino"] = neutrino_info(settings.neutrino_dir())
+    data["swing"] = _swing_amount(settings)
     if settings.own_vocal and os.path.isfile(settings.own_vocal):
         data["own_vocal_file"] = (os.path.getmtime(settings.own_vocal), os.path.getsize(settings.own_vocal))
     digest.update(json.dumps(data, sort_keys=True, default=str).encode())
@@ -594,6 +603,8 @@ def _synthesize_vocals(settings: SongSettings, tracks: dict, out: str) -> Option
             return None
         vocal_check.record(out, settings, "Vorschau")
     _liven(settings, tracks, out, vocals_wav)
+    _style_effects(settings, tracks, vocals_wav)
+    _vocal_swing(settings, tracks, out)
     if sung and key:
         _remember_vocals(out, key)     # die Vorschau-Stimme nicht: fehlte NEUTRINO nur kurz, singt es beim nächsten Mal
     return vocals_wav
@@ -675,6 +686,54 @@ def _vocal_tone(settings: SongSettings, out: str):
     tone = vocal_tone.for_song(singer, settings.style)
     log.info("Gesangskette: %s Stimme, %s (%s)", vocal_tone.voice_kind(singer), settings.style, tone.describe())
     return tone
+
+
+def _style_effects(settings: SongSettings, tracks: dict, vocals_wav: str) -> None:
+    """Stil-Effekte (style_fx.py) auf die Hauptstimme: Telefon, Stutter, harter Tune, Formanten."""
+    import style_fx
+    import voice_fx
+    effects = style_fx.effects_for(settings.style, settings)
+    if not effects or tracks.get("plan") is None:
+        return
+    try:
+        done = style_fx.apply(vocals_wav, voice_fx.timeline(tracks["melody_data"], settings.bpm),
+                              _sections_in_seconds(tracks["plan"]), settings.bpm, effects)
+    except Exception as e:  # noqa: BLE001 – ein Effekt ist kein Grund, den Gesang aufzugeben
+        log.warning("Stil-Effekte übersprungen: %s", e)
+        return
+    if done:
+        log.info("Stil-Effekte (%s): %s", settings.style, ", ".join(done))
+
+
+def _swing_amount(settings: SongSettings) -> float:
+    """Wie stark die Band swingt (wie in orchestrate_song); unter VOCAL_SWING_FROM bleibt der Gesang gerade."""
+    from styles import get_style
+    amount = min(1.0, get_style(settings.style).swing + settings.swing)
+    return round(amount, 4) if settings.vocal_swing and amount >= VOCAL_SWING_FROM else 0.0
+
+
+def _vocal_swing(settings: SongSettings, tracks: dict, out: str) -> None:
+    """A6: der Gesang swingt mit der Band. Jede Spur nach ihren eigenen Noten; Flächen und Adlibs bleiben."""
+    amount = _swing_amount(settings)
+    if not amount:
+        return
+    import voice_fx
+    from orchestrator import SWING_MAX
+    shift = amount * SWING_MAX * 0.5
+    moved = 0
+    for line, files in VOCAL_SWING_LINES.items():
+        notes = voice_fx.timeline(tracks.get(line) or [], settings.bpm)
+        if not voice_fx.swung(notes, settings.bpm):
+            continue
+        for name in files:
+            path = os.path.join(out, name)
+            if os.path.exists(path):
+                try:
+                    moved += voice_fx.swing(path, notes, settings.bpm, shift)
+                except Exception as e:  # noqa: BLE001 – dann bleibt diese Spur gerade
+                    log.warning("Swing im Gesang übersprungen (%s): %s", name, e)
+    if moved:
+        log.info("Gesang swingt mit: %d Töne um %.0f ms später", moved, shift * 60000 / settings.bpm)
 
 
 def _sections_in_seconds(plan) -> list:

@@ -173,6 +173,13 @@ class SongSettings(BaseModel):
     syllable_dynamics: bool = True     # Lautstärke pro Silbe: Betonungen lauter, weicher Einsatz, Anlauf leiser
     vocal_chain: bool = True           # Studio-Kette: Sättigung, Hall und Delay je Sektion, echte Doppelung
     vocal_tone: bool = True            # Kette pro Stimme und Stil: EQ und Sättigung für helle/tiefe Stimmen, Ballade, Rock
+    airwindows: bool = True            # Airwindows Consolidated (setup_airwindows.py): Band auf dem Gesang, Console7
+    # Stil-Effekte (style_fx.py), jeweils nur in den Stilen, zu denen sie gehören
+    telephone_fx: bool = True          # die erste Zeile wie durchs Telefon
+    stutter_fx: bool = True            # die Stimme stottert im letzten Schlag vor dem Refrain
+    hard_tune: bool = True             # harter Tune im Refrain (Future Bass, Kawaii)
+    formant_fx: bool = True            # Formanten verschoben: kindlicher (Kawaii, Idol) oder dunkler
+    vocal_swing: bool = True           # der Gesang swingt mit der Band, wenn der Song swingt (Lo-Fi)
     romaji: bool = True                # Liedtext in lateinischen Buchstaben (Romaji) japanisch singen
     # Gesang 1.1, jedes mit Schalter. Noten, die NEUTRINO gut singen kann (neutrino_score.py):
     long_vowel_mark: bool = True       # lang gezogene Vokale und Melisma als ー statt als neue Silbe

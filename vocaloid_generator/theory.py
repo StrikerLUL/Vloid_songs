@@ -205,5 +205,3 @@ def voice_chord(chord: Chord, lo: int, hi: int, n_voices: int = 4, previous: Opt
     return min(candidates, key=lambda v: abs(sum(v) / len(v) - center))
 
 
-def transpose_key(key: str, semitones: int) -> str:
-    return NOTE_NAMES[(key_pc(key) + semitones) % 12]

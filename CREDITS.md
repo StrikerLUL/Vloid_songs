@@ -9,7 +9,7 @@ Lizenz. Was mit „lädt die App“ markiert ist, kommt erst über den Einrichte
   Sie stehen in der Readme jeder Stimme im Ordner `model`. https://studio-neutrino.com
 - **VOICEVOX**: Jede Figur verlangt einen Hinweis wie `VOICEVOX:ずんだもん` in der Beschreibung.
   https://voicevox.hiroshiba.jp/term/
-- **Klänge mit CC-BY oder CC-BY-SA** (AVL-Schlagzeuge, DRS-Kit, Groove MIDI Dataset): Für Songs, die du damit
+- **Klänge mit CC-BY oder CC-BY-SA** (AVL-Schlagzeuge, DRS Kit, Groove MIDI Dataset): Für Songs, die du damit
   machst, verlangen diese Lizenzen nichts. Sie gelten für die Klang- und Notendateien selbst, falls du die
   weitergibst.
 
@@ -22,6 +22,7 @@ Lizenz. Was mit „lädt die App“ markiert ist, kommt erst über den Einrichte
 | pyworld (WORLD-Vocoder) | Masanori Morise, Jeremy Hsu | MIT |
 | pyttsx3 (Vorschau-Stimme) | Natesh M Bhat | MPL-2.0 |
 | fugashi, unidic-lite (japanischer Text) | Paul O'Leary McCann, NINJAL | MIT, BSD |
+| jaconv (Romaji in Kana) | Yukino Ikegami | MIT |
 
 ## Instrumente und Klänge
 
@@ -34,6 +35,8 @@ Lizenz. Was mit „lädt die App“ markiert ist, kommt erst über den Einrichte
 | FM-Piano, E-Gitarren FSBS (lädt die App) | FreePats | CC0 |
 | Red Zeppelin, Black Pearl (lädt die App) | Glen MacArthur, AVL Drumkits | CC-BY-SA 3.0 |
 | VSCO 2 Community Edition (lädt die App) | Versilian Studios | CC0 |
+| DRS Kit (lädt die App) | DrumGizmo-Team, Jes Eiler (DRSDrums) | CC-BY 4.0 |
+| Groove MIDI Dataset (lädt die App) | Google Magenta | CC-BY 4.0 |
 
 ## Mix, Analyse und Modelle
 
@@ -47,6 +50,9 @@ Lizenz. Was mit „lädt die App“ markiert ist, kommt erst über den Einrichte
 | pretty_midi, mido | Colin Raffel, Ole Martin Bjørndalen | MIT |
 | Audiobox Aesthetics (lädt die App) | Meta | CC-BY 4.0 |
 | ACE-Step 1.5 (lädt die App, Versuch) | ACE Studio, StepFun | MIT |
+| Demucs mit dem Modell htdemucs (lädt die App) | Meta | MIT |
+| Anticipatory Music Transformer (lädt die App, Versuch) | John Thickstun, David Hall, Chris Donahue, Percy Liang (Stanford CRFM) | Apache-2.0 |
+| PyTorch, Transformers (in den eigenen Umgebungen der Modelle) | PyTorch-Team, Hugging Face | BSD-3, Apache-2.0 |
 
 ## Oberfläche und Werkzeuge
 
@@ -55,5 +61,11 @@ Lizenz. Was mit „lädt die App“ markiert ist, kommt erst über den Einrichte
 | NiceGUI | Zauberzeug | MIT |
 | pywebview | Roman Sirokov | BSD-3 |
 | wavesurfer.js | katspaugh | BSD-3 |
+| Pillow (Titelbild für YouTube) | Jeffrey A. Clark und Mitwirkende | MIT-CMU |
 | uv | Astral | MIT / Apache-2.0 |
 | Inno Setup (baut die Setup.exe) | Jordan Russell, Martijn Laan | eigene, freie Lizenz |
+
+## Vloid Songs selbst
+
+Vloid Songs ist ein privates Projekt und steht unter keiner offenen Lizenz. Die Songs, die du damit
+machst, gehören dir; was die Stimmen und Klänge oben verlangen, gilt trotzdem.

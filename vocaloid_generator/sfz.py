@@ -240,14 +240,6 @@ def _onsets(data: np.ndarray, rate: int) -> tuple:
     return sound, max(swell, sound)
 
 
-def clear_cache() -> None:
-    global _cache_bytes
-    with _lock:
-        _cache.clear()
-        _cache_bytes = 0
-    _instrument.cache_clear()
-
-
 # ── Spielen ─────────────────────────────────────────────────────────────────────────
 
 def render(instrument: Instrument, notes: list, sample_rate: int = SAMPLE_RATE, seed: int = 0,

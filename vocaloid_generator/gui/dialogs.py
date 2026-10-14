@@ -195,8 +195,8 @@ def system_check(s: SongSettings) -> ui.dialog:
         with ui.row().classes("w-full items-center gap-2"):
             check_button = ui.button("Prüfen", icon="fact_check", on_click=lambda: check(False)) \
                 .props("unelevated no-caps color=secondary").mark("check-run")
-            thorough = ui.button("Gründlich (mit ACE-Step)", icon="speed", on_click=lambda: check(True)) \
-                .props("outline no-caps").mark("check-thorough")
+            thorough = ui.button("Gründlich (mit ACE-Step und KI-Begleitung)", icon="speed",
+                                 on_click=lambda: check(True)).props("outline no-caps").mark("check-thorough")
             ui.space()
             ui.button("Fehlerbericht speichern", icon="bug_report", on_click=lambda: save_report(s)) \
                 .props("flat no-caps")

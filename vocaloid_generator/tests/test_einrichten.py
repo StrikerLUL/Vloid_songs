@@ -186,3 +186,11 @@ def test_whats_new_shows_once_per_version_and_not_on_first_start(monkeypatch):
 
 def test_changelog_has_this_version():
     assert updates.changes(), "CHANGELOG.md braucht einen Abschnitt für die aktuelle Version"
+
+
+def test_every_help_page_exists_and_this_version_has_its_news():
+    from version import VERSION
+    for name in ("ANLEITUNG.md", "FEHLERBEHEBUNG.md", "TESTLISTE.md", "CREDITS.md", "CHANGELOG.md"):
+        assert os.path.isfile(os.path.join(config.REPO_ROOT, name)), name
+    assert updates.changes(VERSION)
+    assert updates.parse_version(VERSION) >= (1, 0, 0)

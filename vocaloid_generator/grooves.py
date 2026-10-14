@@ -30,7 +30,6 @@ EXTRAS = (39, 54)               # Clap und Tamburin der eingebauten Grooves spie
 TEMPO_RANGE = (0.8, 1.25)       # Phrasen aus diesem Tempo-Verhältnis klingen natürlich (sonst: alle)
 FEEL = 0.6                      # so viel vom Timing des Schlagzeugers bleibt (1 = alles, 0 = genau im Raster)
 PICK_SPREAD = 0.15              # wie weit die Wahl um die passende Dichte streut (Anteil aller Phrasen)
-FILL_EVERY = 8                  # in langen Teilen alle so viele Takte ein Fill
 
 
 def path() -> str:

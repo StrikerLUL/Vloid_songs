@@ -57,12 +57,6 @@ class Section:
                 return slot.chord
         return self.chords[-1].chord if beat >= self.start else self.chords[0].chord
 
-    def bar_slots(self, bar: int) -> list:
-        """Akkorde in Takt bar (0 = erster Takt der Sektion)."""
-        lo = self.start + bar * BEATS_PER_BAR
-        hi = lo + BEATS_PER_BAR
-        return [s for s in self.chords if lo <= s.start < hi]
-
 
 @dataclass
 class SongPlan:

@@ -275,7 +275,7 @@ def register(key: str, name: str, check: Callable, slow: bool = False, before: s
 
 def run_all(settings, progress: Optional[Callable[[float, str], None]] = None, thorough: bool = False,
             only: tuple = ()) -> list:
-    """Alle Prüfungen nacheinander; eine fehlgeschlagene hält die anderen nicht auf. thorough: auch ACE-Step."""
+    """Alle Prüfungen nacheinander; eine fehlgeschlagene hält die anderen nicht auf. thorough: auch ACE-Step und KI-Begleitung."""
     report = progress or (lambda fraction, message: None)
     chosen = [c for c in CHECKS if (thorough or not c[3]) and (not only or c[0] in only)]
     results = []

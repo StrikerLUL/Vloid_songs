@@ -151,7 +151,8 @@ def parse_args(argv=None):
                    help="alles neu berechnen, auch wenn Gesang und Spuren vom letzten Mal passen würden")
     p.add_argument("--system-pruefen", action="store_true",
                    help="jeden Baustein kurz echt ausprobieren (Instrumente, NEUTRINO, MP3, ... und ein kurzer Song)")
-    p.add_argument("--gruendlich", action="store_true", help="mit --system-pruefen: auch ACE-Step ausprobieren")
+    p.add_argument("--gruendlich", action="store_true",
+                   help="mit --system-pruefen: auch ACE-Step und die KI-Begleitung ausprobieren")
     p.add_argument("--fehlerbericht", nargs="?", const="", metavar="DATEI",
                    help="Protokolle, Einstellungen und Systeminfo als ZIP speichern (ohne Songs) und beenden")
     p.add_argument("--einrichten", metavar="TEILE",

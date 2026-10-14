@@ -780,6 +780,12 @@ async def test_help_menu_shows_credits_and_news(user):
     user.find(marker="help-menu").click()
     user.find(marker="menu-credits").click()
     await user.should_see(marker="page-CREDITS.md")
+    user.find(marker="help-menu").click()
+    user.find(marker="menu-guide").click()
+    await user.should_see(marker="page-ANLEITUNG.md")
+    user.find(marker="help-menu").click()
+    user.find(marker="menu-help").click()
+    await user.should_see(marker="page-FEHLERBEHEBUNG.md")
 
 
 async def test_setup_wizard_shows_on_start_and_installs(user, monkeypatch):

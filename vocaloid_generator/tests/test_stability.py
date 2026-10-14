@@ -17,7 +17,6 @@ import config
 import fehlerbericht
 import pipeline
 import resume
-import vocal_synthesizer
 from settings import SongSettings
 
 SLEEP = [sys.executable, "-c", "import time; time.sleep(30)"]
@@ -135,48 +134,14 @@ def test_a_broken_note_is_dropped():
 
 
 # ── Ein ganzer Song mit nachgebautem NEUTRINO (läuft auch in der Windows-CI) ─────────
-@pytest.fixture
-def fake_neutrino(tmp_path, monkeypatch):
-    """NEUTRINO als Attrappe hinter vocal_synthesizer._run: die echten Aufrufe, aber Sinus statt Stimme."""
-    root = tmp_path / "NEUTRINO"
-    (root / "bin").mkdir(parents=True)
-    (root / "model" / "MERROW").mkdir(parents=True)
-    for name in ("musicXMLtoLabel.exe", "NEUTRINO.exe"):
-        (root / "bin" / name).write_bytes(b"")
-    calls = []
-    lengths = {}
-
-    def run(cmd, cwd, timeout):
-        name = os.path.basename(cmd[0])
-        calls.append(name)
-        if name == "musicXMLtoLabel.exe":
-            import music21
-            xml = cmd[1]
-            beats = float(music21.converter.parse(xml).highestTime)
-            lengths[cmd[2]] = beats * 60.0 / vocal_synthesizer._tempo_aus_musicxml(xml)
-            for path in cmd[2:4]:
-                with open(path, "w") as f:
-                    f.write("label")
-        else:
-            sr = 48000
-            t = np.arange(int(lengths[cmd[1]] * sr)) / sr
-            sf.write(cmd[5], (0.2 * np.sin(2 * np.pi * 330 * t)).astype(np.float32), sr)
-        return subprocess.CompletedProcess(cmd, 0, "", "")
-
-    monkeypatch.setattr(vocal_synthesizer, "_run", run)
-    # die Windows-Sprachausgabe der Vorschau-Stimme hängt in der CI: sie darf hier nie singen
-    monkeypatch.setattr(pipeline, "_sing_preview", lambda *a, **k: pytest.fail("die Vorschau-Stimme sang"))
-    return root, calls
-
-
 def e2e_settings(tmp_path, root, **changes) -> SongSettings:
     return SongSettings(active_sections=["Verse", "Chorus"], section_bars={"Verse": 4, "Chorus": 4},
                         output_ordner=str(tmp_path / "out"), neutrino_pfad=str(root), singer="MERROW", seed=5,
                         polish=False, **changes)
 
 
-def test_whole_song_end_to_end_with_neutrino(tmp_path, fake_neutrino):
-    root, calls = fake_neutrino
+def test_whole_song_end_to_end_with_neutrino(tmp_path, neutrino_attrappe):
+    root, calls = neutrino_attrappe
     steps = []
     result = pipeline.generate_song(e2e_settings(tmp_path, root), lambda f, m: steps.append(m))
     assert "NEUTRINO.exe" in calls
@@ -199,8 +164,8 @@ def test_whole_song_end_to_end_with_neutrino(tmp_path, fake_neutrino):
     assert calls.count("NEUTRINO.exe") > sung
 
 
-def test_vocals_are_sung_again_when_reuse_is_off(tmp_path, fake_neutrino):
-    root, calls = fake_neutrino
+def test_vocals_are_sung_again_when_reuse_is_off(tmp_path, neutrino_attrappe):
+    root, calls = neutrino_attrappe
     s = e2e_settings(tmp_path, root)
     tracks, _ = pipeline.compose(s)
     out = s.output_dir()
@@ -212,8 +177,8 @@ def test_vocals_are_sung_again_when_reuse_is_off(tmp_path, fake_neutrino):
     assert calls.count("NEUTRINO.exe") > sung
 
 
-def test_cancelled_song_stops_and_keeps_its_vocals(tmp_path, fake_neutrino):
-    root, calls = fake_neutrino
+def test_cancelled_song_stops_and_keeps_its_vocals(tmp_path, neutrino_attrappe):
+    root, calls = neutrino_attrappe
 
     def progress(fraction, message):
         if message.startswith("Rendere"):
@@ -230,8 +195,8 @@ def test_cancelled_song_stops_and_keeps_its_vocals(tmp_path, fake_neutrino):
     assert os.path.exists(result.audio)
 
 
-def test_crash_leaves_a_note_to_continue(tmp_path, fake_neutrino, monkeypatch):
-    root, _ = fake_neutrino
+def test_crash_leaves_a_note_to_continue(tmp_path, neutrino_attrappe, monkeypatch):
+    root, _ = neutrino_attrappe
     monkeypatch.setattr(resume, "finish", lambda: None)        # so sieht es nach einem Absturz aus
 
     def crash(*args, **kwargs):

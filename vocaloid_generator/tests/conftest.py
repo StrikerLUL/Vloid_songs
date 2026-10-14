@@ -105,3 +105,45 @@ def not_cancelled():
     cancel.reset()
     yield
     cancel.reset()
+
+
+@pytest.fixture
+def neutrino_attrappe(tmp_path, monkeypatch):
+    """NEUTRINO als Attrappe hinter vocal_synthesizer._run: die echten Aufrufe, aber Sinus statt Stimme.
+    Rückgabe: (NEUTRINO-Ordner, Liste der aufgerufenen Programme)."""
+    import subprocess
+
+    import numpy as np
+    import soundfile as sf
+
+    import pipeline
+    import vocal_synthesizer
+    root = tmp_path / "NEUTRINO"
+    (root / "bin").mkdir(parents=True)
+    (root / "model" / "MERROW").mkdir(parents=True)
+    for name in ("musicXMLtoLabel.exe", "NEUTRINO.exe"):
+        (root / "bin" / name).write_bytes(b"")
+    calls = []
+    lengths = {}
+
+    def run(cmd, cwd, timeout):
+        name = os.path.basename(cmd[0])
+        calls.append(name)
+        if name == "musicXMLtoLabel.exe":
+            import music21
+            xml = cmd[1]
+            beats = float(music21.converter.parse(xml).highestTime)
+            lengths[cmd[2]] = beats * 60.0 / vocal_synthesizer._tempo_aus_musicxml(xml)
+            for path in cmd[2:4]:
+                with open(path, "w") as f:
+                    f.write("label")
+        else:
+            sr = 48000
+            t = np.arange(int(lengths[cmd[1]] * sr)) / sr
+            sf.write(cmd[5], (0.2 * np.sin(2 * np.pi * 330 * t)).astype(np.float32), sr)
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(vocal_synthesizer, "_run", run)
+    # die Windows-Sprachausgabe der Vorschau-Stimme hängt in der CI: sie darf hier nie singen
+    monkeypatch.setattr(pipeline, "_sing_preview", lambda *a, **k: pytest.fail("die Vorschau-Stimme sang"))
+    return root, calls

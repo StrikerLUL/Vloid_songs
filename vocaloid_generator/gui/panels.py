@@ -385,6 +385,10 @@ def templates_editor(s: SongSettings, apply_template: Callable[[SongSettings], N
 def text_panel(s: SongSettings) -> None:
     hint("Eine Überschrift wie [Verse], [Pre-Chorus], [Chorus] oder [Bridge] pro Abschnitt. Japanisch darf ganz "
          "normal geschrieben werden, auch mit Kanji; 君[きみ] gibt eine Lesung von Hand vor.")
+    ui.switch("Romaji japanisch singen (kimi no koe → きみ の こえ)").bind_value(s, "romaji").props("dense") \
+        .mark("switch-romaji").on_value_change(lambda: preview.refresh()) \
+        .tooltip("Eine Zeile ganz in Romaji wird japanisch gesungen; ist ein englisches Wort darin (love, baby), bleibt "
+                 "die Zeile, wie sie ist. Neben japanischer Schrift wird jedes Romaji-Wort umgewandelt.")
 
     @ui.refreshable
     def preview() -> None:
@@ -395,7 +399,7 @@ def text_panel(s: SongSettings) -> None:
             if header:
                 rows.append(("header", header.group(1)))
             elif line:
-                sylls = syllables(line)
+                sylls = syllables(line, s.romaji)
                 count += len(sylls)
                 rows.append(("line", " ".join(sylls)))
         ui.label(f"So wird gesungen: {count} Silben").classes("text-subtitle2").mark("syllables")
@@ -488,6 +492,11 @@ LIVELY_SWITCHES = (
                                                  "letzte Wort links und rechts nach"),
     ("final_choir", "Chor im letzten Refrain", "Mit NEUTRINO oder VOICEVOX singen zwei weitere Stimmen mit, "
                                                "sonst wird die eigene Stimme zum Chor vervielfacht"),
+    ("phrase_expression", "Ausdruck pro Phrase", "Jede Zeile wird zu ihrem höchsten Ton hin lauter und heller und "
+                                                 "klingt am Ende weicher aus; Strophen leiser als Refrains"),
+    ("vocal_chain", "Studio-Gesangskette", "Leichte Bandsättigung, Hall und Delay je Sektion (Strophe trockener, "
+                                           "Refrain und Bridge weiter) und im Refrain eine echte Doppelung aus der "
+                                           "zweiten Fassung"),
 )
 
 
@@ -510,8 +519,11 @@ def voice_panel(s: SongSettings, singers: list) -> tuple:
     hint("Plus = heller und jünger, minus = dunkler. Braucht NEUTRINO mit StyleShift.")
     ui.select({1: "1 (am schnellsten)", 2: "2", 3: "3"}, label="Fassungen").bind_value(s, "vocal_takes") \
         .classes("w-full").mark("vocal-takes")
-    hint("NEUTRINO singt den Song so oft, eine Stufe heller und dunkler; in den Song kommt die Fassung, die die Töne "
-         "am besten trifft und keine Aussetzer hat. Jede Fassung dauert so lange wie die erste.")
+    hint("NEUTRINO singt den Song so oft, eine Stufe heller und dunkler. Jede Fassung dauert so lange wie die erste.")
+    ui.switch("Jede Phrase aus der saubersten Fassung (Comping)").bind_value(s, "vocal_comping").props("dense") \
+        .mark("switch-vocal_comping") \
+        .tooltip("Wie im Studio: jede Zeile kommt aus der Fassung, die ihre Töne am besten trifft. Aus ist es die "
+                 "sauberste ganze Fassung. Die zweitbeste Fassung doppelt den Refrain (mit der Studio-Gesangskette).")
     section_title("VOICEVOX")
     voicevox_editor(s)
     section_title("Lebendiger Gesang")

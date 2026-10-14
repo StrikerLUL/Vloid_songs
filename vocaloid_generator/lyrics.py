@@ -4,6 +4,8 @@
 # Lesung, danach wird in Moren zerlegt, also in das, was auf eine Note gesungen wird (きゃ, っ, ん, ー).
 # UniDic kennt auch den Tonhöhenakzent jedes Worts (Tokio): jede More merkt sich, ob sie hoch oder tief
 # gesprochen wird, damit die Melodie den Wörtern folgen kann.
+# Romaji (kimi no koe) wird mit jaconv zu Hiragana, wenn die ganze Zeile aus Romaji besteht oder neben japanischer
+# Schrift steht; englische Wörter (love, baby) bleiben, wie sie sind.
 import functools
 import logging
 import re
@@ -38,6 +40,13 @@ _VOWELS = {v: k for k, row in {"あ": "あかさたなはまやらわがざだ�
 
 log = logging.getLogger(__name__)
 _FUNCTION_WORDS = ("助詞", "助動詞")
+# Ein Wort in Romaji (Hepburn): Silben aus Konsonant und Vokal, ん als n oder n', verdoppelte Konsonanten für っ
+_ROMAJI = re.compile(r"^(?:(?:[kgsztdnhbpmr]y?|sh|ch|j|ts|f|v)?[aiueo]|y[auo]|w[ao]|n'?(?![aiueoy])|n'"
+                     r"|([kgsztdhbpmrjfc])(?=\1)|t(?=ch))+$")
+_LATIN = re.compile(r"[A-Za-zāīūēōâîûêô]")
+_MACRONS = str.maketrans({"ā": "aa", "ī": "ii", "ū": "uu", "ē": "ee", "ō": "ou",
+                          "â": "aa", "î": "ii", "û": "uu", "ê": "ee", "ô": "ou"})
+_PUNCTUATION = ",.!?;:\"()[]「」、。…~〜-"
 
 
 class Mora(str):
@@ -62,16 +71,16 @@ def normalize_section(name: str) -> str:
     return _SECTION_ALIASES.get(key, name.strip())
 
 
-def parse_lyrics(text: str) -> dict:
+def parse_lyrics(text: str, romaji: bool = True) -> dict:
     """
     Zerlegt den Lyrics-Text der App in {Sektion: [Silben]}.
     Format: eine Überschrift wie [Verse] pro Sektion, darunter Silben mit Leerzeichen getrennt.
     Text vor der ersten Überschrift wird ignoriert.
     """
-    return {name: [s for line in lines for s in line] for name, lines in section_lines(text).items()}
+    return {name: [s for line in lines for s in line] for name, lines in section_lines(text, romaji).items()}
 
 
-def section_lines(text: str) -> dict:
+def section_lines(text: str, romaji: bool = True) -> dict:
     """{Sektion: [[Silben einer Zeile], ...]}: wie parse_lyrics, aber Zeile für Zeile (für den Text zum Mitlesen)."""
     sections = {}
     current = None
@@ -82,17 +91,20 @@ def section_lines(text: str) -> dict:
             current = normalize_section(header.group(1))
             sections.setdefault(current, [])
         elif current and line:
-            sung = syllables(line)
+            sung = syllables(line, romaji)
             if sung:
                 sections[current].append(sung)
     return {name: lines for name, lines in sections.items() if lines}
 
 
-def syllables(line: str) -> list:
+def syllables(line: str, romaji: bool = True) -> list:
     """
     Eine Textzeile als Silben zum Singen. Japanisch wird in Moren zerlegt, ob mit Leerzeichen oder ohne,
-    Kanji werden vorher gelesen. Wörter ohne japanische Schrift bleiben ganz (wie bisher).
+    Kanji werden vorher gelesen. romaji: Romaji wird vorher japanisch (romaji_to_kana). Andere Wörter ohne japanische
+    Schrift bleiben ganz (wie bisher).
     """
+    if romaji:
+        line = romaji_to_kana(line)
     tokens = line.split()
     if len(tokens) > 1 and all(_JAPANESE.search(t) and not _KANJI.search(t) for t in tokens):
         # Kana mit Leerzeichen zwischen den Silben (よ る の ま ち): als ganzen Satz lesen, damit die Wörter
@@ -108,6 +120,30 @@ def syllables(line: str) -> list:
         else:
             out.append(token)
     return out
+
+
+def romaji_to_kana(line: str) -> str:
+    """
+    'kimi no koe' → 'きみ の こえ'. Eine Zeile nur aus lateinischen Buchstaben wird umgewandelt, wenn jedes Wort Romaji
+    ist (sonst ist sie wohl Englisch); neben japanischer Schrift wird jedes Wort umgewandelt, das Romaji ist.
+    """
+    tokens = line.split()
+    latin = {t: _romaji_kana(t) for t in tokens if _LATIN.search(t) and not _JAPANESE.search(t)}
+    if not latin:
+        return line
+    if not any(_JAPANESE.search(t) for t in tokens) and not all(latin.values()):
+        return line
+    return " ".join(latin.get(t) or t for t in tokens)
+
+
+def _romaji_kana(token: str) -> str:
+    """Ein Wort in Romaji als Hiragana, sonst ""."""
+    core = token.lower().translate(_MACRONS).strip(_PUNCTUATION)
+    if not core or not _ROMAJI.match(core):
+        return ""
+    import jaconv
+    kana = jaconv.alphabet2kana(re.sub(r"nn(?=[aiueoy])", "n'n", core)).replace("'", "")
+    return kana if kana and all("\u3041" <= c <= "\u309f" or c == "ー" for c in kana) else ""
 
 
 def accented_morae(text: str) -> list:

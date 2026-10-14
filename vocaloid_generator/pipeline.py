@@ -91,7 +91,7 @@ def compose(settings: SongSettings, seed: Optional[int] = None):
         mode=settings.scale,
         section_config=settings.section_config(),
         output_dir=settings.output_dir(),
-        lyrics=parse_lyrics(settings.lyrics),
+        lyrics=parse_lyrics(settings.lyrics, settings.romaji),
         swing=settings.swing,
         jitter_scale=settings.jitter / DEFAULT_JITTER,
         instrument_styles=settings.instrument_styles(),
@@ -190,6 +190,9 @@ def _produce(settings: SongSettings, tracks: dict, out: str, report: ProgressFn,
     if result.vocals_wav and os.path.exists(choir):
         result.choir_wav = choir
         stems.append(choir)
+    double = os.path.join(out, "vocals_double.wav")
+    if result.vocals_wav and settings.vocal_chain and os.path.exists(double):
+        stems.append(double)          # echte Doppelung im Refrain aus der zweitbesten Fassung
     if not stems:
         raise RuntimeError("Keine Audiospuren zum Mischen vorhanden.")
 
@@ -217,6 +220,8 @@ def _produce(settings: SongSettings, tracks: dict, out: str, report: ProgressFn,
         target_lufs=settings.master_lufs,
         texture=profile.texture if settings.lofi_texture else "",
         movement=_movement(tracks.get("plan")) if settings.mix_movement else None,
+        vocal_chain=settings.vocal_chain,
+        vocal_space=_sections_in_seconds(tracks["plan"]) if tracks.get("plan") is not None else None,
         **_reference_targets(settings, tracks, out, has_vocals=result.vocals_wav is not None),
     )
     mische_spuren(spur_pfade=stems, output_pfad=result.mix_wav, **mix_args)
@@ -430,7 +435,8 @@ def _hook_preview(tracks: dict, kind: str, path: str) -> None:
     sf.write(path, (mix * (0.89 / peak)).T, SAMPLE_RATE)
 
 
-VOCAL_FILES = ("vocals.wav", "vocals_duett_1.wav", "vocals_duett_2.wav", "vocals_harmony.wav", "vocals_chor.wav")
+VOCAL_FILES = ("vocals.wav", "vocals_duett_1.wav", "vocals_duett_2.wav", "vocals_harmony.wav", "vocals_chor.wav",
+               "vocals_double.wav")
 # Welche Engine singt, wenn die gewählte fehlt; ganz zuletzt die lokale Vorschau-Stimme
 ENGINE_ORDER = {"NEUTRINO": ("NEUTRINO", "VOICEVOX"), "VOICEVOX": ("VOICEVOX", "NEUTRINO"), "Vorschau": ()}
 
@@ -439,7 +445,8 @@ ENGINE_ORDER = {"NEUTRINO": ("NEUTRINO", "VOICEVOX"), "VOICEVOX": ("VOICEVOX", "
 VOCAL_KEY = "vocals.key"
 VOCAL_CODE = ("pipeline.py", "vocal_synthesizer.py", "voice_fx.py", "voicevox.py")
 VOCAL_FIELDS = ("bpm", "seed", "singer", "vocal_engine", "harmonies", "duet_singer", "style_shift", "vocal_takes",
-                "vibrato", "glide", "breaths", "final_choir", "voicevox_url", "voicevox_singer", "neutrino_pfad")
+                "vibrato", "glide", "breaths", "final_choir", "voicevox_url", "voicevox_singer", "neutrino_pfad",
+                "vocal_comping", "phrase_expression")
 
 
 def _vocal_key(settings: SongSettings, tracks: dict) -> str:
@@ -543,8 +550,12 @@ def _sing_preview(settings: SongSettings, tracks: dict, vocals_wav: str) -> bool
 
 def _liven(settings: SongSettings, tracks: dict, out: str, vocals_wav: str) -> None:
     """Was jede Engine bekommt: Chor im letzten Refrain (aus der eigenen Stimme, wenn die Engine keinen gesungen
-    hat) und Atmer vor den Phrasen."""
+    hat), Ausdruck pro Phrase und Atmer vor den Phrasen."""
     import voice_fx
+    if settings.phrase_expression and tracks.get("plan") is not None:
+        notes = voice_fx.timeline(tracks["melody_data"], settings.bpm)
+        if voice_fx.express(vocals_wav, notes, _sections_in_seconds(tracks["plan"])):
+            log.info("Ausdruck pro Phrase: zum Höhepunkt lauter, am Ende weicher")
     choir = os.path.join(out, "vocals_chor.wav")
     window = _final_chorus(tracks.get("plan"))
     if settings.final_choir and window and not os.path.exists(choir):
@@ -558,6 +569,12 @@ def _liven(settings: SongSettings, tracks: dict, out: str, vocals_wav: str) -> N
         count = voice_fx.add_breaths(vocals_wav, voice_fx.timeline(tracks["melody_data"], settings.bpm),
                                      seed=settings.seed or 0)
         log.info("%d Atmer vor den Phrasen", count)
+
+
+def _sections_in_seconds(plan) -> list:
+    """[(Start, Ende in Sekunden, Sektionsart)]."""
+    spb = plan.seconds_per_beat
+    return [(sec.start * spb, sec.end * spb, sec.kind) for sec in plan.sections]
 
 
 def _final_chorus(plan) -> Optional[tuple]:
@@ -580,7 +597,8 @@ def _sing_neutrino(settings: SongSettings, tracks: dict, out: str, vocals_wav: s
     if duet:
         _sing_duet(settings, tracks, out, neutrino_dir, duet, vocals_wav)
     else:
-        _neutrino_lead(settings, tracks["melody_data"], xml, vocals_wav, neutrino_dir, settings.singer)
+        _neutrino_lead(settings, tracks["melody_data"], xml, vocals_wav, neutrino_dir, settings.singer,
+                       _chorus_windows(tracks.get("plan")))
     harmony_wav = os.path.join(out, "vocals_harmony.wav")
     if (settings.harmonies or duet) and tracks.get("harmony_data"):
         # im Duett singt die zweite Stimme die zweite Stimme im Refrain
@@ -591,8 +609,11 @@ def _sing_neutrino(settings: SongSettings, tracks: dict, out: str, vocals_wav: s
         _neutrino_choir(settings, tracks, out, neutrino_dir, duet)
 
 
-def _neutrino_lead(settings: SongSettings, data: list, xml: str, wav: str, neutrino_dir: str, singer: str) -> None:
-    """Eine Hauptstimme mit NEUTRINO: bei mehreren Fassungen die sauberste, danach Vibrato und Übergänge."""
+def _neutrino_lead(settings: SongSettings, data: list, xml: str, wav: str, neutrino_dir: str, singer: str,
+                   double_windows: list = ()) -> None:
+    """Eine Hauptstimme mit NEUTRINO, danach Vibrato und Übergänge. Bei mehreren Fassungen kommt jede Phrase aus der
+    saubersten (Comping, ohne: die sauberste ganze Fassung); in den double_windows (Sekunden) wird aus den
+    zweitbesten Phrasen eine echte Doppelung (vocals_double.wav)."""
     import voice_fx
     from vocal_synthesizer import neutrino_synthese, stimmlage
     transpose = stimmlage(singer)[2]
@@ -615,11 +636,21 @@ def _neutrino_lead(settings: SongSettings, data: list, xml: str, wav: str, neutr
             score = voice_fx.pitch_error(take, notes)
             log.info("Fassung %d (StyleShift %+d): %.0f Cent neben den Noten", k + 1, shift, score)
             takes.append((score, k, take, shift))
-        _, k, best, shift = min(takes)
-        os.replace(best, wav)
+        double = os.path.join(os.path.dirname(wav), "vocals_double.wav")
+        if settings.vocal_comping and len(takes) > 1:
+            paths = [take for _, _, take, _ in takes]
+            choice = voice_fx.comp(paths, notes, wav, double, double_windows)
+            counts = {takes[k][1] + 1: choice.count(k) for k in sorted(set(choice))}
+            log.info("%s: Phrasen aus den saubersten Fassungen (%s)", singer,
+                     ", ".join(f"Fassung {n}: {c}×" for n, c in counts.items()))
+        else:
+            _, k, best, shift = min(takes)
+            os.replace(best, wav)
+            log.info("%s: Fassung %d klingt am saubersten (StyleShift %+d)", singer, k + 1, shift)
         for _, _, take, _ in takes:
             _remove(take)
-        log.info("%s: Fassung %d klingt am saubersten (StyleShift %+d)", singer, k + 1, shift)
+        if os.path.exists(double):
+            voice_fx.reshape(double, notes, settings.vibrato, settings.glide)
     voice_fx.reshape(wav, notes, settings.vibrato, settings.glide)
 
 
@@ -762,7 +793,8 @@ def _write_karaoke(settings: SongSettings, tracks: dict, out: str) -> None:
     from lyrics import section_lines
     from settings import DEFAULT_LYRICS
     lengths = {kind: [len(line) for line in text_lines]
-               for kind, text_lines in {**section_lines(DEFAULT_LYRICS), **section_lines(settings.lyrics)}.items()}
+               for kind, text_lines in {**section_lines(DEFAULT_LYRICS),
+                                        **section_lines(settings.lyrics, settings.romaji)}.items()}
     found = karaoke.lines(tracks["vocal_melody"], tracks["silben"], settings.bpm, tracks.get("plan"), lengths)
     try:
         karaoke.save(os.path.join(out, karaoke.FILE), found)

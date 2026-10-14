@@ -162,6 +162,10 @@ class SongSettings(BaseModel):
     breaths: bool = True               # hörbares Einatmen vor den Phrasen
     echo_throws: bool = True           # Echo auf dem letzten Wort einer Phrase
     final_choir: bool = True           # im letzten Refrain singt ein Chor mit
+    vocal_comping: bool = True         # bei mehreren Fassungen jede Phrase aus der saubersten (voice_fx.comp)
+    phrase_expression: bool = True     # Ausdruck pro Phrase: zum Höhepunkt lauter und heller, am Ende weicher
+    vocal_chain: bool = True           # Studio-Kette: Sättigung, Hall und Delay je Sektion, echte Doppelung
+    romaji: bool = True                # Liedtext in lateinischen Buchstaben (Romaji) japanisch singen
     voicevox_url: str = ""             # Adresse von VOICEVOX (leer = http://127.0.0.1:50021, App oder Engine)
     voicevox_singer: int = Field(0, ge=0)          # VOICEVOX-Singstimme (Stil-ID, 0 = die erste)
     # Vorbild-Songs (reference.py) und was sie bestimmen dürfen; jedes lässt sich abschalten

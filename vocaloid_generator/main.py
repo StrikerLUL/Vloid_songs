@@ -61,6 +61,12 @@ def parse_args(argv=None):
     p.add_argument("--ohne-atmer", action="store_true", help="kein Einatmen vor den Phrasen")
     p.add_argument("--ohne-echo", action="store_true", help="kein Echo auf dem letzten Wort")
     p.add_argument("--ohne-chor", action="store_true", help="kein Chor im letzten Refrain")
+    p.add_argument("--ohne-comping", action="store_true",
+                   help="bei mehreren Fassungen die sauberste ganze statt jeder Phrase aus der saubersten")
+    p.add_argument("--ohne-ausdruck", action="store_true", help="kein Ausdruck pro Phrase (Lautstärke, Helligkeit)")
+    p.add_argument("--ohne-gesangskette", action="store_true",
+                   help="ohne Sättigung, Hall und Delay je Sektion und echte Doppelung für den Gesang")
+    p.add_argument("--ohne-romaji", action="store_true", help="Romaji im Liedtext nicht japanisch singen")
     p.add_argument("--schlagzeug", choices=["soundfont", "808", "909"],
                    help="Klang des Schlagzeugs: SoundFont oder Drum-Machine (sonst wie der Stil)")
     p.add_argument("--ohne-verstaerker", action="store_true",
@@ -160,6 +166,10 @@ def main(argv=None) -> int:
                  "vibrato": args.vibrato, "glide": args.uebergaenge,
                  "breaths": False if args.ohne_atmer else None, "echo_throws": False if args.ohne_echo else None,
                  "final_choir": False if args.ohne_chor else None,
+                 "vocal_comping": False if args.ohne_comping else None,
+                 "phrase_expression": False if args.ohne_ausdruck else None,
+                 "vocal_chain": False if args.ohne_gesangskette else None,
+                 "romaji": False if args.ohne_romaji else None,
                  "guitar_amp": False if args.ohne_verstaerker else None, "cabinet_ir": args.box,
                  "samples": False if args.ohne_samples else None,
                  "auto_rating": False if args.ohne_bewertung else None,

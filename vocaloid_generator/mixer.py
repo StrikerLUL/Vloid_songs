@@ -19,15 +19,24 @@ MIX_REFERENCE_LUFS = -18.0   # Pegel des Mixes vor dem Master-Kompressor
 # Ziel-Lautheit der einzelnen Spuren (LUFS), falls der Stil nichts anderes sagt
 DEFAULT_LEVELS = {"drums": -17.0, "bass": -19.5, "piano": -22.0, "guitar": -23.0, "strings": -24.5,
                   "synth": -24.0, "brass": -24.0, "bells": -28.0, "choir": -27.0, "counter": -24.5,
-                  "perc": -28.5, "melody": -21.0, "fx": -27.0, "vocals": -17.0, "harmony": -24.0, "gang": -23.0}
+                  "perc": -28.5, "melody": -21.0, "fx": -27.0, "vocals": -17.0, "harmony": -24.0, "gang": -23.0,
+                  "double": -25.0}
 DEFAULT_REVERB = {"drums": 0.06, "bass": 0.0, "piano": 0.16, "guitar": 0.12, "strings": 0.28,
                   "synth": 0.2, "brass": 0.15, "bells": 0.35, "choir": 0.4, "counter": 0.24,
                   "perc": 0.08, "melody": 0.2, "fx": 0.3, "vocals": 0.18, "harmony": 0.26, "gang": 0.32,
-                  "band": 0.03}
+                  "double": 0.18, "band": 0.03}
 # Gesangsdoppelung im Refrain: zwei leicht verstimmte, verzögerte Kopien links und rechts
 DOUBLE_CENTS, DOUBLE_DELAYS, DOUBLE_DB = 12, (0.017, 0.026), -9.0
-# Gesangsspuren: Hauptstimme, zweite Stimme und der Chor im letzten Refrain („gang“); sie hören auf den Kanal Gesang
-VOCAL_KEYS = ("vocals", "harmony", "gang")
+# Echte Doppelung (zweitbeste Fassung im Refrain, vocals_double.wav): so viel leiser als die Hauptstimme, rechts später
+REAL_DOUBLE_DB, REAL_DOUBLE_DELAY = -8.0, 0.012
+# Gesangsspuren: Hauptstimme, zweite Stimme, der Chor im letzten Refrain („gang“) und die Doppelung; sie hören auf
+# den Kanal Gesang
+VOCAL_KEYS = ("vocals", "harmony", "gang", "double")
+# Studio-Gesangskette: Sättigung (Drive in dB, Anteil) und je Sektion eigener Hall und Delay (Anteil des Sends)
+SATURATION_DB, SATURATION_MIX = 6.0, 0.3
+VOCAL_SPACE = {"Intro": (0.22, 0.15), "Verse": (0.10, 0.08), "PreChorus": (0.14, 0.12), "Chorus": (0.20, 0.16),
+               "Bridge": (0.30, 0.22), "Build-up": (0.16, 0.14), "Drop": (0.18, 0.14), "Outro": (0.24, 0.18)}
+VOCAL_SPACE_DEFAULT = (0.15, 0.12)
 # Echo auf dem letzten Wort: Pegel des Sends, Rückkopplung und Länge in Schlägen (punktierte Achtel)
 THROW_DB, THROW_FEEDBACK, THROW_BEATS = -2.0, 0.45, 0.75
 # Lo-Fi: die Band leiert wie auf einer alten Bandmaschine (Tiefe in Sekunden, Tempo in Hz), klingt dumpfer,
@@ -186,6 +195,8 @@ def _track_key(path: str) -> str:
     name = os.path.splitext(os.path.basename(path))[0].lower()
     if "vocals_chor" in name:
         return "gang"
+    if "vocals_double" in name:
+        return "double"
     if "harmon" in name:
         return "harmony"
     if "vocal" in name or "stimme" in name:
@@ -291,6 +302,24 @@ def _double(audio: np.ndarray, windows: list) -> np.ndarray:
     return out
 
 
+def _saturate(audio: np.ndarray, drive_db: float = SATURATION_DB, share: float = SATURATION_MIX) -> np.ndarray:
+    """Sanfte Bandsättigung parallel dazu: dichter und präsenter, ohne hörbar zu zerren."""
+    drive = 10 ** (drive_db / 20)
+    return (audio * (1 - share) + np.tanh(audio * drive) / drive * share).astype(np.float32)
+
+
+def _vocal_space(sections: list, length: int) -> tuple:
+    """(Hall, Delay) des Gesangs über die Zeit: Strophen trockener, Refrain und Bridge weiter; weich übergeblendet."""
+    plate = np.full(length, VOCAL_SPACE_DEFAULT[0], dtype=np.float32)
+    delay = np.full(length, VOCAL_SPACE_DEFAULT[1], dtype=np.float32)
+    for start, end, kind in sections:
+        a, b = max(0, int(start * SAMPLE_RATE)), min(length, int(end * SAMPLE_RATE))
+        plate[a:b], delay[a:b] = VOCAL_SPACE.get(kind, VOCAL_SPACE_DEFAULT)
+    from voice_fx import smooth
+    n = int(0.3 * SAMPLE_RATE)
+    return smooth(plate, n), smooth(delay, n)
+
+
 def _widen(audio: np.ndarray, delay: float = 0.014) -> np.ndarray:
     """Mono-Spur breit machen: rechts ein paar Millisekunden später."""
     d = int(delay * SAMPLE_RATE)
@@ -390,6 +419,8 @@ def mische_spuren(
     texture: str = "",
     movement: list = None,
     band: str = None,
+    vocal_chain: bool = False,
+    vocal_space: list = None,
 ) -> None:
     """
     Mischt die Spuren zu einem Stereo-Master:
@@ -407,10 +438,13 @@ def mische_spuren(
     Sektion, breitere Refrains.
     band: eine fertige Fassung der Band (WAV, z. B. vom Klang-Veredler); sie ersetzt alle Spuren außer Gesang und
     Effekten, so laut wie diese zusammen.
+    vocal_chain: Studio-Kette für den Gesang: leichte Sättigung, eine echte Doppelung (vocals_double.wav) statt der
+    verstimmten Kopie und, mit vocal_space [(Start, Ende in Sekunden, Sektionsart)], eigener Hall und Delay je Sektion.
     """
     from settings import DEFAULT_VOLUMES
 
     levels = {**DEFAULT_LEVELS, **(levels or {})}
+    levels["double"] = levels["vocals"] + REAL_DOUBLE_DB
     reverb = {**DEFAULT_REVERB, **(reverb or {})}
     volumes, panning, mutes, solos = volumes or {}, panning or {}, mutes or {}, solos or {}
     paths = [p for p in spur_pfade if os.path.exists(p)]
@@ -419,6 +453,7 @@ def mische_spuren(
         return
     length = max(sf.info(p).frames for p in paths)
     any_solo = any(solos.values())
+    real_double = vocal_chain and any(_track_key(p) == "double" for p in paths)
 
     tracks = {}
     for path in paths:
@@ -435,11 +470,15 @@ def mische_spuren(
         audio *= 10 ** ((levels.get(key, -22.0) - loud) / 20) * fader
         if key in VOCAL_KEYS:
             audio = _deess(audio)
-        audio = _channel_chain(key)(audio, SAMPLE_RATE)
-        if key == "vocals" and double_windows:
+        if key in ("vocals", "double") and vocal_chain:
+            audio = _saturate(audio)
+        audio = _channel_chain("vocals" if key == "double" else key)(audio, SAMPLE_RATE)
+        if key == "vocals" and double_windows and not real_double:
             audio = _double(audio, double_windows)
         elif key == "harmony":
             audio = _widen(audio)
+        elif key == "double":
+            audio = _widen(audio, REAL_DOUBLE_DELAY)
         audio = _pan(audio, panning.get(channel, 0.0))
         tracks[path] = (key, audio)
 
@@ -467,8 +506,14 @@ def mische_spuren(
     mix = np.zeros((2, length), dtype=np.float32)
     send = np.zeros_like(mix)
     vocal_send = np.zeros_like(mix)
+    plate_send = np.zeros_like(mix)
+    space = _vocal_space(vocal_space, length) if vocal_chain and vocal_space else None
     for key, audio in tracks.values():
         mix += audio
+        if space is not None and key in ("vocals", "double"):
+            plate_send += audio * space[0]
+            vocal_send += audio * space[1]
+            continue
         send += audio * reverb.get(key, 0.1)
         if key in VOCAL_KEYS:
             vocal_send += audio * 0.18
@@ -490,6 +535,11 @@ def mische_spuren(
     hall = Pedalboard([HighpassFilter(250), Reverb(room_size=0.78, damping=0.45, wet_level=1.0, dry_level=0.0, width=1.0),
                        LowpassFilter(9000)])
     mix += hall(send, SAMPLE_RATE)
+    if np.any(plate_send):
+        plate = Pedalboard([Delay(delay_seconds=0.025, feedback=0.0, mix=1.0), HighpassFilter(350),
+                            Reverb(room_size=0.5, damping=0.25, wet_level=1.0, dry_level=0.0, width=0.9),
+                            LowpassFilter(11000)])
+        mix += plate(plate_send, SAMPLE_RATE)
     if np.any(vocal_send):
         echo = Pedalboard([HighpassFilter(300), Delay(delay_seconds=0.75 * 60.0 / bpm, feedback=0.3, mix=1.0),
                            LowpassFilter(6000)])

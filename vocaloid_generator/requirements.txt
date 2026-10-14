@@ -1,4 +1,5 @@
 fugashi
+jaconv
 librosa
 matchering
 mido

@@ -4,7 +4,9 @@ import argparse
 import logging
 import sys
 
+import applog
 import history
+import userdata
 from pipeline import (best, from_references, generate_song, generate_variants, hook_choices, hook_kind,
                       lyric_video)
 from settings import KEYS, REROLLABLE, ReferenceTrack, SongSettings, is_rerollable
@@ -109,6 +111,15 @@ def parse_args(argv=None):
     p.add_argument("--varianten", type=int, default=1, metavar="N",
                    help="N Songs am Stück erzeugen; mit --neu N Fassungen der gewählten Teile")
     p.add_argument("--zip", metavar="DATEI", help="den Song mit allen Spuren als ZIP für eine DAW exportieren")
+    p.add_argument("--ohne-wiederverwenden", action="store_true",
+                   help="alles neu berechnen, auch wenn Gesang und Spuren vom letzten Mal passen würden")
+    p.add_argument("--system-pruefen", action="store_true",
+                   help="jeden Baustein kurz echt ausprobieren (Instrumente, NEUTRINO, MP3, ... und ein kurzer Song)")
+    p.add_argument("--gruendlich", action="store_true", help="mit --system-pruefen: auch ACE-Step ausprobieren")
+    p.add_argument("--fehlerbericht", nargs="?", const="", metavar="DATEI",
+                   help="Protokolle, Einstellungen und Systeminfo als ZIP speichern (ohne Songs) und beenden")
+    p.add_argument("--einrichten", metavar="TEILE",
+                   help="Klänge und Modelle laden: 'alles' (was noch fehlt) oder z. B. 'soundfonts,samples'")
     p.add_argument("-v", "--verbose", action="store_true", help="alle Details ausgeben")
     return p.parse_args(argv)
 
@@ -117,13 +128,23 @@ def main(argv=None) -> int:
     args = parse_args(argv)
     logging.basicConfig(level=logging.INFO if args.verbose else logging.WARNING, format="%(levelname)s %(message)s")
     log.setLevel(logging.INFO)
+    userdata.migrate()
 
     settings = SongSettings.load(args.settings)
-    overrides = {"output_ordner": args.output}
+    _logging(settings.log_file, args.verbose)
+    overrides = {"output_ordner": args.output, "reuse_steps": False if args.ohne_wiederverwenden else None}
     settings = settings.with_updates(**{k: v for k, v in overrides.items() if v is not None})
 
     if args.verlauf:
         return _list_history(settings)
+    if args.fehlerbericht is not None:
+        import fehlerbericht
+        log.info("Fehlerbericht: %s", fehlerbericht.save(args.fehlerbericht or None, settings))
+        return 0
+    if args.einrichten:
+        return _setup(args.einrichten)
+    if args.system_pruefen:
+        return _check(settings, args.gruendlich)
     if args.aus_verlauf or (args.neu and args.seed is None):
         settings = _from_history(settings, args.aus_verlauf or 1)
         if settings is None:
@@ -202,6 +223,46 @@ def main(argv=None) -> int:
         from exporter import exportiere_projekt
         log.info("ZIP: %s", exportiere_projekt(chosen, args.zip))
     return 0
+
+
+def _quiet(record: logging.LogRecord) -> bool:
+    """Im Fenster nur die eigenen Meldungen und Warnungen; die Protokolldatei bekommt alles."""
+    return record.levelno >= logging.WARNING or record.name == log.name
+
+
+def _logging(to_file: bool, verbose: bool) -> None:
+    if not verbose:
+        for handler in logging.getLogger().handlers:
+            if type(handler) is logging.StreamHandler:
+                handler.addFilter(_quiet)
+    applog.setup(to_file)
+
+
+def _check(settings: SongSettings, thorough: bool) -> int:
+    import systemcheck
+    results = systemcheck.run_all(settings, lambda f, m: log.info("[%3d%%] %s", round(f * 100), m), thorough)
+    for r in results:
+        log.info("%s %s: %s", r.symbol, r.name, r.message)
+    log.info("%s", systemcheck.summary(results))
+    return 1 if any(r.ok is False for r in results) else 0
+
+
+def _setup(which: str) -> int:
+    import einrichten
+    if which.strip().lower() == "alles":
+        keys = [c.key for c in einrichten.missing()]
+    else:
+        keys = [k.strip() for k in which.split(",") if k.strip()]
+        unknown = [k for k in keys if einrichten.find(k) is None]
+        if unknown:
+            log.error("Unbekannt: %s (möglich: %s)", ", ".join(unknown),
+                      ", ".join(c.key for c in einrichten.components()))
+            return 1
+    if not keys:
+        log.info("Alles ist schon eingerichtet.")
+        return 0
+    results = einrichten.install(keys, log.info)
+    return 0 if all(results.values()) else 1
 
 
 def _hummed(settings: SongSettings, recording: str):

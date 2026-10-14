@@ -1,0 +1,55 @@
+name: Installer
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  setup-exe:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Version lesen
+        id: version
+        shell: pwsh
+        run: |
+          $v = (Select-String -Path vocaloid_generator/version.py -Pattern 'VERSION = "(.+)"').Matches[0].Groups[1].Value
+          "version=$v" >> $env:GITHUB_OUTPUT
+      - name: uv in den Installer legen
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force installer/uv | Out-Null
+          $uv = (Get-Command uv).Source
+          foreach ($name in "uv.exe", "uvx.exe", "uvw.exe") {
+            $file = Join-Path (Split-Path $uv) $name
+            if (Test-Path $file) { Copy-Item $file installer/uv/ }
+          }
+          Get-ChildItem installer/uv
+      - name: Setup.exe bauen
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+          }
+          & $iscc /Qp "/DAppVersion=${{ steps.version.outputs.version }}" installer/VloidSongs.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Setup.exe testen (still installieren, Dateien prüfen, deinstallieren)
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem installer/Output/*.exe | Select-Object -First 1
+          $target = Join-Path $env:RUNNER_TEMP "VloidSongs"
+          Start-Process $setup.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=$target", "/TASKS=" -Wait
+          foreach ($file in "vocaloid_generator\app.py", "uv\uv.exe", "Vloid Songs starten.bat", ".venv\Scripts\python.exe") {
+            if (-not (Test-Path (Join-Path $target $file))) { Write-Error "$file fehlt nach dem Installieren"; exit 1 }
+          }
+          & (Join-Path $target ".venv\Scripts\python.exe") -c "import nicegui, pedalboard, pretty_midi; print('Bibliotheken da')"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Start-Process (Join-Path $target "unins000.exe") -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES" -Wait
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VloidSongs-Setup-${{ steps.version.outputs.version }}
+          path: installer/Output/*.exe

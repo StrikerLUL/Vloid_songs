@@ -1,12 +1,23 @@
 # conftest.py – gemeinsame Test-Einrichtung
 import os
 import sys
+import tempfile
 
 import pytest
 
 APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if APP_DIR not in sys.path:
     sys.path.insert(0, APP_DIR)
+# Vor jedem Import der App: die Tests schreiben nie in den echten Datenordner (Dokumente\Vloid Songs)
+os.environ["VLOID_DATEN"] = tempfile.mkdtemp(prefix="vloid-test-daten-")
+
+
+@pytest.fixture(autouse=True)
+def isolated_data(tmp_path, monkeypatch):
+    """Jeder Test hat seinen eigenen Datenordner: Vermerke wie „Assistent fertig“ gelten nicht für den nächsten."""
+    import config
+    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path / "daten"))
+    monkeypatch.setattr(config, "LOG_DIR", str(tmp_path / "daten" / "Protokolle"))
 
 
 @pytest.fixture(autouse=True)
@@ -85,3 +96,12 @@ def without_surge(monkeypatch):
     """Ein installiertes Surge XT taucht in den Tests nicht auf."""
     import vst_sounds
     monkeypatch.setattr(vst_sounds, "_surge_candidates", lambda: ())
+
+
+@pytest.fixture(autouse=True)
+def not_cancelled():
+    """Ein Abbruch in einem Test bricht den nächsten nicht ab."""
+    import cancel
+    cancel.reset()
+    yield
+    cancel.reset()

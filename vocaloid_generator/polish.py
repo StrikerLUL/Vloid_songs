@@ -18,6 +18,7 @@ from typing import Optional
 import numpy as np
 import soundfile as sf
 
+import cancel
 import config
 
 log = logging.getLogger(__name__)
@@ -119,9 +120,9 @@ def run(job: dict, folder: str) -> Optional[dict]:
         # Die Ausgabe geht in eine Datei, nicht in Pipes: Pipes liest Windows erst zu Ende, wenn jeder Prozess fertig
         # ist, der sie geerbt hat. -P: der Ordner des Workers (die App) gehört nicht auf den Suchpfad von ACE-Step.
         with open(log_path, "w", encoding="utf-8") as output:
-            done = subprocess.run([python(), "-P", WORKER, path], cwd=source(), stdin=subprocess.DEVNULL,
-                                  stdout=output, stderr=subprocess.STDOUT, timeout=TIMEOUT, env=environment(),
-                                  creationflags=flags)
+            done = cancel.run([python(), "-P", WORKER, path], cwd=source(), stdin=subprocess.DEVNULL,
+                              stdout=output, stderr=subprocess.STDOUT, timeout=TIMEOUT, env=environment(),
+                              creationflags=flags)
     except (OSError, subprocess.TimeoutExpired) as e:
         log.warning("Klang-Veredler fehlgeschlagen: %s", e)
         return None

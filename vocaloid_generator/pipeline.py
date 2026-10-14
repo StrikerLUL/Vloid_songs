@@ -8,6 +8,7 @@ from typing import Callable, Optional
 
 import numpy as np
 
+import cancel
 import config
 from lyrics import parse_lyrics
 from orchestrator import orchestrate_song
@@ -126,11 +127,21 @@ def _own_melody(settings: SongSettings) -> dict:
     return {settings.melody_midi_section: melody}
 
 
+def _checked(progress: Optional[ProgressFn]) -> ProgressFn:
+    """Fortschritt melden und dabei nachsehen, ob abgebrochen wurde (wirft cancel.Cancelled)."""
+    def report(fraction: float, message: str) -> None:
+        cancel.check()
+        if progress:
+            progress(fraction, message)
+    return report
+
+
 def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None, seed: Optional[int] = None,
                   keep_history: bool = True) -> SongResult:
     """Komponieren, Gesang, Rendern, Mischen, Exportieren und im Verlauf ablegen.
-    Wirft RuntimeError, wenn keine Spur entsteht."""
-    report = progress or (lambda fraction, message: None)
+    Wirft RuntimeError, wenn keine Spur entsteht, und cancel.Cancelled, wenn abgebrochen wurde."""
+    import resume
+    report = _checked(progress)
     out = settings.output_dir()
     os.makedirs(out, exist_ok=True)
 
@@ -138,6 +149,19 @@ def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None,
     tracks, seed = compose(settings, seed)
     log.info("Seed: %d (mit diesem Seed entsteht derselbe Song noch einmal)", seed)
     settings = settings.with_updates(seed=seed)
+    if keep_history and settings.reuse_steps:
+        resume.start(settings)     # stürzt die App ab, bietet sie beim nächsten Start an, hier weiterzumachen
+    try:
+        result = _produce(settings, tracks, out, report, keep_history)
+    finally:
+        resume.finish()
+    if progress:
+        progress(1.0, "Fertig")        # ohne Prüfung: ein fertiger Song wird nicht mehr abgebrochen
+    return result
+
+
+def _produce(settings: SongSettings, tracks: dict, out: str, report: ProgressFn, keep_history: bool) -> SongResult:
+    seed = settings.seed
     result = SongResult(seed=seed, output_dir=out, settings=settings)
     result.midi_files = {inst: os.path.join(out, f"{inst}.mid") for inst in INSTRUMENTS if tracks.get(inst)}
 
@@ -214,8 +238,6 @@ def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None,
         import history
         entry = history.record(result.audio, settings, out)
         result.history = entry.audio if entry else None
-
-    report(1.0, "Fertig")
     return result
 
 
@@ -279,6 +301,7 @@ def generate_variants(settings: SongSettings, count: int, parts: tuple = (),
     results, clips = [], []
     with tempfile.TemporaryDirectory() as folder:
         for i in range(count):
+            cancel.check()
             for part in parts:
                 settings = settings.rerolled(part)
 
@@ -412,12 +435,65 @@ VOCAL_FILES = ("vocals.wav", "vocals_duett_1.wav", "vocals_duett_2.wav", "vocals
 ENGINE_ORDER = {"NEUTRINO": ("NEUTRINO", "VOICEVOX"), "VOICEVOX": ("VOICEVOX", "NEUTRINO"), "Vorschau": ()}
 
 
+# Was den Gesang bestimmt: ändert sich nichts davon, bleibt der gesungene Gesang (z. B. beim Neu-Würfeln des Basses)
+VOCAL_KEY = "vocals.key"
+VOCAL_CODE = ("pipeline.py", "vocal_synthesizer.py", "voice_fx.py", "voicevox.py")
+VOCAL_FIELDS = ("bpm", "seed", "singer", "vocal_engine", "harmonies", "duet_singer", "style_shift", "vocal_takes",
+                "vibrato", "glide", "breaths", "final_choir", "voicevox_url", "voicevox_singer", "neutrino_pfad")
+
+
+def _vocal_key(settings: SongSettings, tracks: dict) -> str:
+    import hashlib
+    import json
+
+    from vocal_synthesizer import neutrino_info
+    digest = hashlib.sha1()
+    for name in VOCAL_CODE:
+        try:
+            with open(os.path.join(config.BASE_DIR, name), "rb") as f:
+                digest.update(f.read())
+        except OSError:
+            digest.update(name.encode())
+    plan = tracks.get("plan")
+    data = {name: getattr(settings, name) for name in VOCAL_FIELDS}
+    data["notes"] = [tracks.get(k) for k in ("melody_data", "silben", "harmony_data", "harmony_silben")]
+    data["sections"] = [(sec.kind, sec.start, sec.end) for sec in plan.sections] if plan else []
+    data["neutrino"] = neutrino_info(settings.neutrino_dir())
+    digest.update(json.dumps(data, sort_keys=True, default=str).encode())
+    return digest.hexdigest()
+
+
+def _sung_before(out: str, key: str) -> bool:
+    import json
+    try:
+        with open(os.path.join(out, VOCAL_KEY), encoding="utf-8") as f:
+            found = json.load(f)
+    except (OSError, ValueError):
+        return False
+    files = found.get("files") or []
+    return found.get("key") == key and "vocals.wav" in files and all(os.path.exists(os.path.join(out, n)) for n in files)
+
+
+def _remember_vocals(out: str, key: str) -> None:
+    import json
+    files = [name for name in VOCAL_FILES if os.path.exists(os.path.join(out, name))]
+    try:
+        with open(os.path.join(out, VOCAL_KEY), "w", encoding="utf-8") as f:
+            json.dump({"key": key, "files": files}, f)
+    except OSError as e:
+        log.debug("Fingerabdruck des Gesangs nicht gespeichert: %s", e)
+
+
 def _synthesize_vocals(settings: SongSettings, tracks: dict, out: str) -> Optional[str]:
     vocals_wav = os.path.join(out, "vocals.wav")
-    for name in VOCAL_FILES:
-        _remove(os.path.join(out, name))
     melody_data = tracks.get("melody_data", [])
     silben = tracks.get("silben", [])
+    key = _vocal_key(settings, tracks) if settings.reuse_steps and settings.channels["vocals"].enabled else None
+    if key and _sung_before(out, key):
+        log.info("Gesang unverändert, nicht neu gesungen")
+        return vocals_wav
+    for name in VOCAL_FILES + (VOCAL_KEY,):
+        _remove(os.path.join(out, name))
     if not settings.channels["vocals"].enabled:
         log.info("Gesang ist ausgeschaltet.")
         return None
@@ -446,6 +522,8 @@ def _synthesize_vocals(settings: SongSettings, tracks: dict, out: str) -> Option
         if not _sing_preview(settings, tracks, vocals_wav):
             return None
     _liven(settings, tracks, out, vocals_wav)
+    if sung and key:
+        _remember_vocals(out, key)     # die Vorschau-Stimme nicht: fehlte NEUTRINO nur kurz, singt es beim nächsten Mal
     return vocals_wav
 
 
@@ -851,24 +929,26 @@ def _render_instruments(settings: SongSettings, tracks: dict, out: str, report: 
     def finished(inst: str) -> None:
         nonlocal done
         done += 1
+        if os.path.exists(jobs[inst]["wav_pfad"]):
+            _remember_render(jobs[inst]["wav_pfad"], keys[inst])    # gleich: nach Abbruch oder Absturz bleibt sie
         report(round(0.55 + 0.29 * done / max(len(active), 1), 3), f"{inst} gerendert ({done} von {len(active)})")
 
     from mixer import midi_zu_wav
-    with ThreadPoolExecutor(max_workers=RENDER_WORKERS) as pool:
+    pool = ThreadPoolExecutor(max_workers=RENDER_WORKERS)
+    try:
         futures = {pool.submit(midi_zu_wav, **jobs[inst]): inst for inst in together}
         for future in as_completed(futures):
             future.result()
             finished(futures[future])
+    except cancel.Cancelled:
+        pool.shutdown(wait=True, cancel_futures=True)    # was noch nicht angefangen hat, fällt weg
+        raise
+    finally:
+        pool.shutdown(wait=True)
     for inst in alone:
         midi_zu_wav(**jobs[inst])
         finished(inst)
-    wav_files = {}
-    for inst in active:
-        if os.path.exists(jobs[inst]["wav_pfad"]):
-            wav_files[inst] = jobs[inst]["wav_pfad"]
-            if inst not in kept:
-                _remember_render(jobs[inst]["wav_pfad"], keys[inst])
-    return wav_files
+    return {inst: jobs[inst]["wav_pfad"] for inst in active if os.path.exists(jobs[inst]["wav_pfad"])}
 
 
 # Der Code, der Klang macht: ändert er sich (neue Version der App), wird alles neu gerendert

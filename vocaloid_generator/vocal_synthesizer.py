@@ -1,91 +1,16 @@
-# vocal_synthesizer.py – Vocaloid Synthesizer v4.0 (KI-Engine API Wrapper)
-# Unterstützt NEUTRINO, OpenUTAU und DiffSinger via CLI/Project-Files
+# vocal_synthesizer.py – Gesang: NEUTRINO (MusicXML → WAV) und die lokale Vorschau-Stimme
 import logging
 import os
 import subprocess
-import shutil
-import pretty_midi
-import numpy as np
+
 import soundfile as sf
-import json
 
 log = logging.getLogger(__name__)
 
 SAMPLERATE = 44100
 
-# ── API für OpenUTAU ─────────────────────────────────────────────────────────
-def openutau_synthese(xml_pfad, output_wav_pfad, openutau_cli_pfad=r"C:\OpenUtau\OpenUtau.Cli.exe"):
-    """
-    Ruft das OpenUTAU Command Line Interface auf, um Vocals zu rendern.
-    OpenUTAU unterstützt DiffSinger, VCCV, etc.
-    """
-    if not os.path.exists(openutau_cli_pfad):
-        log.warning(f"OpenUTAU CLI nicht gefunden unter {openutau_cli_pfad}.")
-        return False
-        
-    try:
-        # OpenUtau.Cli.exe kann MusicXML (.musicxml) lesen und rendern
-        log.info(f"[OpenUTAU] Rendere {xml_pfad}...")
-        subprocess.run([
-            openutau_cli_pfad,
-            "render",
-            "--input", os.path.abspath(xml_pfad),
-            "--output", os.path.abspath(output_wav_pfad)
-        ], check=True, capture_output=True, timeout=60)
-        
-        if os.path.exists(output_wav_pfad):
-            log.info(f"[OK] OpenUTAU Vocals: {output_wav_pfad}")
-            return True
-        return False
-    except subprocess.TimeoutExpired:
-        log.error("OpenUTAU CLI hat nicht rechtzeitig geantwortet (Timeout). Nutze Fallback.")
-        return False
-    except Exception as e:
-        log.error(f"OpenUTAU Rendering fehlgeschlagen: {e}")
-        return False
 
-# ── API für DiffSinger (OpenVPI) ─────────────────────────────────────────────
-def diffsinger_synthese(melodie_daten, silben, bpm, output_wav_pfad):
-    """
-    Erstellt ein DiffSinger/OpenVPI Projekt und versucht, es zu rendern.
-    Dies ist eine Schnittstelle für DiffSinger Python-Inference.
-    """
-    ds_pfad = output_wav_pfad.replace(".wav", ".ds")
-    
-    # Erstelle rudimentäre .ds Datei für DiffSinger
-    ds_data = {
-        "bpm": bpm,
-        "notes": []
-    }
-    
-    current_time = 0.0
-    silben_idx = 0
-    quarter_sec = 60.0 / bpm
-    
-    for pitch, dauer in melodie_daten:
-        if pitch is None:
-            current_time += dauer * quarter_sec
-            continue
-            
-        lyric = silben[silben_idx] if silben_idx < len(silben) else "a"
-        silben_idx += 1
-        
-        ds_data["notes"].append({
-            "lyric": lyric,
-            "midi": pitch,
-            "time": current_time,
-            "duration": dauer * quarter_sec
-        })
-        current_time += dauer * quarter_sec
-        
-    with open(ds_pfad, "w", encoding="utf-8") as f:
-        json.dump(ds_data, f, indent=4, ensure_ascii=False)
-        
-    log.info(f"[DiffSinger] Projektdatei erstellt: {ds_pfad}")
-    log.info("[DiffSinger] (Auto-Rendering erfordert lokale DiffSinger Python-Umgebung. Bitte .ds Datei manuell rendern oder CLI konfigurieren.)")
-    return False
-
-# ── Fallback (Pedalboard Synth) ─────────────────────────────────────────────
+# ── Vorschau-Stimme (wenn NEUTRINO und VOICEVOX fehlen) ─────────────────────
 def generiere_lokale_vocals(melodie_daten, silben, bpm, output_wav_pfad, **kwargs):
     """Lokale Vorschau-Stimme (TTS + pyworld). kwargs: breathiness (0.0-0.12), shimmer (Chorus an/aus),
     vibrato (0 = gerade Töne, 1 = normal, 2 = doppelt so tief), glide (0 = springen, 1 = normal, 2 = doppelt so lang)."""
@@ -94,7 +19,7 @@ def generiere_lokale_vocals(melodie_daten, silben, bpm, output_wav_pfad, **kwarg
     import pyworld as pw
     from scipy.interpolate import interp1d
     from scipy.signal import resample, butter, filtfilt
-    from pedalboard import Pedalboard, Chorus, Reverb, Compressor, Delay, LadderFilter
+    from pedalboard import Pedalboard, Chorus, Reverb, Compressor, Delay
     import os, soundfile as sf, numpy as np
     
     SAMPLERATE = 44100
@@ -370,9 +295,10 @@ def neutrino_info(neutrino_pfad: str) -> str:
 
 
 def _run(cmd: list, cwd: str, timeout: int) -> subprocess.CompletedProcess:
+    import cancel
     log.debug("NEUTRINO: %s", " ".join(cmd))
-    return subprocess.run(cmd, cwd=cwd, capture_output=True, timeout=timeout,
-                          encoding="utf-8", errors="replace")
+    return cancel.run(cmd, cwd=cwd, capture_output=True, timeout=timeout, encoding="utf-8", errors="replace",
+                      creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
 
 
 def neutrino_synthese(xml_pfad, output_wav_pfad, neutrino_pfad, model_pfad, threads: int = None,

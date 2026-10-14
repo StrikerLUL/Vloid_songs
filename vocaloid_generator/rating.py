@@ -16,6 +16,7 @@ from typing import Optional
 import numpy as np
 import soundfile as sf
 
+import cancel
 import config
 
 log = logging.getLogger(__name__)
@@ -98,8 +99,8 @@ def rate(paths: list) -> list:
         return [None] * len(paths)
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)       # unter Windows ohne schwarzes Fenster
     try:
-        done = subprocess.run([python(), WORKER, *paths], capture_output=True, timeout=TIMEOUT, env=environment(),
-                              encoding="utf-8", errors="replace", creationflags=flags)
+        done = cancel.run([python(), WORKER, *paths], capture_output=True, timeout=TIMEOUT, env=environment(),
+                          encoding="utf-8", errors="replace", creationflags=flags)
     except (OSError, subprocess.TimeoutExpired) as e:
         log.warning("Bewertung fehlgeschlagen: %s", e)
         return [None] * len(paths)

@@ -186,11 +186,12 @@ def video(audio: str, found: list, out: str, title: str = "", ffmpeg: Optional[s
                "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
                "-c:a", "aac", "-b:a", "192k", "-shortest", os.path.abspath(out)]
     log.info("Lyric-Video: %s", out)
+    import cancel
     try:
-        subprocess.run(command, cwd=folder, check=True, capture_output=True, text=True, errors="replace",
-                       timeout=1800)
-    except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"ffmpeg konnte das Video nicht bauen: {(e.stderr or '').strip()[-400:]}") from e
+        done = cancel.run(command, cwd=folder, capture_output=True, text=True, errors="replace", timeout=1800,
+                          creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     except (OSError, subprocess.TimeoutExpired) as e:
         raise RuntimeError(f"ffmpeg konnte das Video nicht bauen: {e}") from e
+    if done.returncode != 0:
+        raise RuntimeError(f"ffmpeg konnte das Video nicht bauen: {(done.stderr or '').strip()[-400:]}")
     return out

@@ -78,7 +78,58 @@ REPO_ROOT       = os.path.dirname(BASE_DIR)
 SOUNDFONT_PFAD  = os.path.join(BASE_DIR, "soundfont.sf2")
 VST3_SYNTH_PFAD = r"C:\Program Files\Common Files\VST3\Surge XT.vst3"
 VST3_DRUMS_PFAD = r"C:\Program Files\Common Files\VST3\Sitala.vst3"
-OUTPUT_ORDNER   = os.path.join(BASE_DIR, "output")
+
+# ── Deine Daten ───────────────────────────────────────────────────────────────
+# Songs, Einstellungen, Vorlagen, Vorbilder, Motive und Protokolle liegen in einem eigenen Ordner, den Updates nie
+# anfassen: Standard Dokumente\Vloid Songs. Steht in datenordner.txt (im Programmordner) "programmordner", bleiben sie
+# wie früher in vocaloid_generator; ein anderer Ordner dort geht auch. Die Umgebungsvariable VLOID_DATEN geht vor.
+DATA_ENV        = "VLOID_DATEN"
+DATA_CHOICE     = os.path.join(REPO_ROOT, "datenordner.txt")
+PROGRAM_FOLDER  = "programmordner"
+DATA_NAME       = "Vloid Songs"
+
+
+def documents_dir() -> str:
+    """Der Ordner Dokumente, auch wenn Windows ihn verschoben hat (z. B. nach OneDrive)."""
+    if os.name == "nt":
+        try:
+            import ctypes
+            from ctypes import wintypes
+            buf = ctypes.create_unicode_buffer(wintypes.MAX_PATH)
+            if ctypes.windll.shell32.SHGetFolderPathW(None, 5, None, 0, buf) == 0 and buf.value:   # 5 = Dokumente
+                return buf.value
+        except Exception:  # noqa: BLE001 – dann der übliche Ort
+            pass
+    home = os.path.expanduser("~")
+    documents = os.path.join(home, "Documents")
+    return documents if os.path.isdir(documents) else home
+
+
+def default_data_dir() -> str:
+    return os.path.join(documents_dir(), DATA_NAME)
+
+
+def data_choice() -> str:
+    """Was in datenordner.txt steht: "programmordner", ein Ordner oder "" (Standard)."""
+    try:
+        with open(DATA_CHOICE, encoding="utf-8") as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
+def data_dir() -> str:
+    if os.environ.get(DATA_ENV):
+        return os.path.abspath(os.environ[DATA_ENV])
+    choice = data_choice()
+    if choice.lower() == PROGRAM_FOLDER:
+        return BASE_DIR
+    return os.path.abspath(choice) if choice else default_data_dir()
+
+
+DATA_DIR        = data_dir()
+OUTPUT_ORDNER   = os.path.join(DATA_DIR, "Songs")
+LOG_DIR         = os.path.join(DATA_DIR, "Protokolle")
 
 # ── VOCAL ENGINE ───────────────────────────────────────────────────────────────
 # Standard: der Ordner, den setup_neutrino.py im Projektordner anlegt
@@ -86,5 +137,3 @@ NEUTRINO_PFAD       = os.path.join(REPO_ROOT, "NEUTRINO-windows-v3.1", "NEUTRINO
 NEUTRINO_MODEL      = "MERROW"
 NEUTRINO_MODEL_PFAD = os.path.join(NEUTRINO_PFAD, "model", NEUTRINO_MODEL)
 
-# Verfügbare Engines: "NEUTRINO", "LOCAL", "OPENUTAU", "DIFFSINGER"
-VOCAL_ENGINE = "NEUTRINO"

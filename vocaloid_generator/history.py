@@ -20,7 +20,7 @@ FOLDER = "verlauf"
 KEEP = 30                      # ältere Songs fallen heraus, Favoriten bleiben immer
 # Pfade gehören zum Rechner, nicht zum Song: beim Wiederherstellen bleiben die aktuellen
 MACHINE_FIELDS = ("neutrino_pfad", "soundfont_pfad", "output_ordner", "vst_path", "reference_folder", "voicevox_url",
-                  "cabinet_ir", "motif_folder")
+                  "cabinet_ir", "motif_folder", "reuse_steps", "log_file", "update_check", "setup_wizard")
 _STAMP = "%Y%m%d-%H%M%S"
 
 

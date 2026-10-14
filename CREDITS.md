@@ -1,0 +1,59 @@
+# Credits und Lizenzen
+
+Vloid Songs baut auf der Arbeit vieler anderer auf. Hier steht, was die App nutzt, von wem es ist und unter welcher
+Lizenz. Was mit „lädt die App“ markiert ist, kommt erst über den Einrichten-Assistenten auf den Rechner.
+
+## Wenn du Songs veröffentlichst
+
+- **NEUTRINO**: Die Stimmen haben eigene Nutzungsbedingungen (meist: Name der Stimme und „NEUTRINO“ nennen).
+  Sie stehen in der Readme jeder Stimme im Ordner `model`. https://studio-neutrino.com
+- **VOICEVOX**: Jede Figur verlangt einen Hinweis wie `VOICEVOX:ずんだもん` in der Beschreibung.
+  https://voicevox.hiroshiba.jp/term/
+- **Klänge mit CC-BY oder CC-BY-SA** (AVL-Schlagzeuge, DRS-Kit, Groove MIDI Dataset): Für Songs, die du damit
+  machst, verlangen diese Lizenzen nichts. Sie gelten für die Klang- und Notendateien selbst, falls du die
+  weitergibst.
+
+## Gesang
+
+| Was | Von | Lizenz |
+| --- | --- | --- |
+| NEUTRINO (nicht dabei, lädst du selbst) | SHACHI / studio-neutrino.com | eigene Bedingungen |
+| VOICEVOX (nicht dabei, läuft getrennt) | Hiroshiba Kazuyuki | eigene Bedingungen pro Figur |
+| pyworld (WORLD-Vocoder) | Masanori Morise, Jeremy Hsu | MIT |
+| pyttsx3 (Vorschau-Stimme) | Natesh M Bhat | MPL-2.0 |
+| fugashi, unidic-lite (japanischer Text) | Paul O'Leary McCann, NINJAL | MIT, BSD |
+
+## Instrumente und Klänge
+
+| Was | Von | Lizenz |
+| --- | --- | --- |
+| GeneralUser GS (`soundfont.sf2`) | S. Christian Collins | GeneralUser GS License v2.0 (frei nutzbar) |
+| FluidSynth (lädt die App) | FluidSynth-Team | LGPL-2.1 |
+| TinySoundFont / tinysoundfont | Bernhard Schelling, Nathan Whitehead | MIT |
+| MS Basic (lädt die App) | MuseScore | MIT |
+| FM-Piano, E-Gitarren FSBS (lädt die App) | FreePats | CC0 |
+| Red Zeppelin, Black Pearl (lädt die App) | Glen MacArthur, AVL Drumkits | CC-BY-SA 3.0 |
+| VSCO 2 Community Edition (lädt die App) | Versilian Studios | CC0 |
+
+## Mix, Analyse und Modelle
+
+| Was | Von | Lizenz |
+| --- | --- | --- |
+| pedalboard | Spotify | GPL-3.0 |
+| matchering | Sergey Grishakov | GPL-3.0 |
+| librosa | librosa-Team | ISC |
+| pyloudnorm | Christian Steinmetz | MIT |
+| music21 | Michael Scott Asato Cuthbert | BSD-3 |
+| pretty_midi, mido | Colin Raffel, Ole Martin Bjørndalen | MIT |
+| Audiobox Aesthetics (lädt die App) | Meta | CC-BY 4.0 |
+| ACE-Step 1.5 (lädt die App, Versuch) | ACE Studio, StepFun | MIT |
+
+## Oberfläche und Werkzeuge
+
+| Was | Von | Lizenz |
+| --- | --- | --- |
+| NiceGUI | Zauberzeug | MIT |
+| pywebview | Roman Sirokov | BSD-3 |
+| wavesurfer.js | katspaugh | BSD-3 |
+| uv | Astral | MIT / Apache-2.0 |
+| Inno Setup (baut die Setup.exe) | Jordan Russell, Martijn Laan | eigene, freie Lizenz |

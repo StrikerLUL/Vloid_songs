@@ -17,7 +17,21 @@ output/
 vocaloid_generator/output/
 vocaloid_generator/*.wav
 
-# Persönliche Einstellungen der App
+# Persönliche Daten, wenn sie im Programmordner bleiben (datenordner.txt) oder noch nicht umgezogen sind
+datenordner.txt
+vocaloid_generator/Einstellungen.json
+vocaloid_generator/Songs/
+vocaloid_generator/Vorlagen/
+vocaloid_generator/Vorbilder/
+vocaloid_generator/Motive/
+vocaloid_generator/Protokolle/
+vocaloid_generator/Fehlerberichte/
+vocaloid_generator/Systemcheck/
+vocaloid_generator/einrichtung.json
+vocaloid_generator/systemcheck.json
+vocaloid_generator/update.json
+vocaloid_generator/laufender_song.json
+vocaloid_generator/zuletzt_gesehen.txt
 vocaloid_generator/user_settings.json
 vocaloid_generator/vorlagen/
 vocaloid_generator/vorbilder/

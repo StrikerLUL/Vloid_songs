@@ -11,18 +11,23 @@ from fastapi import HTTPException
 from fastapi.responses import FileResponse
 from nicegui import app, run, ui
 
+import cancel
+import einrichten
 import history
 import pipeline
 import polish
 import preview
 import rating
-from gui import labels, media, panels
+import resume
+import updates
+from gui import dialogs, labels, media, panels
 from gui.components import Karaoke, PianoRoll, WavePlayer, add_style
 from settings import ChannelSettings, SongSettings, edit_key
 
 log = logging.getLogger(__name__)
 
 FILE_ROUTE = "/datei"
+CANCELLED = "Abgebrochen"
 COUNTS = {1: "1 Fassung", 2: "2 Fassungen", 3: "3 Fassungen", 5: "5 Fassungen"}
 # Ordner, aus denen der Player Dateien holen darf (Ausgabeordner, auch frühere)
 SERVED_ROOTS: set = set()
@@ -39,6 +44,7 @@ class Job:
     running: bool = False
 
     def start(self) -> None:
+        cancel.reset()          # ein alter Abbruch gilt nicht für den neuen Song
         self.fraction, self.message, self.steps, self.running = 0.0, "", [], True
         self.started = self.step_start = time.monotonic()
 
@@ -130,20 +136,31 @@ def build() -> None:
     ui.dark_mode(True)
     ui.colors(primary="#7e57c2", secondary="#ff4f8b", accent="#ff4f8b")
     add_style()
-    ui.page_title("Vocaloid Song Generator")
+    ui.page_title("Vloid Songs")
 
     # ── Kopfzeile: erzeugen ───────────────────────────────────────────────────────
     with ui.header().classes("items-center gap-4 bg-grey-10 q-px-md"):
-        ui.label("🎤 Vocaloid Song Generator").classes("text-h6")
+        ui.image(os.path.join(os.path.dirname(__file__), "vloid.png")).classes("w-8 h-8")
+        ui.label("Vloid Songs").classes("text-h6")
         ui.space()
         count = ui.select(COUNTS, value=1).props("dense outlined dark").classes("w-36").mark("count") \
             .tooltip("Mehrere Fassungen landen im Verlauf; dort hörst du sie an und behältst die beste.")
         generate_button = ui.button("Song erzeugen", icon="auto_awesome", on_click=lambda: generate()) \
             .props("unelevated size=lg color=secondary no-caps").mark("generate")
+        stop_button = ui.button("Abbrechen", icon="stop", on_click=lambda: stop()) \
+            .props("outline no-caps color=white").mark("stop") \
+            .tooltip("Hört sofort auf, auch mitten in NEUTRINO oder ACE-Step")
+        stop_button.set_visibility(False)
+        update_button = ui.button("Update da", icon="system_update", on_click=lambda: open_update()) \
+            .props("flat no-caps color=amber").mark("update-available")
+        update_button.set_visibility(False)
+        dialogs.help_menu(settings, picker, lambda: show_status())
+        dialog_host = ui.element("div")
 
     with ui.row().classes("w-full no-wrap items-start gap-4 q-pa-md"):
         # ── Links: anhören, neu würfeln, Fortschritt ───────────────────────────────
         with ui.column().classes("gap-4").style("flex: 3; min-width: 0"):
+            resume_box = ui.column().classes("w-full")
             with ui.card().classes("w-full bg-grey-9"):
                 with ui.row().classes("w-full items-center no-wrap"):
                     song_label = ui.label("Noch kein Song. Klick oben auf „Song erzeugen“.") \
@@ -268,8 +285,12 @@ def build() -> None:
                                              job.report)
             else:
                 results = [await run.io_bound(pipeline.generate_song, current, job.report)]
+        except cancel.Cancelled:
+            job.report(job.fraction, CANCELLED)
+            ui.notify("Abgebrochen. Fertige Schritte bleiben und werden beim nächsten Mal übernommen.", type="warning")
+            results = None
         except Exception as e:  # noqa: BLE001 – jeder Fehler gehört ins Protokoll und auf den Schirm
-            log.error("Song fehlgeschlagen: %s", e)
+            log.exception("Song fehlgeschlagen: %s", e)
             ui.notify(f"Fehler: {e}", type="negative", multi_line=True)
             results = None
         finally:
@@ -306,6 +327,10 @@ def build() -> None:
             choices = await run.io_bound(pipeline.hook_choices, current, 3, job.report)
         except ValueError as e:
             ui.notify(str(e), type="warning")
+            choices = None
+        except cancel.Cancelled:
+            job.report(job.fraction, CANCELLED)
+            ui.notify("Abgebrochen.", type="warning")
             choices = None
         except Exception as e:  # noqa: BLE001 – jeder Fehler gehört ins Protokoll und auf den Schirm
             log.error("Refrain-Melodien fehlgeschlagen: %s", e)
@@ -403,6 +428,9 @@ def build() -> None:
             path = await run.io_bound(pipeline.lyric_video, result)
         except RuntimeError as e:
             ui.notify(str(e), type="warning", multi_line=True)
+            path = None
+        except cancel.Cancelled:
+            ui.notify("Abgebrochen.", type="warning")
             path = None
         finally:
             job.report(1.0, "Fertig")
@@ -503,6 +531,10 @@ def build() -> None:
 
     # ── Fortschritt, Protokoll, Speichern ──────────────────────────────────────────
     def set_busy(busy: bool) -> None:
+        stop_button.set_visibility(busy)
+        stop_button.set_enabled(True)
+        if not busy:
+            cancel.reset()
         for button in (generate_button, zip_button, video_button, hooks_button, *reroll_buttons.values()):
             button.set_enabled(not busy)
         resing_button.set_enabled(not busy and _edited(settings) > 0)
@@ -514,7 +546,8 @@ def build() -> None:
         if job.running:
             step_label.set_text(f"{job.message} ({job.elapsed:.0f} s)")
         elif job.steps:
-            step_label.set_text(f"Fertig nach {job.elapsed:.0f} s")
+            done = "Abgebrochen" if job.message == CANCELLED else "Fertig"
+            step_label.set_text(f"{done} nach {job.elapsed:.0f} s")
         steps_box.clear()
         with steps_box:
             for message, seconds in job.steps[-8:]:
@@ -601,9 +634,65 @@ def build() -> None:
         history.delete(entry)
         show_history()
 
+    # ── Abbrechen, Weitermachen, Start ────────────────────────────────────────────
+    def stop() -> None:
+        cancel.request()
+        stop_button.set_enabled(False)
+        step_label.set_text("Breche ab...")
+
+    def offer_resume() -> None:
+        found = resume.pending() if settings.reuse_steps and not job.running else None
+        resume_box.clear()
+        if found is None:
+            return
+        saved, started = found
+        when = f"am {started:%d.%m. um %H:%M}" if started else "beim letzten Mal"
+        with resume_box, ui.card().classes("w-full bg-deep-purple-10").mark("resume"):
+            ui.label(f"Der Song {when} ist nicht fertig geworden ({describe(saved)}). Weitermachen? "
+                     "Was schon fertig war, wird übernommen.").classes("text-body2")
+            with ui.row().classes("gap-2"):
+                ui.button("Weitermachen", icon="play_arrow", on_click=lambda: continue_song(saved)) \
+                    .props("unelevated no-caps color=secondary").mark("resume-continue")
+                ui.button("Verwerfen", icon="close", on_click=lambda: drop_resume()) \
+                    .props("flat no-caps").mark("resume-drop")
+
+    async def continue_song(saved: SongSettings) -> None:
+        resume_box.clear()
+        assign(settings, saved.with_updates(**{f: getattr(settings, f) for f in history.MACHINE_FIELDS}))
+        await generate(n=1)
+
+    def drop_resume() -> None:
+        resume.finish()
+        resume_box.clear()
+
+    def open_update() -> None:
+        with dialog_host:
+            dialogs.update_dialog(state.get("update")).open()
+
+    async def look_for_update() -> None:
+        found = await run.io_bound(updates.available)
+        if found:
+            state["update"] = found
+            update_button.set_text(f"Update {found.version}")
+            update_button.set_visibility(True)
+
+    def on_start() -> None:
+        if settings.setup_wizard and not einrichten.wizard_done():
+            with dialog_host:
+                dialogs.setup_wizard(settings, picker, show_status).open()
+        elif settings.update_check:
+            news = updates.unseen_changes()
+            if news:
+                with dialog_host:
+                    dialogs.whats_new(news).open()
+        if settings.update_check:
+            ui.timer(3.0, look_for_update, once=True)
+
     ui.timer(0.3, tick)
     show_status()
     show_edits()
+    offer_resume()
+    on_start()
 
 
 def describe(s: SongSettings) -> str:

@@ -1,8 +1,10 @@
-# test_alltag.py – Für jeden Tag: schneller Entwurf, Song-Bibliothek
+# test_alltag.py – Für jeden Tag: schneller Entwurf, Song-Bibliothek, Album über Nacht
 import os
 
 import pytest
 
+import album
+import cancel
 import history
 import main
 import pipeline
@@ -153,3 +155,113 @@ def test_command_line_searches_and_sorts_the_history(tmp_path, caplog):
     lines = [r.getMessage() for r in caplog.records if "Seed" in r.getMessage()]
     assert len(lines) == 2 and "Seed 1" in lines[0] and "Note 9.0" in lines[0]
     assert lines[0].startswith(f"{number:2d}.")                       # die Nummer für --aus-verlauf
+
+
+# ── Album über Nacht ─────────────────────────────────────────────────────────
+def test_album_plan_takes_the_styles_in_turn_with_their_typical_values(tmp_path):
+    base = SongSettings(style="J-Pop Energy", seed=99, variations={"melody": 2}, lyrics="[Chorus]\nら ら")
+    songs = album.plan(base, 5, ["Rock", "Ballade"], seed=1)
+    assert [s.style for s in songs] == ["Rock", "Ballade", "Rock", "Ballade", "Rock"]
+    assert all(s.seed is None and s.variations == {} for s in songs)
+    assert all(s.lyrics == base.lyrics for s in songs)
+    assert len({(s.key, s.bpm) for s in songs}) > 1                   # eigene Tonart und eigenes Tempo
+    from preset_manager import preset_settings
+    rock = preset_settings("Rock", base)
+    same = album.plan(base.with_updates(album_vary=False), 3, ["Rock"])
+    assert {(s.key, s.bpm) for s in same} == {(rock.key, rock.bpm)}
+    assert abs(songs[0].bpm - rock.bpm) <= rock.bpm * album.TEMPO_SPREAD + 1
+    with pytest.raises(ValueError):
+        album.plan(base, album.MAX_SONGS + 1, ["Rock"])
+
+
+def test_album_lyrics_come_one_file_per_song(tmp_path):
+    folder = tmp_path / "texte"
+    folder.mkdir()
+    (folder / "2 zweiter.txt").write_text("[Chorus]\nふたつ", encoding="utf-8")
+    (folder / "1 erster.txt").write_text("\ufeff[Chorus]\nひとつ", encoding="utf-8")       # mit BOM aus Notepad
+    (folder / "leer.txt").write_text("  ", encoding="utf-8")
+    (folder / "bild.png").write_bytes(b"x")
+    texts = album.lyric_files(str(folder))
+    assert texts == ["[Chorus]\nひとつ", "[Chorus]\nふたつ"]
+    songs = album.plan(SongSettings(), 3, ["Rock"], texts)
+    assert [s.lyrics for s in songs] == [texts[0], texts[1], texts[0]]
+    assert album.lyric_files(str(tmp_path / "fehlt")) == [] and album.lyric_files("") == []
+
+
+@pytest.fixture
+def overnight(monkeypatch, tmp_path):
+    """Erzeugen nachgestellt: jeder Song legt eine MP3 ab und landet im Verlauf; Song 2 scheitert."""
+    made = []
+
+    def fake_song(settings, progress=None, seed=None):
+        nr = len(made) + 1
+        made.append(settings)
+        progress(0.5, "Rendere...")
+        if nr == 2:
+            raise RuntimeError("NEUTRINO ist abgestürzt")
+        out = settings.output_dir()
+        os.makedirs(out, exist_ok=True)
+        mp3 = os.path.join(out, "final_song.mp3")
+        with open(mp3, "wb") as f:
+            f.write(f"ID3 Song {nr}".encode())
+        settings = settings.with_updates(seed=1000 + nr)
+        entry = history.record(mp3, settings, out, keep=settings.history_keep)
+        return SongResult(seed=settings.seed, output_dir=out, mix_wav=mp3, mp3=mp3, settings=settings,
+                          history=entry.audio)
+
+    monkeypatch.setattr(pipeline, "generate_song", fake_song)
+    return made
+
+
+def test_album_overnight_sorts_by_rating_and_survives_a_failed_song(tmp_path, overnight, monkeypatch):
+    import rating
+    notes = iter([6.0, 9.0, 7.5])
+    monkeypatch.setattr(rating, "available", lambda: True)
+    monkeypatch.setattr(rating, "excerpt", lambda audio, target: audio)
+    monkeypatch.setattr(rating, "rate", lambda paths: [rating.Rating(n, 5.0, 5.0, n) for n, _ in zip(notes, paths)])
+    s = SongSettings(output_ordner=str(tmp_path / "out"), history_keep=2)
+    steps = []
+    made = album.make(s, 4, ["Rock", "Ballade"], progress=lambda f, m: steps.append((f, m)), name="Erste Nacht")
+
+    assert len(overnight) == 4 and made.failed == 1 and not made.cancelled
+    assert os.path.dirname(made.folder) == os.path.join(str(tmp_path / "out"), album.FOLDER)
+    assert made.folder.endswith("Erste Nacht")
+    names = sorted(os.listdir(made.folder))
+    assert names[:3] == [os.path.basename(p) for p in made.files] and len(made.files) == 3
+    assert [r.seed for r in made.results] == [1003, 1004, 1001]       # Noten 9.0, 7.5, 6.0
+    assert names[0].startswith("01 Rock") and open(made.files[0], "rb").read() == b"ID3 Song 3"
+    playlist = open(os.path.join(made.folder, album.PLAYLIST), encoding="utf-8").read()
+    assert playlist.startswith("#EXTM3U") and os.path.basename(made.files[1]) in playlist
+    tracklist = open(os.path.join(made.folder, album.TRACKLIST), encoding="utf-8").read()
+    assert "Note 9.0" in tracklist and "1 Songs sind fehlgeschlagen" in tracklist
+    entries = history.entries(str(tmp_path / "out"))
+    assert len(entries) == 3 and all(e.album == "Erste Nacht" for e in entries)   # bleiben trotz history_keep=2
+    assert [f for f, _ in steps] == sorted(f for f, _ in steps) and steps[-1][0] == 1.0
+    assert "Album 1/4 (Rock)" in steps[0][1]
+
+
+def test_album_can_be_cancelled_and_keeps_finished_songs(tmp_path, overnight, monkeypatch):
+    def stop_during_third(fraction, message):
+        if "Album 3/" in message:
+            cancel.request()
+
+    try:
+        made = album.make(SongSettings(output_ordner=str(tmp_path / "out")), 5, ["Rock"], progress=stop_during_third)
+    finally:
+        cancel.reset()
+    assert made.cancelled and len(overnight) == 3                     # Song 4 und 5 fangen nicht mehr an
+    assert len(made.files) == 2 and made.failed == 1 and all(os.path.isfile(f) for f in made.files)
+    assert "abgebrochen" in made.describe()
+    assert SongSettings().album_vary and "album_vary" in history.MACHINE_FIELDS
+
+
+def test_album_from_the_command_line(tmp_path, overnight, monkeypatch):
+    out = str(tmp_path / "out")
+    assert main.main(["--output", out, "--album", "3", "--album-stile", "Rock, Ballade", "--album-gleich",
+                      "--album-name", "Test"]) == 0
+    assert [s.style for s in overnight] == ["Rock", "Ballade", "Rock"]
+    assert not overnight[0].album_vary
+    [folder] = os.listdir(os.path.join(out, album.FOLDER))
+    assert folder.endswith("Test") and len(history.entries(out)) == 2
+    assert main.main(["--output", out, "--album", "2", "--album-stile", "Polka"]) == 1
+    assert main.main(["--output", out, "--album", "99"]) == 1

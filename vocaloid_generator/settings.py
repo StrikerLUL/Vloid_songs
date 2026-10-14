@@ -201,6 +201,7 @@ class SongSettings(BaseModel):
     setup_wizard: bool = True          # Einrichten-Assistent beim Start, solange er nicht abgeschlossen ist
     # Alltag (1.0.0)
     history_keep: int = Field(30, ge=0, le=1000)   # so viele Songs behält der Verlauf (0 = alle); benannte immer
+    album_vary: bool = True            # Album über Nacht: jeder Song in eigener Tonart und leicht anderem Tempo
     breathiness: float = Field(0.028, ge=0.0, le=0.2)
     shimmer: bool = True
     swing: float = Field(0.12, ge=0.0, le=0.5)

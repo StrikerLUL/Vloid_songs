@@ -11,6 +11,7 @@ from fastapi import HTTPException
 from fastapi.responses import FileResponse
 from nicegui import app, run, ui
 
+import album
 import cancel
 import einrichten
 import history
@@ -23,6 +24,7 @@ import updates
 from gui import dialogs, labels, media, panels
 from gui.components import Karaoke, PianoRoll, WavePlayer, add_style
 from settings import ChannelSettings, SongSettings, edit_key
+from styles import STYLES
 
 log = logging.getLogger(__name__)
 
@@ -149,6 +151,9 @@ def build() -> None:
             .props("outline no-caps color=white").mark("draft") \
             .tooltip("Der ganze Song schnell und ohne NEUTRINO: die Lead-Stimme spielt die Gesangsmelodie. "
                      "Gefällt er dir, macht „Richtig machen“ daraus den Song mit Gesang.")
+        album_button = ui.button("Album", icon="nightlight", on_click=lambda: open_album()) \
+            .props("outline no-caps color=white").mark("album") \
+            .tooltip("Album über Nacht: viele Songs am Stück, morgens nach Note sortiert in einem eigenen Ordner")
         generate_button = ui.button("Song erzeugen", icon="auto_awesome", on_click=lambda: generate()) \
             .props("unelevated size=lg color=secondary no-caps").mark("generate")
         stop_button = ui.button("Abbrechen", icon="stop", on_click=lambda: stop()) \
@@ -333,6 +338,67 @@ def build() -> None:
                           type="positive")
             else:
                 ui.notify(f"{len(results)} Fassungen im Verlauf: anhören und die beste behalten", type="positive")
+
+    def open_album() -> None:
+        async def choose_folder() -> None:
+            path = await picker(folder=True)
+            if path:
+                texts.set_value(path)
+
+        async def start() -> None:
+            dialog.close()
+            await make_album(int(count_input.value or 10), list(style_select.value or [settings.style]),
+                             texts.value or "", name.value or "")
+
+        with dialog_host, ui.dialog() as dialog, ui.card().classes("w-[30rem]"):
+            ui.label("Album über Nacht").classes("text-h6")
+            panels.hint("Jeder Song bekommt einen neuen Seed und die typischen Werte seines Stils. Alle landen im "
+                        "Verlauf und nummeriert mit Wiedergabeliste im Ordner Alben; mit Bewertung der beste vorn.")
+            count_input = ui.number("Wie viele Songs", value=10, min=1, max=album.MAX_SONGS, step=1, precision=0) \
+                .classes("w-full").mark("album-count")
+            style_select = ui.select(list(STYLES), value=[settings.style], multiple=True, label="Stile (reihum)") \
+                .props("use-chips").classes("w-full").mark("album-styles")
+            name = ui.input("Name (leer = Nacht und Datum)").classes("w-full").mark("album-name")
+            with ui.row().classes("w-full items-end no-wrap"):
+                texts = ui.input("Ordner mit Liedtexten (eine .txt pro Song, leer = der eingestellte Text)") \
+                    .classes("col").mark("album-texts")
+                ui.button(icon="folder_open", on_click=choose_folder).props("flat round dense")
+            ui.switch("Jeder Song in eigener Tonart und leicht anderem Tempo").bind_value(settings, "album_vary") \
+                .mark("album-vary")
+            with ui.row().classes("w-full justify-end"):
+                ui.button("Abbrechen", on_click=dialog.close).props("flat no-caps")
+                ui.button("Album starten", icon="nightlight", on_click=start) \
+                    .props("unelevated no-caps color=secondary").mark("album-start")
+        dialog.open()
+
+    async def make_album(n: int, styles: list, texts: str, name: str) -> None:
+        if job.running:
+            return
+        save_settings()
+        current = settings.model_copy(deep=True)
+        job.start()
+        set_busy(True)
+        try:
+            made = await run.io_bound(album.make, current, n, styles, texts, job.report, name)
+        except ValueError as e:
+            ui.notify(str(e), type="warning")
+            made = None
+        finally:
+            job.running = False
+            set_busy(False)
+        if made is None:
+            return
+        if not made.results:
+            ui.notify(f"Kein Song fertig geworden: {made.describe()}", type="negative", multi_line=True)
+            return
+        chosen = made.results[0]
+        state["result"] = chosen
+        await show_result(chosen)
+        library_search.set_value(made.name)
+        library_sort.set_value("bewertung")
+        panel_box.set_value("Verlauf")
+        show_history()
+        ui.notify(f"Album „{made.name}“ fertig: {made.describe()}", type="positive", multi_line=True)
 
     async def hooks() -> None:
         if job.running:
@@ -556,8 +622,8 @@ def build() -> None:
         stop_button.set_enabled(True)
         if not busy:
             cancel.reset()
-        for button in (generate_button, draft_button, full_button, zip_button, video_button, hooks_button,
-                       *reroll_buttons.values()):
+        for button in (generate_button, draft_button, full_button, album_button, zip_button, video_button,
+                       hooks_button, *reroll_buttons.values()):
             button.set_enabled(not busy)
         resing_button.set_enabled(not busy and _edited(settings) > 0)
         preview_button.set_enabled(not busy and _edited(settings) > 0)

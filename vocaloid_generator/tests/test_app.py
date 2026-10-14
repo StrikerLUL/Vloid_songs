@@ -235,6 +235,23 @@ async def test_library_names_finds_and_deletes_songs(user, tmp_path):
     assert [e.settings.seed for e in history.entries(out)] == [11]
 
 
+async def test_album_overnight_from_the_app(user, fake_generation, tmp_path):
+    await user.open("/")
+    user.find(marker="album").click()
+    user.find(marker="album-count").elements.pop().set_value(3)
+    user.find(marker="album-styles").elements.pop().set_value(["Rock", "Ballade"])
+    user.find(marker="album-name").type("Probe")
+    user.find(marker="album-start").click()
+    await until(lambda: len(fake_generation) == 3, seconds=10)
+    assert [c.style for c in fake_generation] == ["Rock", "Ballade", "Rock"]
+    await until(lambda: user.find(marker="library-search").elements.pop().value == "Probe")
+    out = str(tmp_path / "out")
+    [folder] = os.listdir(os.path.join(out, "Alben"))
+    assert folder.endswith("Probe") and len(os.listdir(os.path.join(out, "Alben", folder))) == 3 + 2
+    assert all(e.album == "Probe" for e in history.entries(out))
+    await until(lambda: len(user.find(marker="history-play").elements) == 3)
+
+
 async def test_settings_changes_are_saved(user):
     await user.open("/")
     user.find(marker="bpm").elements.pop().set_value(133)

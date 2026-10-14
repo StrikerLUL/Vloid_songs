@@ -2,6 +2,7 @@
 # Nutzt dieselben Einstellungen wie die App; einzelne Werte lassen sich per Option überschreiben.
 import argparse
 import logging
+import os
 import sys
 
 import applog
@@ -10,6 +11,7 @@ import userdata
 from pipeline import (best, draft_settings, from_references, generate_song, generate_variants, hook_choices,
                       hook_kind, lyric_video)
 from settings import KEYS, REROLLABLE, ReferenceTrack, SongSettings, is_rerollable
+from styles import STYLES
 
 log = logging.getLogger("vocaloid")
 
@@ -55,6 +57,14 @@ def parse_args(argv=None):
     p.add_argument("--engine", choices=["NEUTRINO", "VOICEVOX", "Vorschau"], help="wer singt")
     p.add_argument("--voicevox-stimme", type=int, metavar="ID", help="VOICEVOX-Singstimme (Stil-ID)")
     p.add_argument("--fassungen", type=int, choices=[1, 2, 3], help="NEUTRINO singt so oft, die sauberste zählt")
+    p.add_argument("--album", type=int, metavar="N",
+                   help="Album über Nacht: N Songs (bis 30) am Stück, nach Note sortiert in Alben\\<Datum> <Name>")
+    p.add_argument("--album-stile", type=lambda v: [x.strip() for x in v.split(",") if x.strip()], metavar="STILE",
+                   help="Stile für --album, reihum, z. B. 'Rock,Ballade' (ohne: der eingestellte Stil)")
+    p.add_argument("--album-texte", metavar="ORDNER", help="Liedtexte für --album: eine .txt pro Song")
+    p.add_argument("--album-name", metavar="NAME", default="", help="Name des Albums (ohne: Nacht <Datum>)")
+    p.add_argument("--album-gleich", action="store_true",
+                   help="alle Album-Songs in Tonart und Tempo des Stils, statt sie leicht zu ändern")
     p.add_argument("--entwurf", action="store_true",
                    help="schneller Entwurf ohne Gesang-Synthese: die Lead-Stimme spielt die Melodie (Ordner Entwurf)")
     p.add_argument("--vibrato", type=float, metavar="X", help="0 = gerade Töne, 1 = wie gesungen, 2 = doppelt")
@@ -225,6 +235,8 @@ def main(argv=None) -> int:
 
     if args.refrains:
         return _hooks(settings, args.refrains, progress)
+    if args.album:
+        return _album(settings.with_updates(album_vary=not args.album_gleich), args, progress)
     try:
         if args.varianten > 1 or parts:
             results = generate_variants(settings, args.varianten, parts, progress=progress)
@@ -316,6 +328,24 @@ def _hooks(settings: SongSettings, count: int, progress) -> int:
         log.info("Refrain %d: %s  (ganzer Song: --seed %d --refrain %d)", choice.number, choice.preview,
                  choice.settings.seed, choice.settings.variations[key])
     return 0
+
+
+def _album(settings: SongSettings, args, progress) -> int:
+    import album
+    unknown = [s for s in args.album_stile or () if s not in STYLES]
+    if unknown:
+        log.error("Unbekannte Stile: %s. Vorhanden: %s", ", ".join(unknown), ", ".join(STYLES))
+        return 1
+    try:
+        made = album.make(settings, args.album, args.album_stile or [settings.style], args.album_texte or "",
+                          progress, args.album_name)
+    except ValueError as e:
+        log.error("%s", e)
+        return 1
+    for path in made.files:
+        log.info("  %s", os.path.basename(path))
+    log.info("Album: %s", made.describe())
+    return 0 if made.files else 1
 
 
 def _list_history(settings: SongSettings, text: str = "", sort: str = "neu") -> int:

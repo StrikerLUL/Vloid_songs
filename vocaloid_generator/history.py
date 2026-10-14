@@ -23,7 +23,7 @@ KEEP = 30                      # ältere Songs fallen heraus; Favoriten, benannt
 # Pfade gehören zum Rechner, nicht zum Song: beim Wiederherstellen bleiben die aktuellen
 MACHINE_FIELDS = ("neutrino_pfad", "soundfont_pfad", "output_ordner", "vst_path", "reference_folder", "voicevox_url",
                   "cabinet_ir", "motif_folder", "reuse_steps", "log_file", "update_check", "setup_wizard",
-                  "history_keep")
+                  "history_keep", "album_vary")
 SORTS = {"neu": "Neueste zuerst", "bewertung": "Beste Note zuerst", "name": "Nach Name"}
 _STAMP = "%Y%m%d-%H%M%S"
 

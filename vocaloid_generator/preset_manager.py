@@ -186,29 +186,6 @@ PRESETS = {
     }
 }
 
-def apply_preset(model, preset_name):
-    """Applies preset settings to the model."""
-    if preset_name not in PRESETS:
-        return False
-    preset = PRESETS[preset_name]
-    model.bpm = preset["bpm"]
-    model.key = preset["key"]
-    model.scale = preset["scale"]
-    model.active_sections = list(preset["active_sections"])
-    
-    # Set volumes, panning, enabled
-    for inst, vol in preset["volumes"].items():
-        setattr(model, f"volume_{inst}", vol)
-    for inst, pan in preset["panning"].items():
-        setattr(model, f"pan_{inst}", pan)
-    for inst, enabled in preset["enabled"].items():
-        setattr(model, f"enabled_{inst}", enabled)
-    
-    model.style = preset_name
-    model.log_text = f"Preset angewendet: {preset_name}"
-    return True
-
-
 def preset_settings(preset_name, settings):
     """Die Einstellungen mit den typischen Werten eines Stils (Tempo, Tonart, Ablauf, Lautstärken).
     Gibt None zurück, wenn es für den Stil keine Vorgabe gibt."""

@@ -1,12 +1,26 @@
-# Vocaloid Song Generator
+# Vloid Songs
 
 Erzeugt komplette Vocaloid-Songs auf Knopfdruck: Akkorde, Bass, Schlagzeug, Melodie und Begleitung, Gesang mit NEUTRINO oder VOICEVOX (oder einer lokalen Vorschau-Stimme), Mix mit Kompressor und Limiter und am Ende eine fertige MP3.
 
-Läuft unter Windows.
+Läuft unter Windows. Version 1.0.0.
+
+| Zum Lesen | Was drinsteht |
+| --- | --- |
+| [ANLEITUNG.md](ANLEITUNG.md) | Erste Schritte in fünf Schritten, was die App kann und wo jeder Schalter steht (in der App: Hilfe › Erste Schritte) |
+| [FEHLERBEHEBUNG.md](FEHLERBEHEBUNG.md) | wenn etwas nicht klappt (Hilfe › Fehlerbehebung) |
+| [TESTLISTE.md](TESTLISTE.md) | der Praxistest für 1.0.0, etwa 30 Minuten |
+| [CHANGELOG.md](CHANGELOG.md) | was in jeder Version neu ist |
+| [CREDITS.md](CREDITS.md) | wessen Arbeit drinsteckt, mit Lizenzen |
 
 ## Installation
 
-Empfohlen mit [uv](https://docs.astral.sh/uv/). Im Projektordner (dort, wo `pyproject.toml` liegt) ausführen:
+Am einfachsten mit der Setup.exe von der [Release-Seite](https://github.com/StrikerLUL/Vloid_songs/releases): ohne Adminrechte, mit Eintrag im Startmenü. Sie lädt beim ersten Mal Python und alle Bibliotheken. Klänge, Modelle und NEUTRINO richtet danach **Hilfe › Einrichten** in der App ein; die `setup_….py`-Skripte unten machen dasselbe von der Kommandozeile (`main.py --einrichten alles`). Ein neues Release entsteht von selbst, wenn eine neue Version in `main` landet; die App findet es über „Nach Update suchen“.
+
+Deine Daten (Einstellungen, Songs, Vorlagen, Vorbilder, Motive, Protokolle) liegen in `Dokumente\Vloid Songs`. Steht in `datenordner.txt` im Programmordner `programmordner`, bleiben sie wie früher in `vocaloid_generator`.
+
+### Aus dem Quellcode
+
+Mit [uv](https://docs.astral.sh/uv/). Im Projektordner (dort, wo `pyproject.toml` liegt) ausführen:
 
 ```powershell
 winget install astral-sh.uv
@@ -26,6 +40,8 @@ python vocaloid_generator\app.py
 
 ### Gesang mit NEUTRINO
 
+NEUTRINO darf die App nicht selbst laden. Von [studio-neutrino.com](https://studio-neutrino.com/) laden, entpacken und unter Hilfe › Einrichten den Ordner wählen, in dem `bin` und `model` liegen. Alternativ wie früher:
+
 1. NEUTRINO (`NEUTRINO-windows-v3.1`) und die Stimme MERROW (`めろう（NEUTRINO-Library）-v3.1`) herunterladen und beide Ordner in den Projektordner legen.
 2. `python setup_neutrino.py` kopiert die Stimme an die richtige Stelle.
 
@@ -37,7 +53,7 @@ Im Tab „Gesang“ wählst du die Stimme, ob im Refrain eine zweite Stimme mits
 
 Schlägt NEUTRINO fehl, steht die Meldung im Protokoll, und die App versucht es mit VOICEVOX; läuft das auch nicht, nimmt sie die lokale Vorschau-Stimme (Windows-Sprachausgabe plus Tonhöhen-Korrektur).
 
-**Fassungen:** Unter „Fassungen“ 2 oder 3 wählen (oder `--fassungen 3`). NEUTRINO singt den Song dann mehrmals, mit StyleShift eine Stufe heller und eine dunkler, und die App nimmt die Fassung, die die Töne am besten trifft und keine Aussetzer hat. Im Protokoll steht für jede Fassung, wie viele Cent sie neben den Noten liegt. Jede Fassung dauert so lange wie die erste.
+**Fassungen:** Unter „Fassungen“ 2 oder 3 wählen (oder `--fassungen 3`). NEUTRINO singt den Song dann mehrmals, mit StyleShift eine Stufe heller und eine dunkler, und die App nimmt jede Phrase aus der Fassung, die ihre Töne am besten trifft und keine Aussetzer hat (Comping; ausgeschaltet die beste ganze Fassung, `--ohne-comping`). Im Protokoll steht für jede Fassung, wie viele Cent sie neben den Noten liegt. Jede Fassung dauert so lange wie die erste.
 
 **Duett:** Im Tab „Gesang“ unter „Duett mit“ eine zweite Stimme wählen (oder `--duett NAME` auf der Kommandozeile). Die beiden Stimmen wechseln sich in den Strophen ab, die Bridge singt die zweite, im Refrain singt die erste die Melodie und die zweite die zweite Stimme. Jede singt mit ihrem eigenen Tonumfang und steht etwas links bzw. rechts im Mix.
 
@@ -62,6 +78,8 @@ Unter „Lebendiger Gesang“ im Tab „Gesang“, jedes einzeln abschaltbar:
 | Chor im letzten Refrain | zwei weitere Stimmen singen die Melodie mit: mit NEUTRINO die anderen installierten Stimmen (sonst dieselbe heller und dunkler), mit VOICEVOX zwei andere Figuren, mit der Vorschau-Stimme vier verstimmte Kopien der eigenen Stimme |
 | Vibrato | 1 = wie die Stimme singt, 0 = gerade Töne, 2 = doppelt so viel; lange Töne ohne eigenes Vibrato bekommen eines |
 | Übergänge | 1 = wie gesungen, 0 = die Töne springen (wie hartes Autotune), 2 = die Stimme gleitet doppelt so lange |
+| Ausdruck pro Phrase | jede Zeile wird zu ihrem höchsten Ton hin lauter und heller und klingt weich aus; Strophen leiser als Refrains (`--ohne-ausdruck`) |
+| Studio-Gesangskette | leichte Bandsättigung, Hall und Delay je Sektion und im Refrain eine echte Doppelung aus der zweiten Fassung (`--ohne-gesangskette`) |
 
 Vibrato und Übergänge ändert die App bei VOICEVOX direkt in der Tonhöhenkurve, bevor gesungen wird. Bei NEUTRINO rechnet sie die fertige Aufnahme Phrase für Phrase mit dem WORLD-Vocoder neu; das klingt eine Spur rauer, deshalb bleibt die Aufnahme bei 1 und 1 unberührt.
 
@@ -100,6 +118,8 @@ uv run setup_samples.py
 
 Das lädt etwa 1,2 GB nach `tools\samples` (mit `--nur Violin Harp` nur einzelne Instrumente). Bricht es ab, macht der nächste Start dort weiter. Danach spielen Streicher, Solo-Geige, Bratsche, Cello, Kontrabass, Tremolo, Pizzicato, Harfe, Pauken, Trompete, Posaune, Tuba, Horn, Bläsersatz, Flöte, Piccolo, Oboe, Klarinette, Fagott, Glockenspiel, Marimba, Xylophon und Röhrenglocken aus den Aufnahmen. Ein eingebauter Sampler spielt sie (`sfz.py`, liest das SFZ-Format): kurze Töne nehmen die kurz gespielten Aufnahmen (Spiccato, Staccato), Streicher- und Bläsersätze verteilen ihre Töne nach der Tonhöhe auf Geigen, Bratschen, Celli und Kontrabässe bzw. Trompeten, Posaunen und Tuba, und jedes Instrument wird auf dieselbe Lautstärke gebracht. Langsam anschwellende Streicher setzen etwas später in der Aufnahme ein, damit sie auf dem Schlag kommen. Der Schalter „Orchester aus echten Aufnahmen“ im Tab „Pfade“ (oder `--ohne-samples`) stellt das ab; wie bei den SoundFonts bleibt es mit einem eigenen SoundFont aus.
 
+**Echtes Schlagzeug und Grooves:** `setup_drums.py` lädt das DRS Kit (DrumGizmo, CC BY 4.0, etwa 130 MB), ein im Studio aufgenommenes Schlagzeug mit mehreren Anschlag-Schichten; akustische Schlagzeuge spielen dann daraus (`drum_kit.py`, `--ohne-echtes-schlagzeug`). `setup_grooves.py` lädt das Groove MIDI Dataset (Google Magenta, CC BY 4.0, etwa 3 MB): Pop, Rock, Ballade, City Pop und Idol-Pop spielen Phrasen und Fills echter Schlagzeuger mit ihrem Timing (`grooves.py`, `--ohne-echte-grooves`). Der Bass spielt Ghost-Notes und Slides (`--ohne-bass-leben`), die Gitarre schlägt je nach Teil anders an (`--ohne-anschlagmuster`).
+
 Supersaw, Pluck, Pad, Lead, Chiptune-Klänge, Reese- und Sub-Bass und die breiten Future-Bass-Akkorde erzeugt die App selbst (`synth_engine.py`), ebenso Riser, Becken-Swells, Impacts und Downlifter vor den Refrains (`fx.py`).
 
 **Schlagzeug aus der Drum-Machine:** Im Tab „Band“ steht beim Schlagzeug statt einer Spielweise der Klang: „wie der Stil“, das SoundFont-Schlagzeug oder die Drum-Machine 808 oder 909. Die App baut jeden Schlag wie die Roland-Maschinen aus Sinus, Rauschen und Rechteck-Schwingungen (`drum_machine.py`): die 808 mit langer, tiefer Bassdrum und metallischen Hi-Hats, die 909 kurz und druckvoll mit hellerer Snare. Ein offenes Hi-Hat verstummt, sobald ein geschlossenes kommt. Future Bass spielt von sich aus mit der 808.
@@ -112,7 +132,7 @@ Supersaw, Pluck, Pad, Lead, Chiptune-Klänge, Reese- und Sub-Bass und die breite
 
 ### Vorbild-Songs
 
-Im Tab „Song“ gibst du jedem Song einen oder mehrere Vorbild-Songs (WAV, MP3, FLAC, OGG oder M4A), jeden mit einem Gewicht, wie stark er zählt. Lieblingssongs, die du öfter nimmst, legst du in den Ordner `vocaloid_generator\vorbilder\` (oder einen eigenen, Tab „Pfade“); dort hakst du sie nur noch an.
+Im Tab „Song“ gibst du jedem Song einen oder mehrere Vorbild-Songs (WAV, MP3, FLAC, OGG oder M4A), jeden mit einem Gewicht, wie stark er zählt. Lieblingssongs, die du öfter nimmst, legst du in den Ordner `Vorbilder` im Datenordner (oder einen eigenen, Tab „Pfade“); dort hakst du sie nur noch an.
 
 Was die Vorbilder bestimmen, schaltest du einzeln an und aus:
 
@@ -121,10 +141,11 @@ Was die Vorbilder bestimmen, schaltest du einzeln an und aus:
 | Mastering | Klang und Stereobreite des Masters wie die Vorbilder ([matchering](https://github.com/sergree/matchering)); bei mehreren Vorbildern nach ihrem Mittel |
 | Lautstärke-Verlauf | ruhige und laute Teile liegen so weit auseinander wie in den Vorbildern |
 | Gesangslautstärke | der Gesang steht so laut gegen die Band wie in den Vorbildern (eine Schätzung; Vorbilder ohne Gesang ändern nichts) |
+| Mix pro Instrument | mit Demucs (`setup_demucs.py`): Gesang, Schlagzeug, Bass und Rest einzeln so laut gegen den ganzen Song und so hell wie in den Vorbildern, höchstens 6 dB lauter oder leiser und 4 dB mehr oder weniger Höhen; ersetzt dann die Schätzung der Gesangslautstärke (`--ohne-vorbild-gruppen`) |
 | Tempo und Tonart vorschlagen | ein Klick übernimmt das gemessene Tempo und die Tonart |
 | Stil vorschlagen | ein Klick übernimmt den Stil, der am besten zu den Vorbildern passt |
 
-Gemessen wird mit librosa, jede Datei nur einmal (`vorbild_messungen.json`). Aus den Vorbildern landet nichts im Song, sie werden nur gemessen.
+Gemessen wird mit librosa, jede Datei nur einmal (`vorbild_messungen.json` im Datenordner). Demucs zerlegt den lautesten Abschnitt jedes Vorbilds einmal in vier Gruppen und merkt sich die Messung (`vorbild_gruppen.json`); es läuft in einer eigenen Umgebung in `tools\demucs` (`uv run setup_demucs.py`, mit `--cpu` ohne Grafikkarte). Aus den Vorbildern landet nichts im Song, sie werden nur gemessen.
 
 ### Lautheit des Masters
 
@@ -144,9 +165,19 @@ uv run setup_ace_step.py           # etwa 20 GB: Modelle etwa 10 GB, PyTorch mit
 
 Das lädt ACE-Step in einer festen Fassung nach `tools\ace-step`, legt dort seine eigene Umgebung an (die App bleibt unberührt), lädt die Modelle und prüft, ob die Grafikkarte erkannt wird. Es braucht eine NVIDIA-Grafikkarte; mit 4 GB lagert ACE-Step Teile in den Arbeitsspeicher aus und rechnet mit kleineren Zahlen (INT8), das dauert pro Song ein paar Minuten. Ausschalten: Schalter im Tab „Pfade“ oder `--ohne-veredler`. Es ist ein Versuch: Getestet ist der Ablauf mit einem nachgebauten Modell, nicht mit ACE-Step selbst. Klappt etwas nicht, steht es im Protokoll (die ganze Ausgabe von ACE-Step in `tools\ace-step\letzter_lauf.log`), und es gibt nur den normalen Song.
 
+### KI-Begleitung (Versuch)
+
+Der [Anticipatory Music Transformer](https://github.com/jthickstun/anticipation) (Stanford CRFM, Apache 2.0) bekommt Gesangsmelodie, Bass sowie Bassdrum und Snare des Songs als feste Vorgabe und schreibt dazu Klavier, Gitarre, Streicher, Synths und Bläser. Diese Töne ersetzen die komponierten Begleitstimmen; Melodie, Bass, Schlagzeug und Gesang bleiben. Das Modell kennt nur 100 Sekunden, deshalb schreibt es in Stücken von 30 Sekunden, jedes mit den letzten 5 als Anfang. Mit Grafikkarte nimmt es das mittlere Modell, sonst das kleine; gleiche Vorgabe und gleicher Seed werden nicht noch einmal geschrieben (`begleitung.json` im Ausgabeordner).
+
+```powershell
+uv run setup_begleitung.py          # eigene Umgebung in tools\begleitung, mit Grafikkarte etwa 4 GB
+```
+
+Ab Werk aus: einschalten unter „Pfade“ oder mit `--ki-begleitung`. Ob es besser klingt als die eingebaute Begleitung, ist offen; vergleichen lässt es sich mit festem Seed und A/B im Verlauf. Getestet ist der Ablauf mit einem nachgebauten Modell; die Ausgabe des echten steht in `tools\begleitung\letzter_lauf.log`.
+
 ### Liedtext
 
-Im Tab „Text“ steht der Text pro Sektion; rechts daneben zeigt die App, welche Silben gesungen werden. Japanisch darf ganz normal geschrieben werden, mit Kanji und ohne Leerzeichen: `夜の街を歩いてた` wird zu よ る の ま ち お あ る い て た. Die Lesung der Kanji kommt aus dem Wörterbuch von fugashi (UniDic). Liest es ein Wort falsch, steht die richtige Lesung in eckigen Klammern dahinter: `君[きみ]`. Partikel singt die App so, wie man sie spricht (は als わ), und ー wird als langer Vokal gesungen.
+Im Tab „Text“ steht der Text pro Sektion; rechts daneben zeigt die App, welche Silben gesungen werden. Japanisch darf ganz normal geschrieben werden, mit Kanji und ohne Leerzeichen: `夜の街を歩いてた` wird zu よ る の ま ち お あ る い て た. Die Lesung der Kanji kommt aus dem Wörterbuch von fugashi (UniDic). Liest es ein Wort falsch, steht die richtige Lesung in eckigen Klammern dahinter: `君[きみ]`. Partikel singt die App so, wie man sie spricht (は als わ), und ー wird als langer Vokal gesungen. Romaji geht auch (mit [jaconv](https://github.com/ikegami-yukino/jaconv)): Eine Zeile ganz in Romaji (`kimi no koe`) wird japanisch gesungen, außer es steht ein englisches Wort darin; neben Kana und Kanji wird jedes Romaji-Wort umgewandelt. Schalter im Tab „Text“, `--ohne-romaji`.
 
 ### Eigene Akkorde und eigene Melodie
 
@@ -156,7 +187,7 @@ Unter „Eigene Melodie“ wählst du eine MIDI-Datei, zum Beispiel aus einer DA
 
 **Melodie summen:** Statt einer MIDI-Datei geht auch eine Aufnahme (WAV, MP3, FLAC, OGG, M4A), zum Beispiel vom Handy: Summ oder sing die Melodie im Tempo des Songs, Ton für Ton („da-da-da“). Darunter im Tab „Song“ lädst du sie hoch (im Fenster: „Melodie summen“); die App erkennt die Töne (librosa pYIN), rundet sie auf Sechzehntel, legt den ersten Ton auf die Eins und trägt die fertige MIDI-Datei (`summen\<Name>.mid` im Ausgabeordner) oben als eigene Melodie ein. Wer etwas schief summt, macht nichts: Es zählt der Abstand zwischen den Tönen. Ist keine Melodie zu hören (Stille, nur Rauschen), sagt die App das und lässt das Feld, wie es war.
 
-**Motive der Melodie:** Die komponierte Melodie baut jeden Takt aus einem Rhythmus und einer Bewegung (steigen, fallen, Bogen). Dazu kommen mehr eingebaute (Synkopen wie im J-Pop, Schlüsse mit Vorhalt, Zickzack, Umspielungen) und gelernte: Leg MIDI-Dateien mit Melodien, die dir gefallen, in den Ordner `vocaloid_generator\motive\` (oder einen eigenen, Tab „Song“ unter „Motive der Melodie“). Aus jeder Datei zählen die einstimmigen Spuren in Gesangslage; jeder 4/4-Takt liefert seinen Rhythmus und seine Bewegung, häufige kommen öfter dran, und etwa die Hälfte der Takte singt dann gelernte. Beides hat einen Schalter (`--ohne-motive` schaltet beides ab, `--motive ORDNER` nimmt einen anderen Ordner). Neue Dateien im Ordner ändern auch Songs mit festem Seed; mit beiden Schaltern aus singt ein Seed dieselbe Melodie wie vor v5.
+**Motive der Melodie:** Die komponierte Melodie baut jeden Takt aus einem Rhythmus und einer Bewegung (steigen, fallen, Bogen). Dazu kommen mehr eingebaute (Synkopen wie im J-Pop, Schlüsse mit Vorhalt, Zickzack, Umspielungen) und gelernte: Leg MIDI-Dateien mit Melodien, die dir gefallen, in den Ordner `Motive` im Datenordner (oder einen eigenen, Tab „Song“ unter „Motive der Melodie“). Aus jeder Datei zählen die einstimmigen Spuren in Gesangslage; jeder 4/4-Takt liefert seinen Rhythmus und seine Bewegung, häufige kommen öfter dran, und etwa die Hälfte der Takte singt dann gelernte. Beides hat einen Schalter (`--ohne-motive` schaltet beides ab, `--motive ORDNER` nimmt einen anderen Ordner). Neue Dateien im Ordner ändern auch Songs mit festem Seed; mit beiden Schaltern aus singt ein Seed dieselbe Melodie wie vor v5.
 
 ### MP3-Export
 
@@ -168,7 +199,7 @@ Für die MP3 braucht `pydub` das Programm ffmpeg (`winget install Gyan.FFmpeg`).
 
 ## Starten
 
-Oberfläche:
+Mit der Setup.exe installiert: „Vloid Songs“ im Startmenü. Aus dem Quellcode:
 
 ```powershell
 uv run vocaloid_generator\app.py
@@ -188,9 +219,13 @@ Oder einfach `Vloid Songs starten.bat` im Projektordner doppelklicken. Die App �
 - **Als ZIP für die DAW:** alle Spuren als WAV und MIDI, siehe unten. **Lyric-Video (MP4):** siehe oben.
 - **Vergleichen:** Im Verlauf hat jeder Song die Knöpfe A und B. Wähl zwei Songs, dann stehen unter dem Player A und B; ein Klick wechselt an derselben Stelle im Song, so hörst du direkt, welcher Refrain oder welcher Mix besser ist.
 - **Ablauf:** Im Tab „Song“ ziehst du die Sektionen in eine andere Reihenfolge, ein Klick auf eine Sektion wählt ihre Länge in Takten (gilt für alle Sektionen dieser Art, zum Beispiel ein kurzer Refrain mit 8 Takten).
+- **Entwurf** (oben): ein Song in etwa einer Minute ohne NEUTRINO, die Lead-Stimme spielt die Melodie; er landet in `Songs\Entwurf` und nicht im Verlauf. **Richtig machen** macht danach genau diesen Song mit Gesang (`--entwurf`).
+- **Album** (oben): bis zu 30 Songs am Stück, Stile reihum, auf Wunsch je eine `.txt` mit Liedtext pro Song; morgens nummeriert in `Songs\Alben\<Datum> <Name>` mit Wiedergabeliste und Titelliste, nach Note sortiert, wenn die Bewertung eingerichtet ist (`album.py`, `--album 10 --album-stile "Rock,Ballade"`).
+- **Fertig für YouTube** (unter dem Player): MP3, Video, Titelbild (1280×720, mit Pillow gemalt) und Beschreibung in `Songs\YouTube\<Datum> <Titel>` (`youtube.py`, `--youtube [TITEL]`).
+- **Abbrechen** (oben) beendet einen Song sofort; nach einem Absturz bietet die App beim nächsten Start „Weitermachen“ an.
 - **Tabs rechts:** Song (Stil, Tempo, Tonart, Ablauf, Vorbild-Songs, eigene Vorlagen), Text (mit Vorschau, wie gesungen wird), Band (Spielweise, Lautstärke, Panorama, Mute/Solo pro Spur, Klang von Schlagzeug, Gitarren und VST-Instrument), Gesang, Mix, Verlauf und Pfade.
 
-Alle Einstellungen speichert die App sofort. Eigene Vorlagen (Tab „Song“) merken sich Stil, Tempo, Tonart, Ablauf, Band, Gesang und Mix, aber nicht den Text; sie liegen in `vocaloid_generator\vorlagen\`.
+Alle Einstellungen speichert die App sofort. Eigene Vorlagen (Tab „Song“) merken sich Stil, Tempo, Tonart, Ablauf, Band, Gesang und Mix, aber nicht den Text; sie liegen in `Vorlagen` im Datenordner.
 
 Kommandozeile, nutzt dieselben Einstellungen wie die Oberfläche:
 
@@ -212,7 +247,16 @@ uv run vocaloid_generator\main.py --style Rock --bpm 140 --key E --scale minor -
 | `--motive ORDNER`, `--ohne-motive` | Rhythmen und Bewegungen der Melodie aus den MIDI-Dateien dieses Ordners lernen, oder nur die alten eingebauten |
 | `--varianten N` | N Songs am Stück erzeugen; mit `--neu` N Fassungen der gewählten Teile |
 | `--ohne-bewertung` | mehrere Fassungen nicht automatisch benoten (sonst, wenn `setup_bewertung.py` gelaufen ist) |
-| `--verlauf` | die letzten Songs auflisten |
+| `--verlauf [SUCHE]`, `--sortieren neu\|bewertung\|name` | die Songs im Verlauf auflisten, mit SUCHE nur passende (Name, Notiz, Stil, Seed) |
+| `--entwurf` | schneller Entwurf ohne Gesang-Synthese im Ordner `Entwurf` |
+| `--album N` | Album über Nacht mit N Songs; dazu `--album-stile "Rock,Ballade"`, `--album-texte ORDNER`, `--album-name NAME`, `--album-gleich` (alle in Tonart und Tempo des Stils) |
+| `--youtube [TITEL]` | danach MP3, Video, Titelbild und Beschreibung in einen Ordner unter `YouTube` |
+| `--ohne-comping`, `--ohne-ausdruck`, `--ohne-gesangskette`, `--ohne-romaji` | Comping, Ausdruck pro Phrase, Studio-Gesangskette oder Romaji abschalten |
+| `--ohne-echtes-schlagzeug`, `--ohne-echte-grooves`, `--ohne-bass-leben`, `--ohne-anschlagmuster` | Schlagzeug aus dem SoundFont, eingebaute Grooves, Bass ohne Ghost-Notes, Gitarre immer mit demselben Anschlag |
+| `--ohne-vorbild-gruppen` | Gesang, Schlagzeug, Bass und Rest nicht einzeln an die Vorbilder angleichen |
+| `--ki-begleitung`, `--ohne-ki-begleitung` | die Begleitung vom Anticipatory Music Transformer schreiben lassen, oder nicht |
+| `--ohne-wiederverwenden` | alles neu berechnen, auch wenn Gesang und Spuren vom letzten Mal passen |
+| `--system-pruefen [--gruendlich]`, `--fehlerbericht [DATEI]`, `--einrichten TEILE` | System prüfen, Fehlerbericht speichern, Klänge und Modelle laden (`alles` oder z. B. `drums,grooves`) |
 | `--aus-verlauf NR` | Einstellungen und Seed eines Songs aus dem Verlauf nehmen (1 = der neueste) |
 | `--zip DATEI` | den Song mit allen Spuren als ZIP für eine DAW exportieren |
 | `--stimme NAME`, `--duett NAME` | NEUTRINO-Stimme und zweite Stimme fürs Duett für diesen Lauf |
@@ -236,11 +280,11 @@ uv run vocaloid_generator\main.py --style Rock --bpm 140 --key E --scale minor -
 | `--lyric-video [DATEI]` | nach dem Song ein Lyric-Video als MP4 bauen (Standard: `lyric_video.mp4` im Ausgabeordner) |
 | `-v` | alle Details ausgeben |
 
-Die fertigen Dateien landen in `vocaloid_generator\output\` (oder im Ordner aus den Einstellungen): `final_song.mp3`, `final_mix.wav`, die einzelnen Spuren als WAV und MIDI, `vocals.xml` für NEUTRINO, die `.ust`-Dateien für OpenUtau und `liedtext.json` mit der Zeit jeder Silbe (für das Mitlesen und das Lyric-Video).
+Die fertigen Dateien landen in `Songs` im Datenordner (oder im Ordner aus den Einstellungen): `final_song.mp3`, `final_mix.wav`, die einzelnen Spuren als WAV und MIDI, `vocals.xml` für NEUTRINO, die `.ust`-Dateien für OpenUtau und `liedtext.json` mit der Zeit jeder Silbe (für das Mitlesen und das Lyric-Video).
 
 ### Verlauf, Neu würfeln und Varianten
 
-Jeder fertige Song landet zusätzlich im Unterordner `verlauf\`: die MP3 und daneben eine JSON-Datei mit allen Einstellungen und dem Seed. Die 30 neuesten Songs bleiben dort, als Favorit markierte immer.
+Jeder fertige Song landet zusätzlich im Unterordner `verlauf\`: die MP3 und daneben eine JSON-Datei mit allen Einstellungen und dem Seed. Im Tab „Verlauf“ ist das eine Song-Bibliothek: Suche, nur Favoriten, Sortieren nach Note oder Name, eigener Name und Notiz pro Song. Die 30 neuesten Songs bleiben (einstellbar unter Pfade › App, 0 = alle), Favoriten, Songs mit Namen und Album-Songs immer.
 
 Gefällt dir alles außer einem Teil, wird nur dieser neu gewürfelt. Teile sind `chords` (Akkorde und Ablauf), `melody` (Gesangsmelodie, im Solo das Solo) und jedes Instrument: `piano`, `bass`, `guitar`, `strings`, `synth`, `brass`, `bells`, `choir`, `counter`, `perc`, `drums`. Mit einer Sektion dahinter (`melody:Chorus`, `drums:Verse`, `chords:Bridge`) wird der Teil nur dort neu; Sektionen sind `Intro`, `Build-up`, `Verse`, `PreChorus`, `Chorus`, `Bridge`, `Drop`, `Solo` und `Outro`.
 
@@ -305,7 +349,7 @@ Ohne Gesang (kein NEUTRINO, kein VOICEVOX, keine Vorschau-Stimme oder Gesang aus
 
 ## Einstellungen
 
-Die App speichert alles in `vocaloid_generator\user_settings.json`. Die alte `settings.json` wird noch gelesen, solange es keine `user_settings.json` gibt. Ungültige Werte (zum Beispiel ein Pfad, den es auf diesem Rechner nicht gibt) werden beim Laden durch Standardwerte ersetzt und im Protokoll gemeldet.
+Die App speichert alles in `Einstellungen.json` im Datenordner. Gibt es die noch nicht, liest sie `vocaloid_generator\settings.json` (die Starteinstellungen). Ungültige Werte (zum Beispiel ein Pfad, den es auf diesem Rechner nicht gibt) werden beim Laden durch Standardwerte ersetzt und im Protokoll gemeldet.
 
 Jeder erzeugte Song meldet im Protokoll seinen Seed. Mit diesem Seed lässt sich derselbe Song später noch einmal erzeugen. Seit dem Neu-Würfeln pro Teil und pro Sektion hat jeder Teil in jeder Sektion seinen eigenen Zufall; ein Seed aus einer älteren Version ergibt deshalb einen anderen Song als damals.
 
@@ -350,7 +394,17 @@ uv run pytest -m "not slow"   # ohne den Test, der echtes Audio rendert
 | `karaoke.py` | der Text zum Mitlesen mit der Zeit jeder Silbe, und das Lyric-Video über ffmpeg |
 | `mixer.py`, `exporter.py` | Mischen, Mastern, MP3- und ZIP-Export |
 | `reference.py` | Vorbild-Songs messen: Tempo, Tonart, Stil, Lautstärke-Verlauf, Gesangsanteil |
-| `history.py` | der Verlauf: jeder Song mit Seed und Einstellungen |
+| `history.py` | der Verlauf: jeder Song mit Seed und Einstellungen, Suche, Namen und Notizen |
+| `album.py` | Album über Nacht |
+| `youtube.py` | „Fertig für YouTube“: Ordner mit MP3, Video, Titelbild und Beschreibung |
+| `lyrics.py` | Liedtext in Silben: Kanji-Lesung, Romaji, Partikel |
+| `drum_kit.py`, `setup_drums.py` | echtes Schlagzeug aus dem DRS Kit, und dessen Download |
+| `grooves.py`, `setup_grooves.py` | Grooves und Fills aus dem Groove MIDI Dataset, und dessen Download |
+| `separation.py`, `separation_worker.py`, `setup_demucs.py` | Mix pro Instrument: Demucs zerlegt die Vorbilder (eigene Umgebung), und diese einrichten |
+| `accompaniment.py`, `accompaniment_worker.py`, `setup_begleitung.py` | KI-Begleitung: der Anticipatory Music Transformer (eigene Umgebung), und diese einrichten |
+| `config.py`, `userdata.py` | wo Programm und Daten liegen, und der Umzug nach Dokumente |
+| `einrichten.py`, `systemcheck.py`, `fehlerbericht.py`, `updates.py` | Einrichten, System prüfen, Fehlerbericht und Updates (Hilfe-Menü, `gui/dialogs.py`) |
+| `cancel.py`, `resume.py`, `applog.py` | Abbrechen, Weitermachen nach einem Absturz, Protokolldatei |
 | `app.py`, `gui/` | die Oberfläche (NiceGUI): Seite, Einstellungen, Player mit wavesurfer.js, Mitlesen, Piano-Roll zum Ändern des Gesangs |
 | `vorlagen.py` | eigene Vorlagen speichern und laden |
 | `main.py` | die Kommandozeile |

@@ -16,8 +16,8 @@ import config
 
 log = logging.getLogger(__name__)
 
-LIBRARY = os.path.join(config.BASE_DIR, "vorbilder")      # Ordner mit Lieblingssongs zum Anhaken
-CACHE = os.path.join(config.BASE_DIR, "vorbild_messungen.json")
+LIBRARY = os.path.join(config.DATA_DIR, "Vorbilder")      # Ordner mit Lieblingssongs zum Anhaken
+CACHE = os.path.join(config.DATA_DIR, "vorbild_messungen.json")
 AUDIO_TYPES = (".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aiff", ".aif")
 VERSION = 1                     # neue Messmethode = alter Cache ungültig
 

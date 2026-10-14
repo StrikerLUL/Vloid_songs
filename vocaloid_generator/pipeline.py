@@ -8,6 +8,7 @@ from typing import Callable, Optional
 
 import numpy as np
 
+import cancel
 import config
 from lyrics import parse_lyrics
 from orchestrator import orchestrate_song
@@ -90,7 +91,7 @@ def compose(settings: SongSettings, seed: Optional[int] = None):
         mode=settings.scale,
         section_config=settings.section_config(),
         output_dir=settings.output_dir(),
-        lyrics=parse_lyrics(settings.lyrics),
+        lyrics=parse_lyrics(settings.lyrics, settings.romaji),
         swing=settings.swing,
         jitter_scale=settings.jitter / DEFAULT_JITTER,
         instrument_styles=settings.instrument_styles(),
@@ -102,6 +103,9 @@ def compose(settings: SongSettings, seed: Optional[int] = None):
         melody_edits=settings.melody_edits,
         melody_lengths=settings.melody_lengths,
         motifs=motifs.for_settings(settings),
+        real_grooves=settings.real_grooves,
+        lively_bass=settings.lively_bass,
+        guitar_strums=settings.guitar_strums,
     )
     return tracks, seed
 
@@ -126,11 +130,43 @@ def _own_melody(settings: SongSettings) -> dict:
     return {settings.melody_midi_section: melody}
 
 
+def _checked(progress: Optional[ProgressFn]) -> ProgressFn:
+    """Fortschritt melden und dabei nachsehen, ob abgebrochen wurde (wirft cancel.Cancelled)."""
+    def report(fraction: float, message: str) -> None:
+        cancel.check()
+        if progress:
+            progress(fraction, message)
+    return report
+
+
+DRAFT_FOLDER = "Entwurf"
+
+
+def draft_settings(settings: SongSettings) -> SongSettings:
+    """
+    Ein schneller Entwurf: der ganze Song, aber ohne Gesang-Synthese (die Lead-Stimme spielt die Gesangsmelodie),
+    Orchester und Synths aus dem SoundFont, ohne Veredler, Vorbild-Mastering, MP3 und Verlauf. Er liegt in einem
+    eigenen Ordner, damit der letzte richtige Song samt Gesang erhalten bleibt. Mit demselben Seed wird daraus der
+    richtige.
+    """
+    if settings.draft:
+        return settings
+    out = settings.output_dir()
+    os.makedirs(out, exist_ok=True)              # sonst gilt der Unterordner als unerreichbar (output_dir)
+    draft = settings.with_updates(draft=True, output_ordner=os.path.join(out, DRAFT_FOLDER), vocal_takes=1,
+                                  polish=False, samples=False, reuse_steps=False)
+    draft.channels["vocals"].enabled = False
+    draft.channels["melody"].enabled = True
+    return draft
+
+
 def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None, seed: Optional[int] = None,
                   keep_history: bool = True) -> SongResult:
     """Komponieren, Gesang, Rendern, Mischen, Exportieren und im Verlauf ablegen.
-    Wirft RuntimeError, wenn keine Spur entsteht."""
-    report = progress or (lambda fraction, message: None)
+    Wirft RuntimeError, wenn keine Spur entsteht, und cancel.Cancelled, wenn abgebrochen wurde."""
+    import resume
+    report = _checked(progress)
+    keep_history = keep_history and not settings.draft
     out = settings.output_dir()
     os.makedirs(out, exist_ok=True)
 
@@ -138,7 +174,23 @@ def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None,
     tracks, seed = compose(settings, seed)
     log.info("Seed: %d (mit diesem Seed entsteht derselbe Song noch einmal)", seed)
     settings = settings.with_updates(seed=seed)
+    if keep_history and settings.reuse_steps:
+        resume.start(settings)     # stürzt die App ab, bietet sie beim nächsten Start an, hier weiterzumachen
+    try:
+        result = _produce(settings, tracks, out, report, keep_history)
+    finally:
+        resume.finish()
+    if progress:
+        progress(1.0, "Fertig")        # ohne Prüfung: ein fertiger Song wird nicht mehr abgebrochen
+    return result
+
+
+def _produce(settings: SongSettings, tracks: dict, out: str, report: ProgressFn, keep_history: bool) -> SongResult:
+    seed = settings.seed
     result = SongResult(seed=seed, output_dir=out, settings=settings)
+    if settings.ai_accompaniment and not settings.draft:
+        report(0.10, "KI schreibt die Begleitung (Versuch)...")
+        _ai_accompaniment(settings, tracks, out, seed)
     result.midi_files = {inst: os.path.join(out, f"{inst}.mid") for inst in INSTRUMENTS if tracks.get(inst)}
 
     _write_ust(settings, tracks, out)
@@ -166,6 +218,9 @@ def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None,
     if result.vocals_wav and os.path.exists(choir):
         result.choir_wav = choir
         stems.append(choir)
+    double = os.path.join(out, "vocals_double.wav")
+    if result.vocals_wav and settings.vocal_chain and os.path.exists(double):
+        stems.append(double)          # echte Doppelung im Refrain aus der zweitbesten Fassung
     if not stems:
         raise RuntimeError("Keine Audiospuren zum Mischen vorhanden.")
 
@@ -193,18 +248,22 @@ def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None,
         target_lufs=settings.master_lufs,
         texture=profile.texture if settings.lofi_texture else "",
         movement=_movement(tracks.get("plan")) if settings.mix_movement else None,
-        **_reference_targets(settings, tracks, out, has_vocals=result.vocals_wav is not None),
+        vocal_chain=settings.vocal_chain,
+        vocal_space=_sections_in_seconds(tracks["plan"]) if tracks.get("plan") is not None else None,
+        **({} if settings.draft else
+           _reference_targets(settings, tracks, out, has_vocals=result.vocals_wav is not None)),
     )
     mische_spuren(spur_pfade=stems, output_pfad=result.mix_wav, **mix_args)
     _polish(settings, tracks, result, stems, mix_args, report)
 
     _remove(os.path.join(out, "vorbilder_zusammen.wav"))   # Zusammenschnitt der Vorbilder fürs Mastering
 
-    report(0.95, "Exportiere MP3...")
     from exporter import exportiere_song
     mp3 = os.path.join(out, "final_song.mp3")
     _remove(mp3)  # eine MP3 vom letzten Song darf nicht als neue gelten
-    result.mp3 = exportiere_song(wav_pfad=result.mix_wav, mp3_pfad=mp3)
+    if not settings.draft:                         # den Entwurf spielt der Player als WAV
+        report(0.95, "Exportiere MP3...")
+        result.mp3 = exportiere_song(wav_pfad=result.mix_wav, mp3_pfad=mp3)
     polished_mp3 = os.path.join(out, "final_song_veredelt.mp3")
     _remove(polished_mp3)
     if result.polished_wav:
@@ -212,10 +271,8 @@ def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None,
 
     if keep_history:
         import history
-        entry = history.record(result.audio, settings, out)
+        entry = history.record(result.audio, settings, out, keep=settings.history_keep)
         result.history = entry.audio if entry else None
-
-    report(1.0, "Fertig")
     return result
 
 
@@ -279,6 +336,7 @@ def generate_variants(settings: SongSettings, count: int, parts: tuple = (),
     results, clips = [], []
     with tempfile.TemporaryDirectory() as folder:
         for i in range(count):
+            cancel.check()
             for part in parts:
                 settings = settings.rerolled(part)
 
@@ -407,17 +465,72 @@ def _hook_preview(tracks: dict, kind: str, path: str) -> None:
     sf.write(path, (mix * (0.89 / peak)).T, SAMPLE_RATE)
 
 
-VOCAL_FILES = ("vocals.wav", "vocals_duett_1.wav", "vocals_duett_2.wav", "vocals_harmony.wav", "vocals_chor.wav")
+VOCAL_FILES = ("vocals.wav", "vocals_duett_1.wav", "vocals_duett_2.wav", "vocals_harmony.wav", "vocals_chor.wav",
+               "vocals_double.wav")
 # Welche Engine singt, wenn die gewählte fehlt; ganz zuletzt die lokale Vorschau-Stimme
 ENGINE_ORDER = {"NEUTRINO": ("NEUTRINO", "VOICEVOX"), "VOICEVOX": ("VOICEVOX", "NEUTRINO"), "Vorschau": ()}
 
 
+# Was den Gesang bestimmt: ändert sich nichts davon, bleibt der gesungene Gesang (z. B. beim Neu-Würfeln des Basses)
+VOCAL_KEY = "vocals.key"
+VOCAL_CODE = ("pipeline.py", "vocal_synthesizer.py", "voice_fx.py", "voicevox.py")
+VOCAL_FIELDS = ("bpm", "seed", "singer", "vocal_engine", "harmonies", "duet_singer", "style_shift", "vocal_takes",
+                "vibrato", "glide", "breaths", "final_choir", "voicevox_url", "voicevox_singer", "neutrino_pfad",
+                "vocal_comping", "phrase_expression")
+
+
+def _vocal_key(settings: SongSettings, tracks: dict) -> str:
+    import hashlib
+    import json
+
+    from vocal_synthesizer import neutrino_info
+    digest = hashlib.sha1()
+    for name in VOCAL_CODE:
+        try:
+            with open(os.path.join(config.BASE_DIR, name), "rb") as f:
+                digest.update(f.read())
+        except OSError:
+            digest.update(name.encode())
+    plan = tracks.get("plan")
+    data = {name: getattr(settings, name) for name in VOCAL_FIELDS}
+    data["notes"] = [tracks.get(k) for k in ("melody_data", "silben", "harmony_data", "harmony_silben")]
+    data["sections"] = [(sec.kind, sec.start, sec.end) for sec in plan.sections] if plan else []
+    data["neutrino"] = neutrino_info(settings.neutrino_dir())
+    digest.update(json.dumps(data, sort_keys=True, default=str).encode())
+    return digest.hexdigest()
+
+
+def _sung_before(out: str, key: str) -> bool:
+    import json
+    try:
+        with open(os.path.join(out, VOCAL_KEY), encoding="utf-8") as f:
+            found = json.load(f)
+    except (OSError, ValueError):
+        return False
+    files = found.get("files") or []
+    return found.get("key") == key and "vocals.wav" in files and all(os.path.exists(os.path.join(out, n)) for n in files)
+
+
+def _remember_vocals(out: str, key: str) -> None:
+    import json
+    files = [name for name in VOCAL_FILES if os.path.exists(os.path.join(out, name))]
+    try:
+        with open(os.path.join(out, VOCAL_KEY), "w", encoding="utf-8") as f:
+            json.dump({"key": key, "files": files}, f)
+    except OSError as e:
+        log.debug("Fingerabdruck des Gesangs nicht gespeichert: %s", e)
+
+
 def _synthesize_vocals(settings: SongSettings, tracks: dict, out: str) -> Optional[str]:
     vocals_wav = os.path.join(out, "vocals.wav")
-    for name in VOCAL_FILES:
-        _remove(os.path.join(out, name))
     melody_data = tracks.get("melody_data", [])
     silben = tracks.get("silben", [])
+    key = _vocal_key(settings, tracks) if settings.reuse_steps and settings.channels["vocals"].enabled else None
+    if key and _sung_before(out, key):
+        log.info("Gesang unverändert, nicht neu gesungen")
+        return vocals_wav
+    for name in VOCAL_FILES + (VOCAL_KEY,):
+        _remove(os.path.join(out, name))
     if not settings.channels["vocals"].enabled:
         log.info("Gesang ist ausgeschaltet.")
         return None
@@ -446,6 +559,8 @@ def _synthesize_vocals(settings: SongSettings, tracks: dict, out: str) -> Option
         if not _sing_preview(settings, tracks, vocals_wav):
             return None
     _liven(settings, tracks, out, vocals_wav)
+    if sung and key:
+        _remember_vocals(out, key)     # die Vorschau-Stimme nicht: fehlte NEUTRINO nur kurz, singt es beim nächsten Mal
     return vocals_wav
 
 
@@ -465,8 +580,12 @@ def _sing_preview(settings: SongSettings, tracks: dict, vocals_wav: str) -> bool
 
 def _liven(settings: SongSettings, tracks: dict, out: str, vocals_wav: str) -> None:
     """Was jede Engine bekommt: Chor im letzten Refrain (aus der eigenen Stimme, wenn die Engine keinen gesungen
-    hat) und Atmer vor den Phrasen."""
+    hat), Ausdruck pro Phrase und Atmer vor den Phrasen."""
     import voice_fx
+    if settings.phrase_expression and tracks.get("plan") is not None:
+        notes = voice_fx.timeline(tracks["melody_data"], settings.bpm)
+        if voice_fx.express(vocals_wav, notes, _sections_in_seconds(tracks["plan"])):
+            log.info("Ausdruck pro Phrase: zum Höhepunkt lauter, am Ende weicher")
     choir = os.path.join(out, "vocals_chor.wav")
     window = _final_chorus(tracks.get("plan"))
     if settings.final_choir and window and not os.path.exists(choir):
@@ -480,6 +599,12 @@ def _liven(settings: SongSettings, tracks: dict, out: str, vocals_wav: str) -> N
         count = voice_fx.add_breaths(vocals_wav, voice_fx.timeline(tracks["melody_data"], settings.bpm),
                                      seed=settings.seed or 0)
         log.info("%d Atmer vor den Phrasen", count)
+
+
+def _sections_in_seconds(plan) -> list:
+    """[(Start, Ende in Sekunden, Sektionsart)]."""
+    spb = plan.seconds_per_beat
+    return [(sec.start * spb, sec.end * spb, sec.kind) for sec in plan.sections]
 
 
 def _final_chorus(plan) -> Optional[tuple]:
@@ -502,7 +627,8 @@ def _sing_neutrino(settings: SongSettings, tracks: dict, out: str, vocals_wav: s
     if duet:
         _sing_duet(settings, tracks, out, neutrino_dir, duet, vocals_wav)
     else:
-        _neutrino_lead(settings, tracks["melody_data"], xml, vocals_wav, neutrino_dir, settings.singer)
+        _neutrino_lead(settings, tracks["melody_data"], xml, vocals_wav, neutrino_dir, settings.singer,
+                       _chorus_windows(tracks.get("plan")))
     harmony_wav = os.path.join(out, "vocals_harmony.wav")
     if (settings.harmonies or duet) and tracks.get("harmony_data"):
         # im Duett singt die zweite Stimme die zweite Stimme im Refrain
@@ -513,8 +639,11 @@ def _sing_neutrino(settings: SongSettings, tracks: dict, out: str, vocals_wav: s
         _neutrino_choir(settings, tracks, out, neutrino_dir, duet)
 
 
-def _neutrino_lead(settings: SongSettings, data: list, xml: str, wav: str, neutrino_dir: str, singer: str) -> None:
-    """Eine Hauptstimme mit NEUTRINO: bei mehreren Fassungen die sauberste, danach Vibrato und Übergänge."""
+def _neutrino_lead(settings: SongSettings, data: list, xml: str, wav: str, neutrino_dir: str, singer: str,
+                   double_windows: list = ()) -> None:
+    """Eine Hauptstimme mit NEUTRINO, danach Vibrato und Übergänge. Bei mehreren Fassungen kommt jede Phrase aus der
+    saubersten (Comping, ohne: die sauberste ganze Fassung); in den double_windows (Sekunden) wird aus den
+    zweitbesten Phrasen eine echte Doppelung (vocals_double.wav)."""
     import voice_fx
     from vocal_synthesizer import neutrino_synthese, stimmlage
     transpose = stimmlage(singer)[2]
@@ -537,11 +666,21 @@ def _neutrino_lead(settings: SongSettings, data: list, xml: str, wav: str, neutr
             score = voice_fx.pitch_error(take, notes)
             log.info("Fassung %d (StyleShift %+d): %.0f Cent neben den Noten", k + 1, shift, score)
             takes.append((score, k, take, shift))
-        _, k, best, shift = min(takes)
-        os.replace(best, wav)
+        double = os.path.join(os.path.dirname(wav), "vocals_double.wav")
+        if settings.vocal_comping and len(takes) > 1:
+            paths = [take for _, _, take, _ in takes]
+            choice = voice_fx.comp(paths, notes, wav, double, double_windows)
+            counts = {takes[k][1] + 1: choice.count(k) for k in sorted(set(choice))}
+            log.info("%s: Phrasen aus den saubersten Fassungen (%s)", singer,
+                     ", ".join(f"Fassung {n}: {c}×" for n, c in counts.items()))
+        else:
+            _, k, best, shift = min(takes)
+            os.replace(best, wav)
+            log.info("%s: Fassung %d klingt am saubersten (StyleShift %+d)", singer, k + 1, shift)
         for _, _, take, _ in takes:
             _remove(take)
-        log.info("%s: Fassung %d klingt am saubersten (StyleShift %+d)", singer, k + 1, shift)
+        if os.path.exists(double):
+            voice_fx.reshape(double, notes, settings.vibrato, settings.glide)
     voice_fx.reshape(wav, notes, settings.vibrato, settings.glide)
 
 
@@ -684,7 +823,8 @@ def _write_karaoke(settings: SongSettings, tracks: dict, out: str) -> None:
     from lyrics import section_lines
     from settings import DEFAULT_LYRICS
     lengths = {kind: [len(line) for line in text_lines]
-               for kind, text_lines in {**section_lines(DEFAULT_LYRICS), **section_lines(settings.lyrics)}.items()}
+               for kind, text_lines in {**section_lines(DEFAULT_LYRICS),
+                                        **section_lines(settings.lyrics, settings.romaji)}.items()}
     found = karaoke.lines(tracks["vocal_melody"], tracks["silben"], settings.bpm, tracks.get("plan"), lengths)
     try:
         karaoke.save(os.path.join(out, karaoke.FILE), found)
@@ -737,7 +877,8 @@ def _lead_sings_melody(tracks: dict, out: str) -> None:
 
 
 def _reference_targets(settings: SongSettings, tracks: dict, out: str, has_vocals: bool) -> dict:
-    """Was die Vorbild-Songs am Mix bestimmen dürfen: Mastering, Lautstärke-Verlauf, Gesangspegel."""
+    """Was die Vorbild-Songs am Mix bestimmen dürfen: Mastering, Lautstärke-Verlauf, Gesangspegel und, mit Demucs,
+    Pegel und Helligkeit von Gesang, Schlagzeug, Bass und Rest einzeln."""
     import reference
     from styles import STYLES
     refs = settings.reference_tracks
@@ -762,7 +903,38 @@ def _reference_targets(settings: SongSettings, tracks: dict, out: str, has_vocal
             log.info("In den Vorbildern ist kein Gesang zu hören; die Gesangslautstärke bleibt, wie sie ist.")
         elif wants_voice:
             targets["vocal_ratio_db"] = summary.vocal_db
+    if settings.ref_stems:
+        groups = _group_targets(refs, has_vocals)
+        if groups:
+            targets["group_targets"] = groups
+            if "vocals" in groups:
+                targets.pop("vocal_ratio_db", None)     # die Zerlegung misst den Gesang genauer als die Schätzung
     return targets
+
+
+def _group_targets(refs, has_vocals: bool) -> Optional[dict]:
+    import separation
+    try:
+        groups = separation.summarize(refs)
+    except Exception as e:  # noqa: BLE001 – ohne Zerlegung bleibt der Mix wie bisher
+        log.warning("Vorbilder nicht zerlegbar: %s", e)
+        return None
+    if groups is None:
+        return None
+    if not has_vocals:
+        groups.pop("vocals", None)
+    log.info("Vorbilder einzeln: %s", separation.describe(groups))
+    return groups or None
+
+
+def _ai_accompaniment(settings: SongSettings, tracks: dict, out: str, seed: int) -> None:
+    """Die Begleitstimmen vom Anticipatory Music Transformer; ohne ihn bleibt die komponierte Begleitung."""
+    import accompaniment
+    plan = tracks.get("plan")
+    sections = _section_energies(plan) if plan is not None else []
+    if not accompaniment.accompany(tracks, out, settings.bpm, seed, sections, reuse=settings.reuse_steps) \
+            and not accompaniment.available():
+        log.info("KI-Begleitung eingeschaltet, aber nicht eingerichtet (Hilfe › Einrichten); die komponierte bleibt.")
 
 
 def _section_energies(plan) -> list:
@@ -834,6 +1006,11 @@ def _render_instruments(settings: SongSettings, tracks: dict, out: str, report: 
         if orchestra:
             log.info("Orchester-Aufnahmen: %d Instrumente", len(orchestra))
         extra = extra + orchestra
+    if settings.real_drums and not settings.own_soundfont():
+        import drum_kit
+        if drum_kit.installed():
+            log.info("%s", drum_kit.status())
+            extra = extra + [drum_kit.SFZ_NAME, str(os.path.getmtime(drum_kit.path()))]
     active = [inst for inst in INSTRUMENTS if settings.channels[inst].enabled and tracks.get(inst)]
     jobs = {inst: _render_job(settings, out, inst) for inst in active}
     keys = {inst: _render_key(jobs[inst], extra) for inst in active}
@@ -851,29 +1028,31 @@ def _render_instruments(settings: SongSettings, tracks: dict, out: str, report: 
     def finished(inst: str) -> None:
         nonlocal done
         done += 1
+        if os.path.exists(jobs[inst]["wav_pfad"]):
+            _remember_render(jobs[inst]["wav_pfad"], keys[inst])    # gleich: nach Abbruch oder Absturz bleibt sie
         report(round(0.55 + 0.29 * done / max(len(active), 1), 3), f"{inst} gerendert ({done} von {len(active)})")
 
     from mixer import midi_zu_wav
-    with ThreadPoolExecutor(max_workers=RENDER_WORKERS) as pool:
+    pool = ThreadPoolExecutor(max_workers=RENDER_WORKERS)
+    try:
         futures = {pool.submit(midi_zu_wav, **jobs[inst]): inst for inst in together}
         for future in as_completed(futures):
             future.result()
             finished(futures[future])
+    except cancel.Cancelled:
+        pool.shutdown(wait=True, cancel_futures=True)    # was noch nicht angefangen hat, fällt weg
+        raise
+    finally:
+        pool.shutdown(wait=True)
     for inst in alone:
         midi_zu_wav(**jobs[inst])
         finished(inst)
-    wav_files = {}
-    for inst in active:
-        if os.path.exists(jobs[inst]["wav_pfad"]):
-            wav_files[inst] = jobs[inst]["wav_pfad"]
-            if inst not in kept:
-                _remember_render(jobs[inst]["wav_pfad"], keys[inst])
-    return wav_files
+    return {inst: jobs[inst]["wav_pfad"] for inst in active if os.path.exists(jobs[inst]["wav_pfad"])}
 
 
 # Der Code, der Klang macht: ändert er sich (neue Version der App), wird alles neu gerendert
 RENDER_CODE = ("renderer.py", "mixer.py", "synth_engine.py", "drum_machine.py", "guitar_amp.py", "sound_library.py",
-               "styles.py", "sfz.py", "sample_library.py")
+               "styles.py", "sfz.py", "sample_library.py", "drum_kit.py")
 
 
 def _render_key(job: dict, library: list) -> str:
@@ -926,12 +1105,13 @@ def _render_job(settings: SongSettings, out: str, inst: str) -> dict:
         vst_pfad=vst,
         vst_state=state,
         soundfont_pfad=settings.soundfont_file(),
-        voices=profile.voices.get(inst),
+        voices=None if settings.draft else profile.voices.get(inst),     # eigene Synths brauchen Zeit
         library=settings.sound_library and not settings.own_soundfont(),
         drum_machine=_drum_machine(settings) if inst == "drums" else None,
         amp=settings.guitar_amp,
         cabinet_ir=settings.cabinet_ir,
         samples=_samples(settings),
+        real_drums=settings.real_drums and not settings.own_soundfont() and inst == "drums",
     )
 
 

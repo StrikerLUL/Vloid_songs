@@ -23,7 +23,7 @@ from settings import SongSettings, edit_key
 
 @pytest_asyncio.fixture
 async def user(tmp_path):
-    SongSettings(output_ordner=str(tmp_path / "out"), seed=None).save()
+    SongSettings(output_ordner=str(tmp_path / "out"), seed=None, setup_wizard=False, update_check=False).save()
     async with user_simulation(root=page.build) as user:
         yield user
 
@@ -109,7 +109,8 @@ async def test_generating_shows_the_song_and_its_tracks(user, fake_generation):
     await user.should_see(marker="stem-Mix")
     await user.should_see(marker="stem-Klavier")
     [player] = user.find(WavePlayer).elements
-    assert player.title == "Mix" and player.url.startswith("/datei?pfad=")
+    await until(lambda: player.title == "Mix")          # die Wellenform lädt erst nach den Knöpfen
+    assert player.url.startswith("/datei?pfad=")
     [roll] = user.find(PianoRoll).elements
     await until(lambda: roll.tracks)       # die Noten liest ein Hintergrund-Thread
     assert roll.tracks[0]["name"] == "Klavier"
@@ -118,6 +119,24 @@ async def test_generating_shows_the_song_and_its_tracks(user, fake_generation):
     response = await user.http_client.get(player.url)
     assert response.status_code == 200 and response.content[:4] == b"RIFF"
     assert (await user.http_client.get("/datei?pfad=/etc/passwd")).status_code == 404
+
+
+async def test_draft_first_then_the_real_song_with_the_same_seed(user, fake_generation):
+    await user.open("/")
+    user.find(marker="count").elements.pop().value = 3
+    user.find(marker="draft").click()
+    await user.should_see("Entwurf · ", retries=50)
+    [sketch] = fake_generation                                        # ein Entwurf, nicht drei
+    assert sketch.draft and not sketch.channels["vocals"].enabled
+    assert sketch.output_ordner.endswith(pipeline.DRAFT_FOLDER)
+    [full] = user.find(marker="draft-full").elements
+    assert full.visible
+    user.find(marker="draft-full").click()
+    await until(lambda: len(fake_generation) == 2)
+    real = fake_generation[-1]
+    assert real.seed == sketch.seed and not real.draft and real.channels["vocals"].enabled
+    await until(lambda: not full.visible)
+    assert not SongSettings.load().draft
 
 
 async def test_rerolling_keeps_the_seed_and_counts_up(user, fake_generation):
@@ -185,6 +204,68 @@ async def test_restoring_from_history_takes_settings_and_seed(user, fake_generat
     user.find(marker="generate").click()
     await until(lambda: fake_generation)
     assert fake_generation[-1].bpm == 99 and fake_generation[-1].variations == {"bass": 2}
+
+
+async def test_library_names_finds_and_deletes_songs(user, tmp_path):
+    out = str(tmp_path / "out")
+    history.record(write_song(str(tmp_path / "a"), 11).mix_wav, SongSettings(style="Rock", seed=11), out)
+    history.record(write_song(str(tmp_path / "b"), 4711).mix_wav, SongSettings(style="Ballade", seed=4711), out)
+    await user.open("/")
+    user.find(marker="tab-Verlauf").click()
+    await until(lambda: len(user.find(marker="history-play").elements) == 2)
+
+    user.find(marker="library-search").type("rock")
+    await until(lambda: len(user.find(marker="history-play").elements) == 1)
+    user.find(marker="history-edit").click()
+    user.find(marker="edit-name").type("Sommerregen")
+    user.find(marker="edit-note").type("Bridge kürzer")
+    user.find(marker="edit-save").click()
+    await user.should_see("Sommerregen")
+    await user.should_see("Bridge kürzer")
+    assert [e.label for e in history.entries(out) if e.settings.seed == 11] == ["Sommerregen"]
+
+    user.find(marker="library-search").clear()
+    user.find(marker="library-search").type("4711")
+    await until(lambda: len(user.find(marker="history-play").elements) == 1)
+    user.find(marker="history-delete").click()
+    user.find(marker="delete-keep").click()
+    assert len(history.entries(out)) == 2
+    user.find(marker="history-delete").click()
+    user.find(marker="delete-confirm").click()
+    await user.should_see(marker="library-empty")
+    assert [e.settings.seed for e in history.entries(out)] == [11]
+
+
+async def test_album_overnight_from_the_app(user, fake_generation, tmp_path):
+    await user.open("/")
+    user.find(marker="album").click()
+    user.find(marker="album-count").elements.pop().set_value(3)
+    user.find(marker="album-styles").elements.pop().set_value(["Rock", "Ballade"])
+    user.find(marker="album-name").type("Probe")
+    user.find(marker="album-start").click()
+    await until(lambda: len(fake_generation) == 3, seconds=10)
+    assert [c.style for c in fake_generation] == ["Rock", "Ballade", "Rock"]
+    await until(lambda: user.find(marker="library-search").elements.pop().value == "Probe")
+    out = str(tmp_path / "out")
+    [folder] = os.listdir(os.path.join(out, "Alben"))
+    assert folder.endswith("Probe") and len(os.listdir(os.path.join(out, "Alben", folder))) == 3 + 2
+    assert all(e.album == "Probe" for e in history.entries(out))
+    await until(lambda: len(user.find(marker="history-play").elements) == 3)
+
+
+async def test_youtube_folder_from_the_app_uses_the_song_name(user, fake_generation, monkeypatch, tmp_path):
+    import youtube
+    made, opened = [], []
+    monkeypatch.setattr(youtube, "make", lambda result, label="", progress=None: made.append((result.seed, label))
+                        or youtube.Package(str(tmp_path), label))
+    monkeypatch.setattr(media, "open_folder", lambda path: opened.append(path) or True)
+    await user.open("/")
+    user.find(marker="generate").click()
+    await user.should_see("Seed 1000", retries=50)
+    history.set_details(history.entries(str(tmp_path / "out"))[0], label="Sommerregen")
+    user.find(marker="youtube").click()
+    await until(lambda: opened)
+    assert made == [(1000, "Sommerregen")] and opened == [str(tmp_path)]
 
 
 async def test_settings_changes_are_saved(user):
@@ -357,6 +438,9 @@ async def test_reference_suggestions_can_be_switched_off(user, monkeypatch):
     user.find(marker="switch-ref_tempo_key").elements.pop().set_value(False)
     await user.should_not_see(marker="reference-take-tempo")
     await until(lambda: SongSettings.load().ref_tempo_key is False)
+    await user.should_see("Demucs fehlt")
+    user.find(marker="switch-ref_stems").elements.pop().set_value(False)
+    await until(lambda: SongSettings.load().ref_stems is False)
 
 
 async def test_lively_singing_can_be_switched_and_voicevox_singers_are_listed(user, monkeypatch):
@@ -433,7 +517,7 @@ async def test_choosing_one_of_three_chorus_melodies(user, fake_generation, monk
     user.find(marker="hooks").click()
     await user.should_see(marker="hook-take-3", retries=50)
     [player] = user.find(WavePlayer).elements
-    assert player.title == "Refrain 1"
+    await until(lambda: player.title == "Refrain 1")     # die Wellenform lädt erst nach den Knöpfen
     user.find(marker="hook-play-2").click()
     await until(lambda: player.title == "Refrain 2")
     user.find(marker="hook-take-2").click()
@@ -626,3 +710,116 @@ async def test_a_hummed_melody_becomes_the_own_melody(user, monkeypatch):
     await upload.handle_uploads([SmallFileUpload("kaputt.wav", "audio/wav", b"RIFF kaputt")])
     await user.should_see("keine Melodie zu hören", retries=100)
     assert SongSettings.load().melody_midi == os.path.join(out, "summen", "idee.mid")
+
+
+# ── Abbrechen, Weitermachen, Hilfe-Menü, Einrichten, Updates ─────────────────────
+async def test_stop_cancels_a_running_song(user, monkeypatch):
+    import time
+
+    import cancel
+    started = []
+
+    def slow_song(settings, progress=None, seed=None):
+        started.append(settings)
+        progress(0.3, "Rendere Instrumente...")
+        for _ in range(400):
+            cancel.check()
+            time.sleep(0.05)
+        raise AssertionError("nicht abgebrochen")
+    monkeypatch.setattr(pipeline, "generate_song", slow_song)
+    await user.open("/")
+    user.find(marker="generate").click()
+    await until(lambda: started)
+    [stop] = user.find(marker="stop").elements
+    await until(lambda: stop.visible)
+    user.find(marker="stop").click()
+    await user.should_see("Abgebrochen", retries=100)
+    await until(lambda: not stop.visible)
+    assert not cancel.requested()               # der nächste Song startet wieder normal
+
+
+async def test_unfinished_song_can_be_continued(user, fake_generation, tmp_path):
+    import resume
+    resume.start(SongSettings(seed=77, bpm=99, style="Rock", output_ordner="woanders"))
+    await user.open("/")
+    await user.should_see(marker="resume")
+    await user.should_see("nicht fertig geworden")
+    user.find(marker="resume-continue").click()
+    await until(lambda: fake_generation)
+    assert fake_generation[-1].seed == 77 and fake_generation[-1].bpm == 99
+    assert fake_generation[-1].output_ordner == str(tmp_path / "out")      # die Pfade dieses Rechners bleiben
+    resume.finish()
+
+
+async def test_unfinished_song_can_be_dropped(user):
+    import resume
+    resume.start(SongSettings(seed=78))
+    await user.open("/")
+    user.find(marker="resume-drop").click()
+    await until(lambda: resume.pending() is None)
+    await user.should_not_see(marker="resume")
+
+
+async def test_help_menu_opens_the_system_check(user, monkeypatch):
+    import systemcheck
+    monkeypatch.setattr(systemcheck, "CHECKS", ())
+    systemcheck.register("a", "Probe", lambda s, folder: (True, "klappt"))
+    await user.open("/")
+    user.find(marker="help-menu").click()
+    user.find(marker="menu-check").click()
+    await user.should_see(marker="check-run")
+    user.find(marker="check-run").click()
+    await user.should_see("Alles läuft", retries=100)
+    await user.should_see("klappt")
+
+
+async def test_help_menu_shows_credits_and_news(user):
+    await user.open("/")
+    user.find(marker="help-menu").click()
+    user.find(marker="menu-news").click()
+    await user.should_see(marker="whats-new")
+    user.find(marker="help-menu").click()
+    user.find(marker="menu-credits").click()
+    await user.should_see(marker="page-CREDITS.md")
+    user.find(marker="help-menu").click()
+    user.find(marker="menu-guide").click()
+    await user.should_see(marker="page-ANLEITUNG.md")
+    user.find(marker="help-menu").click()
+    user.find(marker="menu-help").click()
+    await user.should_see(marker="page-FEHLERBEHEBUNG.md")
+
+
+async def test_setup_wizard_shows_on_start_and_installs(user, monkeypatch):
+    import einrichten
+    monkeypatch.setattr(einrichten, "COMPONENTS", ())
+    einrichten.register(einrichten.Component("klang", "Klänge", "besser", "1 MB", "setup_klang.py", lambda: False))
+    einrichten.register(einrichten.Component("da", "Schon da", "da", "1 MB", "setup_da.py", lambda: True))
+    asked = []
+
+    def install(keys, say=print, progress=None):
+        asked.append(keys)
+        say("lade Klänge")
+        return {k: True for k in keys}
+    monkeypatch.setattr(einrichten, "install", install)
+    SongSettings.load().with_updates(setup_wizard=True).save()
+    await user.open("/")
+    await user.should_see(marker="wizard-install")
+    await user.should_see(marker="wizard-have-da")
+    user.find(marker="wizard-install").click()
+    await user.should_see("Alles eingerichtet.", retries=100)
+    assert asked == [["klang"]]
+    user.find(marker="wizard-done").click()
+    await until(einrichten.wizard_done)
+
+
+async def test_update_button_appears_when_there_is_a_new_version(user, monkeypatch):
+    import updates
+    monkeypatch.setattr(updates, "available", lambda force=False: updates.Release("v9.9.9", "- neu", "", "x"))
+    monkeypatch.setattr(updates, "latest", lambda force=False: updates.Release("v9.9.9", "- neu", "", "x"))
+    monkeypatch.setattr(updates, "unseen_changes", lambda: "")
+    SongSettings.load().with_updates(update_check=True).save()
+    await user.open("/")
+    await user.should_see("Update v9.9.9", retries=150)
+    user.find(marker="update-available").click()
+    await user.should_see("Neue Version v9.9.9", retries=50)
+    await user.should_see(marker="update-get")

@@ -95,6 +95,32 @@ def test_mix_hits_the_target_loudness_without_clipping(tmp_path, stems):
     assert mixer._loudness(audio.T) == pytest.approx(mixer.MASTER_LUFS, abs=1.0)
 
 
+SR_TEST = mixer.SAMPLE_RATE
+
+
+def _test_signals() -> dict:
+    rng = np.random.default_rng(3)
+    t = np.arange(SR_TEST * 12) / SR_TEST
+    song = 0.3 * np.sin(2 * np.pi * 220 * t) * (0.5 + 0.5 * np.sin(2 * np.pi * 0.3 * t))
+    song = song + 0.05 * rng.standard_normal(t.size)
+    song = np.stack([song, 0.8 * song]).astype(np.float32)
+    quiet, tail = song.copy(), song.copy()
+    quiet[:, SR_TEST * 3:SR_TEST * 6] *= 0.01
+    tail[:, -SR_TEST * 5:] = 0                                      # stilles Ende: dort wurde es früher langsam
+    return {"Lied": song, "leise Stelle": quiet, "stilles Ende": tail, "kurz": song[:, :int(SR_TEST * 0.7)].copy(),
+            "ungerade Länge": song[:, :SR_TEST * 7 + 1234].copy(), "Mono": song[:1].copy(),
+            "Bass": np.stack([np.sin(2 * np.pi * 50 * t)] * 2).astype(np.float32) * 0.5}
+
+
+def test_loudness_matches_pyloudnorm():
+    import pyloudnorm
+    for name, audio in _test_signals().items():
+        expected = pyloudnorm.Meter(SR_TEST).integrated_loudness(audio.T.astype(np.float64))
+        assert mixer._loudness(audio) == pytest.approx(expected, abs=0.01), name
+    assert mixer._loudness(np.zeros((2, SR_TEST), dtype=np.float32)) == float("-inf")
+    assert mixer._loudness(np.full((2, SR_TEST), 1e-6, dtype=np.float32)) == float("-inf")   # unter -70 LUFS
+
+
 def test_muted_and_soloed_tracks(tmp_path, stems):
     solo = tmp_path / "solo.wav"
     mische_spuren(stems, output_pfad=str(solo), solos={"piano": True}, bpm=120)

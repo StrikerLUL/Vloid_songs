@@ -7,6 +7,7 @@ from song_plan import BEATS_PER_BAR, Section
 KICK, RIM, SNARE, CLAP, HAT, PEDAL_HAT, OPEN_HAT = 36, 37, 38, 39, 42, 44, 46
 CRASH, RIDE, TAMBOURINE = 49, 51, 54
 TOMS = (50, 48, 47, 45, 43, 41)       # hoch nach tief
+EXTRAS = (CLAP, TAMBOURINE)            # spielen auch zu den Grooves echter Schlagzeuger
 GHOST_VELOCITY = 34                    # leiser als das hier: Ghost-Note
 
 
@@ -88,10 +89,23 @@ def _fill(kind: str, bar_start: float, energy: float, rng: random.Random) -> tup
     return out, 12
 
 
-def drum_section(sec: Section, groove: str, rng: random.Random) -> list:
+def _real_fill(drummer, groove: str, bar_start: float, energy: float, rng: random.Random) -> tuple:
+    """Ein Fill eines echten Schlagzeugers über den ganzen Takt; ohne passenden der eingebaute kurze."""
+    hits = drummer.fill(groove, energy, rng)
+    if not hits:
+        return _fill("short", bar_start, energy, rng)
+    return [Ev(bar_start + pos, 0.2, pitch, vel) for pos, pitch, vel in hits], 0
+
+
+def drum_section(sec: Section, groove: str, rng: random.Random, drummer=None) -> list:
+    """
+    Das Schlagzeug einer Sektion. drummer (grooves.Drummer): spielt die Grooves, die er kennt, mit Phrasen und Fills
+    echter Schlagzeuger; None = nur die eingebauten Muster.
+    """
     out = []
     if not groove:
         return out
+    real = drummer is not None and drummer.plays(groove)
     leads_into_chorus = sec.next_kind == "Chorus"
     for b in range(sec.bars):
         bar_start = sec.start + b * BEATS_PER_BAR
@@ -100,14 +114,26 @@ def drum_section(sec: Section, groove: str, rng: random.Random) -> list:
         if last and sec.next_kind is not None:
             kind = "roll" if (leads_into_chorus and sec.kind in ("PreChorus", "Build-up")) or groove == "build" else \
                    "toms" if sec.energy >= 0.55 or leads_into_chorus else "short"
-            fill, silent_from = _fill(kind, bar_start, sec.energy, rng)
+            if real and kind != "roll":
+                fill, silent_from = _real_fill(drummer, groove, bar_start, sec.energy, rng)
+            else:
+                fill, silent_from = _fill(kind, bar_start, sec.energy, rng)
         elif (b + 1) % 8 == 0 and sec.bars > 8:
-            fill, silent_from = _fill("short", bar_start, sec.energy, rng)
-        elif (b + 1) % 4 == 0 and sec.energy >= 0.85 and rng.random() < 0.5:
+            fill, silent_from = (_real_fill(drummer, groove, bar_start, sec.energy, rng) if real else
+                                 _fill("short", bar_start, sec.energy, rng))
+        elif not real and (b + 1) % 4 == 0 and sec.energy >= 0.85 and rng.random() < 0.5:
             fill, silent_from = _fill("short", bar_start, sec.energy, rng)
         out += fill
 
-        if groove == "build":
+        if real:
+            if silent_from:
+                out += [Ev(bar_start + pos, 0.2, pitch, vel) for pos, pitch, vel in drummer.bar(groove, sec.energy, b)
+                        if pos * 4 < silent_from]
+            for inst, hits in GROOVES[groove].items():          # Clap und Tamburin spielen weiter wie eingebaut
+                if inst in EXTRAS:
+                    out += [Ev(bar_start + step / 4, 0.2, inst, _vel(sec.energy, accent * rng.uniform(0.94, 1.04)))
+                            for step, accent in hits if step < silent_from]
+        elif groove == "build":
             division = 4 if b < sec.bars / 2 else 2 if b < sec.bars - 1 else 1
             for s in range(0, min(silent_from, 16), division):
                 progress = (b * 16 + s) / (sec.bars * 16)
@@ -131,8 +157,10 @@ def drum_section(sec: Section, groove: str, rng: random.Random) -> list:
 
         crash_here = b == 0 and sec.index > 0 and sec.energy >= 0.55
         if crash_here or (b % 8 == 0 and b > 0 and sec.energy >= 0.85):
-            out.append(Ev(bar_start, 1.0, CRASH, _vel(sec.energy, 0.85)))
-            if not any(e.pitch == KICK and abs(e.start - bar_start) < 1e-6 for e in out):
+            near = {e.pitch for e in out if abs(e.start - bar_start) < 0.1}   # echte Schläge liegen knapp daneben
+            if not near & {CRASH, 57}:
+                out.append(Ev(bar_start, 1.0, CRASH, _vel(sec.energy, 0.85)))
+            if KICK not in near:
                 out.append(Ev(bar_start, 0.2, KICK, _vel(sec.energy, 1.0)))
     return out
 

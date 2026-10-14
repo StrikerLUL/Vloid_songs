@@ -1,8 +1,10 @@
-# history.py – Verlauf: jeder fertige Song mit Seed und Einstellungen, zum Wiederhören und Wiederherstellen
+# history.py – Verlauf und Bibliothek: jeder fertige Song mit Seed und Einstellungen, zum Wiederhören,
+# Wiederherstellen, Benennen, Notieren und Suchen
 #
 # Pro Song liegen im Ordner <Ausgabe>/verlauf zwei Dateien mit demselben Namen:
 #   20261011-143000_J-Pop-Energy_123456.mp3   der fertige Song (ohne ffmpeg die WAV)
-#   20261011-143000_J-Pop-Energy_123456.json  alle Einstellungen samt Seed, lesbar mit SongSettings.load
+#   20261011-143000_J-Pop-Energy_123456.json  alle Einstellungen samt Seed, lesbar mit SongSettings.load;
+#                                             unter "verlauf" Datum, Favorit, Name, Notiz, Album und Bewertung
 import json
 import logging
 import os
@@ -17,10 +19,12 @@ from settings import SongSettings
 log = logging.getLogger(__name__)
 
 FOLDER = "verlauf"
-KEEP = 30                      # ältere Songs fallen heraus, Favoriten bleiben immer
+KEEP = 30                      # ältere Songs fallen heraus; Favoriten, benannte und Album-Songs bleiben immer
 # Pfade gehören zum Rechner, nicht zum Song: beim Wiederherstellen bleiben die aktuellen
 MACHINE_FIELDS = ("neutrino_pfad", "soundfont_pfad", "output_ordner", "vst_path", "reference_folder", "voicevox_url",
-                  "cabinet_ir", "motif_folder")
+                  "cabinet_ir", "motif_folder", "reuse_steps", "log_file", "update_check", "setup_wizard",
+                  "history_keep", "album_vary")
+SORTS = {"neu": "Neueste zuerst", "bewertung": "Beste Note zuerst", "name": "Nach Name"}
 _STAMP = "%Y%m%d-%H%M%S"
 
 
@@ -33,12 +37,25 @@ class Entry:
     favorite: bool
     settings: SongSettings
     rating: Optional[dict] = None      # Note der automatischen Bewertung (rating.Rating.to_dict)
+    label: str = ""                    # eigener Name
+    note: str = ""
+    album: str = ""                    # aus „Album über Nacht“ (album.py)
 
     @property
     def title(self) -> str:
         s = self.settings
         rerolled = ", neu: " + ", ".join(sorted(s.variations)) if s.variations else ""
-        return f"{self.created:%d.%m. %H:%M}  {s.style}, {s.bpm} BPM, {s.key} {s.scale}, Seed {s.seed}{rerolled}"
+        named = f"„{self.label}“  " if self.label else ""
+        return f"{named}{self.created:%d.%m. %H:%M}  {s.style}, {s.bpm} BPM, {s.key} {s.scale}, Seed {s.seed}{rerolled}"
+
+    @property
+    def kept(self) -> bool:
+        """Favoriten, benannte Songs und Album-Songs fallen nie aus dem Verlauf."""
+        return self.favorite or bool(self.label) or bool(self.album)
+
+    @property
+    def score(self) -> Optional[float]:
+        return self.rating.get("overall") if self.rating else None
 
     def restore(self, current: Optional[SongSettings] = None) -> SongSettings:
         """Die Einstellungen dieses Songs; die Pfade (NEUTRINO, SoundFont, ...) bleiben die von current."""
@@ -52,7 +69,8 @@ def folder(output_dir: str) -> str:
 
 
 def record(audio_path: str, settings: SongSettings, output_dir: str, keep: int = KEEP) -> Optional[Entry]:
-    """Legt den Song im Verlauf ab. settings muss den benutzten Seed enthalten. Fehler kosten nur den Eintrag."""
+    """Legt den Song im Verlauf ab. settings muss den benutzten Seed enthalten. keep=0 behält alle.
+    Fehler kosten nur den Eintrag."""
     if not audio_path or not os.path.exists(audio_path):
         return None
     target = folder(output_dir)
@@ -89,26 +107,65 @@ def entries(output_dir: str) -> list:
 
 def set_favorite(entry: Entry, favorite: bool) -> Entry:
     """Favoriten fallen nie aus dem Verlauf."""
-    with open(entry.info, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    data.setdefault("verlauf", {})["favorit"] = bool(favorite)
-    with open(entry.info, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+    _update(entry.info, favorit=bool(favorite))
     entry.favorite = bool(favorite)
+    return entry
+
+
+def set_details(entry: Entry, label: Optional[str] = None, note: Optional[str] = None) -> Entry:
+    """Name und Notiz eines Songs; ein Song mit Namen fällt nie aus dem Verlauf."""
+    changes = {}
+    if label is not None:
+        changes["name"] = entry.label = label.strip()
+    if note is not None:
+        changes["notiz"] = entry.note = note.strip()
+    _update(entry.info, **changes)
     return entry
 
 
 def set_rating(audio: str, rating: dict) -> None:
     """Merkt sich die Note der automatischen Bewertung beim Song audio im Verlauf."""
-    info = os.path.splitext(audio)[0] + ".json"
     try:
-        with open(info, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        data.setdefault("verlauf", {})["bewertung"] = rating
-        with open(info, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
+        _update(_info(audio), bewertung=rating)
     except (OSError, ValueError) as e:
         log.warning("Bewertung nicht im Verlauf gespeichert: %s", e)
+
+
+def set_album(audio: str, album: str) -> None:
+    try:
+        _update(_info(audio), album=album)
+    except (OSError, ValueError) as e:
+        log.warning("Album nicht im Verlauf gespeichert: %s", e)
+
+
+def find(entries: list, text: str = "", favorites: bool = False, sort: str = "neu") -> list:
+    """Suche in Name, Notiz, Album, Stil, Tonart, Tempo, Seed und Datum; jedes Wort muss vorkommen."""
+    words = text.lower().split()
+    found = [e for e in entries if (e.favorite or not favorites) and all(w in _haystack(e) for w in words)]
+    if sort == "bewertung":
+        found.sort(key=lambda e: (e.score is None, -(e.score or 0.0)))
+    elif sort == "name":
+        found.sort(key=lambda e: (not e.label, (e.label or e.settings.style).lower()))
+    return found
+
+
+def _haystack(e: Entry) -> str:
+    s = e.settings
+    return " ".join([e.label, e.note, e.album, s.style, s.key, s.scale, f"{s.bpm} bpm", f"seed {s.seed}", str(s.seed),
+                     f"{e.created:%d.%m.%Y %H:%M}"]).lower()
+
+
+def _info(audio: str) -> str:
+    return os.path.splitext(audio)[0] + ".json"
+
+
+def _update(info: str, **meta) -> None:
+    with open(info, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    data.setdefault("verlauf", {}).update(meta)
+    with open(info + ".tmp", "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+    os.replace(info + ".tmp", info)
 
 
 def delete(entry: Entry) -> None:
@@ -139,11 +196,14 @@ def _read(info: str) -> Optional[Entry]:
         log.warning("Verlaufseintrag %s nicht lesbar: %s", info, e)
         return None
     rating = meta.get("bewertung") if isinstance(meta.get("bewertung"), dict) else None
-    return Entry(name, audio, info, created, bool(meta.get("favorit")), SongSettings.load(info), rating)
+    return Entry(name, audio, info, created, bool(meta.get("favorit")), SongSettings.load(info), rating,
+                 str(meta.get("name") or ""), str(meta.get("notiz") or ""), str(meta.get("album") or ""))
 
 
 def _prune(output_dir: str, keep: int) -> None:
-    removable = [e for e in entries(output_dir) if not e.favorite]
+    if keep <= 0:
+        return
+    removable = [e for e in entries(output_dir) if not e.kept]
     for entry in removable[keep:]:
         delete(entry)
 

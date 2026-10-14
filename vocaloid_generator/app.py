@@ -28,8 +28,14 @@ def main(argv=None) -> None:
 
     from gui.page import build
 
+    import applog
+    import userdata
+    from settings import SongSettings
+
     args = parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+    userdata.migrate()                  # alte Songs und Einstellungen aus dem Programmordner in den Datenordner
+    applog.setup(SongSettings.load().log_file)
     native = not args.browser and importlib.util.find_spec("webview") is not None
     if not args.browser and not native:
         logging.warning("pywebview fehlt, die App öffnet sich im Browser.")
@@ -37,8 +43,8 @@ def main(argv=None) -> None:
         app.native.settings["ALLOW_DOWNLOADS"] = True
     ui.run(
         build,
-        title="Vocaloid Song Generator",
-        favicon="🎤",
+        title="Vloid Songs",
+        favicon=os.path.join(APP_DIR, "gui", "vloid.png"),
         language="de",
         dark=True,
         reload=False,

@@ -1,4 +1,5 @@
 # mixer.py – Spuren rendern, mischen und mastern (Pedalboard für Effekte, pyloudnorm für die Lautheit)
+import functools
 import logging
 import os
 
@@ -19,15 +20,24 @@ MIX_REFERENCE_LUFS = -18.0   # Pegel des Mixes vor dem Master-Kompressor
 # Ziel-Lautheit der einzelnen Spuren (LUFS), falls der Stil nichts anderes sagt
 DEFAULT_LEVELS = {"drums": -17.0, "bass": -19.5, "piano": -22.0, "guitar": -23.0, "strings": -24.5,
                   "synth": -24.0, "brass": -24.0, "bells": -28.0, "choir": -27.0, "counter": -24.5,
-                  "perc": -28.5, "melody": -21.0, "fx": -27.0, "vocals": -17.0, "harmony": -24.0, "gang": -23.0}
+                  "perc": -28.5, "melody": -21.0, "fx": -27.0, "vocals": -17.0, "harmony": -24.0, "gang": -23.0,
+                  "double": -25.0}
 DEFAULT_REVERB = {"drums": 0.06, "bass": 0.0, "piano": 0.16, "guitar": 0.12, "strings": 0.28,
                   "synth": 0.2, "brass": 0.15, "bells": 0.35, "choir": 0.4, "counter": 0.24,
                   "perc": 0.08, "melody": 0.2, "fx": 0.3, "vocals": 0.18, "harmony": 0.26, "gang": 0.32,
-                  "band": 0.03}
+                  "double": 0.18, "band": 0.03}
 # Gesangsdoppelung im Refrain: zwei leicht verstimmte, verzögerte Kopien links und rechts
 DOUBLE_CENTS, DOUBLE_DELAYS, DOUBLE_DB = 12, (0.017, 0.026), -9.0
-# Gesangsspuren: Hauptstimme, zweite Stimme und der Chor im letzten Refrain („gang“); sie hören auf den Kanal Gesang
-VOCAL_KEYS = ("vocals", "harmony", "gang")
+# Echte Doppelung (zweitbeste Fassung im Refrain, vocals_double.wav): so viel leiser als die Hauptstimme, rechts später
+REAL_DOUBLE_DB, REAL_DOUBLE_DELAY = -8.0, 0.012
+# Gesangsspuren: Hauptstimme, zweite Stimme, der Chor im letzten Refrain („gang“) und die Doppelung; sie hören auf
+# den Kanal Gesang
+VOCAL_KEYS = ("vocals", "harmony", "gang", "double")
+# Studio-Gesangskette: Sättigung (Drive in dB, Anteil) und je Sektion eigener Hall und Delay (Anteil des Sends)
+SATURATION_DB, SATURATION_MIX = 6.0, 0.3
+VOCAL_SPACE = {"Intro": (0.22, 0.15), "Verse": (0.10, 0.08), "PreChorus": (0.14, 0.12), "Chorus": (0.20, 0.16),
+               "Bridge": (0.30, 0.22), "Build-up": (0.16, 0.14), "Drop": (0.18, 0.14), "Outro": (0.24, 0.18)}
+VOCAL_SPACE_DEFAULT = (0.15, 0.12)
 # Echo auf dem letzten Wort: Pegel des Sends, Rückkopplung und Länge in Schlägen (punktierte Achtel)
 THROW_DB, THROW_FEEDBACK, THROW_BEATS = -2.0, 0.45, 0.75
 # Lo-Fi: die Band leiert wie auf einer alten Bandmaschine (Tiefe in Sekunden, Tempo in Hz), klingt dumpfer,
@@ -41,7 +51,7 @@ VINYL_LUFS, VINYL_CLICKS_PER_SECOND = -40.0, 7.0
 def midi_zu_wav(midi_pfad: str, wav_pfad: str, is_drum: bool = False, instrument_type: str = "piano",
                 vst_pfad: str = None, soundfont_pfad: str = None, voices: dict = None,
                 library: bool = True, drum_machine: str = None, amp: bool = False, cabinet_ir: str = "",
-                vst_state: str = "", samples: bool = False) -> None:
+                vst_state: str = "", samples: bool = False, real_drums: bool = False) -> None:
     """
     MIDI → Stereo-WAV. Reihenfolge: eigenes VST3-Instrument (wenn angegeben), SoundFont über
     FluidSynth oder tinysoundfont, zuletzt eine einfache eingebaute Klangerzeugung. Die Spur wird nicht normalisiert,
@@ -53,6 +63,7 @@ def midi_zu_wav(midi_pfad: str, wav_pfad: str, is_drum: bool = False, instrument
     cabinet_ir ist die Impulsantwort einer echten Box (leer = eingebaute Box).
     vst_state: gespeicherter Klang des VST-Instruments (vst_sounds), leer = sein Standardklang.
     samples: Orchester-Instrumente spielen aus echten Aufnahmen (sample_library), soweit vorhanden.
+    real_drums: akustische Schlagzeuge spielen aus dem DRS Kit (drum_kit), soweit vorhanden.
     """
     soundfont_pfad = soundfont_pfad or SOUNDFONT_PFAD
     midi = pretty_midi.PrettyMIDI(midi_pfad)
@@ -65,6 +76,11 @@ def midi_zu_wav(midi_pfad: str, wav_pfad: str, is_drum: bool = False, instrument
         import drum_machine as machine
         audio, midi.instruments = machine.render(midi, drum_machine)
         synths.append(audio)
+    elif is_drum and real_drums and not vst_pfad:
+        import drum_kit
+        audio, midi.instruments = drum_kit.render(midi, SAMPLE_RATE)
+        if audio is not None:
+            synths.append(audio)
     if amp and not vst_pfad:
         import guitar_amp
         for inst in [i for i in midi.instruments if guitar_amp.wants_amp(i)]:
@@ -186,6 +202,8 @@ def _track_key(path: str) -> str:
     name = os.path.splitext(os.path.basename(path))[0].lower()
     if "vocals_chor" in name:
         return "gang"
+    if "vocals_double" in name:
+        return "double"
     if "harmon" in name:
         return "harmony"
     if "vocal" in name or "stimme" in name:
@@ -209,11 +227,49 @@ def _load(path: str, length: int) -> np.ndarray:
     return out
 
 
-def _loudness(audio: np.ndarray) -> float:
+@functools.lru_cache(maxsize=1)
+def _k_weighting() -> tuple:
+    """Die Filter von pyloudnorm (ITU-R BS.1770-4) als eine Kette von Biquads: (sos, Verstärkung)."""
     import pyloudnorm
+    stages = list(pyloudnorm.Meter(SAMPLE_RATE)._filters.values())
+    sos = np.array([np.concatenate([f.b / f.a[0], f.a / f.a[0]]) for f in stages], dtype=np.float32)
+    return sos, float(np.prod([f.passband_gain for f in stages]))
+
+
+def _loudness(audio: np.ndarray) -> float:
+    """
+    Integrierte Lautheit in LUFS (ITU-R BS.1770-4), rechnet wie pyloudnorm (auf 0,001 LU genau), nur schneller:
+    beide Filter in einem Durchgang und in 32 Bit, die Blöcke (400 ms, alle 100 ms) aus Summen über 100 ms, und ein
+    unhörbar leises Rauschen (-300 dB) hält die Filter in stillen Stellen aus dem extrem langsamen Bereich winziger
+    Zahlen (Denormals).
+    """
+    from scipy.signal import sosfilt
     if audio.shape[1] < SAMPLE_RATE // 2 or not np.any(audio):
         return float("-inf")
-    return pyloudnorm.Meter(SAMPLE_RATE).integrated_loudness(audio.T.astype(np.float64))
+    sos, gain = _k_weighting()
+    x = np.array(audio[:2], dtype=np.float32)
+    x[:, ::2] += 1e-15
+    x[:, 1::2] -= 1e-15
+    power = sosfilt(sos, x, axis=1)
+    np.square(power, out=power)
+    hop = SAMPLE_RATE // 10                    # bei 44,1 kHz liegen die Blockgrenzen genau auf diesen Schritten
+    channels, n = power.shape
+    full = n // hop
+    hops = np.concatenate([power[:, :full * hop].reshape(channels, full, hop).sum(axis=2, dtype=np.float64),
+                           power[:, full * hop:].sum(axis=1, keepdims=True, dtype=np.float64),
+                           np.zeros((channels, 4))], axis=1)
+    blocks = int(np.round((n / SAMPLE_RATE - 0.4) / 0.1)) + 1
+    z = sum(hops[:, k:k + blocks] for k in range(4)) * (gain * gain / (0.4 * SAMPLE_RATE))
+    with np.errstate(divide="ignore"):
+        level = -0.691 + 10 * np.log10(z.sum(axis=0))
+        audible = level >= -70.0
+        if not audible.any():
+            return float("-inf")
+        relative = -0.691 + 10 * np.log10(z[:, audible].mean(axis=1).sum()) - 10
+        gated = (level > relative) & (level > -70.0)
+        if not gated.any():
+            return float("-inf")
+        return float(-0.691 + 10 * np.log10(z[:, gated].mean(axis=1).sum()))
 
 
 def _channel_chain(key: str) -> Pedalboard:
@@ -291,6 +347,24 @@ def _double(audio: np.ndarray, windows: list) -> np.ndarray:
     return out
 
 
+def _saturate(audio: np.ndarray, drive_db: float = SATURATION_DB, share: float = SATURATION_MIX) -> np.ndarray:
+    """Sanfte Bandsättigung parallel dazu: dichter und präsenter, ohne hörbar zu zerren."""
+    drive = 10 ** (drive_db / 20)
+    return (audio * (1 - share) + np.tanh(audio * drive) / drive * share).astype(np.float32)
+
+
+def _vocal_space(sections: list, length: int) -> tuple:
+    """(Hall, Delay) des Gesangs über die Zeit: Strophen trockener, Refrain und Bridge weiter; weich übergeblendet."""
+    plate = np.full(length, VOCAL_SPACE_DEFAULT[0], dtype=np.float32)
+    delay = np.full(length, VOCAL_SPACE_DEFAULT[1], dtype=np.float32)
+    for start, end, kind in sections:
+        a, b = max(0, int(start * SAMPLE_RATE)), min(length, int(end * SAMPLE_RATE))
+        plate[a:b], delay[a:b] = VOCAL_SPACE.get(kind, VOCAL_SPACE_DEFAULT)
+    from voice_fx import smooth
+    n = int(0.3 * SAMPLE_RATE)
+    return smooth(plate, n), smooth(delay, n)
+
+
 def _widen(audio: np.ndarray, delay: float = 0.014) -> np.ndarray:
     """Mono-Spur breit machen: rechts ein paar Millisekunden später."""
     d = int(delay * SAMPLE_RATE)
@@ -304,7 +378,8 @@ def _pan(audio: np.ndarray, pan: float) -> np.ndarray:
     if abs(pan) < 1e-3:
         return audio
     angle = (pan + 1) * np.pi / 4
-    return np.vstack([audio[0] * np.cos(angle) * np.sqrt(2), audio[1] * np.sin(angle) * np.sqrt(2)])
+    gains = np.array([[np.cos(angle)], [np.sin(angle)]], dtype=np.float32) * np.float32(np.sqrt(2))
+    return audio[:2] * gains
 
 
 def _echo_throws(vocals: np.ndarray, windows: list, bpm: float) -> np.ndarray:
@@ -387,9 +462,12 @@ def mische_spuren(
     sections: list = None,
     energy_contrast_db: float = None,
     vocal_ratio_db: float = None,
+    group_targets: dict = None,
     texture: str = "",
     movement: list = None,
     band: str = None,
+    vocal_chain: bool = False,
+    vocal_space: list = None,
 ) -> None:
     """
     Mischt die Spuren zu einem Stereo-Master:
@@ -402,15 +480,20 @@ def mische_spuren(
     sections, energy_contrast_db: [(Start, Ende in Sekunden, Energie)] und der Abstand zwischen lauten und leisen
     Stellen, den die Vorbilder haben; die Band wird in ruhigen Sektionen entsprechend leiser oder lauter.
     vocal_ratio_db: Gesang gegen Band, wie reference.vocal_ratio_db ihn in den Vorbildern schätzt.
+    group_targets: Gesang, Schlagzeug, Bass und Rest der Vorbilder, einzeln gemessen ({Gruppe: {"level", "tilt"}},
+    separation.summarize); jede Gruppe wird so laut und so hell wie dort.
     texture: "lofi" lässt die Band wie von einer alten Bandmaschine klingen, mit Schallplatten-Knistern.
     movement: die Sektionen (mix_movement.Part); dann bewegt sich der Mix: Anlauf vor jedem Refrain, Hall je nach
     Sektion, breitere Refrains.
     band: eine fertige Fassung der Band (WAV, z. B. vom Klang-Veredler); sie ersetzt alle Spuren außer Gesang und
     Effekten, so laut wie diese zusammen.
+    vocal_chain: Studio-Kette für den Gesang: leichte Sättigung, eine echte Doppelung (vocals_double.wav) statt der
+    verstimmten Kopie und, mit vocal_space [(Start, Ende in Sekunden, Sektionsart)], eigener Hall und Delay je Sektion.
     """
     from settings import DEFAULT_VOLUMES
 
     levels = {**DEFAULT_LEVELS, **(levels or {})}
+    levels["double"] = levels["vocals"] + REAL_DOUBLE_DB
     reverb = {**DEFAULT_REVERB, **(reverb or {})}
     volumes, panning, mutes, solos = volumes or {}, panning or {}, mutes or {}, solos or {}
     paths = [p for p in spur_pfade if os.path.exists(p)]
@@ -419,6 +502,7 @@ def mische_spuren(
         return
     length = max(sf.info(p).frames for p in paths)
     any_solo = any(solos.values())
+    real_double = vocal_chain and any(_track_key(p) == "double" for p in paths)
 
     tracks = {}
     for path in paths:
@@ -435,11 +519,15 @@ def mische_spuren(
         audio *= 10 ** ((levels.get(key, -22.0) - loud) / 20) * fader
         if key in VOCAL_KEYS:
             audio = _deess(audio)
-        audio = _channel_chain(key)(audio, SAMPLE_RATE)
-        if key == "vocals" and double_windows:
+        if key in ("vocals", "double") and vocal_chain:
+            audio = _saturate(audio)
+        audio = _channel_chain("vocals" if key == "double" else key)(audio, SAMPLE_RATE)
+        if key == "vocals" and double_windows and not real_double:
             audio = _double(audio, double_windows)
         elif key == "harmony":
             audio = _widen(audio)
+        elif key == "double":
+            audio = _widen(audio, REAL_DOUBLE_DELAY)
         audio = _pan(audio, panning.get(channel, 0.0))
         tracks[path] = (key, audio)
 
@@ -449,6 +537,8 @@ def mische_spuren(
 
     if energy_contrast_db is not None and sections:
         _shape_energy(tracks, sections, energy_contrast_db, length)
+    if group_targets:
+        _match_groups(tracks, group_targets)
     if vocal_ratio_db is not None:
         _match_vocal_level(tracks, vocal_ratio_db)
 
@@ -467,8 +557,14 @@ def mische_spuren(
     mix = np.zeros((2, length), dtype=np.float32)
     send = np.zeros_like(mix)
     vocal_send = np.zeros_like(mix)
+    plate_send = np.zeros_like(mix)
+    space = _vocal_space(vocal_space, length) if vocal_chain and vocal_space else None
     for key, audio in tracks.values():
         mix += audio
+        if space is not None and key in ("vocals", "double"):
+            plate_send += audio * space[0]
+            vocal_send += audio * space[1]
+            continue
         send += audio * reverb.get(key, 0.1)
         if key in VOCAL_KEYS:
             vocal_send += audio * 0.18
@@ -490,6 +586,11 @@ def mische_spuren(
     hall = Pedalboard([HighpassFilter(250), Reverb(room_size=0.78, damping=0.45, wet_level=1.0, dry_level=0.0, width=1.0),
                        LowpassFilter(9000)])
     mix += hall(send, SAMPLE_RATE)
+    if np.any(plate_send):
+        plate = Pedalboard([Delay(delay_seconds=0.025, feedback=0.0, mix=1.0), HighpassFilter(350),
+                            Reverb(room_size=0.5, damping=0.25, wet_level=1.0, dry_level=0.0, width=0.9),
+                            LowpassFilter(11000)])
+        mix += plate(plate_send, SAMPLE_RATE)
     if np.any(vocal_send):
         echo = Pedalboard([HighpassFilter(300), Delay(delay_seconds=0.75 * 60.0 / bpm, feedback=0.3, mix=1.0),
                            LowpassFilter(6000)])
@@ -566,6 +667,77 @@ def _shape_energy(tracks: dict, sections: list, target_db: float, length: int) -
     log.info("Lautstärke-Verlauf wie im Vorbild: ruhigste Sektion %+.1f dB", float(total[int(np.argmax(curve))]))
 
 
+MAX_TILT_DB = 4.0            # so weit dürfen die Vorbilder die Höhen einer Gruppe heben oder senken
+TILT_HZ = 4000.0
+GROUP_EXCERPT = 45.0         # wie separation.EXCERPT_SECONDS: gemessen wird im lautesten Abschnitt
+
+
+def _group_of(key: str) -> str:
+    """Die Gruppe, in die Demucs die Spur stecken würde."""
+    if key in VOCAL_KEYS:
+        return "vocals"
+    if key in ("drums", "perc"):
+        return "drums"
+    return "bass" if key == "bass" else "other"
+
+
+def _match_groups(tracks: dict, targets: dict) -> None:
+    """Gesang, Schlagzeug, Bass und Rest so laut gegen den ganzen Song und so hell wie in den Vorbildern.
+    Gemessen wird wie dort (separation.measure) im lautesten Abschnitt; jede Gruppe wandert höchstens
+    MAX_REFERENCE_DB lauter oder leiser und bekommt höchstens MAX_TILT_DB mehr oder weniger Höhen."""
+    import separation
+    from reference import _loudest_start
+    groups = {}
+    for path, (key, _) in tracks.items():
+        if key != "fx" and _group_of(key) in targets:
+            groups.setdefault(_group_of(key), []).append(path)
+    if not groups:
+        return
+    length = next(iter(tracks.values()))[1].shape[1]
+    n = min(length, int(GROUP_EXCERPT * SAMPLE_RATE))
+    start = _loudest_start(sum(a for _, a in tracks.values()).mean(axis=0), SAMPLE_RATE, GROUP_EXCERPT)
+    window = slice(start, start + n)
+
+    def measured() -> dict:
+        parts = {g: sum(tracks[p][1][:, window] for p in paths) for g, paths in groups.items()}
+        rest = [a[:, window] for p, (_, a) in tracks.items() if not any(p in ps for ps in groups.values())]
+        if rest:
+            parts["_rest"] = sum(rest)
+        return separation.measure(parts)
+
+    changes = {}
+    now = measured()
+    for group, paths in groups.items():
+        if group not in now:
+            continue
+        tilt = float(np.clip(targets[group]["tilt"] - now[group]["tilt"], -MAX_TILT_DB, MAX_TILT_DB))
+        if abs(tilt) >= 0.5:
+            shelf = Pedalboard([HighShelfFilter(TILT_HZ, tilt, 0.7)])
+            for path in paths:
+                key, audio = tracks[path]
+                tracks[path] = (key, shelf(audio, SAMPLE_RATE))
+            changes[group] = [0.0, tilt]
+    total = {g: 0.0 for g in groups}
+    for _ in range(3):
+        now = measured()
+        steps = {}
+        for group in groups:
+            if group in now:
+                wanted = total[group] + targets[group]["level"] - now[group]["level"]
+                steps[group] = float(np.clip(wanted, -MAX_REFERENCE_DB, MAX_REFERENCE_DB)) - total[group]
+        if all(abs(step) < 0.5 for step in steps.values()):
+            break
+        for group, step in steps.items():
+            for path in groups[group]:
+                key, audio = tracks[path]
+                tracks[path] = (key, audio * np.float32(10 ** (step / 20)))
+            total[group] += step
+    for group, step in total.items():
+        changes.setdefault(group, [0.0, 0.0])[0] = step
+    log.info("Mix wie die Vorbilder: %s", ", ".join(
+        f"{separation.NAMES[g]} {level:+.1f} dB, Höhen {tilt:+.1f} dB" for g, (level, tilt) in changes.items()))
+
+
 def _match_vocal_level(tracks: dict, target_db: float) -> None:
     """Gesang so laut gegen die Band wie in den Vorbildern; geschätzt mit derselben Methode wie dort."""
     import librosa
@@ -638,11 +810,12 @@ def master(mix: np.ndarray, compressor_threshold: float = -20.0, compressor_rati
 
 def _limit_to(mix: np.ndarray, target_lufs: float, limiter_threshold: float) -> np.ndarray:
     """Auf target_lufs bringen, ohne über limiter_threshold zu kommen."""
-    if _loudness(mix) == float("-inf"):
+    loud = _loudness(mix)
+    if loud == float("-inf"):
         return mix
     # Der Limiter verändert die Lautheit selbst, deshalb die Vorverstärkung ein paar Mal nachregeln
     limiter = Limiter(threshold_db=limiter_threshold, release_ms=80)
-    gain_db = target_lufs - _loudness(mix)
+    gain_db = target_lufs - loud
     limited = mix
     for _ in range(4):
         limited = limiter(mix * 10 ** (gain_db / 20), SAMPLE_RATE)

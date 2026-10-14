@@ -41,8 +41,8 @@ MASTER_TARGETS = {-12.0: "Standard (-12 LUFS)", -14.0: "YouTube und Spotify (-14
 KEYS = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
 _FLAT_TO_SHARP = {"Db": "C#", "Eb": "D#", "Gb": "F#", "Ab": "G#", "Bb": "A#"}
 
-# Die App speichert hier; settings.json ist das alte Format und wird nur noch gelesen
-SETTINGS_PATH = os.path.join(config.BASE_DIR, "user_settings.json")
+# Die App speichert in deinem Datenordner; settings.json ist das alte Format und wird nur noch gelesen
+SETTINGS_PATH = os.path.join(config.DATA_DIR, "Einstellungen.json")
 LEGACY_SETTINGS_PATH = os.path.join(config.BASE_DIR, "settings.json")
 
 # Jitter-Wert, bei dem der Humanizer genau die Genre-Standardwerte nutzt
@@ -140,7 +140,7 @@ class SongSettings(BaseModel):
     melody_midi_section: str = "Chorus"    # in dieser Sektionsart singt die eigene Melodie
     more_motifs: bool = True           # mehr eingebaute Rhythmen und Gesten für die Gesangsmelodie (motifs.py)
     learned_motifs: bool = True        # Rhythmen und Gesten aus den MIDI-Dateien in motif_folder lernen
-    motif_folder: str = ""             # Ordner mit MIDI-Melodien (leer = vocaloid_generator/motive)
+    motif_folder: str = ""             # Ordner mit MIDI-Melodien (leer = Motive im Datenordner)
 
     active_sections: list[str] = Field(default_factory=lambda: [
         "Intro", "Verse", "PreChorus", "Chorus", "Verse", "PreChorus", "Chorus", "Bridge", "Chorus", "Outro"
@@ -162,20 +162,30 @@ class SongSettings(BaseModel):
     breaths: bool = True               # hörbares Einatmen vor den Phrasen
     echo_throws: bool = True           # Echo auf dem letzten Wort einer Phrase
     final_choir: bool = True           # im letzten Refrain singt ein Chor mit
+    vocal_comping: bool = True         # bei mehreren Fassungen jede Phrase aus der saubersten (voice_fx.comp)
+    phrase_expression: bool = True     # Ausdruck pro Phrase: zum Höhepunkt lauter und heller, am Ende weicher
+    vocal_chain: bool = True           # Studio-Kette: Sättigung, Hall und Delay je Sektion, echte Doppelung
+    romaji: bool = True                # Liedtext in lateinischen Buchstaben (Romaji) japanisch singen
     voicevox_url: str = ""             # Adresse von VOICEVOX (leer = http://127.0.0.1:50021, App oder Engine)
     voicevox_singer: int = Field(0, ge=0)          # VOICEVOX-Singstimme (Stil-ID, 0 = die erste)
     # Vorbild-Songs (reference.py) und was sie bestimmen dürfen; jedes lässt sich abschalten
     reference_tracks: list[ReferenceTrack] = Field(default_factory=list)
-    reference_folder: str = ""         # Ordner mit Lieblingssongs zum Anhaken (leer = vocaloid_generator/vorbilder)
+    reference_folder: str = ""         # Ordner mit Lieblingssongs zum Anhaken (leer = Vorbilder im Datenordner)
     ref_mastering: bool = True         # Klang und Lautheit des Masters wie die Vorbilder
     ref_energy: bool = True            # leise und laute Teile so weit auseinander wie in den Vorbildern
     ref_vocal_level: bool = True       # Gesang so laut gegen die Band wie in den Vorbildern
+    ref_stems: bool = True             # Gesang, Schlagzeug, Bass und Rest einzeln wie die Vorbilder (mit Demucs)
     ref_tempo_key: bool = True         # Tempo und Tonart der Vorbilder vorschlagen
     ref_style: bool = True             # passenden Stil vorschlagen
     vst_path: str = ""
     vst_sounds: dict[str, str] = Field(default_factory=dict)   # Spur → gespeicherter Klang des VST-Instruments
     sound_library: bool = True         # bessere Klänge aus tools/soundfonts (setup_soundfonts.py), wenn vorhanden
     samples: bool = True               # Orchester aus echten Aufnahmen (setup_samples.py, VSCO 2), wenn vorhanden
+    real_drums: bool = True            # echtes Schlagzeug aus Aufnahmen (setup_drums.py, DRS Kit), wenn vorhanden
+    real_grooves: bool = True          # Grooves und Fills echter Schlagzeuger (setup_grooves.py), wenn vorhanden
+    lively_bass: bool = True           # Ghost-Notes und Slides im Bass
+    guitar_strums: bool = True         # Gitarre schlägt je nach Energie andere Muster an, mit Abdämpfern
+    draft: bool = False                # nur für einen Lauf (pipeline.draft_settings): schneller Entwurf
     auto_rating: bool = True           # mehrere Fassungen automatisch bewerten (setup_bewertung.py), wenn eingerichtet
     guitar_amp: bool = True            # verzerrte E-Gitarren über Verstärker und Box statt verzerrter Samples
     cabinet_ir: str = ""               # Impulsantwort einer Gitarrenbox (WAV); leer = eingebaute Box
@@ -183,8 +193,17 @@ class SongSettings(BaseModel):
     mix_movement: bool = True          # Anlauf vor dem Refrain, Hall pro Sektion, breitere Refrains (mix_movement.py)
     polish: bool = True                # zweite Fassung mit von ACE-Step veredelter Band (setup_ace_step.py), wenn da
     polish_strength: float = Field(0.4, ge=0.05, le=0.95)   # wie viel ACE-Step am Klang der Band ändert
+    ai_accompaniment: bool = False     # Begleitstimmen vom Anticipatory Music Transformer (setup_begleitung.py)
     polish_caption: str = ""           # eigene Klangbeschreibung für ACE-Step (Englisch); leer = passend zum Stil
     show_karaoke: bool = True          # Text zum Mitlesen unter dem Player
+    # Verlässlichkeit (1.0.0); jedes hat einen Schalter
+    reuse_steps: bool = True           # fertigen Gesang wiederverwenden, nach einem Absturz weitermachen (resume.py)
+    log_file: bool = True              # Protokoll in Protokolle\vloid_songs.log im Datenordner (applog.py)
+    update_check: bool = True          # beim Start nach einer neuen Version schauen (updates.py)
+    setup_wizard: bool = True          # Einrichten-Assistent beim Start, solange er nicht abgeschlossen ist
+    # Alltag (1.0.0)
+    history_keep: int = Field(30, ge=0, le=1000)   # so viele Songs behält der Verlauf (0 = alle); benannte immer
+    album_vary: bool = True            # Album über Nacht: jeder Song in eigener Tonart und leicht anderem Tempo
     breathiness: float = Field(0.028, ge=0.0, le=0.2)
     shimmer: bool = True
     swing: float = Field(0.12, ge=0.0, le=0.5)

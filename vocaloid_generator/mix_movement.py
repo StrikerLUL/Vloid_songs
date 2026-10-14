@@ -85,6 +85,11 @@ def width_curve(parts: list, length: int) -> np.ndarray:
 
 def widen(audio: np.ndarray, curve: np.ndarray) -> np.ndarray:
     """Mitte bleibt, die Seite wird mit curve verstärkt."""
-    mid = (audio[0] + audio[1]) / 2
-    side = (audio[0] - audio[1]) / 2 * curve
-    return np.vstack([mid + side, mid - side]).astype(np.float32)
+    left, right = audio[0].astype(np.float32, copy=False), audio[1].astype(np.float32, copy=False)
+    mid = (left + right) * np.float32(0.5)
+    side = (left - right) * np.float32(0.5)
+    side *= curve.astype(np.float32, copy=False)
+    out = np.empty((2, len(mid)), dtype=np.float32)
+    np.add(mid, side, out=out[0])
+    np.subtract(mid, side, out=out[1])
+    return out

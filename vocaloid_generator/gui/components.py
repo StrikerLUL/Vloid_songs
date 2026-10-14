@@ -47,9 +47,6 @@ class WavePlayer(Element, component="wave_player.js", esm={"wavesurfer": "wavesu
     def title(self) -> str:
         return self._props["title"]
 
-    def play_pause(self) -> None:
-        self.run_method("playPause")
-
 
 class PianoRoll(Element, component="piano_roll.js"):
     """

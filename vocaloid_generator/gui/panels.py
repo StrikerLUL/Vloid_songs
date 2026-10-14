@@ -243,6 +243,8 @@ REFERENCE_SWITCHES = (
                                    "die Lautheit stellst du im Tab Mix ein"),
     ("ref_energy", "Lautstärke-Verlauf", "Strophe und Refrain liegen so weit auseinander wie in den Vorbildern"),
     ("ref_vocal_level", "Gesangslautstärke", "Gesang so laut gegen die Band wie in den Vorbildern (geschätzt)"),
+    ("ref_stems", "Mix pro Instrument", "Gesang, Schlagzeug, Bass und Rest einzeln so laut und so hell wie in den "
+                                        "Vorbildern; braucht Demucs (Hilfe › Einrichten), das zerlegt die Vorbilder"),
     ("ref_tempo_key", "Tempo und Tonart vorschlagen", "Ein Klick übernimmt Tempo und Tonart der Vorbilder"),
     ("ref_style", "Stil vorschlagen", "Ein Klick übernimmt den Stil, der am besten zu den Vorbildern passt"),
 )
@@ -344,6 +346,8 @@ def reference_editor(s: SongSettings, pick: PickFn, apply_template: Callable[[So
         for attr, text, tip in REFERENCE_SWITCHES:
             ui.switch(text).bind_value(s, attr).props("dense").tooltip(tip).mark(f"switch-{attr}") \
                 .on_value_change(lambda: summary_box.refresh())
+        import separation
+        hint(separation.status())
     summary_box()
     ui.timer(0.1, measure, once=True)
 
@@ -385,6 +389,10 @@ def templates_editor(s: SongSettings, apply_template: Callable[[SongSettings], N
 def text_panel(s: SongSettings) -> None:
     hint("Eine Überschrift wie [Verse], [Pre-Chorus], [Chorus] oder [Bridge] pro Abschnitt. Japanisch darf ganz "
          "normal geschrieben werden, auch mit Kanji; 君[きみ] gibt eine Lesung von Hand vor.")
+    ui.switch("Romaji japanisch singen (kimi no koe → きみ の こえ)").bind_value(s, "romaji").props("dense") \
+        .mark("switch-romaji").on_value_change(lambda: preview.refresh()) \
+        .tooltip("Eine Zeile ganz in Romaji wird japanisch gesungen; ist ein englisches Wort darin (love, baby), bleibt "
+                 "die Zeile, wie sie ist. Neben japanischer Schrift wird jedes Romaji-Wort umgewandelt.")
 
     @ui.refreshable
     def preview() -> None:
@@ -395,7 +403,7 @@ def text_panel(s: SongSettings) -> None:
             if header:
                 rows.append(("header", header.group(1)))
             elif line:
-                sylls = syllables(line)
+                sylls = syllables(line, s.romaji)
                 count += len(sylls)
                 rows.append(("line", " ".join(sylls)))
         ui.label(f"So wird gesungen: {count} Silben").classes("text-subtitle2").mark("syllables")
@@ -449,6 +457,16 @@ def band_panel(s: SongSettings) -> None:
     ui.switch("Lo-Fi-Klang: Knistern und alte Bandmaschine").bind_value(s, "lofi_texture") \
         .mark("switch-lofi_texture").tooltip("Nur im Stil Lo-Fi")
     hint("Das Schlagzeug kann oben statt aus dem SoundFont aus einer Drum-Machine kommen (808 oder 909).")
+    section_title("Lebendige Band")
+    ui.switch("Bass mit Ghost-Notes und Slides").bind_value(s, "lively_bass").mark("switch-lively_bass") \
+        .tooltip("Leise, kurze Töne vor manchen Schlägen und Gleiten in große Sprünge und laute Teile, wie bei "
+                 "einem Bassisten (Spielweisen Grundton, synkopiert, entspannt und rollend)")
+    ui.switch("Gitarre schlägt je nach Teil anders an").bind_value(s, "guitar_strums") \
+        .mark("switch-guitar_strums") \
+        .tooltip("Ruhige Teile in Vierteln, Refrains in Sechzehnteln mit abgedämpften Anschlägen; runter klingen die "
+                 "tiefen Saiten, hoch die hohen (Spielweise geschlagen)")
+    hint("Echtes Schlagzeug und Grooves echter Schlagzeuger schaltest du unter Pfade ein oder aus, sobald sie "
+         "eingerichtet sind.")
     section_title("Klänge aus dem VST-Instrument")
     vst_editor(s)
 
@@ -488,6 +506,11 @@ LIVELY_SWITCHES = (
                                                  "letzte Wort links und rechts nach"),
     ("final_choir", "Chor im letzten Refrain", "Mit NEUTRINO oder VOICEVOX singen zwei weitere Stimmen mit, "
                                                "sonst wird die eigene Stimme zum Chor vervielfacht"),
+    ("phrase_expression", "Ausdruck pro Phrase", "Jede Zeile wird zu ihrem höchsten Ton hin lauter und heller und "
+                                                 "klingt am Ende weicher aus; Strophen leiser als Refrains"),
+    ("vocal_chain", "Studio-Gesangskette", "Leichte Bandsättigung, Hall und Delay je Sektion (Strophe trockener, "
+                                           "Refrain und Bridge weiter) und im Refrain eine echte Doppelung aus der "
+                                           "zweiten Fassung"),
 )
 
 
@@ -510,8 +533,11 @@ def voice_panel(s: SongSettings, singers: list) -> tuple:
     hint("Plus = heller und jünger, minus = dunkler. Braucht NEUTRINO mit StyleShift.")
     ui.select({1: "1 (am schnellsten)", 2: "2", 3: "3"}, label="Fassungen").bind_value(s, "vocal_takes") \
         .classes("w-full").mark("vocal-takes")
-    hint("NEUTRINO singt den Song so oft, eine Stufe heller und dunkler; in den Song kommt die Fassung, die die Töne "
-         "am besten trifft und keine Aussetzer hat. Jede Fassung dauert so lange wie die erste.")
+    hint("NEUTRINO singt den Song so oft, eine Stufe heller und dunkler. Jede Fassung dauert so lange wie die erste.")
+    ui.switch("Jede Phrase aus der saubersten Fassung (Comping)").bind_value(s, "vocal_comping").props("dense") \
+        .mark("switch-vocal_comping") \
+        .tooltip("Wie im Studio: jede Zeile kommt aus der Fassung, die ihre Töne am besten trifft. Aus ist es die "
+                 "sauberste ganze Fassung. Die zweitbeste Fassung doppelt den Refrain (mit der Studio-Gesangskette).")
     section_title("VOICEVOX")
     voicevox_editor(s)
     section_title("Lebendiger Gesang")
@@ -629,12 +655,48 @@ def paths_panel(s: SongSettings, pick: PickFn, status: Callable[[], None]) -> No
     ui.switch("Orchester aus echten Aufnahmen (setup_samples.py)") \
         .bind_value(s, "samples").mark("samples-switch") \
         .tooltip("Streicher, Bläser, Harfe, Pauken und Stabspiele aus VSCO 2; gilt nur ohne eigenen SoundFont")
+    ui.switch("Echtes Schlagzeug aus Aufnahmen (setup_drums.py, DRS Kit)") \
+        .bind_value(s, "real_drums").mark("real-drums-switch") \
+        .tooltip("Bassdrum, Snare, Toms, Hi-Hat und Becken aus einem im Studio aufgenommenen Schlagzeug; "
+                 "gilt für akustische Kits ohne eigenen SoundFont, 808 und 909 bleiben Drum-Machines")
+    ui.switch("Grooves und Fills echter Schlagzeuger (setup_grooves.py)") \
+        .bind_value(s, "real_grooves").mark("real-grooves-switch") \
+        .tooltip("Pop, Rock, Ballade, City Pop und Idol-Pop spielen Phrasen und Fills aus dem Groove MIDI Dataset, "
+                 "mit dem Timing echter Schlagzeuger; Stile mit Swing und elektronische bleiben eingebaut")
     ui.switch("Mehrere Fassungen automatisch bewerten (setup_bewertung.py)") \
         .bind_value(s, "auto_rating").mark("rating-switch") \
         .tooltip("Audiobox Aesthetics hört jede Fassung an und gibt ihr eine Note; die beste wird geladen")
     ui.switch("Klang der Band mit ACE-Step veredeln (setup_ace_step.py, Versuch)") \
         .bind_value(s, "polish").mark("polish-switch").on_value_change(lambda: status()) \
         .tooltip("Zweite Fassung jedes Songs mit neu eingespielter Band; braucht eine NVIDIA-Grafikkarte")
+    ui.switch("Begleitung vom KI-Modell schreiben lassen (setup_begleitung.py, Versuch)") \
+        .bind_value(s, "ai_accompaniment").mark("accompaniment-switch") \
+        .tooltip("Der Anticipatory Music Transformer schreibt Klavier, Gitarre, Streicher, Synths und Bläser passend zu "
+                 "Melodie, Bass und Schlagzeug; ohne NVIDIA-Grafikkarte dauert ein Song lange")
+    app_settings(s)
+
+
+def app_settings(s: SongSettings) -> None:
+    """Schalter für die App selbst: Wiederverwenden, Protokoll, Updates, Assistent, Verlauf, Datenordner."""
+    import userdata
+    section_title("App")
+    ui.switch("Fertige Schritte wiederverwenden (Gesang, Spuren, Weitermachen nach Absturz)") \
+        .bind_value(s, "reuse_steps").mark("reuse-switch") \
+        .tooltip("Singt NEUTRINO nicht neu, wenn sich am Gesang nichts geändert hat, und bietet nach einem Absturz an, "
+                 "den Song fertig zu machen")
+    ui.switch("Protokoll in eine Datei schreiben (für Fehlerberichte)").bind_value(s, "log_file") \
+        .mark("log-switch").tooltip("Protokolle\\vloid_songs.log im Datenordner; gilt ab dem nächsten Start")
+    ui.switch("Nach Updates suchen (einmal am Tag) und nach einem Update zeigen, was neu ist").bind_value(s, "update_check").mark("update-switch")
+    ui.switch("Einrichten-Assistent beim Start zeigen, bis er fertig ist").bind_value(s, "setup_wizard") \
+        .mark("wizard-switch")
+    ui.number("So viele Songs behält der Verlauf (0 = alle)", min=0, max=1000, step=5, precision=0) \
+        .bind_value(s, "history_keep", forward=lambda v: int(v or 0)).classes("w-80").mark("history-keep") \
+        .tooltip("Ältere fallen heraus; Favoriten, Songs mit Namen und Album-Songs bleiben immer")
+    ui.label(userdata.describe()).classes("text-caption").mark("data-folder")
+    ui.switch("Daten im Programmordner lassen statt in Dokumente (gilt ab dem nächsten Start)",
+              value=userdata.in_program_folder(), on_change=lambda e: userdata.choose_program_folder(e.value)) \
+        .mark("program-folder-switch") \
+        .tooltip("Für einen Ordner auf dem USB-Stick. Beim nächsten Start zieht die App deine Songs und Einstellungen um.")
 
 
 def _reference_library() -> str:

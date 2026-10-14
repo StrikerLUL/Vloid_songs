@@ -103,8 +103,6 @@ SECTION_ENERGY = {
     "Chorus": 0.9, "Bridge": 0.4, "Drop": 0.7, "Solo": 0.85, "Outro": 0.6,
 }
 
-INSTRUMENT_PARTS = ("piano", "bass", "guitar", "strings", "synth", "brass", "bells", "choir", "counter", "perc", "melody")
-
 # Klänge für neue Instrumente, falls ein Stil keine eigenen nennt (General MIDI)
 DEFAULT_PROGRAMS = {"bells": 9, "choir": 52, "counter": 73, "perc": 0}
 
@@ -125,7 +123,6 @@ class StyleProfile:
     halftime_chance: float = 0.3        # zweite Strophe beginnt im Halftime
     melisma: float = 1.0                # wie oft Phrasen mit einem Melisma enden (1 = normal)
     vocal_center: int = 67         # mittlere Gesangslage (MIDI)
-    double_time_melody: bool = False
     swing: float = 0.0
     halftime_below_bpm: int = 0    # unter diesem Tempo: Sechzehntel-Gefühl statt Achtel
     voices: dict = field(default_factory=dict)   # Instrument → {Unterspur: eigene Synth-Stimme}

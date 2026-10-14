@@ -1,5 +1,6 @@
 # voice_fx.py – Gesang lebendiger machen: Atmer vor den Phrasen, Echo auf dem letzten Wort, Vibrato und Übergänge
-# zwischen den Tönen, die sauberste von mehreren Fassungen und ein Chor im letzten Refrain.
+# zwischen den Tönen, jede Phrase aus der saubersten von mehreren Fassungen (Comping), Ausdruck pro Phrase und ein
+# Chor im letzten Refrain.
 # Alles arbeitet auf fertig gesungenen Spuren und kennt dazu die Noten (in Sekunden ab Songanfang).
 import logging
 from dataclasses import dataclass
@@ -29,6 +30,16 @@ class SungNote:
     start: float             # Sekunden ab Songanfang
     end: float
     pitch: int               # MIDI, so wie er klingt
+
+
+def smooth(curve: np.ndarray, n: int) -> np.ndarray:
+    """Gleitender Mittelwert über n Werte (schnell auch für ganze Songs)."""
+    if n <= 1 or not len(curve):
+        return np.asarray(curve, dtype=np.float32)
+    total = np.concatenate([[0.0], np.cumsum(curve, dtype=np.float64)])
+    idx = np.arange(len(curve))
+    lo, hi = np.clip(idx - n // 2, 0, len(curve)), np.clip(idx + n - n // 2, 0, len(curve))
+    return ((total[hi] - total[lo]) / (hi - lo)).astype(np.float32)
 
 
 def timeline(melody_data: list, bpm: float, transpose: int = 0) -> list:
@@ -284,30 +295,169 @@ def take_shifts(style_shift: int, takes: int) -> list:
     return shifts[:max(1, takes)]
 
 
-def pitch_error(path: str, notes: list) -> float:
-    """Wie weit eine Fassung danebenliegt (kleiner ist besser): mittlere Abweichung von den Noten in Cent,
-    Aussetzer (stumm, wo gesungen werden soll) zählen wie 600 Cent, übersteuerte Stellen kosten extra."""
+def _pitch_track(path: str) -> tuple:
+    """(Tonhöhe in Hz je 10 ms, Zeiten, übersteuert je Zeit, Audio, Rate) einer Fassung."""
     import pyworld as pw
     from scipy.signal import resample_poly
     audio, rate = sf.read(path, dtype="float64", always_2d=True)
-    clipped = float(np.mean(np.abs(audio) >= 0.999))
     x = np.ascontiguousarray(resample_poly(audio.mean(axis=1), 16000, rate))
     f0, times = pw.dio(x, 16000, f0_floor=70.0, f0_ceil=1100.0, frame_period=10.0)
     f0 = pw.stonemask(x, f0, times, 16000)
-    total = weight = 0.0
+    hop = rate // 100
+    peaks = np.abs(audio).max(axis=1)
+    clipped = np.array([np.mean(peaks[i * hop:(i + 1) * hop] >= 0.999) if i * hop < len(peaks) else 0.0
+                        for i in range(len(times))])
+    return f0, times, clipped, audio, rate
+
+
+def _note_errors(f0: np.ndarray, times: np.ndarray, notes: list) -> list:
+    """[(Fehler mal Dauer, Dauer)] je Note: mittlere Abweichung in Cent, Aussetzer zählen wie 600 Cent."""
+    out = []
     for n in notes:
         dur = n.end - n.start
-        if dur < 0.12:
-            continue
-        sel = f0[(times >= n.start + 0.2 * dur) & (times < n.end - 0.2 * dur)]
+        sel = f0[(times >= n.start + 0.2 * dur) & (times < n.end - 0.2 * dur)] if dur >= 0.12 else []
         if not len(sel):
+            out.append((0.0, 0.0))
             continue
         sung = sel[sel > 0]
         target = 440.0 * 2 ** ((n.pitch - 69) / 12)
         cents = float(np.median(np.abs(1200 * np.log2(sung / target)))) if len(sung) else 600.0
-        total += (min(cents, 600.0) + 600.0 * (1 - len(sung) / len(sel))) * dur
-        weight += dur
-    return (total / weight if weight else 600.0) + clipped * 1e4
+        out.append(((min(cents, 600.0) + 600.0 * (1 - len(sung) / len(sel))) * dur, dur))
+    return out
+
+
+def pitch_error(path: str, notes: list) -> float:
+    """Wie weit eine Fassung danebenliegt (kleiner ist besser): mittlere Abweichung von den Noten in Cent,
+    Aussetzer (stumm, wo gesungen werden soll) zählen wie 600 Cent, übersteuerte Stellen kosten extra."""
+    f0, times, clipped, _, _ = _pitch_track(path)
+    errors = _note_errors(f0, times, notes)
+    weight = sum(d for _, d in errors)
+    return (sum(e for e, _ in errors) / weight if weight else 600.0) + float(np.mean(clipped)) * 1e4
+
+
+# ── Comping: jede Phrase aus der saubersten Fassung ──────────────────────────────
+COMP_FADE = 0.03             # Überblendung an den Schnitten (Sekunden), mitten in der Pause zwischen zwei Phrasen
+
+
+def phrase_errors(track: tuple, notes: list, groups: list) -> list:
+    """Fehler je Phrase (wie pitch_error, nur über die Noten der Phrase und ihre Zeit)."""
+    f0, times, clipped = track[:3]
+    errors = _note_errors(f0, times, notes)
+    index = {id(n): i for i, n in enumerate(notes)}
+    out = []
+    for group in groups:
+        mine = [errors[index[id(n)]] for n in group]
+        weight = sum(d for _, d in mine)
+        inside = (times >= group[0].start) & (times < group[-1].end)
+        clip = float(np.mean(clipped[inside])) if inside.any() else 0.0
+        out.append((sum(e for e, _ in mine) / weight if weight else 600.0) + clip * 1e4)
+    return out
+
+
+def _cut_points(groups: list) -> list:
+    """Schnittstellen zwischen den Phrasen: die Mitte der Pause dazwischen (Sekunden)."""
+    return [(a[-1].end + b[0].start) / 2 for a, b in zip(groups, groups[1:])]
+
+
+def _segment_masks(choice: list, cuts: list, takes: int, length: int, rate: int,
+                   keep: np.ndarray = None) -> np.ndarray:
+    """Gewicht jeder Fassung über die Zeit: 1 in ihren Phrasen, weich überblendet; keep blendet Stellen aus."""
+    masks = np.zeros((takes, length), dtype=np.float32)
+    bounds = [0] + [int(c * rate) for c in cuts] + [length]
+    for k, (a, b) in zip(choice, zip(bounds, bounds[1:])):
+        if k is not None:
+            masks[k, a:b] = 1.0
+    if keep is not None:
+        masks *= keep[None]
+    return np.stack([smooth(m, int(COMP_FADE * rate)) for m in masks])
+
+
+def comp(takes: list, notes: list, out_path: str, double_path: str = None, double_windows: list = ()) -> list:
+    """
+    Setzt die Hauptstimme Phrase für Phrase aus der saubersten Fassung zusammen und schreibt sie nach out_path.
+    double_path: dort landet in den double_windows (Sekunden, z. B. die Refrains) die zweitbeste Fassung jeder Phrase,
+    eine echte Doppelung statt einer Kopie. Rückgabe: die gewählte Fassung (Index in takes) je Phrase.
+    """
+    groups = phrases(notes)
+    tracks = [_pitch_track(t) for t in takes]
+    rate = tracks[0][4]
+    length = max(len(tr[3]) for tr in tracks)
+    audio = np.zeros((len(takes), length, tracks[0][3].shape[1]), dtype=np.float32)
+    for k, tr in enumerate(tracks):
+        if tr[4] != rate:
+            raise ValueError("Die Fassungen haben verschiedene Abtastraten")
+        audio[k, :len(tr[3])] = tr[3]
+    scores = np.array([phrase_errors(tr, notes, groups) for tr in tracks])      # [Fassung, Phrase]
+    order = np.argsort(scores, axis=0, kind="stable")
+    choice = [int(order[0, p]) for p in range(len(groups))]
+    cuts = _cut_points(groups)
+    masks = _segment_masks(choice, cuts, len(takes), length, rate)
+    sf.write(out_path, np.einsum("kt,ktc->tc", masks, audio), rate, subtype="FLOAT")
+    if double_path and len(takes) > 1 and double_windows:
+        keep = np.zeros(length, dtype=np.float32)
+        for start, end in double_windows:
+            keep[max(0, int(start * rate)):min(length, int(end * rate))] = 1.0
+        second = [int(order[1, p]) for p in range(len(groups))]
+        masks = _segment_masks(second, cuts, len(takes), length, rate, keep)
+        double = np.einsum("kt,ktc->tc", masks, audio)
+        if np.max(np.abs(double)) > 1e-4:
+            sf.write(double_path, double, rate, subtype="FLOAT")
+    return choice
+
+
+# ── Ausdruck pro Phrase ────────────────────────────────────────────────────────
+# Grundpegel des Gesangs je Sektion (dB): Strophen etwas zurück, Refrains nach vorn
+SECTION_LEVEL_DB = {"Intro": -1.0, "Verse": -1.5, "PreChorus": -0.5, "Chorus": 1.0, "Bridge": -1.0,
+                    "Build-up": 0.0, "Drop": 1.0, "Outro": -1.5}
+RISE_DB = 2.0                # zum höchsten Ton einer Phrase hin wird sie so viel lauter
+END_DB = -3.0                # der letzte Ton einer Phrase klingt so viel leiser aus
+BRIGHT = 0.5                 # lauter klingt heller: Anteil der Höhen über 2,5 kHz, der mit dem Pegel mitgeht
+
+
+def expression_curve(notes: list, sections: list, length: int, rate: int, amount: float = 1.0) -> np.ndarray:
+    """Pegel über die Zeit in dB: Grundpegel der Sektion, Anstieg zum Höhepunkt der Phrase, weiches Ende."""
+    points_t, points_db = [0.0], [0.0]
+
+    def level(t: float) -> float:
+        kind = next((k for start, end, k in sections if start <= t < end), "")
+        return SECTION_LEVEL_DB.get(kind, 0.0)
+
+    for group in phrases(notes):
+        base = level(group[0].start)
+        top = max(range(len(group)), key=lambda i: (group[i].pitch, i))
+        peak = group[top]
+        last = group[-1]
+        fade_start = last.start + 0.4 * (last.end - last.start)
+        shape = [(group[0].start - 0.05, base - 1.0), (group[0].start, base - 1.0),
+                 ((peak.start + peak.end) / 2, base + RISE_DB)]
+        if top == len(group) - 1:       # der Höhepunkt ist der letzte Ton: er bleibt oben und klingt dann aus
+            shape += [(fade_start, base + RISE_DB)]
+        else:
+            shape += [(fade_start, base)]
+        shape += [(last.end, base + END_DB), (last.end + 0.05, base)]
+        for t, db in shape:
+            if t > points_t[-1]:
+                points_t.append(t)
+                points_db.append(db)
+    curve = np.interp(np.arange(length) / rate, points_t, points_db).astype(np.float32)
+    return smooth(curve, int(0.02 * rate)) * float(amount)
+
+
+def express(path: str, notes: list, sections: list, amount: float = 1.0) -> bool:
+    """
+    Ausdruck pro Phrase auf eine fertige Gesangsspur: sections [(Start, Ende in Sekunden, Sektionsart)].
+    Lauter klingt dabei auch heller, wie bei einer echten Stimme. False, wenn es nichts zu tun gab.
+    """
+    from scipy.signal import butter, sosfilt
+    if not notes:
+        return False
+    audio, rate = sf.read(path, dtype="float32", always_2d=True)
+    db = expression_curve(notes, sections, len(audio), rate, amount)
+    gain = 10 ** (db / 20)
+    highs = sosfilt(butter(2, 2500, "highpass", fs=rate, output="sos"), audio, axis=0)
+    shaped = audio * gain[:, None] + highs * ((gain - 1) * BRIGHT)[:, None]
+    sf.write(path, shaped.astype(np.float32), rate, subtype="FLOAT")
+    return True
 
 
 # ── Chor im letzten Refrain ────────────────────────────────────────────────────

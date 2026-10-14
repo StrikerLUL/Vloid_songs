@@ -3,7 +3,7 @@
 # Die Melodie (melody_writer.py) baut jeden Takt aus einem Rhythmus (Einsätze in Sechzehnteln) und einer Geste (wie
 # die Töne im Takt steigen und fallen). Hier kommen zwei Quellen dazu, jede mit eigenem Schalter:
 #   - mehr eingebaute: synkopierte J-Pop-Rhythmen, Schlüsse mit Vorhalt, Gesten wie Zickzack oder Umspielung
-#   - gelernte: aus den MIDI-Dateien in einem Ordner (Standard vocaloid_generator/motive). Aus jeder Datei zählen
+#   - gelernte: aus den MIDI-Dateien in einem Ordner (Standard Motive im Datenordner). Aus jeder Datei zählen
 #     die einstimmigen Spuren in Gesangslage; jeder 4/4-Takt liefert seinen Rhythmus und, ab drei Tönen, seine Geste.
 #     Häufige Rhythmen kommen öfter dran; etwa die Hälfte der Takte singt dann gelernte.
 import logging
@@ -18,7 +18,7 @@ import config
 
 log = logging.getLogger(__name__)
 
-FOLDER = os.path.join(config.BASE_DIR, "motive")
+FOLDER = os.path.join(config.DATA_DIR, "Motive")
 MIDI_FILES = (".mid", ".midi")
 KEEP_RHYTHMS = 12              # pro Silbenzahl die häufigsten
 KEEP_GESTURES = 24

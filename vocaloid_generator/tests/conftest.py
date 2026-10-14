@@ -1,12 +1,26 @@
 # conftest.py – gemeinsame Test-Einrichtung
+import atexit
 import os
+import shutil
 import sys
+import tempfile
 
 import pytest
 
 APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if APP_DIR not in sys.path:
     sys.path.insert(0, APP_DIR)
+# Vor jedem Import der App: die Tests schreiben nie in den echten Datenordner (Dokumente\Vloid Songs)
+os.environ["VLOID_DATEN"] = tempfile.mkdtemp(prefix="vloid-test-daten-")
+atexit.register(shutil.rmtree, os.environ["VLOID_DATEN"], ignore_errors=True)
+
+
+@pytest.fixture(autouse=True)
+def isolated_data(tmp_path, monkeypatch):
+    """Jeder Test hat seinen eigenen Datenordner: Vermerke wie „Assistent fertig“ gelten nicht für den nächsten."""
+    import config
+    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path / "daten"))
+    monkeypatch.setattr(config, "LOG_DIR", str(tmp_path / "daten" / "Protokolle"))
 
 
 @pytest.fixture(autouse=True)
@@ -19,11 +33,15 @@ def isolated_settings(tmp_path, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def without_sound_library(tmp_path, monkeypatch):
-    """Tests klingen gleich, ob setup_soundfonts.py und setup_samples.py gelaufen sind oder nicht: ohne beides."""
+    """Tests klingen gleich, ob die Setup-Skripte (Klänge, Aufnahmen, Schlagzeug, Grooves) gelaufen sind: ohne alles."""
+    import drum_kit
+    import grooves
     import sample_library
     import sound_library
     monkeypatch.setattr(sound_library, "FOLDER", str(tmp_path / "soundfonts"))
     monkeypatch.setattr(sample_library, "FOLDER", str(tmp_path / "samples"))
+    monkeypatch.setattr(drum_kit, "FOLDER", str(tmp_path / "drums"))
+    monkeypatch.setattr(grooves, "FOLDER", str(tmp_path / "grooves"))
 
 
 @pytest.fixture(autouse=True)
@@ -38,6 +56,21 @@ def without_rating(tmp_path, monkeypatch):
     """Eine eingerichtete Bewertung (setup_bewertung.py) bewertet in den Tests nicht mit."""
     import rating
     monkeypatch.setattr(rating, "FOLDER", str(tmp_path / "bewertung"))
+
+
+@pytest.fixture(autouse=True)
+def without_demucs(tmp_path, monkeypatch):
+    """Ein eingerichtetes Demucs (setup_demucs.py) zerlegt in den Tests keine Vorbilder."""
+    import separation
+    monkeypatch.setattr(separation, "FOLDER", str(tmp_path / "demucs"))
+    monkeypatch.setattr(separation, "CACHE", str(tmp_path / "vorbild_gruppen.json"))
+
+
+@pytest.fixture(autouse=True)
+def without_accompaniment(tmp_path, monkeypatch):
+    """Eine eingerichtete KI-Begleitung (setup_begleitung.py) schreibt in den Tests nicht mit."""
+    import accompaniment
+    monkeypatch.setattr(accompaniment, "FOLDER", str(tmp_path / "begleitung"))
 
 
 @pytest.fixture(autouse=True)
@@ -85,3 +118,54 @@ def without_surge(monkeypatch):
     """Ein installiertes Surge XT taucht in den Tests nicht auf."""
     import vst_sounds
     monkeypatch.setattr(vst_sounds, "_surge_candidates", lambda: ())
+
+
+@pytest.fixture(autouse=True)
+def not_cancelled():
+    """Ein Abbruch in einem Test bricht den nächsten nicht ab."""
+    import cancel
+    cancel.reset()
+    yield
+    cancel.reset()
+
+
+@pytest.fixture
+def neutrino_attrappe(tmp_path, monkeypatch):
+    """NEUTRINO als Attrappe hinter vocal_synthesizer._run: die echten Aufrufe, aber Sinus statt Stimme.
+    Rückgabe: (NEUTRINO-Ordner, Liste der aufgerufenen Programme)."""
+    import subprocess
+
+    import numpy as np
+    import soundfile as sf
+
+    import pipeline
+    import vocal_synthesizer
+    root = tmp_path / "NEUTRINO"
+    (root / "bin").mkdir(parents=True)
+    (root / "model" / "MERROW").mkdir(parents=True)
+    for name in ("musicXMLtoLabel.exe", "NEUTRINO.exe"):
+        (root / "bin" / name).write_bytes(b"")
+    calls = []
+    lengths = {}
+
+    def run(cmd, cwd, timeout):
+        name = os.path.basename(cmd[0])
+        calls.append(name)
+        if name == "musicXMLtoLabel.exe":
+            import music21
+            xml = cmd[1]
+            beats = float(music21.converter.parse(xml).highestTime)
+            lengths[cmd[2]] = beats * 60.0 / vocal_synthesizer._tempo_aus_musicxml(xml)
+            for path in cmd[2:4]:
+                with open(path, "w") as f:
+                    f.write("label")
+        else:
+            sr = 48000
+            t = np.arange(int(lengths[cmd[1]] * sr)) / sr
+            sf.write(cmd[5], (0.2 * np.sin(2 * np.pi * 330 * t)).astype(np.float32), sr)
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(vocal_synthesizer, "_run", run)
+    # die Windows-Sprachausgabe der Vorschau-Stimme hängt in der CI: sie darf hier nie singen
+    monkeypatch.setattr(pipeline, "_sing_preview", lambda *a, **k: pytest.fail("die Vorschau-Stimme sang"))
+    return root, calls

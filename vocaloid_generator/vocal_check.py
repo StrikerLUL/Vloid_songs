@@ -15,7 +15,7 @@ SUNG_FILE = "gesang.json"
 
 
 def record(out: str, settings, engine: str, voice: str = "") -> dict:
-    """Festhalten, wer gesungen hat (engine: NEUTRINO, VOICEVOX oder Vorschau)."""
+    """Festhalten, wer gesungen hat (engine: NEUTRINO, VOICEVOX, Vorschau oder Eigene Spur)."""
     info = {"engine": engine, "voice": voice, "chosen": settings.vocal_engine}
     if engine == "NEUTRINO":
         from vocal_synthesizer import LETZTER_LAUF, neutrino_ausgabe
@@ -51,6 +51,8 @@ def describe(info: Optional[dict]) -> tuple:
         return ("Achtung: Hier singt die Vorschau-Stimme, weder NEUTRINO noch VOICEVOX hat gesungen. Sie klingt "
                 "absichtlich schlecht. Das Protokoll sagt, warum; NEUTRINO lässt sich unter Hilfe › Einrichten "
                 "einrichten."), True
+    if engine == "Eigene Spur":
+        return f"Hauptstimme aus der eigenen Gesangsspur {info.get('voice', '')}".rstrip(), False
     parts = [f"NEUTRINO {info['version']}" if engine == "NEUTRINO" and info.get("version") else engine]
     parts += [p for p in (info.get("voice"), info.get("device")) if p]
     text = "Gesungen von " + ", ".join(parts)

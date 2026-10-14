@@ -173,7 +173,7 @@ def lead(tmp_path, root, s):
 
 def test_takes_keep_the_style_shift_unless_neutrino_sings_the_same_every_time(tmp_path, singing_neutrino):
     root, calls, state = singing_neutrino
-    s = SongSettings(vocal_takes=2, bpm=120)
+    s = SongSettings(vocal_takes=2, bpm=120, reuse_steps=False)    # jedes Mal wirklich singen, nicht aus dem Gedächtnis
     lead(tmp_path, root, s)
     assert [shift for _, _, shift in calls] == [0, 0, 1]      # gleich gesungen: die zweite eine Stufe heller
     assert pipeline._neutrino_repeats(str(root)) is True

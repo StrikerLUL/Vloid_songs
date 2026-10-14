@@ -3,6 +3,7 @@ import logging
 import os
 import subprocess
 import sys
+from typing import Optional
 
 import numpy as np
 
@@ -90,6 +91,23 @@ def piano_roll(result) -> dict:
     if result.settings is not None:
         data["step"] = 60.0 / result.settings.bpm / 4       # ein Sechzehntel: so fein ändert sich die Länge
     return data
+
+
+def phrase_at(result, t: float) -> Optional[tuple]:
+    """(Anfang, Ende) in Sekunden der gesungenen Phrase, in der die Zeit t liegt; None ohne Gesang dort."""
+    import pretty_midi
+
+    import voice_fx
+    path = os.path.join(result.output_dir, "vocal_melody.mid") if result is not None else ""
+    if not os.path.exists(path):
+        return None
+    midi = pretty_midi.PrettyMIDI(path)
+    notes = sorted((voice_fx.SungNote(n.start, n.end, n.pitch) for i in midi.instruments for n in i.notes),
+                   key=lambda n: n.start)
+    for group in voice_fx.phrases(notes):
+        if group[0].start - 0.05 <= t <= group[-1].end + 0.05:
+            return group[0].start, group[-1].end
+    return None
 
 
 def lyrics(result) -> list:

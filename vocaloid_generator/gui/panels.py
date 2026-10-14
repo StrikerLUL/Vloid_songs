@@ -538,6 +538,9 @@ LIVELY_SWITCHES = (
     ("vocal_chain", "Studio-Gesangskette", "Leichte Bandsättigung, Hall und Delay je Sektion (Strophe trockener, "
                                            "Refrain und Bridge weiter) und im Refrain eine echte Doppelung aus der "
                                            "zweiten Fassung"),
+    ("vocal_tone", "Kette pro Stimme und Stil", "EQ, Kompressor und Sättigung passen zur Stimme und zum Stil: helle "
+                                                "Stimmen weniger spitz, tiefe klarer, Ballade weicher, Rock mit mehr "
+                                                "Sättigung"),
 )
 
 # Begleitstimmen wie in Produktionen (backing_vocals.py), von NEUTRINO gesungen
@@ -561,10 +564,13 @@ SCORE_SWITCHES = (
                                                     "auf einem Ton, wie es seine Anleitung empfiehlt"),
     ("english_kana", "Englisch als Katakana", "Englische Wörter im Text werden so gesungen, wie man sie in J-Pop singt "
                                               "(love → ラブ). NEUTRINO kann kein Englisch."),
+    ("singable_melody", "Singbare Melodie", "Keine Sprünge über eine Quinte auf kurzen Silben, der höchste Ton nicht "
+                                            "nur eine Sechzehntel lang, nach spätestens 8 Sekunden eine Atempause. "
+                                            "Gilt nicht für eine eigene Melodie."),
 )
 
 
-def voice_panel(s: SongSettings, singers: list) -> tuple:
+def voice_panel(s: SongSettings, singers: list, pick: PickFn | None = None) -> tuple:
     """Rückgabe: die Auswahl der Stimme und die der Duett-Stimme, damit die Seite ihre Listen erneuern kann."""
     ui.select(labels.ENGINES, label="Gesang mit").bind_value(s, "vocal_engine").classes("w-full").mark("engine")
     hint("Fehlt die gewählte Engine, singt die andere; fehlen beide, die Vorschau-Stimme.")
@@ -611,6 +617,16 @@ def voice_panel(s: SongSettings, singers: list) -> tuple:
     section_title("Noten für NEUTRINO")
     for attr, text, tip in SCORE_SWITCHES:
         ui.switch(text).bind_value(s, attr).props("dense").tooltip(tip).mark(f"switch-{attr}")
+    section_title("Eigene Gesangsspur")
+    with ui.row().classes("w-full items-center no-wrap"):
+        ui.input("WAV statt der Hauptstimme", placeholder="leer = die Engine singt") \
+            .bind_value(s, "own_vocal").classes("col").props("dense stack-label clearable").mark("own-vocal")
+        if pick is not None:
+            pick_button(pick, s, "own_vocal", file_types=("WAV (*.wav)",))
+    ui.switch("An den Noten ausrichten").bind_value(s, "own_vocal_align").props("dense").mark("switch-own_vocal_align")
+    hint("Für Feinarbeit im NEUTRINO-Tuning-Tool, in VoiSona oder für eine eigene Aufnahme: „Noten für Tuning-Tools“ "
+         "exportieren, dort bearbeiten, die WAV hier wählen. Sie ersetzt die Hauptstimme und wird gemischt wie der "
+         "eigene Gesang; der Vorlauftakt fällt beim Ausrichten weg. Die Begleitstimmen singt weiter die Engine.")
     section_title("VOICEVOX")
     voicevox_editor(s)
     section_title("Lebendiger Gesang")
@@ -621,9 +637,12 @@ def voice_panel(s: SongSettings, singers: list) -> tuple:
             ui.label(text).classes("w-28")
             ui.slider(min=0, max=2, step=0.1).bind_value(s, attr).props("label markers").classes("col") \
                 .mark(f"slider-{attr}")
+    ui.switch("Mit PSOLA statt WORLD").bind_value(s, "psola_reshape").props("dense").mark("switch-psola_reshape") \
+        .tooltip("Praat-PSOLA verschiebt nur die Tonhöhe und lässt den Klang der Stimme, wie er ist. Aus: der "
+                 "WORLD-Vocoder baut jede Phrase neu, das klingt eine Spur rauer.")
     hint("1 = wie die Stimme singt. Vibrato 0 = gerade Töne, 2 = doppelt so viel; Übergänge 0 = die Töne springen "
-         "(wie Autotune), 2 = die Stimme gleitet doppelt so lange. Bei NEUTRINO wird die Aufnahme dafür neu "
-         "berechnet (WORLD), das klingt eine Spur rauer.")
+         "(wie Autotune), 2 = die Stimme gleitet doppelt so lange. Bei NEUTRINO wird die Aufnahme dafür Phrase für "
+         "Phrase umgerechnet, bei 1 und 1 bleibt sie unberührt.")
     section_title("Vorschau-Stimme (wenn NEUTRINO und VOICEVOX fehlen)")
     with ui.row().classes("w-full items-center gap-4"):
         ui.label("Hauchigkeit").classes("w-28")

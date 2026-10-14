@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 import soundfile as sf
 
+import main
 import mixer
 import pipeline
 import vocal_synthesizer
@@ -194,16 +195,33 @@ def test_glides_can_snap_or_stretch():
     assert np.all(np.abs(np.diff(69 + 12 * np.log2(stretched / 440))) < 0.5)   # keine Sprünge
 
 
-def test_reshaped_track_sings_without_vibrato(tmp_path):
+@pytest.mark.parametrize("psola", [True, False])
+def test_reshaped_track_sings_without_vibrato(tmp_path, psola):
     notes = [N(0.3, 1.5, 62), N(1.5, 2.7, 65)]
     path = write(tmp_path / "vocals.wav", sung(notes, 3.0, vibrato=0.5, glide=0.05))
     assert not voice_fx.reshape(path, notes)                 # 1 und 1: nichts zu tun
-    assert voice_fx.reshape(path, notes, vibrato=0.0)
+    assert voice_fx.reshape(path, notes, vibrato=0.0, psola=psola)
     audio, rate = sf.read(path)
     f0, t = measured_pitch(audio, rate)
-    assert depth(f0, t, notes[0]) < 0.15 and depth(f0, t, notes[1]) < 0.15
+    limit = 0.2 if psola else 0.15                          # PSOLA lässt etwas mehr übrig, dafür bleibt der Klang
+    assert depth(f0, t, notes[0]) < limit and depth(f0, t, notes[1]) < limit
     inside = (t > 0.6) & (t < 1.3)
     assert np.median(f0[inside]) == pytest.approx(hz(62), rel=0.01)
+
+
+def test_psola_is_used_when_parselmouth_is_there_and_world_otherwise(tmp_path, monkeypatch):
+    notes = [N(0.3, 1.5, 62)]
+    path = write(tmp_path / "vocals.wav", sung(notes, 2.0, vibrato=0.5))
+    used = []
+    for name in ("_psola", "_world"):
+        real = getattr(voice_fx, name)
+        monkeypatch.setattr(voice_fx, name, lambda *a, real=real, name=name: used.append(name) or real(*a))
+    voice_fx.reshape(path, notes, vibrato=0.0)
+    voice_fx.reshape(path, notes, vibrato=0.0, psola=False)
+    monkeypatch.setattr(voice_fx, "psola_available", lambda: False)
+    voice_fx.reshape(path, notes, vibrato=0.0)
+    assert used == ["_psola", "_world", "_world"]
+    assert SongSettings().psola_reshape and main.parse_args(["--ohne-psola"]).ohne_psola
 
 
 # ── Fassungen ──────────────────────────────────────────────────────────────────

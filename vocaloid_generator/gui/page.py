@@ -202,7 +202,8 @@ def build() -> None:
                         .props("dense").mark("edit-melody") \
                         .tooltip("Töne der Gesangsmelodie nach oben oder unten ziehen, oder anklicken und mit den "
                                  "Pfeiltasten verschieben (mit Umschalt um eine Oktave). Am rechten Rand gezogen "
-                                 "oder mit Pfeil links/rechts wird ein Ton kürzer oder länger.")
+                                 "oder mit Pfeil links/rechts wird ein Ton kürzer oder länger. Doppelklick auf einen "
+                                 "Ton: nur seine Phrase neu singen, mit anderem StyleShift oder anderer Stimme.")
                 roll = PianoRoll().classes("w-full")
                 with ui.row().classes("items-center gap-1") as edit_row:
                     edits_label = ui.label().classes("text-caption").mark("edits")
@@ -241,6 +242,10 @@ def build() -> None:
                 with ui.row().classes("gap-2 q-mt-sm"):
                     zip_button = ui.button("Als ZIP für die DAW", icon="archive", on_click=lambda: export_zip()) \
                         .props("flat no-caps").mark("zip")
+                    notes_button = ui.button("Noten für Tuning-Tools", icon="queue_music",
+                                             on_click=lambda: export_notes()).props("flat no-caps").mark("notes-zip") \
+                        .tooltip("Die MusicXML, die NEUTRINO bekommt, die UST für OpenUtau und die Melodie als MIDI. "
+                                 "Die bearbeitete Aufnahme kommt unter Gesang als eigene Gesangsspur zurück.")
                     video_button = ui.button("Lyric-Video (MP4)", icon="movie", on_click=lambda: make_video()) \
                         .props("flat no-caps").mark("video") \
                         .tooltip("Der Song mit dem Text zum Mitlesen als Video, z. B. für YouTube (braucht ffmpeg)")
@@ -271,7 +276,7 @@ def build() -> None:
                 with ui.tab_panel("Band"):
                     panels.band_panel(settings)
                 with ui.tab_panel("Gesang"):
-                    singer_select, duet_select = panels.voice_panel(settings, _singers(settings))
+                    singer_select, duet_select = panels.voice_panel(settings, _singers(settings), picker)
                 with ui.tab_panel("Mix"):
                     panels.mix_panel(settings)
                 with ui.tab_panel("Verlauf"):
@@ -309,7 +314,7 @@ def build() -> None:
                 return
             current = current.with_updates(seed=result.seed, variations=result.settings.variations)
         elif current.seed is None:
-            current = current.with_updates(variations={}, melody_edits={}, melody_lengths={})
+            current = current.with_updates(variations={}, melody_edits={}, melody_lengths={}, phrase_fixes={})
         save_settings()
         if draft:
             current, n = pipeline.draft_settings(current), 1
@@ -341,6 +346,7 @@ def build() -> None:
         settings.variations = chosen.settings.variations
         settings.melody_edits = chosen.settings.melody_edits
         settings.melody_lengths = chosen.settings.melody_lengths
+        settings.phrase_fixes = chosen.settings.phrase_fixes
         await show_result(chosen)
         show_history()
         if len(results) > 1:
@@ -522,9 +528,54 @@ def build() -> None:
         roll.resize(start, end)
         show_edits()
 
+    def on_phrase(e) -> None:
+        """Doppelklick auf einen Ton: seine Phrase mit anderem StyleShift oder anderer Stimme neu singen (E3)."""
+        result = state["result"]
+        if result is None:
+            return
+        found = media.phrase_at(result, float(e.args["start"]))
+        if found is None:
+            return
+        start, end = found
+        spb = 60.0 / result.settings.bpm
+        same = [k for k in settings.phrase_fixes if start - 0.05 <= float(k) * spb <= end + 0.05]
+        before = settings.phrase_fixes.get(same[0], {}) if same else {}
+        singers = sorted(set(_singers(settings)) | {settings.singer})
+
+        def keep(fix: Optional[dict]) -> None:
+            fixes = {k: v for k, v in settings.phrase_fixes.items() if k not in same}
+            if fix:
+                fixes[edit_key(start / spb)] = fix
+            settings.phrase_fixes = fixes
+            dialog.close()
+            show_edits()
+
+        async def sing() -> None:
+            keep({"style_shift": int(shift.value), "singer": "" if voice.value == settings.singer else voice.value})
+            await resing()
+
+        with dialog_host, ui.dialog() as dialog, ui.card().classes("w-96"):
+            ui.label(f"Phrase bei {start:.1f} s neu singen").classes("text-h6")
+            with ui.row().classes("w-full items-center gap-4"):
+                ui.label("StyleShift").classes("w-24")
+                shift = ui.slider(min=-6, max=6, step=1, value=before.get("style_shift", settings.style_shift)) \
+                    .props("label markers").classes("col").mark("phrase-shift")
+            voice = ui.select(singers, value=before.get("singer") or settings.singer, label="Stimme") \
+                .classes("w-full").mark("phrase-singer")
+            panels.hint("Nur diese Phrase singt NEUTRINO neu, der Rest des Gesangs bleibt, wie er ist. Minus = dunkler "
+                        "und ruhiger, plus = heller und kräftiger.")
+            with ui.row().classes("w-full justify-end"):
+                if same:
+                    ui.button("Wie vorher", icon="undo", on_click=lambda: keep(None)).props("flat no-caps") \
+                        .mark("phrase-reset")
+                ui.button("Abbrechen", on_click=dialog.close).props("flat no-caps")
+                ui.button("Neu singen", icon="record_voice_over", on_click=sing) \
+                    .props("unelevated no-caps color=secondary").mark("phrase-sing")
+        dialog.open()
+
     def show_edits() -> None:
         n = _edited(settings)
-        edits_label.set_text(_edits(n))
+        edits_label.set_text(_edits(settings))
         edit_row.set_visibility(n > 0)
         resing_button.set_enabled(n > 0 and not job.running)
         preview_button.set_enabled(n > 0 and not job.running)
@@ -548,6 +599,7 @@ def build() -> None:
     async def drop_edits() -> None:
         settings.melody_edits = {}
         settings.melody_lengths = {}
+        settings.phrase_fixes = {}
         show_edits()
         result = state["result"]
         if result is not None:
@@ -557,6 +609,7 @@ def build() -> None:
 
     roll.on("edit", on_edit)
     roll.on("resize", on_resize)
+    roll.on("phrase", on_phrase)
 
     # ── Lyric-Video und Vergleich ─────────────────────────────────────────────────
     async def make_video() -> None:
@@ -701,13 +754,30 @@ def build() -> None:
         ui.notify(f"ZIP gespeichert: {path}", type="positive", multi_line=True)
         ui.download.file(path)
 
+    async def export_notes() -> None:
+        result = state["result"]
+        if result is None:
+            ui.notify("Noch kein Song zum Exportieren.", type="warning")
+            return
+        from exporter import exportiere_noten
+        target = os.path.join(result.output_dir, "export", f"noten_{result.seed}.zip")
+        try:
+            path = await run.io_bound(exportiere_noten, result, target)
+        except FileNotFoundError as e:
+            ui.notify(str(e), type="warning")
+            return
+        if path is None:
+            return
+        ui.notify(f"Noten gespeichert: {path}", type="positive", multi_line=True)
+        ui.download.file(path)
+
     # ── Fortschritt, Protokoll, Speichern ──────────────────────────────────────────
     def set_busy(busy: bool) -> None:
         stop_button.set_visibility(busy)
         stop_button.set_enabled(True)
         if not busy:
             cancel.reset()
-        for button in (generate_button, draft_button, full_button, album_button, zip_button, video_button,
+        for button in (generate_button, draft_button, full_button, album_button, zip_button, notes_button, video_button,
                        youtube_button, hooks_button, cast_button, *reroll_buttons.values()):
             button.set_enabled(not busy)
         resing_button.set_enabled(not busy and _edited(settings) > 0)
@@ -914,7 +984,7 @@ def describe(s: SongSettings) -> str:
     rerolled = ", ".join(f"{_part_name(p)} {n}×" for p, n in sorted(s.variations.items()))
     return (f"{s.style} · {s.bpm} BPM · {s.key} {labels.SCALES.get(s.scale, s.scale)} · Seed {s.seed}"
             + (f" · neu gewürfelt: {rerolled}" if rerolled else "")
-            + (f" · {_edits(_edited(s))}" if _edited(s) else ""))
+            + (f" · {_edits(s)}" if _edited(s) else ""))
 
 
 def _song_name(entry: history.Entry) -> str:
@@ -922,12 +992,15 @@ def _song_name(entry: history.Entry) -> str:
 
 
 def _edited(s: SongSettings) -> int:
-    """Zahl der von Hand geänderten Töne (Höhe oder Länge)."""
-    return len(set(s.melody_edits) | set(s.melody_lengths))
+    """Zahl der von Hand geänderten Töne (Höhe oder Länge) und neu gesungenen Phrasen."""
+    return len(set(s.melody_edits) | set(s.melody_lengths)) + len(s.phrase_fixes)
 
 
-def _edits(n: int) -> str:
-    return "1 Ton geändert" if n == 1 else f"{n} Töne geändert"
+def _edits(s: SongSettings) -> str:
+    tones, phrases = len(set(s.melody_edits) | set(s.melody_lengths)), len(s.phrase_fixes)
+    parts = ([("1 Ton geändert" if tones == 1 else f"{tones} Töne geändert")] if tones else []) + \
+        ([("1 Phrase neu gesungen" if phrases == 1 else f"{phrases} Phrasen neu gesungen")] if phrases else [])
+    return ", ".join(parts)
 
 
 def _part_name(key: str) -> str:

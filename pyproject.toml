@@ -17,6 +17,7 @@ dependencies = [
     "numpy>=1.24",
     "pedalboard>=0.9",
     "pillow>=10.1",
+    "praat-parselmouth>=0.4.5",
     "pretty_midi>=0.2.10",
     "py7zr>=0.22",
     "pydantic>=2.5",

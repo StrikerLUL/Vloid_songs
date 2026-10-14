@@ -275,7 +275,14 @@ def _loudness(audio: np.ndarray) -> float:
         return float(-0.691 + 10 * np.log10(z[:, gated].mean(axis=1).sum()))
 
 
-def _channel_chain(key: str) -> Pedalboard:
+def _channel_chain(key: str, tone=None) -> Pedalboard:
+    """EQ und Kompressor einer Spur; tone (vocal_tone.Tone): die Kette des Gesangs für Stimme und Stil."""
+    if key == "vocals" and tone is not None:
+        return Pedalboard([HighpassFilter(tone.highpass),
+                           Compressor(threshold_db=-14, ratio=tone.ratio, attack_ms=1, release_ms=40),
+                           PeakFilter(tone.mud_hz, tone.mud_db, 1.0), PeakFilter(tone.presence_hz, tone.presence_db, 1.0),
+                           HighShelfFilter(10000, tone.air_db),
+                           Compressor(threshold_db=-22, ratio=3, attack_ms=8, release_ms=120)])
     chains = {
         "drums":   [HighpassFilter(30), Compressor(threshold_db=-12, ratio=2.5, attack_ms=15, release_ms=120)],
         "bass":    [HighpassFilter(35), LowpassFilter(5000),
@@ -476,6 +483,7 @@ def mische_spuren(
     sung_pads: list = None,
     convolution: bool = False,
     ducked_delay: bool = False,
+    vocal_tone=None,
 ) -> None:
     """
     Mischt die Spuren zu einem Stereo-Master:
@@ -502,6 +510,7 @@ def mische_spuren(
     sung_pads: Zeitbereiche (Sekunden), in denen gesungene Flächen den Keyboard-Chor (choir) ersetzen.
     convolution: die Gesangsplatte aus einer Impulsantwort mit Pre-Delay im Tempo (vocal_mix.plate); eine eigene
     Raum-Impulsantwort ersetzt den gemeinsamen Hall. ducked_delay: das Gesangs-Delay ist leiser, solange gesungen wird.
+    vocal_tone: EQ, Kompressor und Sättigung des Gesangs für Stimme und Stil (vocal_tone.Tone); None = die feste Kette.
     """
     from settings import DEFAULT_VOLUMES
 
@@ -536,8 +545,9 @@ def mische_spuren(
         if key in VOCAL_KEYS:
             audio = _deess(audio)
         if key in ("vocals", "double") and vocal_chain:
-            audio = _saturate(audio)
-        audio = _channel_chain("vocals" if key == "double" else key)(audio, SAMPLE_RATE)
+            audio = _saturate(audio) if vocal_tone is None else _saturate(audio, vocal_tone.drive_db,
+                                                                            vocal_tone.drive_mix)
+        audio = _channel_chain("vocals" if key == "double" else key, vocal_tone)(audio, SAMPLE_RATE)
         if key == "vocals" and double_windows and not real_double:
             audio = _double(audio, double_windows)
         elif key == "harmony" and mono:

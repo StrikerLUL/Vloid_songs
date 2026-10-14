@@ -159,6 +159,11 @@ class SongSettings(BaseModel):
     vocal_takes: int = Field(1, ge=1, le=3)    # NEUTRINO singt so oft (StyleShift ±1), die sauberste Fassung zählt
     vibrato: float = Field(1.0, ge=0.0, le=2.0)   # 0 = gerade Töne, 1 = wie gesungen, 2 = doppelt so viel
     glide: float = Field(1.0, ge=0.0, le=2.0)     # Übergänge zwischen Tönen: 0 = springen, 1 = wie gesungen, 2 = länger
+    psola_reshape: bool = True         # Vibrato und Übergänge mit Praat-PSOLA statt WORLD (Klang bleibt)
+    own_vocal: str = ""                 # eigene Gesangsspur (WAV), ersetzt die Hauptstimme; leer = die Engine singt
+    own_vocal_align: bool = True       # die eigene Spur an den Noten ausrichten (z. B. Vorlauftakt weg)
+    # von Hand neu gesungene Phrasen (E3): {Schlag einer Note der Phrase (edit_key): {"style_shift": int, "singer": str}}
+    phrase_fixes: dict[str, dict] = Field(default_factory=dict)
     breaths: bool = True               # hörbares Einatmen vor den Phrasen
     recorded_breaths: bool = True      # aufgenommene Atmer aus dem Ordner Atmer statt Rauschen (wenn welche da sind)
     echo_throws: bool = True           # Echo auf dem letzten Wort einer Phrase
@@ -167,12 +172,14 @@ class SongSettings(BaseModel):
     phrase_expression: bool = True     # Ausdruck pro Phrase: zum Höhepunkt lauter und heller, am Ende weicher
     syllable_dynamics: bool = True     # Lautstärke pro Silbe: Betonungen lauter, weicher Einsatz, Anlauf leiser
     vocal_chain: bool = True           # Studio-Kette: Sättigung, Hall und Delay je Sektion, echte Doppelung
+    vocal_tone: bool = True            # Kette pro Stimme und Stil: EQ und Sättigung für helle/tiefe Stimmen, Ballade, Rock
     romaji: bool = True                # Liedtext in lateinischen Buchstaben (Romaji) japanisch singen
     # Gesang 1.1, jedes mit Schalter. Noten, die NEUTRINO gut singen kann (neutrino_score.py):
     long_vowel_mark: bool = True       # lang gezogene Vokale und Melisma als ー statt als neue Silbe
     breath_marks: bool = True          # Atemzeichen in langen Phrasen (NEUTRINO trennt dort, braucht weniger Speicher)
     fast_diphthongs: bool = True       # zwei schnelle Töne mit Doppelvokal (か + い) auf einem Ton
     english_kana: bool = True          # englische Wörter als Katakana singen (love → ラブ)
+    singable_melody: bool = True       # Melodie auf Singbarkeit prüfen: Sprünge, Spitzen, Atempausen
     # StyleShift pro Sektion: Strophe ruhiger und tiefer, Refrain kräftiger und heller (Versatz zum StyleShift)
     section_style: bool = True
     verse_style_shift: int = Field(-1, ge=-3, le=3)
@@ -378,7 +385,8 @@ class SongSettings(BaseModel):
         new_melody = part.partition(":")[0] in ("melody", "chords")
         return self.with_updates(variations={**self.variations, part: self.variations.get(part, 0) + 1},
                                  melody_edits={} if new_melody else self.melody_edits,
-                                 melody_lengths={} if new_melody else self.melody_lengths)
+                                 melody_lengths={} if new_melody else self.melody_lengths,
+                                 phrase_fixes={} if new_melody else self.phrase_fixes)
 
     def section_config(self) -> dict:
         """config.SECTION_CONFIG mit den eigenen Längen der Sektionen."""

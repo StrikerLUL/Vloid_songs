@@ -70,6 +70,8 @@ def parse_args(argv=None):
     p.add_argument("--vibrato", type=float, metavar="X", help="0 = gerade Töne, 1 = wie gesungen, 2 = doppelt")
     p.add_argument("--uebergaenge", type=float, metavar="X",
                    help="Übergänge zwischen Tönen: 0 = springen, 1 = wie gesungen, 2 = doppelt so lang")
+    p.add_argument("--ohne-psola", action="store_true",
+                   help="Vibrato und Übergänge mit dem WORLD-Vocoder statt mit Praat-PSOLA ändern")
     p.add_argument("--ohne-atmer", action="store_true", help="kein Einatmen vor den Phrasen")
     p.add_argument("--ohne-echo", action="store_true", help="kein Echo auf dem letzten Wort")
     p.add_argument("--ohne-chor", action="store_true", help="kein Chor im letzten Refrain")
@@ -78,11 +80,15 @@ def parse_args(argv=None):
     p.add_argument("--ohne-ausdruck", action="store_true", help="kein Ausdruck pro Phrase (Lautstärke, Helligkeit)")
     p.add_argument("--ohne-gesangskette", action="store_true",
                    help="ohne Sättigung, Hall und Delay je Sektion und echte Doppelung für den Gesang")
+    p.add_argument("--ohne-stimmkette", action="store_true",
+                   help="dieselbe Gesangskette für jede Stimme und jeden Stil (wie bis 1.0)")
     p.add_argument("--ohne-romaji", action="store_true", help="Romaji im Liedtext nicht japanisch singen")
     p.add_argument("--ohne-haltezeichen", action="store_true", help="lange Vokale für NEUTRINO nicht als ー schreiben")
     p.add_argument("--ohne-atemzeichen", action="store_true", help="keine Atemzeichen in langen Zeilen")
     p.add_argument("--ohne-doppelvokale", action="store_true", help="schnelle Töne nicht auf einem Ton zusammenlegen")
     p.add_argument("--ohne-englisch", action="store_true", help="englische Wörter nicht als Katakana singen")
+    p.add_argument("--ohne-singbarkeit", action="store_true",
+                   help="die Melodie nicht auf Sprünge, Spitzen auf Sechzehnteln und Atempausen prüfen")
     p.add_argument("--ohne-sektions-stil", action="store_true",
                    help="Strophe und Refrain mit demselben StyleShift singen")
     p.add_argument("--strophe-stil", type=int, choices=range(-3, 4), metavar="-3..3",
@@ -163,6 +169,13 @@ def parse_args(argv=None):
                    help="eigene Akkorde, z. B. 'Chorus=F G Em Am' oder 'Verse=vi IV I V' (mehrfach möglich, "
                         "'Chorus=' nimmt wieder die des Stils)")
     p.add_argument("--melodie-midi", metavar="DATEI", help="eigene Melodie als MIDI-Datei ('' = komponieren)")
+    p.add_argument("--eigener-gesang", metavar="WAV",
+                   help="eigene Gesangsspur statt der Hauptstimme, z. B. aus dem NEUTRINO-Tuning-Tool ('' = die "
+                        "Engine singt)")
+    p.add_argument("--ohne-ausrichten", action="store_true",
+                   help="die eigene Gesangsspur nicht an den Noten ausrichten (sie beginnt mit dem Song)")
+    p.add_argument("--noten-zip", metavar="DATEI",
+                   help="die Noten des Gesangs für Tuning-Tools als ZIP exportieren (MusicXML, UST, MIDI)")
     p.add_argument("--summen", metavar="AUFNAHME",
                    help="eine gesummte Melodie (WAV, MP3 …) in Noten verwandeln und singen lassen")
     p.add_argument("--takte", action="append", type=_section_bars, metavar="SEKTION=N",
@@ -228,16 +241,19 @@ def main(argv=None) -> int:
                  "singer": args.stimme, "duet_singer": args.duett, "master_lufs": args.lautheit,
                  "vocal_engine": args.engine, "voicevox_singer": args.voicevox_stimme, "vocal_takes": args.fassungen,
                  "vibrato": args.vibrato, "glide": args.uebergaenge,
+                 "psola_reshape": False if args.ohne_psola else None,
                  "breaths": False if args.ohne_atmer else None, "echo_throws": False if args.ohne_echo else None,
                  "final_choir": False if args.ohne_chor else None,
                  "vocal_comping": False if args.ohne_comping else None,
                  "phrase_expression": False if args.ohne_ausdruck else None,
                  "vocal_chain": False if args.ohne_gesangskette else None,
+                 "vocal_tone": False if args.ohne_stimmkette else None,
                  "romaji": False if args.ohne_romaji else None,
                  "long_vowel_mark": False if args.ohne_haltezeichen else None,
                  "breath_marks": False if args.ohne_atemzeichen else None,
                  "fast_diphthongs": False if args.ohne_doppelvokale else None,
                  "english_kana": False if args.ohne_englisch else None,
+                 "singable_melody": False if args.ohne_singbarkeit else None,
                  "section_style": False if args.ohne_sektions_stil else None,
                  "verse_style_shift": args.strophe_stil, "chorus_style_shift": args.refrain_stil,
                  "even_takes": False if args.ohne_gleiche_fassungen else None,
@@ -266,6 +282,7 @@ def main(argv=None) -> int:
                  "polish": False if args.ohne_veredler else None, "polish_strength": args.veredler_staerke,
                  "polish_caption": args.veredler_klang,
                  "melody_midi": args.melodie_midi, "melody_midi_section": args.melodie_sektion,
+                 "own_vocal": args.eigener_gesang, "own_vocal_align": False if args.ohne_ausrichten else None,
                  "motif_folder": args.motive,
                  "more_motifs": False if args.ohne_motive else None,
                  "learned_motifs": False if args.ohne_motive else None}
@@ -337,6 +354,9 @@ def main(argv=None) -> int:
     if args.zip:
         from exporter import exportiere_projekt
         log.info("ZIP: %s", exportiere_projekt(chosen, args.zip))
+    if args.noten_zip:
+        from exporter import exportiere_noten
+        log.info("Noten für Tuning-Tools: %s", exportiere_noten(chosen, args.noten_zip))
     return 0
 
 

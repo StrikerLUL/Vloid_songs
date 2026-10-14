@@ -20,7 +20,7 @@ GLIDE_ZONE = 0.1             # Sekunden vor und nach einem Tonwechsel, in denen 
 VIBRATO_PERIOD = 0.18        # eine Schwingung eines natürlichen Vibratos (5,5 Hz)
 VIBRATO_DEPTH = 0.3          # Halbtöne, die ein zusätzliches Vibrato auf und ab geht
 NATURAL_VIBRATO = 0.08       # ab dieser Tiefe (Halbtöne) hat die Stimme selbst ein Vibrato
-FRAME = 0.005                # Rahmen der Tonhöhenanalyse mit WORLD (Sekunden)
+FRAME = 0.005                # Rahmen der Tonhöhenanalyse mit WORLD und Praat (Sekunden)
 # Chor aus der eigenen Stimme: (Verstimmung in Cent, Verzögerung in Sekunden, Panorama) je Sänger
 CHOIR_VOICES = ((-14, 0.019, -0.85), (9, 0.027, -0.4), (-7, 0.034, 0.4), (15, 0.042, 0.85))
 CHOIR_PAN = 0.6              # gesungene Chorstimmen stehen abwechselnd so weit links und rechts
@@ -337,12 +337,14 @@ def _glides(base: np.ndarray, t: np.ndarray, notes: list, amount: float) -> np.n
     return out
 
 
-def reshape(path: str, notes: list, vibrato: float = 1.0, glide: float = 1.0) -> bool:
-    """Vibrato und Übergänge einer gesungenen Spur mit dem WORLD-Vocoder ändern. Gerechnet wird Phrase für Phrase,
-    die Pausen bleiben unberührt. False, wenn nichts zu tun war."""
+def reshape(path: str, notes: list, vibrato: float = 1.0, glide: float = 1.0, psola: bool = True) -> bool:
+    """Vibrato und Übergänge einer gesungenen Spur ändern. Gerechnet wird Phrase für Phrase, die Pausen bleiben
+    unberührt. psola: mit Praat-PSOLA (parselmouth), das nur die Tonhöhe verschiebt und den Klang der Stimme lässt;
+    ohne, oder wenn parselmouth fehlt, baut der WORLD-Vocoder die Phrase neu (klingt eine Spur rauer).
+    False, wenn nichts zu tun war."""
     if abs(vibrato - 1.0) < 1e-3 and abs(glide - 1.0) < 1e-3:
         return False
-    import pyworld as pw
+    method = _psola if psola and psola_available() else _world
     audio, rate = sf.read(path, dtype="float64", always_2d=True)
     mono = audio.mean(axis=1)
     out = mono.copy()
@@ -353,23 +355,63 @@ def reshape(path: str, notes: list, vibrato: float = 1.0, glide: float = 1.0) ->
         if b - a < int(0.1 * rate):
             continue
         x = np.ascontiguousarray(mono[a:b])
-        f0, times = pw.dio(x, rate, f0_floor=70.0, f0_ceil=1100.0, frame_period=FRAME * 1000)
-        f0 = pw.stonemask(x, f0, times, rate)
-        if not np.any(f0 > 0):
+        y = method(x, rate, phrase, a / rate, vibrato, glide)
+        if y is None:
             continue
-        sp = pw.cheaptrick(x, f0, times, rate)
-        ap = pw.d4c(x, f0, times, rate)
-        new = shape_pitch(f0, FRAME, phrase, vibrato, glide, offset=a / rate)
-        y = pw.synthesize(new, sp, ap, rate, frame_period=FRAME * 1000)[:len(x)]
-        y = np.pad(y, (0, len(x) - len(y)))
+        y = np.pad(y[:len(x)], (0, max(0, len(x) - len(y))))
         fade = min(len(y) // 4, int(0.01 * rate))
         ramp = np.linspace(0, 1, fade)
         y[:fade] = x[:fade] * (1 - ramp) + y[:fade] * ramp
         y[-fade:] = y[-fade:] * ramp[::-1] + x[-fade:] * (1 - ramp[::-1])
         out[a:b] = y
     sf.write(path, np.repeat(out[:, None], audio.shape[1], axis=1).astype(np.float32), rate, subtype="FLOAT")
-    log.info("Vibrato %.1f, Übergänge %.1f", vibrato, glide)
+    log.info("Vibrato %.1f, Übergänge %.1f (%s)", vibrato, glide, "PSOLA" if method is _psola else "WORLD")
     return True
+
+
+def psola_available() -> bool:
+    try:
+        import parselmouth  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def _f0(x: np.ndarray, rate: int) -> tuple:
+    """Tonhöhe je FRAME mit WORLD (DIO und StoneMask): genauer im Vibrato als die Analyse von Praat."""
+    import pyworld as pw
+    f0, times = pw.dio(x, rate, f0_floor=70.0, f0_ceil=1100.0, frame_period=FRAME * 1000)
+    return pw.stonemask(x, f0, times, rate), times
+
+
+def _world(x: np.ndarray, rate: int, phrase: list, offset: float, vibrato: float, glide: float):
+    import pyworld as pw
+    f0, times = _f0(x, rate)
+    if not np.any(f0 > 0):
+        return None
+    sp = pw.cheaptrick(x, f0, times, rate)
+    ap = pw.d4c(x, f0, times, rate)
+    new = shape_pitch(f0, FRAME, phrase, vibrato, glide, offset=offset)
+    return pw.synthesize(new, sp, ap, rate, frame_period=FRAME * 1000)
+
+
+def _psola(x: np.ndarray, rate: int, phrase: list, offset: float, vibrato: float, glide: float):
+    """Die neue Tonhöhenkurve als PitchTier in eine Praat-Manipulation, dann Overlap-Add (PSOLA). Gemessen wird die
+    Tonhöhe mit WORLD, neu gerechnet nicht: die Stimme behält ihren Klang."""
+    import parselmouth
+    from parselmouth.praat import call
+    f0, times = _f0(x, rate)
+    if not np.any(f0 > 0):
+        return None
+    new = shape_pitch(f0, FRAME, phrase, vibrato, glide, offset=offset)
+    sound = parselmouth.Sound(x, sampling_frequency=rate)
+    manipulation = call(sound, "To Manipulation", 0.01, 70.0, 1100.0)
+    tier = call("Create PitchTier", "neu", sound.xmin, sound.xmax)
+    for t, hz in zip(times, new):
+        if hz > 0:
+            call(tier, "Add point", float(t), float(hz))
+    call([manipulation, tier], "Replace pitch tier")
+    return call(manipulation, "Get resynthesis (overlap-add)").values[0]
 
 
 # ── Fassungen ──────────────────────────────────────────────────────────────────
@@ -473,12 +515,13 @@ def _segment_masks(choice: list, cuts: list, takes: int, length: int, rate: int,
 
 
 def comp(takes: list, notes: list, out_path: str, double_path: str = None, double_windows: list = (),
-         tolerance: float = 0.0) -> list:
+         tolerance: float = 0.0, forced: dict = None) -> list:
     """
     Setzt die Hauptstimme Phrase für Phrase aus der saubersten Fassung zusammen und schreibt sie nach out_path.
     double_path: dort landet in den double_windows (Sekunden, z. B. die Refrains) die zweitbeste Fassung jeder Phrase,
     eine echte Doppelung statt einer Kopie; eine Fassung, die die Phrase gar nicht singt, doppelt nicht.
-    tolerance: grobe Fehler statt jeder Abweichung (siehe _note_errors). Rückgabe: die Fassung je Phrase.
+    tolerance: grobe Fehler statt jeder Abweichung (siehe _note_errors). forced: {Phrase: Fassung}, die feststehen
+    (von Hand neu gesungen); sie bekommen keine Doppelung. Rückgabe: die Fassung je Phrase.
     """
     groups = phrases(notes)
     tracks = [_pitch_track(t) for t in takes]
@@ -491,7 +534,8 @@ def comp(takes: list, notes: list, out_path: str, double_path: str = None, doubl
         audio[k, :len(tr[3])] = tr[3]
     scores = np.array([phrase_errors(tr, notes, groups, tolerance) for tr in tracks])      # [Fassung, Phrase]
     order = np.argsort(scores, axis=0, kind="stable")
-    choice = [int(order[0, p]) for p in range(len(groups))]
+    forced = forced or {}
+    choice = [forced.get(p, int(order[0, p])) for p in range(len(groups))]
     cuts = _cut_points(groups)
     masks = _segment_masks(choice, cuts, len(takes), length, rate)
     sf.write(out_path, np.einsum("kt,ktc->tc", masks, audio), rate, subtype="FLOAT")
@@ -499,7 +543,8 @@ def comp(takes: list, notes: list, out_path: str, double_path: str = None, doubl
         keep = np.zeros(length, dtype=np.float32)
         for start, end in double_windows:
             keep[max(0, int(start * rate)):min(length, int(end * rate))] = 1.0
-        second = [int(order[1, p]) if scores[order[1, p], p] < SILENT_SCORE else None for p in range(len(groups))]
+        second = [int(order[1, p]) if scores[order[1, p], p] < SILENT_SCORE and p not in forced else None
+                  for p in range(len(groups))]
         masks = _segment_masks(second, cuts, len(takes), length, rate, keep)
         double = np.einsum("kt,ktc->tc", masks, audio)
         if np.max(np.abs(double)) > 1e-4:

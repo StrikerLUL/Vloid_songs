@@ -50,7 +50,7 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
                      vocal_range: tuple = None, variations: dict = None, custom_chords: dict = None,
                      imported_melody: dict = None, melody_edits: dict = None, motifs=None,
                      melody_lengths: dict = None, real_grooves: bool = False, lively_bass: bool = False,
-                     guitar_strums: bool = False) -> dict:
+                     guitar_strums: bool = False, singable: bool = False) -> dict:
     """
     Komponiert den kompletten Song und schreibt eine MIDI-Datei pro Instrument nach output_dir.
 
@@ -69,6 +69,7 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
     real_grooves: Grooves und Fills echter Schlagzeuger (grooves.py), soweit geladen; Stile mit Swing spielen weiter
     die eingebauten.
     lively_bass: Ghost-Notes und Slides im Bass. guitar_strums: Anschlagmuster je nach Energie statt eines festen.
+    singable: die komponierte Gesangsmelodie auf Singbarkeit prüfen (melody_writer.make_singable).
     Rückgabe: {Instrument: [pretty_midi.Note]}, dazu "melody_data", "silben", "vocal_melody", die zweite
     Stimme für den Refrain ("harmony_data", "harmony_silben") und "plan".
     """
@@ -86,7 +87,7 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
     if vocal_range:
         plan.vocal_range = tuple(vocal_range)
     vocal_notes = write_vocal_melody(plan, sung, dice.part("melody"), rerolls=dice.rerolled_kinds("melody"),
-                                     imported=imported_melody, motifs=motifs)
+                                     imported=imported_melody, motifs=motifs, singable=singable)
     _apply_edits(vocal_notes, melody_edits or {}, melody_lengths or {})
 
     arrangement = describe_arrangement(plan)

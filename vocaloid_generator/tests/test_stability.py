@@ -159,8 +159,13 @@ def test_whole_song_end_to_end_with_neutrino(tmp_path, neutrino_attrappe):
     assert calls.count("NEUTRINO.exe") == sung
     assert os.path.exists(again.vocals_wav)
 
-    # mit anderem Vibrato singt NEUTRINO neu
-    pipeline.generate_song(e2e_settings(tmp_path, root, vibrato=0.5))
+    # mit anderem Vibrato wird der Gesang neu bearbeitet; was NEUTRINO gesungen hat, kommt aus dem Gedächtnis
+    before = os.path.getmtime(again.vocals_wav)
+    changed = pipeline.generate_song(e2e_settings(tmp_path, root, vibrato=0.5))
+    assert calls.count("NEUTRINO.exe") == sung and os.path.getmtime(changed.vocals_wav) > before
+
+    # ohne Wiederverwenden singt NEUTRINO neu
+    pipeline.generate_song(e2e_settings(tmp_path, root, vibrato=0.4, reuse_steps=False))
     assert calls.count("NEUTRINO.exe") > sung
 
 

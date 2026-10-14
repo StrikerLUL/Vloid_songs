@@ -18,6 +18,14 @@ SECTION_CONFIG = {
 BASE_DIR        = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT       = os.path.dirname(BASE_DIR)
 SOUNDFONT_PFAD  = os.path.join(BASE_DIR, "soundfont.sf2")
+# Python, das die Setup.exe mitbringt. „Vloid Songs starten.bat“ lässt uv nur dieses nehmen.
+BUNDLED_PYTHON  = os.path.join(REPO_ROOT, "python", "python.exe")
+
+
+def venv_python(version: str = "3.12") -> str:
+    """Python für die eigenen Umgebungen der Modelle (tools/…): das mitgebrachte, ohne Setup.exe sucht uv version."""
+    return BUNDLED_PYTHON if os.path.isfile(BUNDLED_PYTHON) else version
+
 
 # ── Deine Daten ───────────────────────────────────────────────────────────────
 # Songs, Einstellungen, Vorlagen, Vorbilder, Motive und Protokolle liegen in einem eigenen Ordner, den Updates nie

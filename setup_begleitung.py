@@ -17,11 +17,12 @@ import sys
 import tempfile
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "vocaloid_generator"))
+import config  # noqa: E402
 import accompaniment  # noqa: E402
 
 PAKETE = ("torch", "transformers>=4.40,<5", "tqdm",
           "anticipation @ https://github.com/jthickstun/anticipation/archive/refs/heads/main.zip")
-PYTHON = "3.12"
+PYTHON = "3.12"     # ohne Setup.exe; sonst nimmt die Umgebung deren Python (config.venv_python)
 
 
 def _ausfuehren(befehl: list, **kwargs) -> bool:
@@ -40,7 +41,8 @@ def setup(cpu: bool = False) -> bool:
         return False
     venv = os.path.join(accompaniment.FOLDER, "venv")
     print(f"Richte die KI-Begleitung in {accompaniment.FOLDER} ein")
-    if not os.path.isfile(accompaniment.python()) and not _ausfuehren([uv, "venv", venv, "--python", PYTHON]):
+    anlegen = [uv, "venv", venv, "--python", config.venv_python(PYTHON)]
+    if not os.path.isfile(accompaniment.python()) and not _ausfuehren(anlegen):
         return False
     backend = "cpu" if cpu else "auto"
     if not _ausfuehren([uv, "pip", "install", "--python", accompaniment.python(), "--torch-backend", backend,

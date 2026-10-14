@@ -15,10 +15,11 @@ import sys
 import tempfile
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "vocaloid_generator"))
+import config  # noqa: E402
 import rating  # noqa: E402
 
 PAKETE = ("audiobox_aesthetics==0.0.4", "soundfile")
-PYTHON = "3.12"
+PYTHON = "3.12"     # ohne Setup.exe; sonst nimmt die Umgebung deren Python (config.venv_python)
 
 
 def _ausfuehren(befehl: list, **kwargs) -> bool:
@@ -37,7 +38,8 @@ def setup(cpu: bool = False) -> bool:
         return False
     venv = os.path.join(rating.FOLDER, "venv")
     print(f"Richte die Bewertung in {rating.FOLDER} ein")
-    if not os.path.isfile(rating.python()) and not _ausfuehren([uv, "venv", venv, "--python", PYTHON]):
+    anlegen = [uv, "venv", venv, "--python", config.venv_python(PYTHON)]
+    if not os.path.isfile(rating.python()) and not _ausfuehren(anlegen):
         return False
     backend = "cpu" if cpu else "auto"
     if not _ausfuehren([uv, "pip", "install", "--python", rating.python(), "--torch-backend", backend, *PAKETE]):

@@ -30,6 +30,20 @@ jobs:
             if (Test-Path $file) { Copy-Item $file installer/uv/ }
           }
           Get-ChildItem installer/uv
+      # Die Setup.exe bringt ihr eigenes Python mit, damit uv auf dem PC nichts in AppData\Roaming\uv\python anlegen
+      # oder lesen muss (dort sperrt Windows manchmal die Verknüpfungen von uv, os error 448). Genommen wird der echte
+      # Ordner cpython-3.12.<patch>-…, nicht die Verknüpfung cpython-3.12-…, die uv daneben anlegt.
+      - name: Python in den Installer legen
+        shell: pwsh
+        run: |
+          $dl = Join-Path $env:RUNNER_TEMP "python-dl"
+          uv python install 3.12 --install-dir $dl
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $dir = Get-ChildItem $dl -Directory | Where-Object { $_.Name -match '^cpython-3\.12\.\d+-windows-x86_64-none$' } | Select-Object -First 1
+          if (-not $dir) { Write-Error "Python 3.12 fehlt in $dl"; exit 1 }
+          Copy-Item $dir.FullName installer/python -Recurse
+          & installer/python/python.exe -c "import sys, ssl, sqlite3; print(sys.version)"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
       - name: Setup.exe bauen
         shell: pwsh
         run: |
@@ -39,16 +53,38 @@ jobs:
           }
           & $iscc /Qp "/DAppVersion=${{ steps.version.outputs.version }}" installer/VloidSongs.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      # Wie auf Strikers PC: In AppData\Roaming\uv\python liegt ein Python, das uv nicht abfragen kann. Ohne eigenes
+      # Python bricht uv dann mit „Failed to inspect Python interpreter from managed installations“ ab.
+      - name: Kaputtes Python in AppData anlegen
+        shell: pwsh
+        run: |
+          $broken = Join-Path $env:APPDATA "uv\python\cpython-3.13.0-windows-x86_64-none"
+          New-Item -ItemType Directory -Force $broken | Out-Null
+          Copy-Item "$env:SystemRoot\System32\where.exe" (Join-Path $broken "python.exe")
+          $out = uv python find --managed-python 2>&1 | Out-String
+          $out
+          if ($out -notmatch "Failed to (inspect|query) Python interpreter") {
+            Write-Error "uv stolpert nicht über das kaputte Python, der Test prüft so nichts"; exit 1
+          }
+          exit 0
       - name: Setup.exe testen (still installieren, Dateien prüfen, deinstallieren)
         shell: pwsh
         run: |
           $setup = Get-ChildItem installer/Output/*.exe | Select-Object -First 1
           $target = Join-Path $env:RUNNER_TEMP "VloidSongs"
           Start-Process $setup.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=$target", "/TASKS=" -Wait
-          foreach ($file in "vocaloid_generator\app.py", "uv\uv.exe", "Vloid Songs starten.bat", ".venv\Scripts\python.exe") {
+          foreach ($file in "vocaloid_generator\app.py", "uv\uv.exe", "python\python.exe", "Vloid Songs starten.bat", ".venv\Scripts\python.exe") {
             if (-not (Test-Path (Join-Path $target $file))) { Write-Error "$file fehlt nach dem Installieren"; exit 1 }
           }
+          $cfg = Get-Content (Join-Path $target ".venv\pyvenv.cfg") -Raw
+          $cfg
+          if ($cfg -notmatch [regex]::Escape((Join-Path $target "python"))) { Write-Error "Die Umgebung nimmt nicht das mitgebrachte Python"; exit 1 }
           & (Join-Path $target ".venv\Scripts\python.exe") -c "import nicegui, pedalboard, pretty_midi; print('Bibliotheken da')"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          # So legen die setup_….py-Skripte die Umgebungen der Modelle an (Demucs, Bewertung, KI-Begleitung)
+          $python = & (Join-Path $target ".venv\Scripts\python.exe") -c "import sys; sys.path.insert(0, r'$target\vocaloid_generator'); import config; print(config.venv_python())"
+          if ($python -ne (Join-Path $target "python\python.exe")) { Write-Error "Modelle bekämen $python statt des mitgebrachten Pythons"; exit 1 }
+          & (Join-Path $target "uv\uv.exe") venv (Join-Path $env:RUNNER_TEMP "modell-venv") --python $python
           if ($LASTEXITCODE -ne 0) { exit 1 }
           Start-Process (Join-Path $target "unins000.exe") -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES" -Wait
       - uses: actions/upload-artifact@v4

@@ -38,3 +38,4 @@ vocaloid_generator/vorbilder/
 vocaloid_generator/motive/
 vocaloid_generator/vorbild_messungen.json
 .nicegui/
+installer/python/

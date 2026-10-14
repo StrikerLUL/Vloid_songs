@@ -2,19 +2,19 @@
 
 Erzeugt komplette Vocaloid-Songs auf Knopfdruck: Akkorde, Bass, Schlagzeug, Melodie und Begleitung, Gesang mit NEUTRINO oder VOICEVOX (oder einer lokalen Vorschau-Stimme), Mix mit Kompressor und Limiter und am Ende eine fertige MP3.
 
-Läuft unter Windows. Version 1.0.0.
+Läuft unter Windows. Version 1.0.1.
 
 | Zum Lesen | Was drinsteht |
 | --- | --- |
 | [ANLEITUNG.md](ANLEITUNG.md) | Erste Schritte in fünf Schritten, was die App kann und wo jeder Schalter steht (in der App: Hilfe › Erste Schritte) |
 | [FEHLERBEHEBUNG.md](FEHLERBEHEBUNG.md) | wenn etwas nicht klappt (Hilfe › Fehlerbehebung) |
-| [TESTLISTE.md](TESTLISTE.md) | der Praxistest für 1.0.0, etwa 30 Minuten |
+| [TESTLISTE.md](TESTLISTE.md) | der Praxistest für 1.0.1, etwa 30 Minuten |
 | [CHANGELOG.md](CHANGELOG.md) | was in jeder Version neu ist |
 | [CREDITS.md](CREDITS.md) | wessen Arbeit drinsteckt, mit Lizenzen |
 
 ## Installation
 
-Am einfachsten mit der Setup.exe von der [Release-Seite](https://github.com/StrikerLUL/Vloid_songs/releases): ohne Adminrechte, mit Eintrag im Startmenü. Sie lädt beim ersten Mal Python und alle Bibliotheken. Klänge, Modelle und NEUTRINO richtet danach **Hilfe › Einrichten** in der App ein; die `setup_….py`-Skripte unten machen dasselbe von der Kommandozeile (`main.py --einrichten alles`). Ein neues Release entsteht von selbst, wenn eine neue Version in `main` landet; die App findet es über „Nach Update suchen“.
+Am einfachsten mit der Setup.exe von der [Release-Seite](https://github.com/StrikerLUL/Vloid_songs/releases): ohne Adminrechte, mit Eintrag im Startmenü. Sie bringt ihr eigenes Python mit und lädt beim ersten Mal alle Bibliotheken. Klänge, Modelle und NEUTRINO richtet danach **Hilfe › Einrichten** in der App ein; die `setup_….py`-Skripte unten machen dasselbe von der Kommandozeile (`main.py --einrichten alles`). Ein neues Release entsteht von selbst, wenn eine neue Version in `main` landet; die App findet es über „Nach Update suchen“.
 
 Deine Daten (Einstellungen, Songs, Vorlagen, Vorbilder, Motive, Protokolle) liegen in `Dokumente\Vloid Songs`. Steht in `datenordner.txt` im Programmordner `programmordner`, bleiben sie wie früher in `vocaloid_generator`.
 

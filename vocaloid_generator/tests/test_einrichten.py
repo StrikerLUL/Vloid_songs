@@ -48,6 +48,21 @@ def test_install_runs_the_scripts_and_logs_their_output(scripts):
     assert "── Gut ──" in log_text and "kaputt" in log_text
 
 
+def test_with_the_python_of_the_setup_exe_uv_takes_only_that_one(tmp_path, monkeypatch):
+    """Sonst liest uv AppData\\Roaming\\uv\\python, wo Windows seine Verknüpfungen sperren kann (os error 448)."""
+    monkeypatch.delenv("UV_PYTHON", raising=False)
+    assert "UV_PYTHON" not in einrichten.environment()                        # aus dem Quellcode gestartet
+    python = tmp_path / "python" / "python.exe"
+    python.parent.mkdir()
+    python.write_text("")
+    monkeypatch.setattr(config, "BUNDLED_PYTHON", str(python))
+    env = einrichten.environment()
+    assert env["UV_PYTHON"] == str(python) and env["UV_PYTHON_DOWNLOADS"] == "never"
+    assert env["UV_PYTHON_INSTALL_DIR"].startswith(config.REPO_ROOT)
+    starter = open(os.path.join(config.REPO_ROOT, "Vloid Songs starten.bat"), encoding="utf-8").read()
+    assert 'set "UV_PYTHON=%~dp0python\\python.exe"' in starter and "UV_PYTHON_DOWNLOADS=never" in starter
+
+
 def test_wizard_is_done_once_finished():
     assert not einrichten.wizard_done()
     einrichten.mark_wizard_done()

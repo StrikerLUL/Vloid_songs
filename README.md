@@ -2,13 +2,13 @@
 
 Erzeugt komplette Vocaloid-Songs auf Knopfdruck: Akkorde, Bass, Schlagzeug, Melodie und Begleitung, Gesang mit NEUTRINO oder VOICEVOX (oder einer lokalen Vorschau-Stimme), Mix mit Kompressor und Limiter und am Ende eine fertige MP3.
 
-Läuft unter Windows. Version 1.0.1.
+Läuft unter Windows. Version 1.0.2.
 
 | Zum Lesen | Was drinsteht |
 | --- | --- |
 | [ANLEITUNG.md](ANLEITUNG.md) | Erste Schritte in fünf Schritten, was die App kann und wo jeder Schalter steht (in der App: Hilfe › Erste Schritte) |
 | [FEHLERBEHEBUNG.md](FEHLERBEHEBUNG.md) | wenn etwas nicht klappt (Hilfe › Fehlerbehebung) |
-| [TESTLISTE.md](TESTLISTE.md) | der Praxistest für 1.0.1, etwa 30 Minuten |
+| [TESTLISTE.md](TESTLISTE.md) | der Praxistest für 1.0.2, etwa 30 Minuten |
 | [CHANGELOG.md](CHANGELOG.md) | was in jeder Version neu ist |
 | [CREDITS.md](CREDITS.md) | wessen Arbeit drinsteckt, mit Lizenzen |
 

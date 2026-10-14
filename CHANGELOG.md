@@ -2,6 +2,13 @@
 
 Jede Version hat hier einen Abschnitt. Die App zeigt ihn einmal nach einem Update (Hilfe › Was ist neu).
 
+## 1.0.2
+
+- Beim Installieren zeigt ein schwarzes Fenster, welche Bibliotheken gerade laden. Geht etwas schief, bleibt es mit
+  der Meldung offen. Vorher stand die Setup.exe ohne Hinweis bei „Lade die Bibliotheken“.
+- uv lädt ein Paket nach dem anderen. Mehrere große gleichzeitig blieben auf manchen PCs mitten im Download stehen
+  (scipy und llvmlite bei 1,19 MB). Das gilt auch für Einrichten, z. B. für PyTorch.
+
 ## 1.0.1
 
 - Die Setup.exe bringt ihr eigenes Python mit. Vorher brach der Start auf manchen PCs ab mit „Failed to inspect Python

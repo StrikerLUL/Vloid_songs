@@ -109,7 +109,8 @@ async def test_generating_shows_the_song_and_its_tracks(user, fake_generation):
     await user.should_see(marker="stem-Mix")
     await user.should_see(marker="stem-Klavier")
     [player] = user.find(WavePlayer).elements
-    assert player.title == "Mix" and player.url.startswith("/datei?pfad=")
+    await until(lambda: player.title == "Mix")          # die Wellenform lädt erst nach den Knöpfen
+    assert player.url.startswith("/datei?pfad=")
     [roll] = user.find(PianoRoll).elements
     await until(lambda: roll.tracks)       # die Noten liest ein Hintergrund-Thread
     assert roll.tracks[0]["name"] == "Klavier"
@@ -516,7 +517,7 @@ async def test_choosing_one_of_three_chorus_melodies(user, fake_generation, monk
     user.find(marker="hooks").click()
     await user.should_see(marker="hook-take-3", retries=50)
     [player] = user.find(WavePlayer).elements
-    assert player.title == "Refrain 1"
+    await until(lambda: player.title == "Refrain 1")     # die Wellenform lädt erst nach den Knöpfen
     user.find(marker="hook-play-2").click()
     await until(lambda: player.title == "Refrain 2")
     user.find(marker="hook-take-2").click()

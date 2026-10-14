@@ -10,6 +10,7 @@ import numpy as np
 
 import cancel
 import config
+import neutrino_score
 from lyrics import parse_lyrics
 from orchestrator import orchestrate_song
 from settings import CHANNELS, DEFAULT_JITTER, INSTRUMENTS, SongSettings
@@ -91,7 +92,7 @@ def compose(settings: SongSettings, seed: Optional[int] = None):
         mode=settings.scale,
         section_config=settings.section_config(),
         output_dir=settings.output_dir(),
-        lyrics=parse_lyrics(settings.lyrics, settings.romaji),
+        lyrics=parse_lyrics(settings.lyrics, settings.romaji, settings.english_kana),
         swing=settings.swing,
         jitter_scale=settings.jitter / DEFAULT_JITTER,
         instrument_styles=settings.instrument_styles(),
@@ -473,10 +474,10 @@ ENGINE_ORDER = {"NEUTRINO": ("NEUTRINO", "VOICEVOX"), "VOICEVOX": ("VOICEVOX", "
 
 # Was den Gesang bestimmt: ändert sich nichts davon, bleibt der gesungene Gesang (z. B. beim Neu-Würfeln des Basses)
 VOCAL_KEY = "vocals.key"
-VOCAL_CODE = ("pipeline.py", "vocal_synthesizer.py", "voice_fx.py", "voicevox.py")
+VOCAL_CODE = ("pipeline.py", "vocal_synthesizer.py", "voice_fx.py", "voicevox.py", "neutrino_score.py")
 VOCAL_FIELDS = ("bpm", "seed", "singer", "vocal_engine", "harmonies", "duet_singer", "style_shift", "vocal_takes",
                 "vibrato", "glide", "breaths", "final_choir", "voicevox_url", "voicevox_singer", "neutrino_pfad",
-                "vocal_comping", "phrase_expression")
+                "vocal_comping", "phrase_expression", "long_vowel_mark", "breath_marks", "fast_diphthongs")
 
 
 def _vocal_key(settings: SongSettings, tracks: dict) -> str:
@@ -540,7 +541,8 @@ def _synthesize_vocals(settings: SongSettings, tracks: dict, out: str) -> Option
 
     from vocal_synthesizer import erstelle_musicxml, stimmlage
     _, _, transpose = stimmlage(settings.singer)
-    xml = erstelle_musicxml(melody_data, silben, settings.bpm, os.path.join(out, "vocals.xml"), transpose)
+    xml = erstelle_musicxml(melody_data, silben, settings.bpm, os.path.join(out, "vocals.xml"), transpose,
+                            neutrino_score.options(settings))
 
     engines = {"NEUTRINO": _sing_neutrino, "VOICEVOX": _sing_voicevox}
     sung = False
@@ -706,7 +708,7 @@ def _neutrino_choir(settings: SongSettings, tracks: dict, out: str, neutrino_dir
         xml = os.path.join(out, f"vocals_chor_{k + 1}.xml")
         wav = os.path.join(out, f"vocals_chor_{k + 1}.wav")
         try:
-            erstelle_musicxml(data, silben, settings.bpm, xml, stimmlage(singer)[2])
+            erstelle_musicxml(data, silben, settings.bpm, xml, stimmlage(singer)[2], neutrino_score.options(settings))
             neutrino_synthese(xml, wav, neutrino_dir, os.path.join(neutrino_dir, "model", singer), style_shift=shift)
             audio, rate = sf.read(wav, dtype="float32", always_2d=True)
             sung.append(audio.mean(axis=1))
@@ -790,7 +792,7 @@ def _sing_duet(settings: SongSettings, tracks: dict, out: str, neutrino_dir: str
     for k, (singer, (data, silben)) in enumerate(zip((settings.singer, partner), parts)):
         wav = os.path.join(out, f"vocals_duett_{k + 1}.wav")
         xml = erstelle_musicxml(data, silben, settings.bpm, os.path.join(out, f"vocals_duett_{k + 1}.xml"),
-                                stimmlage(singer)[2])
+                                stimmlage(singer)[2], neutrino_score.options(settings))
         _neutrino_lead(settings, data, xml, wav, neutrino_dir, singer)
         data_k, rate = sf.read(wav, dtype="float32", always_2d=True)
         mono = data_k.mean(axis=1)
@@ -806,7 +808,7 @@ def _sing_harmony(settings, tracks, out, neutrino_dir, model_dir, transpose, har
     """Zweite Stimme im Refrain, mit NEUTRINO gesungen."""
     from vocal_synthesizer import erstelle_musicxml, neutrino_synthese
     xml = erstelle_musicxml(tracks["harmony_data"], tracks["harmony_silben"], settings.bpm,
-                            os.path.join(out, "vocals_harmony.xml"), transpose)
+                            os.path.join(out, "vocals_harmony.xml"), transpose, neutrino_score.options(settings))
     try:
         neutrino_synthese(xml, harmony_wav, neutrino_dir, model_dir, style_shift=settings.style_shift)
         log.info("Zweite Stimme im Refrain gesungen.")
@@ -824,7 +826,7 @@ def _write_karaoke(settings: SongSettings, tracks: dict, out: str) -> None:
     from settings import DEFAULT_LYRICS
     lengths = {kind: [len(line) for line in text_lines]
                for kind, text_lines in {**section_lines(DEFAULT_LYRICS),
-                                        **section_lines(settings.lyrics, settings.romaji)}.items()}
+                                        **section_lines(settings.lyrics, settings.romaji, settings.english_kana)}.items()}
     found = karaoke.lines(tracks["vocal_melody"], tracks["silben"], settings.bpm, tracks.get("plan"), lengths)
     try:
         karaoke.save(os.path.join(out, karaoke.FILE), found)

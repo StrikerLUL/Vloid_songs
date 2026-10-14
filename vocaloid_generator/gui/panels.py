@@ -403,7 +403,7 @@ def text_panel(s: SongSettings) -> None:
             if header:
                 rows.append(("header", header.group(1)))
             elif line:
-                sylls = syllables(line, s.romaji)
+                sylls = syllables(line, s.romaji, s.english_kana)
                 count += len(sylls)
                 rows.append(("line", " ".join(sylls)))
         ui.label(f"So wird gesungen: {count} Silben").classes("text-subtitle2").mark("syllables")
@@ -513,6 +513,18 @@ LIVELY_SWITCHES = (
                                            "zweiten Fassung"),
 )
 
+# Noten, die NEUTRINO gut singen kann (neutrino_score.py) und Englisch im Liedtext
+SCORE_SWITCHES = (
+    ("long_vowel_mark", "Haltezeichen ー für lange Vokale", "Lang gezogene Vokale und Melismen bekommen für NEUTRINO "
+                                                            "das Haltezeichen ー statt einer neuen Silbe"),
+    ("breath_marks", "Atemzeichen in langen Zeilen", "Nach spätestens zwei Takten Gesang atmet die Stimme an der "
+                                                     "nächsten kleinen Pause; NEUTRINO braucht dann weniger Speicher"),
+    ("fast_diphthongs", "Schnelle Stellen flüssig", "Zwei sehr schnelle Töne mit Doppelvokal (か + い) singt NEUTRINO "
+                                                    "auf einem Ton, wie es seine Anleitung empfiehlt"),
+    ("english_kana", "Englisch als Katakana", "Englische Wörter im Text werden so gesungen, wie man sie in J-Pop singt "
+                                              "(love → ラブ). NEUTRINO kann kein Englisch."),
+)
+
 
 def voice_panel(s: SongSettings, singers: list) -> tuple:
     """Rückgabe: die Auswahl der Stimme und die der Duett-Stimme, damit die Seite ihre Listen erneuern kann."""
@@ -538,6 +550,9 @@ def voice_panel(s: SongSettings, singers: list) -> tuple:
         .mark("switch-vocal_comping") \
         .tooltip("Wie im Studio: jede Zeile kommt aus der Fassung, die ihre Töne am besten trifft. Aus ist es die "
                  "sauberste ganze Fassung. Die zweitbeste Fassung doppelt den Refrain (mit der Studio-Gesangskette).")
+    section_title("Noten für NEUTRINO")
+    for attr, text, tip in SCORE_SWITCHES:
+        ui.switch(text).bind_value(s, attr).props("dense").tooltip(tip).mark(f"switch-{attr}")
     section_title("VOICEVOX")
     voicevox_editor(s)
     section_title("Lebendiger Gesang")

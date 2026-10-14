@@ -79,6 +79,10 @@ def parse_args(argv=None):
     p.add_argument("--ohne-gesangskette", action="store_true",
                    help="ohne Sättigung, Hall und Delay je Sektion und echte Doppelung für den Gesang")
     p.add_argument("--ohne-romaji", action="store_true", help="Romaji im Liedtext nicht japanisch singen")
+    p.add_argument("--ohne-haltezeichen", action="store_true", help="lange Vokale für NEUTRINO nicht als ー schreiben")
+    p.add_argument("--ohne-atemzeichen", action="store_true", help="keine Atemzeichen in langen Zeilen")
+    p.add_argument("--ohne-doppelvokale", action="store_true", help="schnelle Töne nicht auf einem Ton zusammenlegen")
+    p.add_argument("--ohne-englisch", action="store_true", help="englische Wörter nicht als Katakana singen")
     p.add_argument("--schlagzeug", choices=["soundfont", "808", "909"],
                    help="Klang des Schlagzeugs: SoundFont oder Drum-Machine (sonst wie der Stil)")
     p.add_argument("--ohne-verstaerker", action="store_true",
@@ -201,6 +205,10 @@ def main(argv=None) -> int:
                  "phrase_expression": False if args.ohne_ausdruck else None,
                  "vocal_chain": False if args.ohne_gesangskette else None,
                  "romaji": False if args.ohne_romaji else None,
+                 "long_vowel_mark": False if args.ohne_haltezeichen else None,
+                 "breath_marks": False if args.ohne_atemzeichen else None,
+                 "fast_diphthongs": False if args.ohne_doppelvokale else None,
+                 "english_kana": False if args.ohne_englisch else None,
                  "guitar_amp": False if args.ohne_verstaerker else None, "cabinet_ir": args.box,
                  "samples": False if args.ohne_samples else None,
                  "real_drums": False if args.ohne_echtes_schlagzeug else None,

@@ -132,7 +132,9 @@ def test_romaji_lyrics_reach_the_song():
     text = "[Verse]\nkimi no koe ga kikoeru\n[Chorus]\nzutto issho ni iyou"
     tracks, _ = compose(SongSettings(lyrics=text, active_sections=["Verse", "Chorus"], seed=3))
     assert "き" in tracks["silben"] and not any(s.isascii() for s in tracks["silben"])
-    tracks, _ = compose(SongSettings(lyrics=text, active_sections=["Verse", "Chorus"], seed=3, romaji=False))
+    # ohne Romaji und ohne Englisch bleibt der Text, wie er ist (mit Englisch würde er wie Englisch gelesen)
+    tracks, _ = compose(SongSettings(lyrics=text, active_sections=["Verse", "Chorus"], seed=3, romaji=False,
+                                     english_kana=False))
     assert "kimi" in tracks["silben"]
 
 

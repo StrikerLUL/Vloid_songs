@@ -192,8 +192,8 @@ _REST_WERTE = (4.0, 3.0, 2.0, 1.5, 1.0, 0.75, 0.5, 0.25, 0.125)
 # NEUTRINO setzt vor einen Song ohne Pausentakt selbst einen. Wir schreiben immer einen Takt Pause
 # davor und schneiden ihn nach dem Rendern wieder ab, dann bleibt der Gesang im Takt der Band.
 VORLAUF_SCHLAEGE = 4.0
-# Kurze Pausen in einer Phrase klingen bei NEUTRINO abgehackt; bis zu dieser Länge wird gebunden
-LEGATO_BIS = 0.5
+# Kurze Pausen in einer Phrase klingen bei NEUTRINO abgehackt; bis zu dieser Länge wird gebunden (neutrino_score)
+from neutrino_score import LEGATO_BIS  # noqa: E402
 # Empfohlener Tonumfang der NEUTRINO-Stimmen (MIDI, C4 = 60) laut studio-neutrino.com.
 # Männliche Stimmen singen eine Oktave tiefer, als die Melodie notiert ist.
 STIMMEN = {
@@ -247,29 +247,30 @@ def _gebunden(melodie_daten) -> list:
     return out
 
 
-def erstelle_musicxml(melodie_daten, liedtext_silben, bpm, output_xml_pfad, transpose: int = 0):
-    """Gesangsstimme als MusicXML für NEUTRINO: ein Takt Vorlauf, jede Note mit Silbe, Tempo, 4/4."""
+def erstelle_musicxml(melodie_daten, liedtext_silben, bpm, output_xml_pfad, transpose: int = 0, options=None):
+    """Gesangsstimme als MusicXML für NEUTRINO: ein Takt Vorlauf, jede Note mit Silbe, Tempo, 4/4.
+    options: neutrino_score.ScoreOptions (Haltezeichen, Atemzeichen, schnelle Stellen); None = nur gebunden."""
     try:
-        from music21 import meter, note, stream, tempo
+        from music21 import articulations, meter, note, stream, tempo
     except ImportError:
         log.warning("music21 nicht installiert. MusicXML kann nicht generiert werden.")
         return ""
+    import neutrino_score
 
     s = stream.Stream()
     s.append(tempo.MetronomeMark(number=bpm))
     s.append(meter.TimeSignature("4/4"))
     s.append(note.Rest(quarterLength=VORLAUF_SCHLAEGE))
-    silben = list(liedtext_silben)
-    i = 0
-    for pitch, dauer in _gebunden(melodie_daten):
-        if pitch is None:
-            for teil in _pausen(dauer):
+    for n in neutrino_score.build(melodie_daten, list(liedtext_silben), bpm, options):
+        if n.pitch is None:
+            for teil in _pausen(n.beats):
                 s.append(note.Rest(quarterLength=teil))
             continue
-        n_ = note.Note(int(pitch) + transpose, quarterLength=_quantisiere_dauer(dauer))
-        n_.addLyric(silben[i] if i < len(silben) else "ら")   # ohne Silbe bricht NEUTRINO ab
+        n_ = note.Note(n.pitch + transpose, quarterLength=_quantisiere_dauer(n.beats))
+        n_.addLyric(n.lyric)
+        if n.breath:
+            n_.articulations.append(articulations.BreathMark())
         s.append(n_)
-        i += 1
 
     pfad = s.write("musicxml", fp=output_xml_pfad)
     log.info(f"[OK] MusicXML: {pfad}")

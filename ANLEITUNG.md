@@ -5,7 +5,7 @@ In fünf Schritten zum ersten Song. Alles Weitere steht darunter; wenn etwas nic
 
 ## 1. Installieren
 
-`VloidSongs-Setup-1.0.1.exe` starten. Sie braucht keine Adminrechte, legt „Vloid Songs“ ins Startmenü (auf Wunsch
+`VloidSongs-Setup-1.0.2.exe` starten. Sie braucht keine Adminrechte, legt „Vloid Songs“ ins Startmenü (auf Wunsch
 auch auf den Desktop) und lädt beim ersten Mal alle Bibliotheken; das dauert ein paar Minuten. Danach
 startet die App über das Startmenü.
 

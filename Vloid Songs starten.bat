@@ -17,14 +17,25 @@ if "%UV%"=="uv" (
 rem Die Setup.exe bringt ihr eigenes Python mit (Ordner python). uv nimmt genau dieses, laedt kein anderes und schaut
 rem nicht in AppData\Roaming\uv\python: Die Verknuepfungen, die uv dort anlegt, sperrt Windows manchmal
 rem ("nicht vertrauenswuerdiger Bereitstellungspunkt", os error 448), und dann startet nichts.
+rem uv laedt ein Paket nach dem anderen: Laedt es mehrere grosse gleichzeitig, bleiben die Downloads auf manchen
+rem PCs stehen (bei Striker scipy und llvmlite bei 1,19 MB).
 if exist "%~dp0python\python.exe" (
     set "UV_PYTHON=%~dp0python\python.exe"
     set "UV_PYTHON_DOWNLOADS=never"
     set "UV_PYTHON_INSTALL_DIR=%~dp0uv\python"
+    set "UV_CONCURRENT_DOWNLOADS=1"
 )
 if "%~1"=="--einrichten" (
+    title Vloid Songs: Bibliotheken laden
+    echo Vloid Songs laedt die Bibliotheken. Beim ersten Mal dauert das einige Minuten.
+    echo.
     "%UV%" sync --frozen --no-dev
-    if errorlevel 1 exit /b 1
+    if errorlevel 1 (
+        echo.
+        echo Das Laden hat nicht geklappt. Bitte ein Bild von diesem Fenster schicken.
+        timeout /t 600
+        exit /b 1
+    )
     exit /b 0
 )
 "%UV%" run --no-dev vocaloid_generator\app.py %*

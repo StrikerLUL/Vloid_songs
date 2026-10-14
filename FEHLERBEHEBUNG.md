@@ -12,6 +12,9 @@ und Systeminfo (keine Songs) und landet in `Dokumente\Vloid Songs\Fehlerberichte
 - **„Failed to inspect Python interpreter“ mit „os error 448“ oder „nicht vertrauenswürdiger Bereitstellungspunkt“.**
   Windows sperrt die Python-Verknüpfungen, die uv in `AppData\Roaming\uv\python` anlegt. Die Setup.exe ab 1.0.1
   bringt ihr eigenes Python mit und braucht diesen Ordner nicht; einfach die neueste Setup.exe installieren.
+- **Das Laden der Bibliotheken bleibt stehen** (die Zahlen hinter scipy, llvmlite oder torch ändern sich nicht mehr).
+  Ab 1.0.2 lädt uv ein Paket nach dem anderen, das hilft meist. Sonst das Fenster schließen und die Setup.exe noch
+  einmal starten; was schon geladen ist, lädt sie nicht neu.
 - **Ein schwarzes Fenster bleibt mit einer Meldung stehen.** Die letzte Zeile sagt, was fehlt. „uv fehlt“: die
   Setup.exe noch einmal ausführen (sie bringt uv mit). Steht dort ein Python-Fehler, einen Fehlerbericht schicken.
 - **Nach einem Absturz** bietet die App beim nächsten Start an, den Song fertig zu machen („Weitermachen“). Wer das

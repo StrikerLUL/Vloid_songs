@@ -2,6 +2,12 @@
 
 Jede Version hat hier einen Abschnitt. Die App zeigt ihn einmal nach einem Update (Hilfe › Was ist neu).
 
+## 1.0.1
+
+- Die Setup.exe bringt ihr eigenes Python mit. Vorher brach der Start auf manchen PCs ab mit „Failed to inspect Python
+  interpreter … os error 448“, weil Windows die Python-Verknüpfungen von uv in AppData gesperrt hat.
+- Die Setup.exe lädt beim Installieren kein Python mehr herunter, nur noch die Bibliotheken.
+
 ## 1.0.0
 
 **Installieren und Einrichten**

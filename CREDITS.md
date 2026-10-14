@@ -63,6 +63,7 @@ Lizenz. Was mit „lädt die App“ markiert ist, kommt erst über den Einrichte
 | wavesurfer.js | katspaugh | BSD-3 |
 | Pillow (Titelbild für YouTube) | Jeffrey A. Clark und Mitwirkende | MIT-CMU |
 | uv | Astral | MIT / Apache-2.0 |
+| Python (bringt die Setup.exe mit, aus python-build-standalone) | Python Software Foundation, Astral | PSF-2.0, MPL-2.0 |
 | Inno Setup (baut die Setup.exe) | Jordan Russell, Martijn Laan | eigene, freie Lizenz |
 
 ## Vloid Songs selbst

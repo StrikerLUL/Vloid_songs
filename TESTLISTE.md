@@ -1,11 +1,11 @@
-# Testliste für Vloid Songs 1.0.0
+# Testliste für Vloid Songs 1.0.1
 
 Etwa 30 Minuten auf deinem PC, davon viel Warten. Hak ab, was klappt, und schreib zu allem anderen eine Zeile, was
 passiert ist. Am Ende **Hilfe › Fehlerbericht speichern** und das ZIP zusammen mit der Liste zurückschicken.
 
 ## A. Installieren (5 Minuten)
 
-- [ ] `VloidSongs-Setup-1.0.0.exe` starten, durchklicken. Am Ende startet die App von selbst.
+- [ ] `VloidSongs-Setup-1.0.1.exe` starten, durchklicken. Am Ende startet die App von selbst.
 - [ ] Im Startmenü gibt es „Vloid Songs“, und es startet die App.
 - [ ] `Dokumente\Vloid Songs` gibt es, mit `Songs` und `Einstellungen.json`.
 - [ ] Hattest du vorher den entpackten Ordner: In Einrichten unter „Deine Daten“ den alten Ordner wählen,
@@ -52,7 +52,7 @@ passiert ist. Am Ende **Hilfe › Fehlerbericht speichern** und das ZIP zusammen
 ## G. Hilfe-Menü (1 Minute)
 
 - [ ] Hilfe › Erste Schritte, Fehlerbehebung, Was ist neu und Credits gehen auf.
-- [ ] Hilfe › Nach Update suchen meldet „Deine Version 1.0.0 ist die neueste.“ (oder zeigt eine neuere).
+- [ ] Hilfe › Nach Update suchen meldet „Deine Version 1.0.1 ist die neueste.“ (oder zeigt eine neuere).
 
 ## Wenn du mehr Zeit hast
 

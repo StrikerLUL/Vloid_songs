@@ -9,6 +9,9 @@ und Systeminfo (keine Songs) und landet in `Dokumente\Vloid Songs\Fehlerberichte
 - **Das Fenster geht nicht auf.** Es braucht die Microsoft-Edge-WebView2-Laufzeit, die auf Windows 10 und 11 meist
   schon da ist. Sonst die App im Browser öffnen: im Programmordner in der Adresszeile des Explorers `cmd` eingeben
   und `"Vloid Songs starten.bat" --browser` ausführen. Die Oberfläche ist dann unter http://127.0.0.1:8090.
+- **„Failed to inspect Python interpreter“ mit „os error 448“ oder „nicht vertrauenswürdiger Bereitstellungspunkt“.**
+  Windows sperrt die Python-Verknüpfungen, die uv in `AppData\Roaming\uv\python` anlegt. Die Setup.exe ab 1.0.1
+  bringt ihr eigenes Python mit und braucht diesen Ordner nicht; einfach die neueste Setup.exe installieren.
 - **Ein schwarzes Fenster bleibt mit einer Meldung stehen.** Die letzte Zeile sagt, was fehlt. „uv fehlt“: die
   Setup.exe noch einmal ausführen (sie bringt uv mit). Steht dort ein Python-Fehler, einen Fehlerbericht schicken.
 - **Nach einem Absturz** bietet die App beim nächsten Start an, den Song fertig zu machen („Weitermachen“). Wer das

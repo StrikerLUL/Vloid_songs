@@ -159,6 +159,24 @@ def test_setup_builds_its_own_environment(monkeypatch):
     assert commands[-1][commands[-1].index("--torch-backend") + 1] == "cpu"
 
 
+def test_setup_takes_the_python_of_the_setup_exe(monkeypatch, tmp_path):
+    """Sonst sucht uv ein Python in AppData, wo Windows seine Verknüpfungen sperren kann (os error 448)."""
+    commands = []
+    monkeypatch.setattr(setup_bewertung.shutil, "which", lambda name: "/bin/uv")
+    monkeypatch.setattr(setup_bewertung.subprocess, "run",
+                        lambda cmd, **kw: commands.append(cmd) or type("Done", (), {"returncode": 0})())
+    monkeypatch.setattr(rating, "rate", lambda paths: [Rating(6.0, 5.0, 4.0, 7.0)])
+    assert setup_bewertung.setup()
+    assert commands[0][commands[0].index("--python") + 1] == "3.12"           # aus dem Quellcode gestartet
+    python = tmp_path / "python" / "python.exe"
+    python.parent.mkdir()
+    python.write_text("")
+    monkeypatch.setattr(config, "BUNDLED_PYTHON", str(python))
+    commands.clear()
+    assert setup_bewertung.setup()
+    assert commands[0][commands[0].index("--python") + 1] == str(python)
+
+
 def test_setup_needs_uv_and_a_working_model(monkeypatch):
     monkeypatch.setattr(setup_bewertung.shutil, "which", lambda name: None)
     assert not setup_bewertung.setup()

@@ -169,11 +169,17 @@ def log_path() -> str:
 
 
 def environment() -> dict:
-    """Die Skripte finden uv auch, wenn es nur neben der App liegt (Installer) und nicht im PATH."""
+    """
+    Die Skripte finden uv auch, wenn es nur neben der App liegt (Installer) und nicht im PATH. Bringt die Setup.exe
+    Python mit, nimmt uv nur dieses (wie in „Vloid Songs starten.bat“), z. B. für uv sync bei ACE-Step.
+    """
     env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1"}
     bundled = os.path.join(config.REPO_ROOT, "uv")
     if os.path.isdir(bundled):
         env["PATH"] = bundled + os.pathsep + env.get("PATH", "")
+    if os.path.isfile(config.BUNDLED_PYTHON):
+        env.update(UV_PYTHON=config.BUNDLED_PYTHON, UV_PYTHON_DOWNLOADS="never",
+                   UV_PYTHON_INSTALL_DIR=os.path.join(bundled, "python"))
     return env
 
 

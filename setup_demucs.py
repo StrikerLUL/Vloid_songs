@@ -17,11 +17,12 @@ import sys
 import tempfile
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "vocaloid_generator"))
+import config  # noqa: E402
 import separation  # noqa: E402
 
 # torchaudio ab 2.9 liest Audio nur noch mit FFmpeg; der Worker liest selbst, Demucs 4.0.1 braucht es trotzdem
 PAKETE = ("demucs==4.0.1", "soundfile", "torch<2.9", "torchaudio<2.9")
-PYTHON = "3.12"
+PYTHON = "3.12"     # ohne Setup.exe; sonst nimmt die Umgebung deren Python (config.venv_python)
 
 
 def _ausfuehren(befehl: list, **kwargs) -> bool:
@@ -40,7 +41,8 @@ def setup(cpu: bool = False) -> bool:
         return False
     venv = os.path.join(separation.FOLDER, "venv")
     print(f"Richte Demucs in {separation.FOLDER} ein")
-    if not os.path.isfile(separation.python()) and not _ausfuehren([uv, "venv", venv, "--python", PYTHON]):
+    anlegen = [uv, "venv", venv, "--python", config.venv_python(PYTHON)]
+    if not os.path.isfile(separation.python()) and not _ausfuehren(anlegen):
         return False
     backend = "cpu" if cpu else "auto"
     if not _ausfuehren([uv, "pip", "install", "--python", separation.python(), "--torch-backend", backend, *PAKETE]):

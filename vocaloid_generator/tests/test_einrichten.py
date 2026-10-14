@@ -58,9 +58,11 @@ def test_with_the_python_of_the_setup_exe_uv_takes_only_that_one(tmp_path, monke
     monkeypatch.setattr(config, "BUNDLED_PYTHON", str(python))
     env = einrichten.environment()
     assert env["UV_PYTHON"] == str(python) and env["UV_PYTHON_DOWNLOADS"] == "never"
+    assert env["UV_CONCURRENT_DOWNLOADS"] == "1"
     assert env["UV_PYTHON_INSTALL_DIR"].startswith(config.REPO_ROOT)
     starter = open(os.path.join(config.REPO_ROOT, "Vloid Songs starten.bat"), encoding="utf-8").read()
     assert 'set "UV_PYTHON=%~dp0python\\python.exe"' in starter and "UV_PYTHON_DOWNLOADS=never" in starter
+    assert "UV_CONCURRENT_DOWNLOADS=1" in starter
 
 
 def test_wizard_is_done_once_finished():

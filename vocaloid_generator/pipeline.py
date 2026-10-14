@@ -103,6 +103,9 @@ def compose(settings: SongSettings, seed: Optional[int] = None):
         melody_edits=settings.melody_edits,
         melody_lengths=settings.melody_lengths,
         motifs=motifs.for_settings(settings),
+        real_grooves=settings.real_grooves,
+        lively_bass=settings.lively_bass,
+        guitar_strums=settings.guitar_strums,
     )
     return tracks, seed
 
@@ -944,6 +947,11 @@ def _render_instruments(settings: SongSettings, tracks: dict, out: str, report: 
         if orchestra:
             log.info("Orchester-Aufnahmen: %d Instrumente", len(orchestra))
         extra = extra + orchestra
+    if settings.real_drums and not settings.own_soundfont():
+        import drum_kit
+        if drum_kit.installed():
+            log.info("%s", drum_kit.status())
+            extra = extra + [drum_kit.SFZ_NAME, str(os.path.getmtime(drum_kit.path()))]
     active = [inst for inst in INSTRUMENTS if settings.channels[inst].enabled and tracks.get(inst)]
     jobs = {inst: _render_job(settings, out, inst) for inst in active}
     keys = {inst: _render_key(jobs[inst], extra) for inst in active}
@@ -985,7 +993,7 @@ def _render_instruments(settings: SongSettings, tracks: dict, out: str, report: 
 
 # Der Code, der Klang macht: ändert er sich (neue Version der App), wird alles neu gerendert
 RENDER_CODE = ("renderer.py", "mixer.py", "synth_engine.py", "drum_machine.py", "guitar_amp.py", "sound_library.py",
-               "styles.py", "sfz.py", "sample_library.py")
+               "styles.py", "sfz.py", "sample_library.py", "drum_kit.py")
 
 
 def _render_key(job: dict, library: list) -> str:
@@ -1044,6 +1052,7 @@ def _render_job(settings: SongSettings, out: str, inst: str) -> dict:
         amp=settings.guitar_amp,
         cabinet_ir=settings.cabinet_ir,
         samples=_samples(settings),
+        real_drums=settings.real_drums and not settings.own_soundfont() and inst == "drums",
     )
 
 

@@ -37,6 +37,16 @@ def _samples() -> bool:
     return len(sample_library.installed()) == len(sample_library.files())
 
 
+def _drums() -> bool:
+    import drum_kit
+    return drum_kit.complete()
+
+
+def _grooves() -> bool:
+    import grooves
+    return grooves.load() is not None
+
+
 def _rating() -> bool:
     import rating
     return rating.available()
@@ -69,6 +79,10 @@ COMPONENTS = (
               "SoundFonts", "etwa 250 MB Download, 550 MB Platz", "setup_soundfonts.py", _soundfonts),
     Component("samples", "Orchester aus echten Aufnahmen", "Streicher, Bläser, Harfe, Pauken und Stabspiele aus "
               "VSCO 2", "etwa 1,2 GB", "setup_samples.py", _samples),
+    Component("drums", "Echtes Schlagzeug", "Bassdrum, Snare, Toms, Hi-Hat und Becken aus dem DRS Kit, im Studio "
+              "aufgenommen", "etwa 130 MB Download, 50 MB Platz", "setup_drums.py", _drums),
+    Component("grooves", "Echte Grooves", "Schlagzeug-Phrasen und Fills von zehn Profi-Schlagzeugern (Groove MIDI "
+              "Dataset)", "etwa 3 MB", "setup_grooves.py", _grooves),
     Component("rating", "Automatische Bewertung", "Bei mehreren Fassungen hört ein Modell zu und lädt die beste",
               "etwa 3 GB", "setup_bewertung.py", _rating),
     Component("ace_step", "Klang-Veredler ACE-Step (Versuch)", "Eine zweite Fassung jedes Songs mit neu "
@@ -78,7 +92,7 @@ COMPONENTS = (
 
 
 def register(component: Component) -> None:
-    """Weitere Bausteine (z. B. Schlagzeug) melden sich hier an."""
+    """Weitere Bausteine melden sich hier an (Tests, Erweiterungen)."""
     global COMPONENTS
     COMPONENTS = tuple(c for c in COMPONENTS if c.key != component.key) + (component,)
 

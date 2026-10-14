@@ -50,7 +50,7 @@ VINYL_LUFS, VINYL_CLICKS_PER_SECOND = -40.0, 7.0
 def midi_zu_wav(midi_pfad: str, wav_pfad: str, is_drum: bool = False, instrument_type: str = "piano",
                 vst_pfad: str = None, soundfont_pfad: str = None, voices: dict = None,
                 library: bool = True, drum_machine: str = None, amp: bool = False, cabinet_ir: str = "",
-                vst_state: str = "", samples: bool = False) -> None:
+                vst_state: str = "", samples: bool = False, real_drums: bool = False) -> None:
     """
     MIDI → Stereo-WAV. Reihenfolge: eigenes VST3-Instrument (wenn angegeben), SoundFont über
     FluidSynth oder tinysoundfont, zuletzt eine einfache eingebaute Klangerzeugung. Die Spur wird nicht normalisiert,
@@ -62,6 +62,7 @@ def midi_zu_wav(midi_pfad: str, wav_pfad: str, is_drum: bool = False, instrument
     cabinet_ir ist die Impulsantwort einer echten Box (leer = eingebaute Box).
     vst_state: gespeicherter Klang des VST-Instruments (vst_sounds), leer = sein Standardklang.
     samples: Orchester-Instrumente spielen aus echten Aufnahmen (sample_library), soweit vorhanden.
+    real_drums: akustische Schlagzeuge spielen aus dem DRS Kit (drum_kit), soweit vorhanden.
     """
     soundfont_pfad = soundfont_pfad or SOUNDFONT_PFAD
     midi = pretty_midi.PrettyMIDI(midi_pfad)
@@ -74,6 +75,11 @@ def midi_zu_wav(midi_pfad: str, wav_pfad: str, is_drum: bool = False, instrument
         import drum_machine as machine
         audio, midi.instruments = machine.render(midi, drum_machine)
         synths.append(audio)
+    elif is_drum and real_drums and not vst_pfad:
+        import drum_kit
+        audio, midi.instruments = drum_kit.render(midi, SAMPLE_RATE)
+        if audio is not None:
+            synths.append(audio)
     if amp and not vst_pfad:
         import guitar_amp
         for inst in [i for i in midi.instruments if guitar_amp.wants_amp(i)]:

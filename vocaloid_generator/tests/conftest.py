@@ -30,11 +30,15 @@ def isolated_settings(tmp_path, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def without_sound_library(tmp_path, monkeypatch):
-    """Tests klingen gleich, ob setup_soundfonts.py und setup_samples.py gelaufen sind oder nicht: ohne beides."""
+    """Tests klingen gleich, ob die Setup-Skripte (Klänge, Aufnahmen, Schlagzeug, Grooves) gelaufen sind: ohne alles."""
+    import drum_kit
+    import grooves
     import sample_library
     import sound_library
     monkeypatch.setattr(sound_library, "FOLDER", str(tmp_path / "soundfonts"))
     monkeypatch.setattr(sample_library, "FOLDER", str(tmp_path / "samples"))
+    monkeypatch.setattr(drum_kit, "FOLDER", str(tmp_path / "drums"))
+    monkeypatch.setattr(grooves, "FOLDER", str(tmp_path / "grooves"))
 
 
 @pytest.fixture(autouse=True)

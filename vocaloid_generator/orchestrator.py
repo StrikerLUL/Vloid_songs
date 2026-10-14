@@ -6,6 +6,7 @@ from dataclasses import replace
 
 import pretty_midi
 
+import grooves
 from drums import CRASH, KICK, OPEN_HAT, HAT, PEDAL_HAT, RIDE, TAMBOURINE, TOMS, drum_section, lead_in
 from lyrics import parse_lyrics
 from melody_import import imported_bars
@@ -33,6 +34,7 @@ TIMING_SPREAD = {"drums": 0.003, "bass": 0.004, "piano": 0.006, "guitar": 0.006,
                  "synth": 0.002, "brass": 0.006, "melody": 0.004, "bells": 0.003, "choir": 0.01,
                  "counter": 0.006, "perc": 0.006}
 SWING_MAX = 1 / 6                       # Swing 0.5 schiebt die zweite Sechzehntel um 1/12 Schlag
+SLIDE_SECONDS, SLIDE_STEPS = 0.08, 8     # so lange gleitet ein Bass-Slide, in so vielen Schritten
 # Teile mit eigenem Zufall (wie settings.REROLLABLE): Akkorde und Ablauf, Gesangsmelodie, jedes Instrument
 REROLLABLE = ("chords",) + INSTRUMENTS
 
@@ -47,7 +49,8 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
                      jitter_scale: float = 1.0, instrument_styles: dict = None, style: str = None,
                      vocal_range: tuple = None, variations: dict = None, custom_chords: dict = None,
                      imported_melody: dict = None, melody_edits: dict = None, motifs=None,
-                     melody_lengths: dict = None) -> dict:
+                     melody_lengths: dict = None, real_grooves: bool = False, lively_bass: bool = False,
+                     guitar_strums: bool = False) -> dict:
     """
     Komponiert den kompletten Song und schreibt eine MIDI-Datei pro Instrument nach output_dir.
 
@@ -63,6 +66,9 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
     melody_edits: {Schlag: Tonhöhe} (settings.edit_key): Töne der Gesangsmelodie, die von Hand geändert wurden.
     melody_lengths: {Schlag: Länge in Schlägen}: Töne, die von Hand kürzer oder länger gemacht wurden.
     motifs: zusätzliche Rhythmen und Gesten für die Gesangsmelodie (motifs.for_settings), None = nur eingebaute.
+    real_grooves: Grooves und Fills echter Schlagzeuger (grooves.py), soweit geladen; Stile mit Swing spielen weiter
+    die eingebauten.
+    lively_bass: Ghost-Notes und Slides im Bass. guitar_strums: Anschlagmuster je nach Energie statt eines festen.
     Rückgabe: {Instrument: [pretty_midi.Note]}, dazu "melody_data", "silben", "vocal_melody", die zweite
     Stimme für den Refrain ("harmony_data", "harmony_silben") und "plan".
     """
@@ -89,6 +95,9 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
 
     events = {inst: [] for inst in INSTRUMENTS}
     contexts = {inst: {"vocal": vocal_notes} for inst in PARTS}
+    contexts["bass"]["lively"] = lively_bass and dice.label("bass")      # eigener Zufall: aus = wie bisher
+    contexts["guitar"]["strums"] = guitar_strums and dice.label("guitar")
+    drummer = grooves.for_song(bpm, dice.label("drums")) if real_grooves and not swing else None
     seen = {}
     for sec in plan.sections:
         seen[sec.kind] = seen.get(sec.kind, 0) + 1
@@ -108,7 +117,7 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
                 events["drums"] += lead_in(piece, rngs["drums"])
             else:
                 groove = "halftime" if piece.feel == "halftime" else profile.groove(sec.kind)
-                events["drums"] += drum_section(piece, groove, rngs["drums"])
+                events["drums"] += drum_section(piece, groove, rngs["drums"], drummer)
 
     _breaks_before_chorus(plan, events)
     _final_chord(plan, events)
@@ -316,10 +325,10 @@ def _write_midi(path: str, inst: str, evs: list, notes: list, profile, bpm: floa
     ordered = sorted(evs, key=lambda e: (e.start, e.pitch))
     layers = {}
     for e, n in zip(ordered, notes):
-        layers.setdefault(e.layer, []).append(n)
+        layers.setdefault(e.layer, []).append((e, n))
     if not layers:
         layers[""] = []
-    for layer, layer_notes in layers.items():
+    for layer, pairs in layers.items():
         if inst == "drums":
             program, is_drum = profile.drum_kit, True
         elif inst == "perc":
@@ -329,11 +338,26 @@ def _write_midi(path: str, inst: str, evs: list, notes: list, profile, bpm: floa
             program, is_drum = LAYER_PROGRAMS.get(layer, profile.programs.get(layer, profile.program(inst))), False
         name = TRACK_NAMES[inst] + (f" {layer}" if layer else "")
         track = pretty_midi.Instrument(program=program, is_drum=is_drum, name=name)
-        track.notes = layer_notes
+        track.notes = [n for _, n in pairs]
+        track.pitch_bends = _slides(pairs)
         if layer in LAYER_PAN:
             track.control_changes.append(pretty_midi.ControlChange(number=10, value=LAYER_PAN[layer], time=0.0))
         pm.instruments.append(track)
     pm.write(path)
+
+
+def _slides(pairs: list) -> list:
+    """Pitch-Bends für Töne, die hineingleiten (Ev.slide): erst daneben, dann in SLIDE_SECONDS auf den Ton."""
+    bends = []
+    for e, n in pairs:
+        if not e.slide:
+            continue
+        semitones = max(-2, min(2, e.slide))
+        for k in range(SLIDE_STEPS + 1):
+            share = 1 - k / SLIDE_STEPS
+            value = round(semitones / 2 * 8191 * share * share)     # erst schnell, dann sanft ankommen
+            bends.append(pretty_midi.PitchBend(value, max(0.0, n.start - 0.002) + k * SLIDE_SECONDS / SLIDE_STEPS))
+    return bends
 
 
 def _write_simple_midi(path: str, notes: list, program: int, bpm: float) -> None:

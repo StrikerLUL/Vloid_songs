@@ -74,6 +74,13 @@ def parse_args(argv=None):
     p.add_argument("--box", metavar="WAV", help="Impulsantwort einer Gitarrenbox")
     p.add_argument("--ohne-samples", action="store_true",
                    help="Orchester aus dem SoundFont statt aus den echten Aufnahmen (setup_samples.py)")
+    p.add_argument("--ohne-echtes-schlagzeug", action="store_true",
+                   help="Schlagzeug aus dem SoundFont statt aus dem DRS Kit (setup_drums.py)")
+    p.add_argument("--ohne-echte-grooves", action="store_true",
+                   help="eingebaute Schlagzeug-Muster statt Grooves echter Schlagzeuger (setup_grooves.py)")
+    p.add_argument("--ohne-bass-leben", action="store_true", help="Bass ohne Ghost-Notes und Slides")
+    p.add_argument("--ohne-anschlagmuster", action="store_true",
+                   help="Gitarre schlägt immer dasselbe Muster an statt je nach Teil")
     p.add_argument("--ohne-lofi-klang", action="store_true", help="Lo-Fi ohne Knistern und Bandmaschine")
     p.add_argument("--ohne-bewegung", action="store_true",
                    help="Mix ohne Anlauf vor dem Refrain, Hall pro Sektion und breitere Refrains")
@@ -172,6 +179,10 @@ def main(argv=None) -> int:
                  "romaji": False if args.ohne_romaji else None,
                  "guitar_amp": False if args.ohne_verstaerker else None, "cabinet_ir": args.box,
                  "samples": False if args.ohne_samples else None,
+                 "real_drums": False if args.ohne_echtes_schlagzeug else None,
+                 "real_grooves": False if args.ohne_echte_grooves else None,
+                 "lively_bass": False if args.ohne_bass_leben else None,
+                 "guitar_strums": False if args.ohne_anschlagmuster else None,
                  "auto_rating": False if args.ohne_bewertung else None,
                  "lofi_texture": False if args.ohne_lofi_klang else None,
                  "mix_movement": False if args.ohne_bewegung else None,

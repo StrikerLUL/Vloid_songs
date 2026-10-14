@@ -150,6 +150,32 @@ def check_samples(settings, folder: str) -> tuple:
     return (have == total), f"{have} von {total} Instrumenten da, die Geige spielt"
 
 
+def check_drums(settings, folder: str) -> tuple:
+    import pretty_midi
+
+    import drum_kit
+    if not drum_kit.installed():
+        return None, "Echtes Schlagzeug nicht geladen"
+    midi = pretty_midi.PrettyMIDI()
+    kit = pretty_midi.Instrument(program=0, is_drum=True, name="drums")
+    kit.notes = [pretty_midi.Note(100, pitch, k * 0.25, k * 0.25 + 0.1) for k, pitch in enumerate((36, 42, 38, 42))]
+    midi.instruments.append(kit)
+    audio, _ = drum_kit.render(midi)
+    if audio is None or float(np.max(np.abs(audio))) < 1e-3:
+        return False, "Das Schlagzeug aus den Aufnahmen blieb still"
+    return drum_kit.complete(), drum_kit.status()
+
+
+def check_grooves(settings, folder: str) -> tuple:
+    import grooves
+    if not grooves.installed():
+        return None, "Echte Grooves nicht geladen"
+    drummer = grooves.for_song(120, "systemcheck")
+    if drummer is None or not drummer.plays("pop_verse"):
+        return False, "Die Grooves lassen sich nicht lesen: unter Einrichten neu laden"
+    return True, grooves.status()
+
+
 def check_soundfonts(settings, folder: str) -> tuple:
     import sound_library
     have = sound_library.installed()
@@ -205,6 +231,8 @@ CHECKS = (
     ("instruments", "Instrumente", check_instruments, False),
     ("soundfonts", "Bessere Klänge", check_soundfonts, False),
     ("samples", "Orchester-Aufnahmen", check_samples, False),
+    ("drums", "Echtes Schlagzeug", check_drums, False),
+    ("grooves", "Echte Grooves", check_grooves, False),
     ("mp3", "MP3-Export", check_mp3, False),
     ("video", "Lyric-Video", check_video, False),
     ("neutrino", "NEUTRINO", check_neutrino, False),
@@ -216,7 +244,7 @@ CHECKS = (
 
 
 def register(key: str, name: str, check: Callable, slow: bool = False, before: str = "song") -> None:
-    """Weitere Prüfungen (z. B. Schlagzeug) melden sich hier an, vor dem ganzen Song."""
+    """Weitere Prüfungen melden sich hier an (Tests, Erweiterungen), vor dem ganzen Song."""
     global CHECKS
     rest = [c for c in CHECKS if c[0] != key]
     at = next((i for i, c in enumerate(rest) if c[0] == before), len(rest))

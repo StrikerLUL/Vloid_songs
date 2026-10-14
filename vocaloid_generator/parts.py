@@ -20,6 +20,25 @@ class Ev:
     pitch: int
     vel: int
     layer: str = ""
+    slide: int = 0    # der Ton gleitet von so vielen Halbtönen daneben hinein (-2: von unten), höchstens 2
+
+
+# Lebendiger Bass: Spielweisen mit Platz für Ghost-Notes und Slides, und wie oft sie kommen
+LIVELY_BASS = ("root", "sync", "lazy", "rolling")
+GHOST_CHANCE, GHOST_VEL, GHOST_LEN = 0.3, 0.4, 0.08
+SLIDE_CHANCE, SLIDE_MIN_LEAP, SLIDE_ENERGY = 0.35, 3, 0.6
+# Anschlagmuster der Gitarre: (Sechzehntel, Richtung, Akzent); D runter, U hoch, X abgedämpft (perkussiv)
+STRUMS = {
+    "calm": [(0, "D", 1.0), (4, "D", 0.75), (8, "D", 0.9), (12, "D", 0.75), (14, "U", 0.6)],
+    "pop": [(0, "D", 1.0), (4, "D", 0.8), (6, "U", 0.7), (10, "U", 0.7), (12, "D", 0.9), (14, "U", 0.7)],
+    "push": [(0, "D", 1.0), (3, "U", 0.6), (6, "U", 0.75), (8, "D", 0.9), (10, "U", 0.65), (12, "X", 0.7),
+             (14, "U", 0.7)],
+    "drive": [(s, "X" if s in (4, 12) else "D" if s % 2 == 0 else "U", 1.0 if s % 8 == 0 else 0.8 if s % 2 == 0
+               else 0.55) for s in range(16)],
+}
+STRUM_BY_ENERGY = ((0.4, "calm"), (0.65, "pop"), (0.85, "push"), (1.01, "drive"))
+STRUM_GAP = (0.012, 0.005)     # Sekunden zwischen zwei Saiten: leise langsam, laut schnell
+MUTE_LEN = 0.06                # abgedämpfter Anschlag in Schlägen
 
 
 def _vel(sec: Section, accent: float = 1.0) -> int:
@@ -194,6 +213,33 @@ def bass(pattern: str, sec: Section, plan: SongPlan, rng: random.Random, ctx: di
             end = hits[i + 1] if i + 1 < len(hits) else sec.end
             note(t, (end - t) * 0.95, _chord_for(sec, t), 1.0 if abs(t % 4) < 1e-6 else 0.85)
     ctx["bass"] = prev
+    if ctx.get("lively") and pattern in LIVELY_BASS:
+        out = _liven_bass(out, sec, random.Random(f"{ctx['lively']}:{sec.kind}:{sec.start}"))
+    return out
+
+
+def _liven_bass(notes: list, sec: Section, rng: random.Random) -> list:
+    """
+    Wie ein Bassist: leise, kurze Ghost-Notes eine Sechzehntel vor manchen Schlägen (der Ton davor wird dafür
+    etwas kürzer), Slides in große Sprünge und in den Anfang lauter Teile.
+    """
+    notes = sorted(notes, key=lambda e: e.start)
+    starts = [e.start for e in notes]
+    out = []
+    for i, e in enumerate(notes):
+        ghost = e.start - 0.25
+        on_beat = abs(e.start - round(e.start)) < 1e-6
+        room = i > 0 and ghost - notes[i - 1].start >= 0.5 and not any(ghost - 1e-6 <= s < e.start for s in starts)
+        if on_beat and room and rng.random() < GHOST_CHANCE:
+            before = notes[i - 1]
+            before.dur = min(before.dur, ghost - before.start - 0.02)
+            out.append(Ev(ghost, GHOST_LEN, e.pitch, max(1, round(e.vel * GHOST_VEL)), e.layer))
+        if i == 0 and sec.energy >= SLIDE_ENERGY and rng.random() < 0.7:
+            e.slide = -2
+        elif i > 0 and abs(e.pitch - notes[i - 1].pitch) >= SLIDE_MIN_LEAP and e.dur >= 0.9 and \
+                rng.random() < SLIDE_CHANCE:
+            e.slide = -2 if e.pitch > notes[i - 1].pitch else 2
+        out.append(e)
     return out
 
 
@@ -215,8 +261,10 @@ def guitar(pattern: str, sec: Section, plan: SongPlan, rng: random.Random, ctx: 
     out = []
     spb = plan.seconds_per_beat
     strum_gap = 0.007 / spb    # 7 ms zwischen den Saiten, in Schlägen
-    if pattern == "strummed":
-        steps = [(0, "D", 1.0), (4, "D", 0.8), (6, "U", 0.7), (10, "U", 0.7), (12, "D", 0.9), (14, "U", 0.7)]
+    if pattern == "strummed" and ctx.get("strums"):
+        out = _strums(sec, spb, random.Random(f"{ctx['strums']}:{sec.kind}:{sec.start}"))
+    elif pattern == "strummed":
+        steps = STRUMS["pop"]
         for _, bar_start in _bars(sec):
             for i, (step, direction, accent) in enumerate(steps):
                 t = bar_start + step / 4
@@ -256,6 +304,36 @@ def guitar(pattern: str, sec: Section, plan: SongPlan, rng: random.Random, ctx: 
                 v = _voicing(ctx, "guitar", chord, 62, 77, 3, ext=False)
                 accent = 1.0 if k % 2 else 0.55
                 out += [Ev(t + j * strum_gap, 0.14, p, _vel(sec, 0.7 * accent)) for j, p in enumerate(v)]
+    return out
+
+
+def _strums(sec: Section, spb: float, rng: random.Random) -> list:
+    """
+    Anschlagen wie ein Gitarrist: das Muster passt zur Energie des Teils, runter klingen die tiefen Saiten lauter,
+    hoch nur die oberen vier, laute Anschläge sind schneller, abgedämpfte Anschläge (X) knacken kurz auf allen Saiten.
+    """
+    name = next(n for limit, n in STRUM_BY_ENERGY if sec.energy < limit)
+    if rng.random() < 0.3:                      # manchmal das Nachbarmuster, damit nicht jeder Song gleich klingt
+        names = [n for _, n in STRUM_BY_ENERGY]
+        name = names[max(0, min(len(names) - 1, names.index(name) + rng.choice((-1, 1))))]
+    steps = STRUMS[name]
+    out = []
+    for _, bar_start in _bars(sec):
+        for i, (step, direction, accent) in enumerate(steps):
+            t = bar_start + step / 4 + rng.gauss(0.0, 0.004) / spb
+            nxt = steps[i + 1][0] if i + 1 < len(steps) else 16
+            shape = _guitar_shape(_chord_for(sec, bar_start + step / 4))
+            gap = (STRUM_GAP[0] + (STRUM_GAP[1] - STRUM_GAP[0]) * accent) * rng.uniform(0.85, 1.15) / spb
+            vel = _vel(sec, 0.72 * accent)
+            if direction == "X":
+                out += [Ev(max(t, 0.0) + k * gap * 0.4, MUTE_LEN, p, max(1, round(vel * 0.55)))
+                        for k, p in enumerate(shape)]
+                continue
+            strings = shape if direction == "D" else list(reversed(shape[2:]))
+            length = (nxt - step) / 4 * 0.9
+            for k, p in enumerate(strings):
+                taper = 1 - 0.05 * k if direction == "D" else 0.85 - 0.03 * k
+                out.append(Ev(max(t, 0.0) + k * gap, length, p, max(1, round(vel * taper))))
     return out
 
 

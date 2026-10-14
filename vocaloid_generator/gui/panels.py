@@ -453,6 +453,16 @@ def band_panel(s: SongSettings) -> None:
     ui.switch("Lo-Fi-Klang: Knistern und alte Bandmaschine").bind_value(s, "lofi_texture") \
         .mark("switch-lofi_texture").tooltip("Nur im Stil Lo-Fi")
     hint("Das Schlagzeug kann oben statt aus dem SoundFont aus einer Drum-Machine kommen (808 oder 909).")
+    section_title("Lebendige Band")
+    ui.switch("Bass mit Ghost-Notes und Slides").bind_value(s, "lively_bass").mark("switch-lively_bass") \
+        .tooltip("Leise, kurze Töne vor manchen Schlägen und Gleiten in große Sprünge und laute Teile, wie bei "
+                 "einem Bassisten (Spielweisen Grundton, synkopiert, entspannt und rollend)")
+    ui.switch("Gitarre schlägt je nach Teil anders an").bind_value(s, "guitar_strums") \
+        .mark("switch-guitar_strums") \
+        .tooltip("Ruhige Teile in Vierteln, Refrains in Sechzehnteln mit abgedämpften Anschlägen; runter klingen die "
+                 "tiefen Saiten, hoch die hohen (Spielweise geschlagen)")
+    hint("Echtes Schlagzeug und Grooves echter Schlagzeuger schaltest du unter Pfade ein oder aus, sobald sie "
+         "eingerichtet sind.")
     section_title("Klänge aus dem VST-Instrument")
     vst_editor(s)
 
@@ -641,6 +651,14 @@ def paths_panel(s: SongSettings, pick: PickFn, status: Callable[[], None]) -> No
     ui.switch("Orchester aus echten Aufnahmen (setup_samples.py)") \
         .bind_value(s, "samples").mark("samples-switch") \
         .tooltip("Streicher, Bläser, Harfe, Pauken und Stabspiele aus VSCO 2; gilt nur ohne eigenen SoundFont")
+    ui.switch("Echtes Schlagzeug aus Aufnahmen (setup_drums.py, DRS Kit)") \
+        .bind_value(s, "real_drums").mark("real-drums-switch") \
+        .tooltip("Bassdrum, Snare, Toms, Hi-Hat und Becken aus einem im Studio aufgenommenen Schlagzeug; "
+                 "gilt für akustische Kits ohne eigenen SoundFont, 808 und 909 bleiben Drum-Machines")
+    ui.switch("Grooves und Fills echter Schlagzeuger (setup_grooves.py)") \
+        .bind_value(s, "real_grooves").mark("real-grooves-switch") \
+        .tooltip("Pop, Rock, Ballade, City Pop und Idol-Pop spielen Phrasen und Fills aus dem Groove MIDI Dataset, "
+                 "mit dem Timing echter Schlagzeuger; Stile mit Swing und elektronische bleiben eingebaut")
     ui.switch("Mehrere Fassungen automatisch bewerten (setup_bewertung.py)") \
         .bind_value(s, "auto_rating").mark("rating-switch") \
         .tooltip("Audiobox Aesthetics hört jede Fassung an und gibt ihr eine Note; die beste wird geladen")

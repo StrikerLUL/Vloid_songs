@@ -251,12 +251,13 @@ def clear_cache() -> None:
 # ── Spielen ─────────────────────────────────────────────────────────────────────────
 
 def render(instrument: Instrument, notes: list, sample_rate: int = SAMPLE_RATE, seed: int = 0,
-           swell: float = None) -> np.ndarray:
+           swell: float = None, retrigger: bool = True) -> np.ndarray:
     """
     Spielt notes (mit start, end, pitch, velocity, z. B. pretty_midi.Note) und gibt float32 der Form (2, Samples)
     zurück. seed macht die Auswahl zwischen gleichwertigen Aufnahmen wiederholbar. Stille am Anfang einer Aufnahme
     überspringt der Sampler, damit jeder Ton auf dem Schlag kommt. swell: braucht eine Aufnahme länger als so viele
     Sekunden, bis sie fast laut ist (langsam einsetzende Streicher), beginnt sie entsprechend später; None = nie.
+    retrigger: ein neuer Ton gleicher Höhe beendet den alten; aus (Schlagzeug), wenn die Tonlängen das schon regeln.
     """
     notes = sorted(notes, key=lambda n: (n.start, n.pitch))
     if not notes:
@@ -268,7 +269,7 @@ def render(instrument: Instrument, notes: list, sample_rate: int = SAMPLE_RATE, 
         turn = turns.get(n.pitch, 0)
         turns[n.pitch] = turn + 1
         start = int(round(n.start * sample_rate))
-        until = None if again is None else again - n.start + CHOKE_FADE
+        until = None if again is None or not retrigger else again - n.start + CHOKE_FADE
         for region in instrument.pick(n.pitch, n.velocity, turn, float(rng.random())):
             audio = _voice(region, n.pitch, n.velocity, n.end - n.start, sample_rate, until, swell)
             if audio is not None:

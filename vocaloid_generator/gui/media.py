@@ -46,6 +46,10 @@ def stems(result) -> dict:
     polished = getattr(result, "polished_mp3", None) or getattr(result, "polished_wav", None)
     if polished and os.path.exists(polished):
         found["Veredelt (ACE-Step)"] = polished
+    for kind, name in (("offvocal", "Off-Vocal (ohne Gesang)"), ("acappella", "A-cappella (nur Gesang)")):
+        path = getattr(result, "versions", {}).get(kind)
+        if path and os.path.exists(path):
+            found[name] = path
     if result.vocals_wav and os.path.exists(result.vocals_wav):
         found[labels.CHANNELS["vocals"]] = result.vocals_wav
     if result.harmony_wav and os.path.exists(result.harmony_wav):

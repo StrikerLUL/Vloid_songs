@@ -89,7 +89,7 @@ def make(result, label: str = "", progress: Optional[ProgressFn] = None) -> Pack
         package.problems.append("ohne ffmpeg nur als WAV")
 
     report(0.15, "YouTube: Titelbild...")
-    subtitle = " · ".join(_details(result))
+    subtitle = " · ".join(details(result))
     package.image = title_image(os.path.join(folder, "Titelbild.png"), title, subtitle,
                                 s.style if s else "", result.mix_wav)
 
@@ -125,7 +125,7 @@ def _mp3(source: str, target: str) -> Optional[str]:
     return exportiere_song(wav_pfad=source, mp3_pfad=target)
 
 
-def _details(result) -> list:
+def details(result) -> list:
     s = result.settings
     if s is None:
         return []
@@ -136,7 +136,7 @@ def _details(result) -> list:
 def description(result, title: str) -> str:
     """Text für das Beschreibungsfeld: worum es geht und was genannt werden muss."""
     s = result.settings
-    lines = [title, "", " · ".join(_details(result)), ""]
+    lines = [title, "", " · ".join(details(result)), ""]
     if s and s.channels["vocals"].enabled and not s.draft:
         if s.vocal_engine == "VOICEVOX":
             lines.append("Gesang: VOICEVOX:<Name der Figur> (bitte eintragen, VOICEVOX verlangt diesen Hinweis)")
@@ -150,10 +150,11 @@ def description(result, title: str) -> str:
 
 
 def title_image(path: str, title: str, subtitle: str = "", style: str = "", audio: Optional[str] = None,
-                bars: bool = True) -> str:
-    """Ein schlichtes Titelbild (PNG, 1280×720): Farbverlauf des Stils, Wellenform des Songs, Titel und Details."""
+                bars: bool = True, size: tuple = IMAGE_SIZE) -> str:
+    """Ein schlichtes Titelbild (PNG, sonst 1280×720): Farbverlauf des Stils, Wellenform des Songs, Titel und
+    Details. size (Breite, Höhe): quadratisch für das Cover in der MP3 (tags.py)."""
     from PIL import Image, ImageDraw, ImageFilter
-    width, height = IMAGE_SIZE
+    width, height = size
     top, bottom, accent = (_rgb(c) for c in PALETTES.get(style, DEFAULT_PALETTE))
     mix = np.linspace(0.0, 1.0, height)[:, None, None]
     gradient = (np.array(top)[None, None] * (1 - mix) + np.array(bottom)[None, None] * mix)

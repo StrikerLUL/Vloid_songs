@@ -145,6 +145,10 @@ def parse_args(argv=None):
     p.add_argument("--ohne-lofi-klang", action="store_true", help="Lo-Fi ohne Knistern und Bandmaschine")
     p.add_argument("--ohne-bewegung", action="store_true",
                    help="Mix ohne Anlauf vor dem Refrain, Hall pro Sektion und breitere Refrains")
+    p.add_argument("--ohne-true-peak", action="store_true",
+                   help="nur die Samples begrenzen, nicht die Spitzen dazwischen (-1 dBTP)")
+    p.add_argument("--ohne-offvocal", action="store_true", help="keine MP3s ohne Gesang (Off-Vocal) und nur mit Gesang")
+    p.add_argument("--ohne-tags", action="store_true", help="MP3 ohne Titel, Liedtext und Titelbild in den Tags")
     p.add_argument("--ohne-veredler", action="store_true",
                    help="keine zweite Fassung mit von ACE-Step veredelter Band (setup_ace_step.py)")
     p.add_argument("--veredler-staerke", type=float, metavar="0.1-0.9",
@@ -299,6 +303,9 @@ def main(argv=None) -> int:
                  "auto_rating": False if args.ohne_bewertung else None,
                  "lofi_texture": False if args.ohne_lofi_klang else None,
                  "mix_movement": False if args.ohne_bewegung else None,
+                 "true_peak": False if args.ohne_true_peak else None,
+                 "vocal_versions": False if args.ohne_offvocal else None,
+                 "id3_tags": False if args.ohne_tags else None,
                  "ref_stems": False if args.ohne_vorbild_gruppen else None,
                  "ref_vocal_curve": False if args.ohne_vorbild_gesangsklang else None,
                  "ai_accompaniment": False if args.ohne_ki_begleitung else (True if args.ki_begleitung else None),
@@ -357,6 +364,8 @@ def main(argv=None) -> int:
         log.info("Fertig! Seed %d: %s", result.seed, result.history or result.audio)
         if result.polished_wav:
             log.info("Veredelte Fassung: %s", result.polished_mp3 or result.polished_wav)
+        for path in result.versions.values():
+            log.info("Fassung: %s", path)
     chosen = best(results)
     if chosen.rating:
         log.info("Beste Fassung: Seed %d, %s", chosen.seed, chosen.rating.describe())

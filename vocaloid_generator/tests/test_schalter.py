@@ -29,7 +29,7 @@ NOTES = ("more_motifs", "numbered_lyrics", "harmony_variety", "sung_pads", "adli
 # Ändert die Einstellungen des Mixes (mixdown.mix_arguments); in Klammern der Stil, in dem er wirkt
 MIX = {"echo_throws": None, "vocal_chain": None, "vocal_tone": None, "vocal_unmask": None, "vocal_ride": None,
        "convolution_reverb": None, "ducked_delay": None, "mix_movement": None, "airwindows": None,
-       "lofi_texture": "Lo-Fi"}
+       "lofi_texture": "Lo-Fi", "true_peak": None}
 # Ändert, womit eine Spur klingt (rendering._render_job)
 RENDER = ("sound_library", "guitar_amp", "real_drums")
 # Ändert, was auf der fertigen Gesangsspur passiert (singing._liven)
@@ -70,6 +70,8 @@ ELSEWHERE = {
     "draft": "test_alltag.py::test_draft_skips_the_slow_steps_and_keeps_the_real_song",
     "auto_rating": "test_rating.py::test_the_switch_turns_the_rating_off",
     "album_vary": "test_alltag.py::test_album_plan_takes_the_styles_in_turn_with_their_typical_values",
+    "vocal_versions": "test_fassungen.py::test_switched_off_there_are_no_versions_and_no_tags",
+    "id3_tags": "test_fassungen.py::test_switched_off_there_are_no_versions_and_no_tags",
 }
 # Bedienung der App, ändert den Song nicht
 APP = ("show_karaoke", "reuse_steps", "log_file", "update_check", "setup_wizard")

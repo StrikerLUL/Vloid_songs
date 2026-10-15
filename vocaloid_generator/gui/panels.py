@@ -749,6 +749,17 @@ def mix_panel(s: SongSettings) -> None:
     hint("Die Lautheit gilt immer, auch beim Mastering nach Vorbild-Songs; der Limiter hält die Spitzen unten.")
     ui.switch("Bewegung im Mix").bind_value(s, "mix_movement").mark("switch-mix_movement") \
         .tooltip("Anlauf mit Filter vor jedem Refrain, Hall je nach Sektion, breitere Refrains")
+    ui.switch("Spitzen auch zwischen den Samples begrenzen (-1 dBTP)").bind_value(s, "true_peak") \
+        .mark("switch-true_peak") \
+        .tooltip("MP3 und Streaming heben Spitzen zwischen den Samples sonst über 0 dB; das kann knacksen. "
+                 "YouTube und Spotify empfehlen -1 dBTP.")
+    ui.switch("Off-Vocal und A-cappella dazu (ohne Gesang / nur Gesang)").bind_value(s, "vocal_versions") \
+        .mark("switch-vocal_versions") \
+        .tooltip("Zwei weitere MP3s neben dem Song, so laut wie im Song: zum Mitsingen, für Cover und Remixe. "
+                 "Im Player unter den Spuren.")
+    ui.switch("Titel, Liedtext und Titelbild in die MP3 schreiben").bind_value(s, "id3_tags") \
+        .mark("switch-id3_tags") \
+        .tooltip("Handy, Auto und Musik-Apps zeigen den Song dann mit Namen, Stil, Tempo, Text und Cover.")
     with ui.column().classes("w-full gap-1").bind_visibility_from(s, "polish"):
         ui.label("Klang-Veredler (ACE-Step, Versuch)").classes("text-subtitle2 q-mt-sm")
         with ui.row().classes("w-full items-center gap-4"):

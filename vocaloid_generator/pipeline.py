@@ -54,6 +54,7 @@ class SongResult:
     rating: Optional[object] = None            # rating.Rating, wenn mehrere Fassungen bewertet wurden
     polished_wav: Optional[str] = None         # zweite Fassung mit der vom Klang-Veredler neu eingespielten Band
     polished_mp3: Optional[str] = None
+    versions: dict = field(default_factory=dict)   # {"offvocal" / "acappella": MP3, ohne ffmpeg WAV} (v6 Nr. 4)
 
     @property
     def audio(self) -> Optional[str]:
@@ -225,8 +226,9 @@ def _produce(settings: SongSettings, tracks: dict, out: str, report: ProgressFn,
     result.mix_wav = os.path.join(out, "final_mix.wav")
     mix_args = mixdown.mix_arguments(settings, tracks, out, has_vocals=result.vocals_wav is not None,
                                      lead_sings=lead_sings, stems=len(stems))
-    mische_spuren(spur_pfade=stems, output_pfad=result.mix_wav, **mix_args)
+    level = mische_spuren(spur_pfade=stems, output_pfad=result.mix_wav, **mix_args)
     _polish(settings, tracks, result, stems, mix_args, report)
+    _mix_versions(settings, result, stems, mix_args, level, report)
 
     remove_file(os.path.join(out, "vorbilder_zusammen.wav"))   # Zusammenschnitt der Vorbilder fürs Mastering
 
@@ -240,12 +242,61 @@ def _produce(settings: SongSettings, tracks: dict, out: str, report: ProgressFn,
     remove_file(polished_mp3)
     if result.polished_wav:
         result.polished_mp3 = exportiere_song(wav_pfad=result.polished_wav, mp3_pfad=polished_mp3)
+    for kind, wav in list(result.versions.items()):
+        mp3_version = os.path.join(out, VERSIONS[kind][1])
+        result.versions[kind] = exportiere_song(wav_pfad=wav, mp3_pfad=mp3_version) or wav
+    if settings.id3_tags and not settings.draft:
+        _write_tags(result)
 
     if keep_history:
         import history
         entry = history.record(result.audio, settings, out, keep=settings.history_keep)
         result.history = entry.audio if entry else None
     return result
+
+
+# Off-Vocal und A-cappella (v6 Nr. 4): (WAV, MP3, Zusatz zum Titel in den Tags)
+VERSIONS = {"offvocal": ("final_offvocal.wav", "final_song_offvocal.mp3", "Off Vocal"),
+            "acappella": ("final_acappella.wav", "final_song_acappella.mp3", "A Cappella")}
+
+
+def _mix_versions(settings: SongSettings, result: SongResult, stems: list, mix_args: dict, level: Optional[float],
+                  report: ProgressFn) -> None:
+    """Die Band ohne Gesang (Off-Vocal, zum Mitsingen und für Cover) und der Gesang allein (A-cappella), jeweils so
+    laut, wie sie im Song klingen: mit denselben Einstellungen gemischt, nur stumm geschaltet (mixer: level_of)."""
+    out = result.output_dir
+    for wav, mp3, _ in VERSIONS.values():
+        for name in (wav, mp3):
+            remove_file(os.path.join(out, name))        # eine Fassung vom letzten Song darf nicht als neue gelten
+    if not settings.vocal_versions or settings.draft or not result.vocals_wav or level is None:
+        return
+    from mixer import mische_spuren
+    report(0.9, "Mische Off-Vocal und A-cappella...")
+    base = {**mix_args, "reference": None, "level_of": level}
+    mutes = mix_args.get("mutes") or {}
+    parts = {
+        # ohne Gesang spielt der Keyboard-Chor wieder, wo sonst gesungene Flächen liegen
+        "offvocal": {**base, "mutes": {**mutes, "vocals": True}, "sung_pads": None},
+        "acappella": {**base, "solos": {channel: channel == "vocals" for channel in mutes or ("vocals",)}},
+    }
+    for kind, args in parts.items():
+        path = os.path.join(out, VERSIONS[kind][0])
+        try:
+            mische_spuren(spur_pfade=stems, output_pfad=path, **args)
+        except Exception as e:  # noqa: BLE001 – der Song selbst ist fertig
+            log.warning("%s nicht gemischt: %s", VERSIONS[kind][2], e)
+        if os.path.exists(path):
+            result.versions[kind] = path
+
+
+def _write_tags(result: SongResult) -> None:
+    """Titel, Stimme, Stil, Tempo, Tonart, Liedtext und Titelbild in jede MP3 des Songs (v6 Nr. 6)."""
+    import tags
+    cover = None
+    for path, version in ((result.mp3, ""), (result.polished_mp3, "ACE-Step"),
+                          *((result.versions.get(kind), VERSIONS[kind][2]) for kind in VERSIONS)):
+        if path and path.lower().endswith(".mp3"):
+            cover = tags.write(path, result, "", version, cover) or cover
 
 
 def _vocal_stems(settings: SongSettings, result: SongResult, out: str) -> list:

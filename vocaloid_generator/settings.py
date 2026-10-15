@@ -261,6 +261,9 @@ class SongSettings(BaseModel):
     compressor_ratio: float = Field(2.0, ge=1.0, le=20.0)
     limiter_threshold: float = Field(-0.3, ge=-20.0, le=0.0)
     master_lufs: float = Field(-12.0, ge=-20.0, le=-6.0)   # Ziel-Lautheit des Masters (MASTER_TARGETS)
+    true_peak: bool = True             # auch zwischen den Samples höchstens -1 dBTP (mixer.TRUE_PEAK_DB)
+    vocal_versions: bool = True        # Off-Vocal (ohne Gesang) und A-cappella (nur Gesang) als eigene MP3
+    id3_tags: bool = True              # Titel, Stimme, Stil, Tempo, Tonart, Liedtext und Titelbild in die MP3
 
     channels: dict[str, ChannelSettings] = Field(default_factory=_default_channels)
 

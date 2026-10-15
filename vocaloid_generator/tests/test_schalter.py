@@ -31,7 +31,7 @@ MIX = {"echo_throws": None, "vocal_chain": None, "vocal_tone": None, "vocal_unma
        "convolution_reverb": None, "ducked_delay": None, "mix_movement": None, "airwindows": None,
        "lofi_texture": "Lo-Fi", "true_peak": None}
 # Ändert, womit eine Spur klingt (rendering._render_job)
-RENDER = ("sound_library", "guitar_amp", "real_drums")
+RENDER = ("sound_library", "guitar_amp", "real_drums", "band_samples")
 # Ändert, was auf der fertigen Gesangsspur passiert (singing._liven)
 LIVEN = ("syllable_dynamics", "phrase_expression", "final_choir", "breaths", "recorded_breaths")
 # Ändert die Stil-Effekte auf dem Gesang (style_fx.effects_for) im genannten Stil

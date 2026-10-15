@@ -135,6 +135,8 @@ def parse_args(argv=None):
     p.add_argument("--box", metavar="WAV", help="Impulsantwort einer Gitarrenbox")
     p.add_argument("--ohne-samples", action="store_true",
                    help="Orchester aus dem SoundFont statt aus den echten Aufnahmen (setup_samples.py)")
+    p.add_argument("--ohne-band-samples", action="store_true",
+                   help="Flügel, E-Bass und E-Gitarre aus dem SoundFont statt aus echten Aufnahmen (setup_band.py)")
     p.add_argument("--ohne-echtes-schlagzeug", action="store_true",
                    help="Schlagzeug aus dem SoundFont statt aus dem DRS Kit (setup_drums.py)")
     p.add_argument("--ohne-echte-grooves", action="store_true",
@@ -302,6 +304,7 @@ def main(argv=None) -> int:
                  "guitar_amp": False if args.ohne_verstaerker else None, "cabinet_ir": args.box,
                  "samples": False if args.ohne_samples else None,
                  "real_drums": False if args.ohne_echtes_schlagzeug else None,
+                 "band_samples": False if args.ohne_band_samples else None,
                  "real_grooves": False if args.ohne_echte_grooves else None,
                  "lively_bass": False if args.ohne_bass_leben else None,
                  "guitar_strums": False if args.ohne_anschlagmuster else None,

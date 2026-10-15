@@ -805,6 +805,10 @@ def paths_panel(s: SongSettings, pick: PickFn, status: Callable[[], None]) -> No
     ui.switch("Orchester aus echten Aufnahmen (setup_samples.py)") \
         .bind_value(s, "samples").mark("samples-switch") \
         .tooltip("Streicher, Bläser, Harfe, Pauken und Stabspiele aus VSCO 2; gilt nur ohne eigenen SoundFont")
+    ui.switch("Flügel, E-Bass und E-Gitarre aus echten Aufnahmen (setup_band.py)") \
+        .bind_value(s, "band_samples").mark("band-samples-switch") \
+        .tooltip("Salamander-Flügel, Growlybass und Emily-Gitarre; verzerrte Gitarren spielen die Emily-Gitarre "
+                 "in den Verstärker. Gilt nur ohne eigenen SoundFont")
     ui.switch("Echtes Schlagzeug aus Aufnahmen (setup_drums.py, DRS Kit)") \
         .bind_value(s, "real_drums").mark("real-drums-switch") \
         .tooltip("Bassdrum, Snare, Toms, Hi-Hat und Becken aus einem im Studio aufgenommenen Schlagzeug; "

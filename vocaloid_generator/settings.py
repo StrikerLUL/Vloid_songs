@@ -226,6 +226,7 @@ class SongSettings(BaseModel):
     sound_library: bool = True         # bessere Klänge aus tools/soundfonts (setup_soundfonts.py), wenn vorhanden
     samples: bool = True               # Orchester aus echten Aufnahmen (setup_samples.py, VSCO 2), wenn vorhanden
     real_drums: bool = True            # echtes Schlagzeug aus Aufnahmen (setup_drums.py, DRS Kit), wenn vorhanden
+    band_samples: bool = True          # Flügel, E-Bass, E-Gitarre aus Aufnahmen (setup_band.py), wenn vorhanden
     real_grooves: bool = True          # Grooves und Fills echter Schlagzeuger (setup_grooves.py), wenn vorhanden
     lively_bass: bool = True           # Ghost-Notes und Slides im Bass
     guitar_strums: bool = True         # Gitarre schlägt je nach Energie andere Muster an, mit Abdämpfern

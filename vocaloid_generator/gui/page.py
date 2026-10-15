@@ -821,6 +821,7 @@ def build() -> None:
             log.warning("Einstellungen nicht gespeichert: %s", e)
 
     def show_status() -> None:
+        import band_library
         import sample_library
         import sound_library
         from renderer import engine_name
@@ -831,6 +832,7 @@ def build() -> None:
             ui.label(f"Instrumente mit {engine_name()}").classes("text-caption")
             ui.label(sound_library.status()).classes("text-caption").mark("sound-library")
             ui.label(sample_library.status()).classes("text-caption").mark("sample-library")
+            ui.label(band_library.status()).classes("text-caption").mark("band-library")
             ui.label(rating.status()).classes("text-caption").mark("rating-status")
             ui.label(polish.status(settings)).classes("text-caption").mark("polish-status")
         singer_select.set_options(sorted(set(_singers(settings)) | {settings.singer}), value=settings.singer)

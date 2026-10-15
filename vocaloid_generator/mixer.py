@@ -56,7 +56,7 @@ VINYL_LUFS, VINYL_CLICKS_PER_SECOND = -40.0, 7.0
 def midi_zu_wav(midi_pfad: str, wav_pfad: str, is_drum: bool = False, instrument_type: str = "piano",
                 vst_pfad: str = None, soundfont_pfad: str = None, voices: dict = None,
                 library: bool = True, drum_machine: str = None, amp: bool = False, cabinet_ir: str = "",
-                vst_state: str = "", samples: bool = False, real_drums: bool = False) -> None:
+                vst_state: str = "", samples: bool = False, real_drums: bool = False, band: bool = False) -> None:
     """
     MIDI → Stereo-WAV. Reihenfolge: eigenes VST3-Instrument (wenn angegeben), SoundFont über
     FluidSynth oder tinysoundfont, zuletzt eine einfache eingebaute Klangerzeugung. Die Spur wird nicht normalisiert,
@@ -69,6 +69,7 @@ def midi_zu_wav(midi_pfad: str, wav_pfad: str, is_drum: bool = False, instrument
     vst_state: gespeicherter Klang des VST-Instruments (vst_sounds), leer = sein Standardklang.
     samples: Orchester-Instrumente spielen aus echten Aufnahmen (sample_library), soweit vorhanden.
     real_drums: akustische Schlagzeuge spielen aus dem DRS Kit (drum_kit), soweit vorhanden.
+    band: Flügel, E-Bass und E-Gitarre spielen aus echten Aufnahmen (band_library), soweit vorhanden.
     """
     soundfont_pfad = soundfont_pfad or SOUNDFONT_PFAD
     midi = pretty_midi.PrettyMIDI(midi_pfad)
@@ -89,7 +90,7 @@ def midi_zu_wav(midi_pfad: str, wav_pfad: str, is_drum: bool = False, instrument
     if amp and not vst_pfad:
         import guitar_amp
         for inst in [i for i in midi.instruments if guitar_amp.wants_amp(i)]:
-            audio = guitar_amp.play(inst, soundfont_pfad, library, cabinet_ir)
+            audio = guitar_amp.play(inst, soundfont_pfad, library, cabinet_ir, band)
             if audio is not None:
                 synths.append(audio)
                 midi.instruments.remove(inst)
@@ -102,6 +103,13 @@ def midi_zu_wav(midi_pfad: str, wav_pfad: str, is_drum: bool = False, instrument
         import sample_library
         for inst in [i for i in midi.instruments if sample_library.covers(i)]:
             audio = sample_library.render(inst, SAMPLE_RATE)
+            if audio is not None:
+                synths.append(audio)
+                midi.instruments.remove(inst)
+    if band and not vst_pfad:
+        import band_library
+        for inst in [i for i in midi.instruments if band_library.covers(i)]:
+            audio = band_library.render(inst, SAMPLE_RATE)
             if audio is not None:
                 synths.append(audio)
                 midi.instruments.remove(inst)

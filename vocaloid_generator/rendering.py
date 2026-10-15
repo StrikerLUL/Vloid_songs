@@ -54,6 +54,12 @@ def _render_instruments(settings: SongSettings, tracks: dict, out: str, report: 
         if orchestra:
             log.info("Orchester-Aufnahmen: %d Instrumente", len(orchestra))
         extra = extra + orchestra
+    if _band(settings):
+        import band_library
+        band = band_library.installed()
+        if band:
+            log.info("%s", band_library.status())
+        extra = extra + [f"{name}:{os.path.getmtime(band_library.path(name))}" for name in band]
     if settings.real_drums and not settings.own_soundfont():
         import drum_kit
         if drum_kit.installed():
@@ -100,7 +106,7 @@ def _render_instruments(settings: SongSettings, tracks: dict, out: str, report: 
 
 # Der Code, der Klang macht: ändert er sich (neue Version der App), wird alles neu gerendert
 RENDER_CODE = ("renderer.py", "mixer.py", "synth_engine.py", "drum_machine.py", "guitar_amp.py", "sound_library.py",
-               "styles.py", "sfz.py", "sample_library.py", "drum_kit.py")
+               "styles.py", "sfz.py", "sample_library.py", "drum_kit.py", "band_library.py")
 
 
 def _render_key(job: dict, library: list) -> str:
@@ -160,12 +166,18 @@ def _render_job(settings: SongSettings, out: str, inst: str) -> dict:
         cabinet_ir=settings.cabinet_ir,
         samples=_samples(settings),
         real_drums=settings.real_drums and not settings.own_soundfont() and inst == "drums",
+        band=_band(settings),
     )
 
 
 def _samples(settings: SongSettings) -> bool:
     """Orchester-Aufnahmen statt SoundFont: eingeschaltet und kein eigener SoundFont gewählt."""
     return settings.samples and not settings.own_soundfont()
+
+
+def _band(settings: SongSettings) -> bool:
+    """Flügel, E-Bass und E-Gitarre aus Aufnahmen: eingeschaltet und kein eigener SoundFont gewählt."""
+    return settings.band_samples and not settings.own_soundfont()
 
 
 def _vst_for(settings: SongSettings, inst: str) -> tuple:

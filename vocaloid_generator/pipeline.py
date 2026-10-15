@@ -114,6 +114,7 @@ def compose(settings: SongSettings, seed: Optional[int] = None):
         lively_bass=settings.lively_bass,
         guitar_strums=settings.guitar_strums,
         singable=settings.singable_melody,
+        meter=settings.meter,
     )
     import backing_vocals
     backing_vocals.add(tracks, settings)
@@ -483,13 +484,12 @@ def _hook_preview(tracks: dict, kind: str, path: str, lead: bool = True) -> None
     """Die ersten HOOK_BARS Takte der Sektion: Melodie als Lead-Synth (ohne lead nicht), Akkorde als Fläche und Bass."""
     import pretty_midi
     import soundfile as sf
-    from song_plan import BEATS_PER_BAR
     from synth_engine import SAMPLE_RATE, render_notes
     from theory import voice_chord
     plan = tracks["plan"]
     sec = next(s for s in plan.sections if s.kind == kind)
     spb = plan.seconds_per_beat
-    t0, t1 = sec.start * spb, min(sec.end, sec.start + HOOK_BARS * BEATS_PER_BAR) * spb
+    t0, t1 = sec.start * spb, min(sec.end, sec.start + HOOK_BARS * sec.bar_beats) * spb
 
     def note(velocity: int, pitch: int, start: float, end: float) -> pretty_midi.Note:
         return pretty_midi.Note(velocity=velocity, pitch=pitch, start=start - t0, end=min(end, t1) - t0)

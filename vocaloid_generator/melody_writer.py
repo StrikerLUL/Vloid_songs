@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from lyrics import Mora, for_occurrence, vowel
+from meter import END_RHYTHMS_34, RHYTHMS_34
 from song_plan import BEATS_PER_BAR, VOCAL_RANGE, Section, SongPlan
 from theory import Chord, scale_pcs
 
@@ -129,8 +130,8 @@ def roles_for(kind: str, n_phrases: int) -> list:
     return body + [seq[-1]]
 
 
-def phrase_bars_for(bars: int, bpm: float) -> int:
-    bar_seconds = BEATS_PER_BAR * 60.0 / bpm
+def phrase_bars_for(bars: int, bpm: float, bar_beats: float = BEATS_PER_BAR) -> int:
+    bar_seconds = bar_beats * 60.0 / bpm
     if bars % 4 == 0 and bar_seconds * 4 <= 8.5:
         return 4
     if bars % 2 == 0:
@@ -138,8 +139,13 @@ def phrase_bars_for(bars: int, bpm: float) -> int:
     return bars
 
 
-def max_syllables(bars: int) -> int:
-    return bars * MAX_PER_BAR
+def max_syllables(bars: int, bar_steps: int = BAR_STEPS) -> int:
+    return bars * _per_bar(bar_steps)
+
+
+def _per_bar(bar_steps: int) -> int:
+    """So viele Silben passen höchstens in einen Takt: 12 im 4/4-Takt, 9 im 3/4-Takt."""
+    return MAX_PER_BAR * bar_steps // BAR_STEPS
 
 
 def _local_scale(tonic: int, mode: str, chord: Chord) -> set:
@@ -168,20 +174,28 @@ class SectionMelodyWriter:
         self.motifs = {}
         self.gestures = {}
         self.melisma = {}
+        # Sechzehntel pro Takt: 16, im 3/4-Takt 12 (dort schreibt der Writer im fertigen Takt, meter.py)
+        self.bar_steps = int(round(section.bar_beats * STEPS_PER_BEAT))
+        self.waltz = self.bar_steps == 12
+        self.body = RHYTHMS_34 if self.waltz else BODY_RHYTHMS
+        self.ends = END_RHYTHMS_34 if self.waltz else END_RHYTHMS
+        self.strong_steps = (0,) if self.waltz else (0, 8)
+        self.release = self.bar_steps - 4         # der Schlusston endet einen Schlag vor dem Taktende
+        self.own_rhythms = bool(motifs) and self.bar_steps == BAR_STEPS   # gelernte Rhythmen sind 4/4
 
     # ── Silben verteilen ─────────────────────────────────────────────────────────
     def allocate(self, syllables: list) -> tuple:
         """Silben auf Phrasen verteilen. Kurze Texte werden wiederholt, damit die Sektion nicht leer klingt."""
         bars = self.sec.bars
-        pb = phrase_bars_for(bars, self.plan.bpm)
+        pb = phrase_bars_for(bars, self.plan.bpm, self.sec.bar_beats)
         n_phrases = max(bars // pb, 1)
         syllables = list(syllables) or ["ら"]
-        seconds = bars * BEATS_PER_BAR * self.plan.seconds_per_beat
+        seconds = bars * self.sec.bar_beats * self.plan.seconds_per_beat
         comfortable = SYLLABLES_PER_SECOND.get(self.kind, 3.3) * seconds * SINGING_SHARE
         reps = max(1, round(comfortable / len(syllables)))
-        while reps > 1 and len(syllables) * reps > max_syllables(bars):
+        while reps > 1 and len(syllables) * reps > max_syllables(bars, self.bar_steps):
             reps -= 1
-        stream = (syllables * reps)[:max_syllables(bars)]
+        stream = (syllables * reps)[:max_syllables(bars, self.bar_steps)]
         if reps > 1 and n_phrases % reps == 0:
             per_pass = n_phrases // reps
             chunks = []
@@ -201,11 +215,11 @@ class SectionMelodyWriter:
             return self.motifs[key]
         for other in (count - 1, count + 1):
             if (other, variant) in self.motifs and other > 0:
-                self.motifs[key] = _derive(self.motifs[(other, variant)], count)
+                self.motifs[key] = _derive(self.motifs[(other, variant)], count, self.bar_steps)
                 return self.motifs[key]
-        if count in BODY_RHYTHMS:
-            options = list(BODY_RHYTHMS[count])
-            if self.extra:
+        if count in self.body:
+            options = list(self.body[count])
+            if self.own_rhythms:
                 options += self.extra.body.get(count, [])
                 learned = self.extra.learned.get(count, [])
                 if learned and self.rng.random() < LEARNED_SHARE:
@@ -215,16 +229,17 @@ class SectionMelodyWriter:
                 options = [o for o in options if o != first]
             motif = self.rng.choice(options)
         else:
-            extra = [3, 11, 7, 15, 1, 9, 5, 13][:count - 8]
-            motif = tuple(sorted(set(range(0, 16, 2)) | set(extra)))[:count]
+            eighths = set(range(0, self.bar_steps, 2))
+            extra = [s for s in (3, 11, 7, 15, 1, 9, 5, 13) if s < self.bar_steps][:count - len(eighths)]
+            motif = tuple(sorted(eighths | set(extra)))[:count]
         self.motifs[key] = motif
         return motif
 
     def _end_rhythm(self, count: int, role: str) -> tuple:
         key = ("end", role, count)
         if key not in self.motifs:
-            options = END_RHYTHMS.get(min(count, 6))
-            if self.extra:
+            options = self.ends.get(min(count, 6))
+            if self.own_rhythms:
                 options = options + self.extra.end.get(min(count, 6), [])
             self.motifs[key] = self.rng.choice(options) if count <= 6 else self._motif(count)
         return self.motifs[key]
@@ -237,7 +252,7 @@ class SectionMelodyWriter:
             body = phrase_bars - 1
             end = 1 if n <= body + 1 else max(1, min(6, round(n / phrase_bars * 0.6)))
             rest = n - end
-            while rest > body * MAX_PER_BAR and end < 6:
+            while rest > body * _per_bar(self.bar_steps) and end < 6:
                 end += 1
                 rest -= 1
             base, extra = divmod(rest, body)
@@ -248,18 +263,18 @@ class SectionMelodyWriter:
         onsets = []
         for b, c in enumerate(counts):
             variant = b % 2 if len(counts) > 2 else 0
-            onsets.extend(b * BAR_STEPS + s for s in self._motif(c, variant))
-        last_bar = len(counts) * BAR_STEPS
+            onsets.extend(b * self.bar_steps + s for s in self._motif(c, variant))
+        last_bar = len(counts) * self.bar_steps
         onsets.extend(last_bar + s for s in self._end_rhythm(end, role))
-        phrase_end = last_bar + END_RELEASE
+        phrase_end = last_bar + self.release
         if onsets and onsets[-1] >= phrase_end - 1:
-            phrase_end = min(last_bar + BAR_STEPS, onsets[-1] + 2)
+            phrase_end = min(last_bar + self.bar_steps, onsets[-1] + 2)
         slots = []
         for i, step in enumerate(onsets):
             nxt = onsets[i + 1] if i + 1 < len(onsets) else phrase_end
-            in_bar = step % BAR_STEPS
+            in_bar = step % self.bar_steps
             dur = max(1, nxt - step)
-            strong = in_bar in (0, 8) or dur >= 4 or i == len(onsets) - 1
+            strong = in_bar in self.strong_steps or dur >= 4 or i == len(onsets) - 1
             slots.append(_Slot(step, dur, strong, i == len(onsets) - 1))
         return slots
 
@@ -277,7 +292,7 @@ class SectionMelodyWriter:
     def _gesture_offsets(self, slots: list, role: str) -> list:
         by_bar = {}
         for i, s in enumerate(slots):
-            by_bar.setdefault(s.step // BAR_STEPS, []).append(i)
+            by_bar.setdefault(s.step // self.bar_steps, []).append(i)
         depth = GESTURE_DEPTH.get(self.kind, 0.8)
         offsets = [0.0] * len(slots)
         for bar, idxs in by_bar.items():
@@ -350,7 +365,7 @@ class SectionMelodyWriter:
         out, history, prev_move = [], [], 0
         ref_by_step = {s.step: p for s, p in reference} if reference else {}
         gesture = self._gesture_offsets(slots, role)
-        last_bar_start = (slots[-1].step // BAR_STEPS) * BAR_STEPS
+        last_bar_start = (slots[-1].step // self.bar_steps) * self.bar_steps
         for i, slot in enumerate(slots):
             chord = self._chord_at_step(phrase_start, slot.step)
             target = self.center + contour(slot.step / total) + gesture[i]
@@ -376,7 +391,7 @@ class SectionMelodyWriter:
         """Hook-Technik: weitere Takte wiederholen das Motiv des ersten Takts, verschoben auf den neuen Akkord."""
         bars = {}
         for i, s in enumerate(slots):
-            bars.setdefault(s.step // BAR_STEPS, []).append(i)
+            bars.setdefault(s.step // self.bar_steps, []).append(i)
         first = bars.get(0, [])
         if not first:
             return pitches
@@ -386,10 +401,10 @@ class SectionMelodyWriter:
         for b, idxs in bars.items():
             if b == 0 or b == max(bars):
                 continue
-            steps = [slots[i].step - b * BAR_STEPS for i in idxs]
+            steps = [slots[i].step - b * self.bar_steps for i in idxs]
             if steps != motif_steps:
                 continue
-            chord = self._chord_at_step(phrase_start, b * BAR_STEPS)
+            chord = self._chord_at_step(phrase_start, b * self.bar_steps)
             best = None
             for shift in (0, 1, -1, 2, -2, 3, -3, 4, -4):
                 moved = [_scale_shift(scale, out[i], shift) for i in first]
@@ -411,7 +426,7 @@ class SectionMelodyWriter:
         notes, prev = [], None
         written = {}
         for ph, (chunk, role) in enumerate(zip(chunks, roles)):
-            phrase_start = self.sec.start + ph * pb * BEATS_PER_BAR
+            phrase_start = self.sec.start + ph * pb * self.sec.bar_beats
             slots = self.phrase_rhythm(len(chunk), pb, role)
             base_role = role.rstrip("2")
             reference = written.get(base_role)
@@ -475,11 +490,11 @@ def _split_even(items: list, parts: int) -> list:
     return [c for c in out if c] or [items]
 
 
-def _derive(motif: tuple, count: int) -> tuple:
+def _derive(motif: tuple, count: int, bar_steps: int = BAR_STEPS) -> tuple:
     """Motiv mit einer Silbe mehr oder weniger, so ähnlich wie möglich."""
     onsets = list(motif)
     while len(onsets) < count:
-        bounds = onsets + [BAR_STEPS]
+        bounds = onsets + [bar_steps]
         gaps = [(bounds[i + 1] - bounds[i], i) for i in range(len(onsets))]
         size, i = max(gaps)
         if size < 2:
@@ -488,7 +503,7 @@ def _derive(motif: tuple, count: int) -> tuple:
         new = onsets[i] + (half if half % 2 == 0 or size < 4 else half - 1)
         onsets.insert(i + 1, new)
     while len(onsets) > count:
-        bounds = onsets + [BAR_STEPS]
+        bounds = onsets + [bar_steps]
         gaps = [(bounds[i + 1] - bounds[i], i) for i in range(1, len(onsets))]
         _, i = min(gaps) if gaps else (0, 0)
         onsets.pop(i if i else len(onsets) - 1)
@@ -823,9 +838,9 @@ def melody_data(notes: list) -> tuple:
     return data, syllables
 
 
-def required_bars(n_syllables: int) -> int:
+def required_bars(n_syllables: int, bar_steps: int = BAR_STEPS) -> int:
     """Takte (Zweierpotenz), die eine Sektion mindestens braucht, damit n Silben singbar hineinpassen."""
     bars = 1
-    while n_syllables > max_syllables(bars):
+    while n_syllables > max_syllables(bars, bar_steps):
         bars *= 2
     return bars

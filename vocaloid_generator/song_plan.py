@@ -9,7 +9,7 @@ from theory import Chord, is_minor, key_pc, parse_chord_name, parse_roman
 
 log = logging.getLogger(__name__)
 
-BEATS_PER_BAR = 4
+BEATS_PER_BAR = 4            # beim Komponieren; im 3/4-Takt rückt meter.py die Töne danach zurecht
 SLOW_BPM = 100
 VOCAL_RANGE = (57, 79)       # A3 bis G5: Lage, in der die Melodie geschrieben wird
 SHARED_PROGRESSION = {"Intro": "Chorus", "Outro": "Chorus", "Drop": "Chorus", "Solo": "Chorus", "Build-up": "PreChorus"}
@@ -41,10 +41,11 @@ class Section:
     # Schlag resume, danach spielt die Sektion wie gewohnt
     feel: str = ""
     resume: Optional[float] = None
+    bar_beats: float = BEATS_PER_BAR     # Schläge pro Takt; im fertigen Plan eines 3/4-Songs 3 (meter.Meter.plan)
 
     @property
     def beats(self) -> float:
-        return self.bars * BEATS_PER_BAR
+        return self.bars * self.bar_beats
 
     @property
     def end(self) -> float:
@@ -68,6 +69,11 @@ class SongPlan:
     progressions: dict       # Sektionsart → gewählte Akkordfolge (Stufen)
     vocal_range: tuple = VOCAL_RANGE
     key_change: int = 0      # Halbtöne, um die der letzte Refrain höher liegt
+    meter: str = "4/4"       # Takt (meter.py); komponiert wird in Vierer-Takten
+
+    @property
+    def bar_beats(self) -> float:
+        return self.sections[0].bar_beats if self.sections else BEATS_PER_BAR
 
     @property
     def total_beats(self) -> float:
@@ -152,7 +158,7 @@ def _section_bars(kind: str, bars: int, progression: list, mode_class: str, next
 
 def build_plan(style: StyleProfile, bpm: float, structure: list, key: str, mode: str, section_config: dict,
                rng: random.Random, min_bars: Optional[dict] = None, custom_chords: Optional[dict] = None,
-               rerolls: Optional[dict] = None) -> SongPlan:
+               rerolls: Optional[dict] = None, meter: str = "4/4") -> SongPlan:
     """
     Legt Tonart, Akkorde und Energie jeder Sektion fest. Gleiche Sektionsarten bekommen dieselbe
     Akkordfolge (der zweite Refrain klingt wie der erste). Der letzte Refrain kann einen oder zwei
@@ -161,6 +167,8 @@ def build_plan(style: StyleProfile, bpm: float, structure: list, key: str, mode:
     custom_chords: {Sektionsart: eigene Akkorde (parse_custom)}; sie gelten genau so, ohne Schlusskadenz.
     rerolls: {Sektionsart: eigener Zufall}, um nur die Akkordfolge dieser Sektion neu zu würfeln (Intro, Outro
     und Solo teilen sie mit dem Refrain).
+    meter: im 6/8-Takt sind die Takte aus section_config 6/8-Takte (zwei pro Kompositionstakt), jeder mit eigenem
+    Akkord; die Zeiten bleiben in Kompositionsschlägen (meter.Meter.plan rechnet sie um).
     """
     tonic = key_pc(key)
     mode_class = "minor" if is_minor(mode) else "major"
@@ -187,7 +195,9 @@ def build_plan(style: StyleProfile, bpm: float, structure: list, key: str, mode:
     for idx, kind in enumerate(structure):
         cfg = section_config.get(kind, {"bars": 4, "has_vocals": True})
         bars = max(int(cfg.get("bars", 4)), 1)
-        if bpm < SLOW_BPM and bars >= 8:
+        if meter == "6/8":
+            bars = (bars + 1) // 2      # zwei 6/8-Takte (je zwei punktierte Viertel) sind ein Kompositionstakt
+        elif bpm < SLOW_BPM and bars >= 8:
             bars //= 2      # langsame Songs: halb so viele Takte, sonst dauert ein Refrain eine Minute
         while bars < min_bars.get(kind, 0):
             bars *= 2
@@ -207,18 +217,21 @@ def build_plan(style: StyleProfile, bpm: float, structure: list, key: str, mode:
             is_last_of_kind=kind not in structure[idx + 1:],
         )
         own = custom.get(kind) or custom.get(SHARED_PROGRESSION.get(kind, kind))
+        per_bar = 2 if meter == "6/8" else 1          # im 6/8-Takt ein Akkord pro 6/8-Takt
+        chord_bars, bar_len = bars * per_bar, BEATS_PER_BAR / per_bar
         if own:
-            bar_symbols = [own[1][b % len(own[1])] for b in range(bars)]
+            bar_symbols = [own[1][b % len(own[1])] for b in range(chord_bars)]
         else:
-            bar_symbols = _section_bars(kind, bars, _parse_progression(progressions[kind]), mode_class, sec.next_kind)
+            bar_symbols = _section_bars(kind, chord_bars, _parse_progression(progressions[kind]), mode_class,
+                                        sec.next_kind)
         for b, symbols in enumerate(bar_symbols):
-            dur = BEATS_PER_BAR / len(symbols)
+            dur = bar_len / len(symbols)
             for j, sym in enumerate(symbols):
                 if own:
                     chord = custom_chord(sym, tonic, sec.tonic)
                 else:
                     chord = _colorize(parse_roman(sym, sec.tonic), sym, style.chord_color, kind)
-                sec.chords.append(ChordSlot(beat + b * BEATS_PER_BAR + j * dur, dur, chord))
+                sec.chords.append(ChordSlot(beat + b * bar_len + j * dur, dur, chord))
         sections.append(sec)
         beat += sec.beats
 
@@ -231,7 +244,7 @@ def build_plan(style: StyleProfile, bpm: float, structure: list, key: str, mode:
 
     arrange(sections, style, rng)
     return SongPlan(bpm=bpm, style=style, tonic=tonic, mode=mode, sections=sections, progressions=progressions,
-                    key_change=modulation)
+                    key_change=modulation, meter=meter)
 
 
 def _own_chords(custom_chords: dict) -> dict:

@@ -130,6 +130,8 @@ class SongSettings(BaseModel):
     energy: str = "Hoch"
     key: str = "A"
     scale: Literal["minor", "major", "dorian", "phrygian"] = "minor"
+    # Takt (meter.py): 4/4 wie bisher, 3/4 (Walzer) oder 6/8 (dort zählt bpm die punktierten Viertel)
+    meter: Literal["4/4", "3/4", "6/8"] = "4/4"
     seed: Optional[int] = Field(None, ge=0)
     # Wie oft ein Teil bei gleichem Seed neu gewürfelt wurde; ohne Eintrag bleibt er, wie der Seed ihn macht.
     # Schlüssel: Teil ("bass") oder Teil in einer Sektionsart ("melody:Chorus")

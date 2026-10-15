@@ -6,7 +6,7 @@
 import numpy as np
 from scipy.signal import istft
 
-from song_plan import BEATS_PER_BAR, SongPlan
+from song_plan import SongPlan
 
 SAMPLE_RATE = 44100
 TAIL_SECONDS = 2.5
@@ -67,7 +67,7 @@ def render_fx(plan: SongPlan, seed: int = 0) -> np.ndarray:
         return out.astype(np.float32)
     rng = np.random.default_rng(seed)
     spb = plan.seconds_per_beat
-    bar = BEATS_PER_BAR * spb
+    bar = plan.bar_beats * spb         # im 3/4-Takt drei Schläge
 
     def place(audio, at_seconds, gain=1.0):
         start = int(round(at_seconds * SAMPLE_RATE))

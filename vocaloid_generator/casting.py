@@ -37,7 +37,6 @@ def cast(settings, progress: Optional[Callable] = None) -> list:
     import pipeline
     import singing
     import voice_fx
-    from song_plan import BEATS_PER_BAR
     from vocal_synthesizer import erstelle_musicxml, neutrino_synthese, stimmlage
     report = progress or (lambda fraction, message: None)
     neutrino_dir = settings.neutrino_dir()
@@ -57,7 +56,7 @@ def cast(settings, progress: Optional[Callable] = None) -> list:
         s = settings.with_updates(singer=singer, output_ordner=target)
         tracks, _ = pipeline.compose(s)
         sec = next(sec for sec in tracks["plan"].sections if sec.kind == kind)
-        start, end = sec.start, min(sec.end, sec.start + pipeline.HOOK_BARS * BEATS_PER_BAR)
+        start, end = sec.start, min(sec.end, sec.start + pipeline.HOOK_BARS * sec.bar_beats)
         data, silben = voice_fx.excerpt(tracks["melody_data"], tracks["silben"], start, end)
         if not data:
             continue

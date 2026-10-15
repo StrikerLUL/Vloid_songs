@@ -16,6 +16,7 @@ import cancel
 import casting
 import einrichten
 import history
+import meter
 import pipeline
 import polish
 import preview
@@ -521,7 +522,8 @@ def build() -> None:
         if result is None:
             return
         start, pitch = float(e.args["start"]), int(e.args["pitch"])
-        settings.melody_edits = {**settings.melody_edits, edit_key(start * result.settings.bpm / 60): pitch}
+        key = meter.get(result.settings.meter).edit_key(start * result.settings.bpm / 60)
+        settings.melody_edits = {**settings.melody_edits, key: pitch}
         roll.move(start, pitch)
         show_edits()
 
@@ -530,8 +532,9 @@ def build() -> None:
         if result is None:
             return
         start, end = float(e.args["start"]), float(e.args["end"])
-        beats = (end - start) * result.settings.bpm / 60
-        settings.melody_lengths = {**settings.melody_lengths, edit_key(start * result.settings.bpm / 60): beats}
+        bar, per_second = meter.get(result.settings.meter), result.settings.bpm / 60
+        beats = bar.edit_length(start * per_second, end * per_second)
+        settings.melody_lengths = {**settings.melody_lengths, bar.edit_key(start * per_second): beats}
         roll.resize(start, end)
         show_edits()
 

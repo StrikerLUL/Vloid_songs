@@ -54,13 +54,13 @@ def load(path: str) -> list:
     return melody
 
 
-def imported_bars(melody: list) -> int:
-    """Takte, die die Melodie braucht (1, 2, 4, 8 oder 16); 0 ohne Melodie."""
+def imported_bars(melody: list, bar_beats: float = BEATS_PER_BAR) -> int:
+    """Takte, die die Melodie braucht (1, 2, 4, 8 oder 16); 0 ohne Melodie. bar_beats: Schläge pro Takt (3/4: 3)."""
     if not melody:
         return 0
     end = max(start + dur for start, dur, _ in melody)
     bars = 1
-    while bars * BEATS_PER_BAR < end - 1e-6:
+    while bars * bar_beats < end - 1e-6:
         bars *= 2
     return bars
 
@@ -71,7 +71,7 @@ def fit(melody: list, plan: SongPlan, sec: Section, syllables: list) -> list:
     Stimmlage gerückt (im höheren Schlussrefrain mit der Tonart) und Ton für Ton mit dem Text belegt. Hat die
     Melodie mehr Töne als der Text Silben, beginnt der Text von vorn.
     """
-    length = imported_bars(melody) * BEATS_PER_BAR
+    length = imported_bars(melody, sec.bar_beats) * sec.bar_beats
     shift = (sec.tonic - plan.tonic + 6) % 12 - 6
     pitches = sorted(p + shift for _, _, p in melody)
     lo, hi = plan.vocal_range

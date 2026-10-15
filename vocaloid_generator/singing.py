@@ -37,8 +37,9 @@ VOCAL_KEY = "vocals.key"
 # Die gesungenen Noten aller Stimmen in den Spuren (orchestrate_song)
 NOTE_KEYS = ("melody_data", "silben", "harmony_data", "harmony_silben", "octave_data", "octave_silben", "pads",
              "adlib_data", "adlib_silben")
-VOCAL_CODE = ("singing.py", "vocal_synthesizer.py", "voice_fx.py", "voicevox.py", "neutrino_score.py", "diffsinger.py")
-VOCAL_FIELDS = ("bpm", "seed", "singer", "vocal_engine", "harmonies", "duet_singer", "support_singer", "style_shift", "vocal_takes",
+VOCAL_CODE = ("singing.py", "vocal_synthesizer.py", "voice_fx.py", "voicevox.py", "neutrino_score.py", "diffsinger.py",
+              "meter.py")
+VOCAL_FIELDS = ("bpm", "meter", "seed", "singer", "vocal_engine", "harmonies", "duet_singer", "support_singer", "style_shift", "vocal_takes",
                 "vibrato", "glide", "breaths", "final_choir", "voicevox_url", "voicevox_singer", "voicevox_dynamics", "diffsinger_voice",
                 "neutrino_pfad",
                 "vocal_comping", "phrase_expression", "long_vowel_mark", "breath_marks", "fast_diphthongs",
@@ -241,6 +242,8 @@ def _style_effects(settings: SongSettings, tracks: dict, vocals_wav: str) -> Non
 def _swing_amount(settings: SongSettings) -> float:
     """Wie stark die Band swingt (wie in orchestrate_song); unter VOCAL_SWING_FROM bleibt der Gesang gerade."""
     from styles import get_style
+    if settings.meter == "6/8":
+        return 0.0          # die Band swingt im 6/8-Takt nicht (orchestrate_song)
     amount = min(1.0, get_style(settings.style).swing + settings.swing)
     return round(amount, 4) if settings.vocal_swing and amount >= VOCAL_SWING_FROM else 0.0
 

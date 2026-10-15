@@ -51,6 +51,7 @@ def parse_args(argv=None):
     p.add_argument("--style", help="Preset-Stil, z. B. 'J-Pop Energy', 'Rock', 'Kawaii Chiptune'")
     p.add_argument("--key", choices=KEYS)
     p.add_argument("--scale", choices=["minor", "major", "dorian", "phrygian"])
+    p.add_argument("--takt", choices=["4/4", "3/4", "6/8"], help="Takt; im 6/8-Takt zählt --bpm die punktierten Viertel")
     p.add_argument("--output", help="Ausgabeordner")
     p.add_argument("--stimme", metavar="NAME", help="NEUTRINO-Stimme, z. B. MERROW")
     p.add_argument("--duett", metavar="NAME", help="zweite NEUTRINO-Stimme fürs Duett ('' = kein Duett)")
@@ -263,6 +264,7 @@ def main(argv=None) -> int:
     if args.vom_vorbild:
         settings = from_references(settings)
     overrides = {"seed": args.seed, "bpm": args.bpm, "style": args.style, "key": args.key, "scale": args.scale,
+                 "meter": args.takt,
                  "singer": args.stimme, "duet_singer": args.duett, "support_singer": args.support_stimme, "master_lufs": args.lautheit,
                  "vocal_engine": args.engine, "voicevox_singer": args.voicevox_stimme,
                  "voicevox_dynamics": False if args.ohne_voicevox_dynamik else None,

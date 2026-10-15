@@ -140,6 +140,5 @@ def _movement(plan) -> Optional[list]:
     if plan is None:
         return None
     from mix_movement import Part
-    from song_plan import BEATS_PER_BAR
     spb = plan.seconds_per_beat
-    return [Part(sec.start * spb, sec.end * spb, sec.kind, BEATS_PER_BAR * spb) for sec in plan.sections]
+    return [Part(sec.start * spb, sec.end * spb, sec.kind, sec.bar_beats * spb) for sec in plan.sections]

@@ -45,6 +45,9 @@ def song_panel(s: SongSettings, pick: PickFn, apply_template: Callable[[SongSett
         ui.select(labels.SCALES, label="Tonleiter").bind_value(s, "scale")
         ui.number("Tempo (BPM)", min=40, max=260, step=1, precision=0) \
             .bind_value(s, "bpm", forward=lambda v: int(v or 160)).mark("bpm")
+        ui.select(labels.METERS, label="Takt").bind_value(s, "meter").mark("meter") \
+            .tooltip("3/4: Bum-Tschak-Tschak wie ein Walzer. 6/8: wiegend, das Tempo zählt dann die punktierten Viertel "
+                     "(zwei pro Takt, eine Ballade hat etwa 50 bis 70). 4/4 = wie bisher.")
     with ui.row().classes("w-full items-center gap-4"):
         ui.label("Swing").classes("w-24")
         ui.slider(min=0, max=0.5, step=0.01).bind_value(s, "swing").props("label").classes("col")

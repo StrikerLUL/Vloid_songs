@@ -7,7 +7,8 @@ from dataclasses import replace
 import pretty_midi
 
 import grooves
-from drums import CRASH, KICK, OPEN_HAT, HAT, PEDAL_HAT, RIDE, TAMBOURINE, TOMS, drum_section, lead_in
+import meter as meters
+from drums import CRASH, GROOVES, KICK, OPEN_HAT, HAT, PEDAL_HAT, RIDE, TAMBOURINE, TOMS, drum_section, lead_in
 from lyrics import kind_of, parse_lyrics
 from melody_import import imported_bars
 from melody_writer import harmony_line, melody_data, required_bars, write_vocal_melody
@@ -53,7 +54,7 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
                      vocal_range: tuple = None, variations: dict = None, custom_chords: dict = None,
                      imported_melody: dict = None, melody_edits: dict = None, motifs=None,
                      melody_lengths: dict = None, real_grooves: bool = False, lively_bass: bool = False,
-                     guitar_strums: bool = False, singable: bool = False) -> dict:
+                     guitar_strums: bool = False, singable: bool = False, meter: str = "4/4") -> dict:
     """
     Komponiert den kompletten Song und schreibt eine MIDI-Datei pro Instrument nach output_dir.
 
@@ -73,28 +74,40 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
     GROOVE_SWING_UNTIL), spielen weiter die eingebauten.
     lively_bass: Ghost-Notes und Slides im Bass. guitar_strums: Anschlagmuster je nach Energie statt eines festen.
     singable: die komponierte Gesangsmelodie auf Singbarkeit prüfen (melody_writer.make_singable).
+    meter: Takt (meter.METERS). Komponiert wird in Vierer-Takten, erst die fertigen Töne rücken in den Takt; im
+    3/4-Takt schreibt melody_writer die Gesangsmelodie gleich darin. Im 6/8-Takt zählt bpm die punktierten Viertel.
     Rückgabe: {Instrument: [pretty_midi.Note]}, dazu "melody_data", "silben", "vocal_melody", die zweite
     Stimme für den Refrain ("harmony_data", "harmony_silben") und "plan".
     """
     profile = get_style(style or genre)
+    m = meters.get(meter)
     dice = Dice(random.getrandbits(32), variations or {})
     swing = min(1.0, profile.swing + (swing or 0.0))     # Stile mit eigenem Swing (Lo-Fi) legen ihn dazu
-    log.info("Komponiere: Stil %s, %s BPM, %s-%s", profile.name, bpm, key, mode)
+    if m.compound:
+        swing = 0.0                                       # 6/8 wiegt schon von sich aus
+    log.info("Komponiere: Stil %s, %s BPM, %s-%s, %s-Takt", profile.name, bpm, key, mode, m.name)
 
     sung = {**_default_lyrics(), **(lyrics or {})}
-    imported_melody = {kind: m for kind, m in (imported_melody or {}).items() if m and kind in structure}
+    imported_melody = {kind: m.imported(mel) for kind, mel in (imported_melody or {}).items()
+                       if mel and kind in structure}
     longest = {}                 # die meisten Silben je Sektionsart, auch aus „[Verse 2]“
     for name, words in sung.items():
         longest[kind_of(name)] = max(longest.get(kind_of(name), 0), len(words))
-    min_bars = {kind: max(required_bars(longest.get(kind, 0)), imported_bars(imported_melody.get(kind, [])))
+    steps = 12 if m.native else 16                       # Sechzehntel pro Takt, in dem die Melodie entsteht
+    min_bars = {kind: max(required_bars(longest.get(kind, 0), steps),
+                          imported_bars(imported_melody.get(kind, []), steps / 4))
                 for kind in set(structure) if section_config.get(kind, {}).get("has_vocals", True)}
     plan = build_plan(profile, bpm, structure, key, mode, section_config, dice.part("chords"), min_bars,
-                      custom_chords=custom_chords, rerolls=dice.rerolled_kinds("chords"))
+                      custom_chords=custom_chords, rerolls=dice.rerolled_kinds("chords"), meter=m.name)
     if vocal_range:
         plan.vocal_range = tuple(vocal_range)
-    vocal_notes = write_vocal_melody(plan, sung, dice.part("melody"), rerolls=dice.rerolled_kinds("melody"),
-                                     imported=imported_melody, motifs=motifs, singable=singable)
-    _apply_edits(vocal_notes, melody_edits or {}, melody_lengths or {})
+    real = m.plan(plan)          # Sektionen und Akkorde an ihren Plätzen im Takt
+    melody = write_vocal_melody(real if m.native else plan, sung, dice.part("melody"),
+                                rerolls=dice.rerolled_kinds("melody"), imported=imported_melody, motifs=motifs,
+                                singable=singable)
+    _apply_edits(melody, melody_edits or {}, melody_lengths or {})
+    vocal_notes = m.band_vocal(melody)       # so hören Band und Lead die Melodie: in Vierer-Takten
+    sung_notes = m.vocal(melody)             # so wird sie gesungen: im Takt
 
     arrangement = describe_arrangement(plan)
     if arrangement:
@@ -105,6 +118,7 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
     contexts["bass"]["lively"] = lively_bass and dice.label("bass")      # eigener Zufall: aus = wie bisher
     contexts["guitar"]["strums"] = guitar_strums and dice.label("guitar")
     drummer = grooves.for_song(bpm, dice.label("drums")) if real_grooves and swing < GROOVE_SWING_UNTIL else None
+    drops = []                   # 3/4: (Anfang, Ende, ausfallender Schlag) je Teil der Sektion, für das Schlagzeug
     seen = {}
     for sec in plan.sections:
         seen[sec.kind] = seen.get(sec.kind, 0) + 1
@@ -122,13 +136,16 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
                 events["melody"] += lead_solo(piece, plan, vocal_notes, rngs["melody"])
             if piece.feel == "breakdown":
                 events["drums"] += lead_in(piece, rngs["drums"])
+                drops.append((piece.start, piece.end, m.drop))
             else:
                 groove = "halftime" if piece.feel == "halftime" else profile.groove(sec.kind)
                 events["drums"] += drum_section(piece, groove, rngs["drums"], drummer)
+                drops.append((piece.start, piece.end, meters.drum_drop(GROOVES.get(groove, {})) if m.native else None))
 
     _breaks_before_chorus(plan, events)
     _final_chord(plan, events)
     _spread_stereo(plan, profile, events, instrument_styles)
+    events = _into_meter(m, events, drops)
 
     tracks = {}
     for inst in INSTRUMENTS:
@@ -137,18 +154,19 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
     out_dir = output_dir or _default_output()
     os.makedirs(out_dir, exist_ok=True)
     for inst in INSTRUMENTS:
-        _write_midi(os.path.join(out_dir, f"{inst}.mid"), inst, events[inst], tracks[inst], profile, bpm)
+        _write_midi(os.path.join(out_dir, f"{inst}.mid"), inst, events[inst], tracks[inst], profile, bpm, m)
     vocal_track = [pretty_midi.Note(velocity=100, pitch=n.pitch, start=n.start * 60 / bpm,
-                                    end=(n.start + n.dur) * 60 / bpm) for n in vocal_notes]
-    _write_simple_midi(os.path.join(out_dir, "vocal_melody.mid"), vocal_track, profile.programs["melody"], bpm)
+                                    end=(n.start + n.dur) * 60 / bpm) for n in sung_notes]
+    _write_simple_midi(os.path.join(out_dir, "vocal_melody.mid"), vocal_track, profile.programs["melody"], bpm, m)
 
-    data, syllables = melody_data(vocal_notes)
-    tracks["harmony_data"], tracks["harmony_silben"] = melody_data(harmony_line(plan, vocal_notes))
+    data, syllables = melody_data(sung_notes)
+    tracks["harmony_data"], tracks["harmony_silben"] = melody_data(harmony_line(real, sung_notes))
     tracks["vocal_melody"] = vocal_track
     tracks["melody_data"] = data
     tracks["silben"] = syllables
-    tracks["plan"] = plan
-    log.info("Song: %d Takte, %.0f Sekunden", plan.total_beats / BEATS_PER_BAR, plan.total_beats * 60 / bpm)
+    tracks["plan"] = real
+    bars = sum(sec.bars for sec in plan.sections) * m.bars_per_bar
+    log.info("Song: %d Takte, %.0f Sekunden", bars, real.total_beats * 60 / bpm)
     return tracks
 
 
@@ -307,6 +325,20 @@ def _spread_stereo(plan, profile, events: dict, overrides: dict = None) -> None:
     events["guitar"] += doubled
 
 
+def _into_meter(m, events: dict, drops: list) -> dict:
+    """Alle Ereignisse an ihren Platz im Takt (meter.py); das Schlagzeug lässt je Sektion den Schlag aus, der zu
+    seinem Groove passt (drops)."""
+    if m.plain:
+        return events
+    out = {inst: m.events(evs) for inst, evs in events.items()}
+    if m.native:
+        out["drums"] = []
+        for e in events["drums"]:
+            drop = next((d for start, end, d in drops if start - 1e-6 <= e.start < end - 1e-6 and d is not None), None)
+            out["drums"] += m.events([e], drop)
+    return out
+
+
 def _to_notes(evs: list, bpm: float, inst: str, label: str, swing: float, jitter_scale: float) -> list:
     """Schläge in Sekunden, mit Swing und kleinen Ungenauigkeiten. Jeder Ton würfelt für sich (label, Zeit, Höhe),
     damit ein neu gewürfelter Refrain die Töne in den anderen Sektionen nicht verschiebt."""
@@ -327,9 +359,17 @@ def _to_notes(evs: list, bpm: float, inst: str, label: str, swing: float, jitter
     return notes
 
 
-def _write_midi(path: str, inst: str, evs: list, notes: list, profile, bpm: float) -> None:
+def _midi(bpm: float, m=meters.FOUR) -> pretty_midi.PrettyMIDI:
+    """Eine leere MIDI-Datei mit Tempo und Takt (im 6/8-Takt zählt bpm die punktierten Viertel)."""
+    pm = pretty_midi.PrettyMIDI(initial_tempo=bpm * m.quarters_per_beat)
+    if not m.plain:
+        pm.time_signature_changes.append(pretty_midi.TimeSignature(m.numerator, m.denominator, 0.0))
+    return pm
+
+
+def _write_midi(path: str, inst: str, evs: list, notes: list, profile, bpm: float, m=meters.FOUR) -> None:
     """Eine Spur pro Klang: Unterspuren (z. B. Pad im Synth-Kanal) bekommen ihr eigenes Programm."""
-    pm = pretty_midi.PrettyMIDI(initial_tempo=bpm)
+    pm = _midi(bpm, m)
     ordered = sorted(evs, key=lambda e: (e.start, e.pitch))
     layers = {}
     for e, n in zip(ordered, notes):
@@ -368,8 +408,8 @@ def _slides(pairs: list) -> list:
     return bends
 
 
-def _write_simple_midi(path: str, notes: list, program: int, bpm: float) -> None:
-    pm = pretty_midi.PrettyMIDI(initial_tempo=bpm)
+def _write_simple_midi(path: str, notes: list, program: int, bpm: float, m=meters.FOUR) -> None:
+    pm = _midi(bpm, m)
     track = pretty_midi.Instrument(program=program, name="Vocal Melody")
     track.notes = notes
     pm.instruments.append(track)

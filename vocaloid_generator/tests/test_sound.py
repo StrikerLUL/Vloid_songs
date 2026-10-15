@@ -81,8 +81,8 @@ def test_new_styles_play_every_part_they_name(tmp_path, name):
 def test_style_swing_comes_on_top_of_the_setting(tmp_path, monkeypatch):
     seen = []
     real = orchestrator._to_notes
-    monkeypatch.setattr(orchestrator, "_to_notes", lambda evs, bpm, inst, rng, swing, jitter: seen.append(swing)
-                        or real(evs, bpm, inst, rng, swing, jitter))
+    monkeypatch.setattr(orchestrator, "_to_notes", lambda evs, bpm, inst, rng, swing, jitter, *rest: seen.append(swing)
+                        or real(evs, bpm, inst, rng, swing, jitter, *rest))
     for style in ("Lo-Fi", "J-Pop Energy"):
         pipeline.compose(make_settings(tmp_path, style=style, swing=0.1, active_sections=["Chorus"]), seed=1)
     assert seen[0] == pytest.approx(0.1 + get_style("Lo-Fi").swing) and seen[-1] == pytest.approx(0.1)

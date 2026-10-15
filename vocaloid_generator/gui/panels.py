@@ -391,7 +391,12 @@ def templates_editor(s: SongSettings, apply_template: Callable[[SongSettings], N
 # ── Text ────────────────────────────────────────────────────────────────────────
 def text_panel(s: SongSettings) -> None:
     hint("Eine Überschrift wie [Verse], [Pre-Chorus], [Chorus] oder [Bridge] pro Abschnitt. Japanisch darf ganz "
-         "normal geschrieben werden, auch mit Kanji; 君[きみ] gibt eine Lesung von Hand vor.")
+         "normal geschrieben werden, auch mit Kanji; 君[きみ] gibt eine Lesung von Hand vor. [Verse 2] oder "
+         "[Chorus 3] gibt einer Wiederholung ihren eigenen Text auf dieselbe Melodie.")
+    ui.switch("Eigener Text für [Verse 2], [Chorus 3] …").bind_value(s, "numbered_lyrics").props("dense") \
+        .mark("switch-numbered_lyrics") \
+        .tooltip("Aus: jede Wiederholung singt wieder den Text der ersten Strophe oder des ersten Refrains (wie bis "
+                 "1.1), Überschriften mit Nummer werden übergangen.")
     ui.switch("Romaji japanisch singen (kimi no koe → きみ の こえ)").bind_value(s, "romaji").props("dense") \
         .mark("switch-romaji").on_value_change(lambda: preview.refresh()) \
         .tooltip("Eine Zeile ganz in Romaji wird japanisch gesungen; ist ein englisches Wort darin (love, baby), bleibt "

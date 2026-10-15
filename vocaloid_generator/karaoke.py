@@ -10,6 +10,8 @@ import shutil
 import subprocess
 from typing import Optional
 
+from lyrics import OCCURRENCE
+
 log = logging.getLogger(__name__)
 
 FILE = "liedtext.json"
@@ -31,8 +33,8 @@ def lines(notes: list, syllables: list, bpm: float, plan=None, line_lengths: Opt
     notes: die Töne der Gesangsmelodie (pretty_midi.Note), syllables: die Silben dazu in zeitlicher Reihenfolge
     (melody_writer.melody_data). Ein Melisma verlängert die Silbe davor.
     line_lengths {Sektionsart: [Silben pro Zeile]} (aus lyrics.section_lines): die Zeilen wie im Liedtext, auch
-    wenn der Text in der Sektion wiederholt wird. Ohne sie beginnt eine neue Zeile nach einer Pause ab einem
-    Schlag. Jede Sektion beginnt mit einer neuen Zeile.
+    wenn der Text in der Sektion wiederholt wird; "Verse#2" für ein Vorkommen mit eigenem Text („[Verse 2]“). Ohne
+    sie beginnt eine neue Zeile nach einer Pause ab einem Schlag. Jede Sektion beginnt mit einer neuen Zeile.
     """
     spb = 60.0 / bpm
     sections = []
@@ -41,13 +43,14 @@ def lines(notes: list, syllables: list, bpm: float, plan=None, line_lengths: Opt
             sections[-1][1][-1][1] = note.end
             continue
         sec = plan.section_at(note.start / spb + 1e-6) if plan is not None else None
-        key = (sec.index, sec.kind) if sec is not None else (0, "")
+        key = (sec.index, sec.kind, sec.occurrence) if sec is not None else (0, "", 1)
         if not sections or sections[-1][0] != key:
             sections.append((key, []))
         sections[-1][1].append([note.start, note.end, str(syllable), bool(getattr(syllable, "word_start", False))])
     found = []
-    for (_, kind), sung in sections:
-        lengths = [n for n in (line_lengths or {}).get(kind, []) if n > 0]
+    for (_, kind, occurrence), sung in sections:
+        own = (line_lengths or {}).get(f"{kind}{OCCURRENCE}{occurrence}") if occurrence > 1 else None
+        lengths = [n for n in own or (line_lengths or {}).get(kind, []) if n > 0]
         for line in _by_lengths(sung, lengths) if lengths else _by_pauses(sung, LINE_GAP_BEATS * spb):
             found += _split(line)
     return [{"start": round(line[0][0], 3), "end": round(line[-1][1], 3),

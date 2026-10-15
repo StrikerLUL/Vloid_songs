@@ -11,7 +11,7 @@ import random
 from dataclasses import dataclass
 from typing import Optional
 
-from lyrics import Mora, vowel
+from lyrics import Mora, for_occurrence, vowel
 from song_plan import BEATS_PER_BAR, VOCAL_RANGE, Section, SongPlan
 from theory import Chord, scale_pcs
 
@@ -507,7 +507,8 @@ def write_vocal_melody(plan: SongPlan, lyrics: dict, rng: random.Random, rerolls
                        imported: Optional[dict] = None, motifs=None, singable: bool = False) -> list:
     """
     Melodie für alle Sektionen mit Gesang. Jede Sektionsart wird einmal komponiert; spätere Vorkommen
-    singen dieselbe Melodie (im Schlussrefrain höher, wenn der Song die Tonart wechselt).
+    singen dieselbe Melodie (im Schlussrefrain höher, wenn der Song die Tonart wechselt). Hat ein späteres Vorkommen
+    einen eigenen Text (lyrics["Verse#2"], aus „[Verse 2]“), singt es ihn auf dieselbe Melodie (fit_text).
     Jede Sektionsart würfelt für sich; rerolls {Sektionsart: Zufall} schreibt nur ihre Melodie neu.
     imported {Sektionsart: Melodie aus melody_import.load}: dort singt die eigene Melodie, Ton für Ton.
     motifs: zusätzliche Rhythmen und Gesten (motifs.Motifs), None = nur die eingebauten.
@@ -533,12 +534,89 @@ def write_vocal_melody(plan: SongPlan, lyrics: dict, rng: random.Random, rerolls
             shift = (sec.tonic - first.tonic + 6) % 12 - 6
             sec_notes = [MelNote(n.start - first.start + sec.start, n.dur, n.pitch + shift, n.syllable, n.strong)
                          for n in first_notes]
+            own = for_occurrence(lyrics, sec.kind, sec.occurrence)
+            if own:
+                sec_notes = fit_text(sec_notes, own)
+                log.info("%s %d singt seinen eigenen Text (%d Silben)", sec.kind, sec.occurrence, len(own))
         notes.extend(sec_notes)
     composed = [n for n in notes if not imported.get(plan.section_at(n.start).kind)]
     _fit_to_chords(plan, composed)
     if singable:
         make_singable(plan, composed)
     return notes
+
+
+# ── Eigener Text für eine wiederholte Sektion (v6, Nr. 1) ───────────────────────
+# Die Melodie bleibt, der Rhythmus passt sich an: mehr Silben teilen die längsten Töne, weniger Silben lassen kurze
+# Töne direkt nach einem anderen auf dem Vokal davor weiterklingen (Melisma) oder binden sie an ihn.
+MIN_SPLIT = 0.5             # Schläge: kürzere Töne werden nicht mehr geteilt (zwei Sechzehntel)
+SPLIT_GRID = 0.25
+
+
+def _held(note: MelNote) -> bool:
+    return bool(getattr(note.syllable, "melisma", False))
+
+
+def fit_text(notes: list, syllables: list) -> list:
+    """
+    Die Töne einer wiederholten Sektion mit einem eigenen Text. notes: die Töne des ersten Vorkommens (an die Stelle
+    dieses Vorkommens verschoben), syllables: der neue Text. Ist er viel kürzer als der alte, wird er wie beim ersten
+    Vorkommen wiederholt. Rückgabe: neue Töne mit den neuen Silben; Tonhöhen und Phrasen bleiben.
+    """
+    out = [[MelNote(n.start, n.dur, n.pitch, n.syllable, n.strong), not _held(n)] for n in sorted(notes, key=lambda n: n.start)]
+    words = [w for w in syllables if w]
+    if not out or not words:
+        return [n for n, _ in out]
+    slots = sum(1 for _, sung in out if sung)
+    stream = words * max(1, round(slots / len(words)))
+    # mehr Silben als Töne: erst Melismen zu eigenen Silben, dann die längsten Töne teilen
+    while sum(1 for _, sung in out if sung) < len(stream):
+        held = next((item for item in out if not item[1]), None)
+        if held:
+            held[1] = True
+            continue
+        longest = max(out, key=lambda item: (item[0].dur, -item[0].start))
+        note = longest[0]
+        if note.dur < MIN_SPLIT:
+            break
+        first = max(SPLIT_GRID, round(note.dur / 2 / SPLIT_GRID) * SPLIT_GRID)
+        rest = MelNote(note.start + first, note.dur - first, note.pitch, None, False)
+        note.dur = first
+        out.insert(out.index(longest) + 1, [rest, True])
+    # weniger Silben als Töne: kurze, unbetonte Töne direkt nach einem anderen klingen auf dessen Silbe weiter
+    surplus = sum(1 for _, sung in out if sung) - len(stream)
+    if surplus > 0:
+        candidates = [i for i in range(1, len(out)) if out[i][1]
+                      and abs(out[i - 1][0].start + out[i - 1][0].dur - out[i][0].start) < 1e-6]
+        candidates.sort(key=lambda i: (out[i][0].strong, out[i][0].dur, out[i][0].start))
+        for i in candidates[:surplus]:
+            out[i][1] = False
+        surplus -= min(surplus, len(candidates))
+        while surplus > 0:                       # sonst die kürzesten Töne weglassen (eine Pause mehr)
+            shortest = min((item for item in out if item[1]), key=lambda item: (item[0].dur, -item[0].start))
+            out.remove(shortest)
+            surplus -= 1
+    fitted, words = [], iter(stream)
+    for note, sung in out:
+        if sung:
+            note.syllable = next(words, None)
+        elif fitted and fitted[-1].pitch == note.pitch and \
+                abs(fitted[-1].start + fitted[-1].dur - note.start) < 1e-6:
+            fitted[-1].dur += note.dur            # gleicher Ton: einfach länger halten
+            continue
+        else:
+            sound = vowel(str(fitted[-1].syllable or "")) if fitted else None
+            if sound is None:                     # nach っ oder vor dem ersten Ton: ein Ton weniger
+                if fitted and abs(fitted[-1].start + fitted[-1].dur - note.start) < 1e-6:
+                    fitted[-1].dur += note.dur
+                continue
+            note.syllable = Mora(sound, melisma=True)
+            note.strong = False
+        fitted.append(note)
+    left = sum(1 for _ in words)
+    if left:
+        log.warning("Eigener Text: %d Silben passen nicht mehr auf die Melodie und fallen weg", left)
+    return fitted
 
 
 # ── Singbarkeit (Gesang 1.1, A5) ────────────────────────────────────────────────

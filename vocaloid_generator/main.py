@@ -95,6 +95,8 @@ def parse_args(argv=None):
     p.add_argument("--ohne-formant", action="store_true", help="die Formanten der Stimme nicht verschieben")
     p.add_argument("--ohne-gesangsswing", action="store_true", help="der Gesang bleibt gerade, auch wenn die Band swingt")
     p.add_argument("--ohne-romaji", action="store_true", help="Romaji im Liedtext nicht japanisch singen")
+    p.add_argument("--ohne-eigene-texte", action="store_true",
+                   help="[Verse 2], [Chorus 3] übergehen: jede Wiederholung singt den Text der ersten")
     p.add_argument("--ohne-haltezeichen", action="store_true", help="lange Vokale für NEUTRINO nicht als ー schreiben")
     p.add_argument("--ohne-atemzeichen", action="store_true", help="keine Atemzeichen in langen Zeilen")
     p.add_argument("--ohne-doppelvokale", action="store_true", help="schnelle Töne nicht auf einem Ton zusammenlegen")
@@ -269,6 +271,7 @@ def main(argv=None) -> int:
                  "formant_fx": False if args.ohne_formant else None,
                  "vocal_swing": False if args.ohne_gesangsswing else None,
                  "romaji": False if args.ohne_romaji else None,
+                 "numbered_lyrics": False if args.ohne_eigene_texte else None,
                  "long_vowel_mark": False if args.ohne_haltezeichen else None,
                  "breath_marks": False if args.ohne_atemzeichen else None,
                  "fast_diphthongs": False if args.ohne_doppelvokale else None,

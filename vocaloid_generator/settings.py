@@ -150,6 +150,7 @@ class SongSettings(BaseModel):
     melody_edits: dict[str, int] = Field(default_factory=dict)
     melody_lengths: dict[str, float] = Field(default_factory=dict)   # {Schlag: neue Länge in Schlägen}
     lyrics: str = DEFAULT_LYRICS
+    numbered_lyrics: bool = True       # „[Verse 2]“ im Liedtext: das zweite Vorkommen singt seinen eigenen Text
 
     singer: str = "MERROW"
     vocal_engine: str = "NEUTRINO"     # NEUTRINO, VOICEVOX, DiffSinger oder Vorschau; fehlt eine, singt die andere

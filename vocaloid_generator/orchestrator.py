@@ -8,7 +8,7 @@ import pretty_midi
 
 import grooves
 from drums import CRASH, KICK, OPEN_HAT, HAT, PEDAL_HAT, RIDE, TAMBOURINE, TOMS, drum_section, lead_in
-from lyrics import parse_lyrics
+from lyrics import kind_of, parse_lyrics
 from melody_import import imported_bars
 from melody_writer import harmony_line, melody_data, required_bars, write_vocal_melody
 from parts import LAYER_PROGRAMS, PARTS, Ev, lead_hook, lead_solo
@@ -83,7 +83,10 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
 
     sung = {**_default_lyrics(), **(lyrics or {})}
     imported_melody = {kind: m for kind, m in (imported_melody or {}).items() if m and kind in structure}
-    min_bars = {kind: max(required_bars(len(sung.get(kind, []))), imported_bars(imported_melody.get(kind, [])))
+    longest = {}                 # die meisten Silben je Sektionsart, auch aus „[Verse 2]“
+    for name, words in sung.items():
+        longest[kind_of(name)] = max(longest.get(kind_of(name), 0), len(words))
+    min_bars = {kind: max(required_bars(longest.get(kind, 0)), imported_bars(imported_melody.get(kind, [])))
                 for kind in set(structure) if section_config.get(kind, {}).get("has_vocals", True)}
     plan = build_plan(profile, bpm, structure, key, mode, section_config, dice.part("chords"), min_bars,
                       custom_chords=custom_chords, rerolls=dice.rerolled_kinds("chords"))

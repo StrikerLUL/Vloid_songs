@@ -15,7 +15,7 @@ import mixdown
 import rendering
 import singing
 from config import remove_file
-from lyrics import parse_lyrics
+from lyrics import parse_lyrics, shared_only
 from orchestrator import orchestrate_song
 from settings import DEFAULT_JITTER, INSTRUMENTS, SongSettings
 
@@ -75,6 +75,12 @@ def seed_everything(seed: int) -> None:
     np.random.seed(seed % 2**32)
 
 
+def sung_lyrics(settings: SongSettings) -> dict:
+    """Die Silben je Sektion; mit numbered_lyrics auch die eigenen Texte einzelner Vorkommen („[Verse 2]“)."""
+    lyrics = parse_lyrics(settings.lyrics, settings.romaji, settings.english_kana)
+    return lyrics if settings.numbered_lyrics else shared_only(lyrics)
+
+
 def compose(settings: SongSettings, seed: Optional[int] = None):
     """Erzeugt alle MIDI-Spuren. Gleicher Seed + gleiche Einstellungen = gleicher Song."""
     if seed is None:
@@ -91,7 +97,7 @@ def compose(settings: SongSettings, seed: Optional[int] = None):
         mode=settings.scale,
         section_config=settings.section_config(),
         output_dir=settings.output_dir(),
-        lyrics=parse_lyrics(settings.lyrics, settings.romaji, settings.english_kana),
+        lyrics=sung_lyrics(settings),
         swing=settings.swing,
         jitter_scale=settings.jitter / DEFAULT_JITTER,
         instrument_styles=settings.instrument_styles(),
@@ -458,9 +464,10 @@ def _write_karaoke(settings: SongSettings, tracks: dict, out: str) -> None:
     import karaoke
     from lyrics import section_lines
     from settings import DEFAULT_LYRICS
+    own = section_lines(settings.lyrics, settings.romaji, settings.english_kana)
     lengths = {kind: [len(line) for line in text_lines]
                for kind, text_lines in {**section_lines(DEFAULT_LYRICS),
-                                        **section_lines(settings.lyrics, settings.romaji, settings.english_kana)}.items()}
+                                        **(own if settings.numbered_lyrics else shared_only(own))}.items()}
     found = karaoke.lines(tracks["vocal_melody"], tracks["silben"], settings.bpm, tracks.get("plan"), lengths)
     try:
         karaoke.save(os.path.join(out, karaoke.FILE), found)

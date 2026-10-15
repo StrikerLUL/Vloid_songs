@@ -10,6 +10,7 @@ import cancel
 import config
 import einrichten
 import fehlerbericht
+import speicher
 import systemcheck
 import updates
 import userdata
@@ -51,6 +52,7 @@ def _hint(text: str) -> None:
 def setup_wizard(s: SongSettings, pick: PickFn, on_change: Callable[[], None]) -> ui.dialog:
     """Der Einrichten-Assistent: was die App zusätzlich laden kann, mit Platzbedarf und Fortschritt."""
     state = {"running": False}
+    sizes: dict = {}            # Baustein → Bytes auf der Festplatte (speicher.components), kommt im Hintergrund
     with ui.dialog().props("persistent") as dialog, ui.card().classes("w-[720px] max-w-full bg-grey-9"):
         _title("Einrichten")
         _hint("Hier lädt die App, was sie zusätzlich nutzen kann. Alles ist freiwillig; was fehlt, lässt sich jederzeit "
@@ -116,6 +118,20 @@ def setup_wizard(s: SongSettings, pick: PickFn, on_change: Callable[[], None]) -
         step = ui.label("").classes("text-caption").mark("wizard-step")
         output = ui.log(max_lines=300).classes("w-full h-40 text-xs")
         lines = Lines(output)
+
+        ui.label("Speicherplatz").classes("text-subtitle1 q-mt-sm")
+        with ui.row().classes("w-full items-center no-wrap gap-2"):
+            songs_label = ui.label("Songs: …").classes("text-body2 col").mark("wizard-songs")
+            ui.button("Projekte löschen (Songs bleiben)", icon="delete_sweep", on_click=lambda: drop_projects()) \
+                .props("flat dense no-caps").mark("wizard-drop-projects")
+        with ui.row().classes("w-full items-center no-wrap gap-2"):
+            caches_label = ui.label("Zwischenspeicher: …").classes("text-body2 col").mark("wizard-caches")
+            ui.button("Aufräumen", icon="cleaning_services", on_click=lambda: clear_caches()) \
+                .props("flat dense no-caps").mark("wizard-clear")
+        _hint("Projekte sind der aufgehobene Gesang zum Wieder-Öffnen aus dem Verlauf; Favoriten und benannte Songs "
+              "behalten ihres. Zwischenspeicher sind Messungen der Vorbilder, alte Protokolle und Fehlerberichte, die "
+              "beim nächsten Mal neu entstehen. Eingerichtete Klänge und Modelle lassen sich oben mit „Entfernen“ "
+              "löschen und jederzeit neu einrichten.")
         with ui.row().classes("w-full items-center gap-2 q-mt-sm"):
             ui.switch("Beim Start zeigen, bis „Fertig“ gedrückt ist").bind_value(s, "setup_wizard").props("dense") \
                 .mark("wizard-show")
@@ -143,8 +159,12 @@ def setup_wizard(s: SongSettings, pick: PickFn, on_change: Callable[[], None]) -
                     else:
                         checks[c.key] = ui.checkbox(value=c.recommended).props("dense").mark(f"wizard-{c.key}")
                     with ui.column().classes("gap-0 col"):
-                        ui.label(f"{c.name} · {c.size}").classes("text-body2")
+                        size = speicher.describe(sizes[c.key]) + " belegt" if have and c.key in sizes else c.size
+                        ui.label(f"{c.name} · {size}").classes("text-body2")
                         ui.label(c.what + (" (schon da)" if have else "")).classes("text-caption text-grey-5")
+                    if have and c.key in sizes:
+                        ui.button("Entfernen", icon="delete", on_click=lambda _, c=c: remove(c)) \
+                            .props("flat dense no-caps color=grey").mark(f"wizard-remove-{c.key}")
         start.set_enabled(bool(checks) and not state["running"])
         stop.set_visibility(state["running"])
         later.set_enabled(not state["running"])
@@ -181,8 +201,62 @@ def setup_wizard(s: SongSettings, pick: PickFn, on_change: Callable[[], None]) -
         einrichten.mark_wizard_done()
         dialog.close()
 
+    async def measure() -> None:
+        """Wie viel Platz Bausteine, Songs und Zwischenspeicher belegen (im Hintergrund, das Zählen dauert)."""
+        found = await run.io_bound(speicher.components)
+        sizes.clear()
+        sizes.update({u.key: u.bytes for u in found})
+        total, projects, count = await run.io_bound(speicher.songs, s.output_dir())
+        caches = await run.io_bound(lambda: sum(speicher.size(p) for p in speicher.caches()))
+        songs_label.set_text(f"Songs: {speicher.describe(total)}, davon {count} aufgehobene Projekte: "
+                             f"{speicher.describe(projects)}")
+        caches_label.set_text(f"Zwischenspeicher: {speicher.describe(caches)}")
+        show()
+
+    async def remove(c) -> None:
+        answer = await _confirm(f"{c.name} entfernen?", f"Gibt {speicher.describe(sizes.get(c.key))} frei. Neu "
+                                "einrichten geht jederzeit hier im Assistenten.")
+        if not answer:
+            return
+        try:
+            freed = await run.io_bound(speicher.remove, c.key)
+        except (ValueError, OSError) as e:
+            ui.notify(str(e), type="warning", multi_line=True)
+            return
+        ui.notify(f"{c.name} entfernt: {speicher.describe(freed)} frei", type="positive")
+        on_change()
+        await measure()
+
+    async def drop_projects() -> None:
+        answer = await _confirm("Projekte löschen?", "Die Songs bleiben im Verlauf, nur ihr aufgehobener Gesang geht. "
+                                "Wieder-Öffnen singt sie dann neu. Favoriten und benannte Songs behalten ihr Projekt.")
+        if answer:
+            freed = await run.io_bound(speicher.drop_projects, s.output_dir())
+            ui.notify(f"Projekte gelöscht: {speicher.describe(freed)} frei", type="positive")
+            await measure()
+
+    async def clear_caches() -> None:
+        freed = await run.io_bound(speicher.clear_caches)
+        ui.notify(f"Aufgeräumt: {speicher.describe(freed)} frei", type="positive")
+        await measure()
+
     show()
+    with dialog:
+        ui.timer(0.1, measure, once=True)
     return dialog
+
+
+async def _confirm(question: str, detail: str) -> bool:
+    with ui.dialog() as ask, ui.card():
+        ui.label(question).classes("text-h6")
+        ui.label(detail).classes("text-body2")
+        with ui.row().classes("w-full justify-end"):
+            ui.button("Abbrechen", on_click=lambda: ask.submit(False)).props("flat no-caps")
+            ui.button("Ja", on_click=lambda: ask.submit(True)).props("unelevated no-caps color=negative") \
+                .mark("confirm-yes")
+    answer = await ask
+    ask.delete()
+    return bool(answer)
 
 
 # ── System prüfen ─────────────────────────────────────────────────────────────

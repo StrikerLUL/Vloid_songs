@@ -1,8 +1,8 @@
 # karaoke.py – Der Liedtext zum Mitlesen: Zeilen mit der Zeit jeder Silbe, für den Player und das Lyric-Video
 #
 # Die Zeiten kommen aus der Gesangsmelodie, also stimmen sie mit dem fertigen Song überein. Das Lyric-Video baut
-# ffmpeg: einfarbiger Hintergrund oder ein Bild (das Titelbild aus youtube.py), die Wellenform des Songs und der
-# Text als Karaoke-Untertitel (ASS, libass).
+# ffmpeg in 1080p: der Farbverlauf des Stils (wie das Titelbild aus youtube.py) oder ein eigenes Bild, die
+# Wellenform des Songs und der Text als Karaoke-Untertitel (ASS, libass), gesungen in der Farbe des Stils.
 import json
 import logging
 import os
@@ -20,11 +20,12 @@ MAX_SYLLABLES = 18        # längere Zeilen werden an der größten Pause geteil
 LEAD_SECONDS = 1.0        # so früh erscheint eine Zeile vor ihrer ersten Silbe
 HOLD_SECONDS = 0.8        # so lange bleibt sie nach der letzten stehen
 
-VIDEO_SIZE = (1280, 720)
+VIDEO_SIZE = (1920, 1080)
 VIDEO_FPS = 30
 VIDEO_FONT = "Meiryo"     # unter Windows immer da; fehlt sie, nimmt libass eine Schrift mit Kana
-BACKGROUND = "0x1a1030"
-WAVE_COLOR = "0xff4f8b"
+BACKGROUND = "0x1a1030"   # ohne Stil: einfarbig wie bis 1.1
+PLAIN = ("#ff4f8b", "#ff4f8b", "#1a1a30")      # (gesungen, Wellenform, Rand) ohne Stil
+LIGHT = 0.8               # hellere Farben gehen neben dem weißen, noch nicht gesungenen Text unter
 
 
 def lines(notes: list, syllables: list, bpm: float, plan=None, line_lengths: Optional[dict] = None) -> list:
@@ -115,25 +116,49 @@ def _clean(syllable: str) -> str:
     return syllable.replace("\\", "").replace("{", "(").replace("}", ")")
 
 
-def ass(found: list, title: str = "", size: tuple = VIDEO_SIZE) -> str:
+def colors(style: str = "") -> tuple:
+    """(gesungen, Wellenform, Rand) als #rrggbb in den Farben des Stils (youtube.PALETTES); ohne Stil wie bis 1.1.
+    Gesungen wird in der Akzentfarbe, außer sie ist zu hell neben Weiß, dann in der oberen oder unteren Farbe."""
+    if not style:
+        return PLAIN
+    from youtube import DEFAULT_PALETTE, PALETTES, _rgb
+    top, bottom, accent = PALETTES.get(style, DEFAULT_PALETTE)
+    sung = next((c for c in (accent, top, bottom) if _lightness(_rgb(c)) < LIGHT), bottom)
+    edge = "#" + "".join(f"{int(v * 0.35):02x}" for v in _rgb(bottom))
+    return sung, accent, edge
+
+
+def _lightness(rgb: tuple) -> float:
+    r, g, b = rgb
+    return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
+
+
+def _ass_color(color: str, alpha: str = "00") -> str:
+    """#rrggbb → &HAABBGGRR."""
+    color = color.lstrip("#")
+    return f"&H{alpha}{color[4:6]}{color[2:4]}{color[0:2]}".upper()
+
+
+def ass(found: list, title: str = "", size: tuple = VIDEO_SIZE, style: str = "") -> str:
     """
     Untertitel im ASS-Format: die laufende Zeile groß in der Mitte, Silbe für Silbe eingefärbt (\\kf), die nächste
-    kleiner darunter, oben links der Titel.
+    kleiner darunter, oben links der Titel. style: gesungen wird in seiner Farbe (colors), ohne Stil pink.
     """
     width, height = size
     big, small = height // 12, height // 22
+    sung, _, edge = (_ass_color(c) for c in colors(style))
     head = [
         "[Script Info]", "ScriptType: v4.00+", f"PlayResX: {width}", f"PlayResY: {height}", "WrapStyle: 2", "",
         "[V4+ Styles]",
         "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, "
         "Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, "
         "MarginR, MarginV, Encoding",
-        # Farben als &HAABBGGRR: gesungen pink, noch nicht gesungen weiß
-        f"Style: Line,{VIDEO_FONT},{big},&H008B4FFF,&H00FFFFFF,&H00301A1A,&H80000000,1,0,0,0,100,100,0,0,1,3,1,5,"
+        # Farben als &HAABBGGRR: gesungen in der Farbe des Stils, noch nicht gesungen weiß
+        f"Style: Line,{VIDEO_FONT},{big},{sung},&H00FFFFFF,{edge},&H80000000,1,0,0,0,100,100,0,0,1,3,1,5,"
         "40,40,0,1",
-        f"Style: Next,{VIDEO_FONT},{small},&H60FFFFFF,&H60FFFFFF,&H00301A1A,&H80000000,0,0,0,0,100,100,0,0,1,2,0,5,"
+        f"Style: Next,{VIDEO_FONT},{small},&H60FFFFFF,&H60FFFFFF,{edge},&H80000000,0,0,0,0,100,100,0,0,1,2,0,5,"
         "40,40,0,1",
-        f"Style: Title,{VIDEO_FONT},{small},&H90FFFFFF,&H90FFFFFF,&H00301A1A,&H00000000,0,0,0,0,100,100,0,0,1,1,0,7,"
+        f"Style: Title,{VIDEO_FONT},{small},&H90FFFFFF,&H90FFFFFF,{edge},&H00000000,0,0,0,0,100,100,0,0,1,1,0,7,"
         "40,40,30,1",
         "", "[Events]", "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
     ]
@@ -165,10 +190,11 @@ def find_ffmpeg() -> Optional[str]:
 
 
 def video(audio: str, found: list, out: str, title: str = "", ffmpeg: Optional[str] = None,
-          background: Optional[str] = None) -> str:
+          background: Optional[str] = None, style: str = "") -> str:
     """
-    Lyric-Video als MP4: Hintergrund, Wellenform des Songs unten und der Text als Karaoke. Gibt out zurück.
-    background: ein Bild statt der einfarbigen Fläche; mit Bild darf der Text fehlen (Video ohne Karaoke).
+    Lyric-Video als MP4 (1080p): Hintergrund, Wellenform des Songs unten und der Text als Karaoke. Gibt out zurück.
+    background: ein eigenes Bild; mit Bild darf der Text fehlen (Video ohne Karaoke). style: Farbverlauf, Wellenform
+    und gesungener Text in den Farben des Stils; ohne Stil und Bild einfarbig dunkel wie bis 1.1.
     Wirft RuntimeError ohne ffmpeg oder wenn ffmpeg scheitert.
     """
     exe = ffmpeg or find_ffmpeg()
@@ -176,13 +202,33 @@ def video(audio: str, found: list, out: str, title: str = "", ffmpeg: Optional[s
         raise RuntimeError("Für das Lyric-Video fehlt ffmpeg (winget install Gyan.FFmpeg).")
     if not found and not background:
         raise RuntimeError("Der Song hat keinen Text zum Mitlesen.")
-    width, height = VIDEO_SIZE
+    if background and not os.path.exists(background):
+        raise RuntimeError(f"Das Hintergrundbild fehlt: {background}")
     folder = os.path.dirname(os.path.abspath(out))
     os.makedirs(folder, exist_ok=True)
-    subtitles = os.path.splitext(os.path.basename(out))[0] + ".ass"
+    stem = os.path.splitext(os.path.basename(out))[0]
+    subtitles = stem + ".ass"
     if found:
         with open(os.path.join(folder, subtitles), "w", encoding="utf-8") as f:
-            f.write(ass(found, title))
+            f.write(ass(found, title, style=style))
+    gradient = None
+    if not background and style:
+        import youtube
+        try:
+            gradient = background = youtube.title_image(os.path.join(folder, stem + ".hintergrund.png"), "", "",
+                                                        style, bars=False, size=VIDEO_SIZE)
+        except (ImportError, OSError, ValueError) as e:
+            log.warning("Kein Farbverlauf für das Video, es bleibt einfarbig: %s", e)
+    try:
+        return _render(exe, audio, out, folder, subtitles if found else "", background, colors(style)[1])
+    finally:
+        if gradient and os.path.exists(gradient):
+            os.remove(gradient)
+
+
+def _render(exe: str, audio: str, out: str, folder: str, subtitles: str, background: Optional[str],
+            wave: str) -> str:
+    width, height = VIDEO_SIZE
     wave_height = height // 4
     if background:
         source = ["-loop", "1", "-framerate", str(VIDEO_FPS), "-i", os.path.abspath(background)]
@@ -192,8 +238,8 @@ def video(audio: str, found: list, out: str, title: str = "", ffmpeg: Optional[s
         picture = "[0:v]null[bg];"
     # Die Untertitel liegen im selben Ordner wie das Video: so braucht der Filter keinen Pfad mit Laufwerk
     graph = (f"{picture}[1:a]showwaves=s={width}x{wave_height}:mode=cline:rate={VIDEO_FPS}:"
-             f"colors={WAVE_COLOR}@0.5[wave];"
-             f"[bg][wave]overlay=0:{height - wave_height}:shortest=1{f',ass={subtitles}' if found else ''}[video]")
+             f"colors=0x{wave.lstrip('#')}@0.5[wave];"
+             f"[bg][wave]overlay=0:{height - wave_height}:shortest=1{f',ass={subtitles}' if subtitles else ''}[video]")
     command = [exe, "-y", "-hide_banner", "-loglevel", "error", *source, "-i", os.path.abspath(audio),
                "-filter_complex", graph, "-map", "[video]", "-map", "1:a",
                "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",

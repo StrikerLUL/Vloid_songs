@@ -294,11 +294,12 @@ def build() -> None:
                                    ("Gesang", "mic"), ("Mix", "tune"), ("Verlauf", "history"),
                                    ("Pfade", "folder")):
                     ui.tab(name, icon=icon).mark(f"tab-{name}")
+            tabs.on_value_change(lambda e: refresh_text() if e.value == "Text" else None)
             with ui.tab_panels(tabs, value="Song").classes("w-full bg-transparent") as panel_box:
                 with ui.tab_panel("Song"):
                     panels.song_panel(settings, picker, lambda new: assign(settings, new))
                 with ui.tab_panel("Text"):
-                    panels.text_panel(settings)
+                    refresh_text = panels.text_panel(settings)
                 with ui.tab_panel("Band"):
                     panels.band_panel(settings)
                 with ui.tab_panel("Gesang"):
@@ -564,11 +565,32 @@ def build() -> None:
         await generate(n=1)
 
     # ── Gesang bearbeiten ─────────────────────────────────────────────────────────
+    undo_steps: list = []       # (Änderungen vorher, Längen vorher, der Ton vorher) für Strg+Z
+
+    def remember(start: float) -> None:
+        vocal = next((i for i, t in enumerate(roll.tracks) if t.get("key") == "vocals"), None)
+        note = next((list(n) for n in roll.notes if n[3] == vocal and abs(n[0] - start) < 1e-3), None)
+        undo_steps.append((dict(settings.melody_edits), dict(settings.melody_lengths), note))
+        del undo_steps[:-50]
+
+    def undo() -> None:
+        """Strg+Z: die letzte Änderung an einem Ton zurücknehmen."""
+        if not undo_steps:
+            ui.notify("Keine Änderung an den Noten zum Zurücknehmen.")
+            return
+        edits, lengths, note = undo_steps.pop()
+        settings.melody_edits, settings.melody_lengths = edits, lengths
+        if note:
+            roll.move(note[0], note[2])
+            roll.resize(note[0], note[1])
+        show_edits()
+
     def on_edit(e) -> None:
         result = state["result"]
         if result is None:
             return
         start, pitch = float(e.args["start"]), int(e.args["pitch"])
+        remember(start)
         key = meter.get(result.settings.meter).edit_key(start * result.settings.bpm / 60)
         settings.melody_edits = {**settings.melody_edits, key: pitch}
         roll.move(start, pitch)
@@ -579,6 +601,7 @@ def build() -> None:
         if result is None:
             return
         start, end = float(e.args["start"]), float(e.args["end"])
+        remember(start)
         bar, per_second = meter.get(result.settings.meter), result.settings.bpm / 60
         beats = bar.edit_length(start * per_second, end * per_second)
         settings.melody_lengths = {**settings.melody_lengths, bar.edit_key(start * per_second): beats}
@@ -654,6 +677,7 @@ def build() -> None:
         show_edits()
 
     async def drop_edits() -> None:
+        undo_steps.clear()
         settings.melody_edits = {}
         settings.melody_lengths = {}
         settings.phrase_fixes = {}
@@ -667,6 +691,22 @@ def build() -> None:
     roll.on("edit", on_edit)
     roll.on("resize", on_resize)
     roll.on("phrase", on_phrase)
+
+    # ── Tastenkürzel (v6 Nr. 19) ──────────────────────────────────────────────────
+    async def on_key(e) -> None:
+        """Leertaste spielt oder hält an, Strg+Enter erzeugt den Song, Strg+Z nimmt die letzte Notenänderung
+        zurück. Nicht beim Schreiben in einem Feld (ui.keyboard übergeht Eingaben, Listen und Knöpfe)."""
+        if not settings.shortcuts or not e.action.keydown or e.action.repeat:
+            return
+        ctrl = e.modifiers.ctrl or e.modifiers.meta
+        if e.key.code == "Space" and not ctrl:
+            player.toggle()
+        elif ctrl and e.key.name == "Enter":
+            await generate()
+        elif ctrl and e.key.code == "KeyZ" and not e.modifiers.shift:
+            undo()
+
+    ui.keyboard(on_key=on_key).mark("shortcuts")
 
     # ── Lyric-Video und Vergleich ─────────────────────────────────────────────────
     async def make_video() -> None:
@@ -762,6 +802,7 @@ def build() -> None:
         data = await run.io_bound(media.piano_roll, result)
         if data is None:        # die App wird gerade beendet
             return
+        undo_steps.clear()
         roll.show(data)
         show_edits()
         legend.clear()

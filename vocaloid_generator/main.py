@@ -7,6 +7,7 @@ import sys
 
 import applog
 import history
+import rezepte
 import userdata
 from pipeline import (best, draft_settings, from_references, generate_song, generate_variants, hook_choices, remix,
                       hook_kind, lyric_video)
@@ -52,6 +53,9 @@ def parse_args(argv=None):
     p.add_argument("--remix", metavar="STIL",
                    help="derselbe Song (--seed oder --aus-verlauf) mit Band, Tempo und Klang dieses Stils; Melodie, "
                         "Text und Akkorde bleiben")
+    p.add_argument("--rezept", choices=rezepte.names(), metavar="NAME",
+                   help="ein neuer Song nach einem Rezept: Stil, Tempo, Tonart, Takt, Ablauf und ein Beispieltext ("
+                        + "; ".join(rezepte.names()) + "); --bpm, --style usw. ändern es danach noch")
     p.add_argument("--key", choices=KEYS)
     p.add_argument("--scale", choices=["minor", "major", "dorian", "phrygian"])
     p.add_argument("--takt", choices=["4/4", "3/4", "6/8"], help="Takt; im 6/8-Takt zählt --bpm die punktierten Viertel")
@@ -217,6 +221,10 @@ def parse_args(argv=None):
                    help="danach MP3, Video, Titelbild und Beschreibung in einen Ordner unter YouTube legen")
     p.add_argument("--lyric-video", nargs="?", const="", metavar="DATEI",
                    help="dazu ein Lyric-Video (MP4) mit dem Text zum Mitlesen; ohne DATEI neben dem Song")
+    p.add_argument("--video-hintergrund", metavar="BILD",
+                   help="eigenes Bild als Hintergrund des Lyric-Videos ('' = Farbverlauf des Stils)")
+    p.add_argument("--ohne-stilfarben", action="store_true",
+                   help="Lyric-Video einfarbig dunkel mit pinkem Text wie bis 1.1 statt in den Farben des Stils")
     p.add_argument("--melodie-sektion", metavar="SEKTION", help="dort singt die eigene Melodie (Standard: Chorus)")
     p.add_argument("--motive", metavar="ORDNER", help="Rhythmen und Gesten aus den MIDI-Melodien in diesem Ordner lernen")
     p.add_argument("--ohne-motive", action="store_true",
@@ -271,6 +279,8 @@ def main(argv=None) -> int:
         settings = settings.with_updates(reference_tracks=[ReferenceTrack(path=p).model_dump() for p in args.vorbild])
     if args.vom_vorbild:
         settings = from_references(settings)
+    if args.rezept:
+        settings = rezepte.apply(args.rezept, settings)
     overrides = {"seed": args.seed, "bpm": args.bpm, "style": args.style, "key": args.key, "scale": args.scale,
                  "meter": args.takt,
                  "singer": args.stimme, "duet_singer": args.duett, "support_singer": args.support_stimme, "master_lufs": args.lautheit,
@@ -335,7 +345,8 @@ def main(argv=None) -> int:
                  "polish_caption": args.veredler_klang,
                  "melody_midi": args.melodie_midi, "melody_midi_section": args.melodie_sektion,
                  "own_vocal": args.eigener_gesang, "own_vocal_align": False if args.ohne_ausrichten else None,
-                 "motif_folder": args.motive,
+                 "motif_folder": args.motive, "video_background": args.video_hintergrund,
+                 "video_colors": False if args.ohne_stilfarben else None,
                  "more_motifs": False if args.ohne_motive else None,
                  "learned_motifs": False if args.ohne_motive else None}
     if args.akkorde:

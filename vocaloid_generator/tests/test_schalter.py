@@ -77,9 +77,11 @@ ELSEWHERE = {
     "idol_calls": "test_idol_rufe.py::test_without_the_switch_there_are_no_calls",
     "vocal_chops": "test_vocal_chops.py::test_the_song_mixes_the_chops_only_with_the_switch",
     "ritardando": "test_ritardando.py::test_a_ballad_slows_down_and_holds_the_last_chord",
+    "video_colors": "test_video.py::test_the_video_takes_the_colors_of_the_style_only_with_the_switch",
 }
 # Bedienung der App, ändert den Song nicht
-APP = ("show_karaoke", "reuse_steps", "log_file", "update_check", "setup_wizard", "done_notice")
+APP = ("show_karaoke", "reuse_steps", "log_file", "update_check", "setup_wizard", "done_notice", "lyric_hints",
+       "shortcuts")
 
 GROUPS = {"NOTES": NOTES, "MIX": tuple(MIX), "RENDER": RENDER, "LIVEN": LIVEN, "STYLE_FX": tuple(STYLE_FX),
           "SCORE": SCORE, "SUGGESTIONS": SUGGESTIONS, "WIRED": WIRED, "ELSEWHERE": tuple(ELSEWHERE), "APP": APP}

@@ -471,7 +471,9 @@ def lyric_video(result: SongResult, path: Optional[str] = None) -> str:
     found = karaoke.load(os.path.join(result.output_dir, karaoke.FILE))
     s = result.settings
     title = f"{s.style} · {s.bpm} BPM" if s else ""
-    return karaoke.video(result.audio, found, path or os.path.join(result.output_dir, "lyric_video.mp4"), title)
+    return karaoke.video(result.audio, found, path or os.path.join(result.output_dir, "lyric_video.mp4"), title,
+                         background=(s.video_background or None) if s else None,
+                         style=s.style if s and s.video_colors else "")
 
 
 HOOK_BARS = 8           # so lang ist die Vorschau einer Refrain-Melodie

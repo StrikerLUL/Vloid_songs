@@ -95,13 +95,15 @@ def make(result, label: str = "", progress: Optional[ProgressFn] = None) -> Pack
 
     report(0.25, "YouTube: Video...")
     found = karaoke.load(os.path.join(result.output_dir, karaoke.FILE))
+    own = s.video_background if s and s.video_background and os.path.exists(s.video_background) else ""
     with tempfile.TemporaryDirectory() as temp:
         # im Video läuft die echte Wellenform; mit Text steht in der Mitte die Karaoke-Zeile statt des Titels
-        background = title_image(os.path.join(temp, "hintergrund.png"), "" if found else title,
-                                 "" if found else subtitle, s.style if s else "", bars=False)
+        background = own or title_image(os.path.join(temp, "hintergrund.png"), "" if found else title,
+                                        "" if found else subtitle, s.style if s else "", bars=False,
+                                        size=karaoke.VIDEO_SIZE)
         try:
             package.video = karaoke.video(package.audio, found, os.path.join(folder, name + ".mp4"), title,
-                                          background=background)
+                                          background=background, style=s.style if s and s.video_colors else "")
         except RuntimeError as e:
             package.problems.append(f"kein Video: {e}")
     subtitles = os.path.join(folder, name + ".ass")       # die Untertitel stecken im Video
@@ -152,9 +154,10 @@ def description(result, title: str) -> str:
 def title_image(path: str, title: str, subtitle: str = "", style: str = "", audio: Optional[str] = None,
                 bars: bool = True, size: tuple = IMAGE_SIZE) -> str:
     """Ein schlichtes Titelbild (PNG, sonst 1280×720): Farbverlauf des Stils, Wellenform des Songs, Titel und
-    Details. size (Breite, Höhe): quadratisch für das Cover in der MP3 (tags.py)."""
+    Details. size (Breite, Höhe): quadratisch für das Cover in der MP3 (tags.py), 1920×1080 fürs Video."""
     from PIL import Image, ImageDraw, ImageFilter
     width, height = size
+    scale = max(1.0, width / IMAGE_SIZE[0])            # größere Bilder: Schrift wächst mit
     top, bottom, accent = (_rgb(c) for c in PALETTES.get(style, DEFAULT_PALETTE))
     mix = np.linspace(0.0, 1.0, height)[:, None, None]
     gradient = (np.array(top)[None, None] * (1 - mix) + np.array(bottom)[None, None] * mix)
@@ -172,19 +175,20 @@ def title_image(path: str, title: str, subtitle: str = "", style: str = "", audi
     if not title:
         image.save(path)
         return path
-    title_font = _fit(draw, title, width * 0.86, 104)
+    title_font = _fit(draw, title, width * 0.86, int(104 * scale))
     box = draw.textbbox((0, 0), title, font=title_font)
     x, y = (width - (box[2] - box[0])) / 2 - box[0], height * 0.30 - (box[3] - box[1]) / 2 - box[1]
     shadow = Image.new("RGBA", image.size, (0, 0, 0, 0))
-    ImageDraw.Draw(shadow).text((x + 4, y + 6), title, font=title_font, fill=(0, 0, 0, 170))
+    ImageDraw.Draw(shadow).text((x + 4 * scale, y + 6 * scale), title, font=title_font,
+                                fill=(0, 0, 0, 170))
     shadow = shadow.filter(ImageFilter.GaussianBlur(8))
     image.paste(shadow, (0, 0), shadow)
     draw = ImageDraw.Draw(image, "RGBA")
     draw.text((x, y), title, font=title_font, fill=(255, 255, 255, 255))
     if subtitle:
-        small = _font(40)
+        small = _font(int(40 * scale))
         box = draw.textbbox((0, 0), subtitle, font=small)
-        draw.text(((width - (box[2] - box[0])) / 2 - box[0], height * 0.30 + 90), subtitle, font=small,
+        draw.text(((width - (box[2] - box[0])) / 2 - box[0], height * 0.30 + 90 * scale), subtitle, font=small,
                   fill=(*accent, 255))
     image.save(path)
     return path

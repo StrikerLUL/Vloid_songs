@@ -126,7 +126,7 @@ def test_the_pipeline_writes_the_lyrics_and_builds_the_video_from_them(tmp_path,
     mp3 = tmp_path / "out" / "final_song.mp3"
     mp3.write_bytes(b"ID3")
     seen = {}
-    monkeypatch.setattr(karaoke, "video", lambda audio, lines, path, title="": seen.update(
+    monkeypatch.setattr(karaoke, "video", lambda audio, lines, path, title="", background=None, style="": seen.update(
         audio=audio, lines=lines, path=path, title=title) or path)
     path = pipeline.lyric_video(SongResult(seed=21, output_dir=out, mp3=str(mp3), settings=s))
     assert path == os.path.join(out, "lyric_video.mp4") and seen["lines"] == found

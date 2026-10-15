@@ -39,6 +39,11 @@ class WavePlayer(Element, component="wave_player.js", esm={"wavesurfer": "wavesu
         self._props.update(url=url, title=title, peaks=peaks, duration=duration)
         self.update()
 
+    def toggle(self) -> None:
+        """Abspielen oder anhalten (Leertaste)."""
+        if self.url:
+            self.run_method("playPause")
+
     @property
     def url(self) -> str:
         return self._props["url"]

@@ -76,6 +76,9 @@ def song_panel(s: SongSettings, pick: PickFn, apply_template: Callable[[SongSett
     section_title("Vorbild-Songs")
     reference_editor(s, pick, apply_template)
 
+    section_title("Song-Rezepte")
+    recipes_editor(apply_template, s)
+
     section_title("Vorlagen")
     templates_editor(s, apply_template)
 
@@ -358,6 +361,26 @@ def reference_editor(s: SongSettings, pick: PickFn, apply_template: Callable[[So
     ui.timer(0.1, measure, once=True)
 
 
+def recipes_editor(apply_template: Callable[[SongSettings], None], s: SongSettings) -> None:
+    """Fertige Ausgangspunkte mit Beispieltext (rezepte.py, v6 Nr. 13)."""
+    import rezepte
+    about = {r.name: r.about for r in rezepte.RECIPES}
+
+    def load() -> None:
+        if not choice.value:
+            return
+        apply_template(rezepte.apply(choice.value, s))
+        ui.notify(f"Rezept „{choice.value}“ geladen, jetzt auf „Song erzeugen“ drücken", type="positive")
+
+    with ui.row().classes("w-full items-center no-wrap gap-2"):
+        choice = ui.select(rezepte.names(), label="Rezept").classes("col").mark("recipe")
+        ui.button("Rezept laden", icon="restaurant_menu", on_click=load).props("flat no-caps").mark("load-recipe")
+    ui.label().classes("text-caption").bind_text_from(choice, "value", backward=lambda v: about.get(v, "")) \
+        .mark("recipe-about")
+    hint("Ein Rezept bringt Stil, Tempo, Tonart, Takt, Ablauf und einen passenden Beispieltext mit (ersetzt deinen "
+         "Text). Es entsteht ein neuer Song; Stimme, Pfade und Mix bleiben.")
+
+
 def templates_editor(s: SongSettings, apply_template: Callable[[SongSettings], None]) -> None:
     with ui.row().classes("w-full items-center no-wrap gap-2"):
         choice = ui.select(vorlagen.names(), label="Vorlage").classes("col").mark("template")
@@ -392,7 +415,8 @@ def templates_editor(s: SongSettings, apply_template: Callable[[SongSettings], N
 
 
 # ── Text ────────────────────────────────────────────────────────────────────────
-def text_panel(s: SongSettings) -> None:
+def text_panel(s: SongSettings) -> Callable[[], None]:
+    """Gibt zurück, wie sich die Vorschau neu zeichnet (nach Tempo, Takt oder Ablauf auf einem anderen Reiter)."""
     hint("Eine Überschrift wie [Verse], [Pre-Chorus], [Chorus] oder [Bridge] pro Abschnitt. Japanisch darf ganz "
          "normal geschrieben werden, auch mit Kanji; 君[きみ] gibt eine Lesung von Hand vor. [Verse 2] oder "
          "[Chorus 3] gibt einer Wiederholung ihren eigenen Text auf dieselbe Melodie.")
@@ -405,8 +429,17 @@ def text_panel(s: SongSettings) -> None:
         .tooltip("Eine Zeile ganz in Romaji wird japanisch gesungen; ist ein englisches Wort darin (love, baby), bleibt "
                  "die Zeile, wie sie ist. Neben japanischer Schrift wird jedes Romaji-Wort umgewandelt.")
 
+    ui.switch("Text-Helfer: Silben gegen Platz, Reime und Lesungen pro Zeile").bind_value(s, "lyric_hints") \
+        .props("dense").mark("switch-lyric_hints").on_value_change(lambda: preview.refresh()) \
+        .tooltip("Neben jeder Zeile: wie viele Silben sie hat und wie viele bequem in ihre Phrase passen (rot = zu "
+                 "viele), auf welchem Vokal sie endet (gleicher Buchstabe = Reim) und wie Kanji gelesen werden. "
+                 "Rechnet mit Tempo, Takt und Takten der Sektion.")
+
     @ui.refreshable
     def preview() -> None:
+        if s.lyric_hints:
+            helped()
+            return
         rows, count = [], 0
         for raw in (s.lyrics or "").splitlines():
             line = raw.strip()
@@ -425,11 +458,35 @@ def text_panel(s: SongSettings) -> None:
                 else:
                     ui.label(text).classes("text-body2")
 
+    def helped() -> None:
+        import lyric_helper
+        sections = lyric_helper.check(s)
+        count = sum(line.count for sec in sections for line in sec.lines)
+        ui.label(f"So wird gesungen: {count} Silben").classes("text-subtitle2").mark("syllables")
+        with ui.scroll_area().classes("w-full h-96"):
+            for sec in sections:
+                if sec.name:
+                    about = f" · {sec.bars} Takte, {sec.phrases} Phrasen" if sec.phrases else ""
+                    ui.label(f"[{sec.name}]{about}").classes("text-caption text-deep-purple-3 q-mt-sm")
+                if sec.note():
+                    ui.label(sec.note()).classes("text-caption text-amber-5").mark("lyric-note")
+                for line in sec.lines:
+                    with ui.row().classes("w-full no-wrap items-baseline gap-2"):
+                        ui.label(line.letter or " ").classes("text-caption text-grey-5 w-4") \
+                            .tooltip(f"endet auf {line.rhyme}: gleicher Buchstabe = Reim" if line.rhyme else "")
+                        ui.label(" ".join(str(x) for x in line.sung)).classes("text-body2 col")
+                    color = {"zu viel": "text-red-5", "schnell": "text-orange-5"}.get(line.status, "text-grey-5")
+                    ui.label(line.describe()).classes(f"text-caption q-ml-lg {color}").mark("line-hint")
+                    if line.unread:
+                        ui.label("Kanji ohne Lesung: schreib sie in Kana oder mit Lesung wie 君[きみ]") \
+                            .classes("text-caption q-ml-lg text-red-5").mark("line-unread")
+
     with ui.row().classes("w-full no-wrap gap-4 items-start"):
         ui.textarea().bind_value(s, "lyrics").props("outlined autogrow input-style=min-height:360px") \
             .classes("col").mark("lyrics").on_value_change(lambda: preview.refresh())
         with ui.column().classes("col"):
             preview()
+    return preview.refresh
 
 
 # ── Band ────────────────────────────────────────────────────────────────────────
@@ -826,6 +883,8 @@ def paths_panel(s: SongSettings, pick: PickFn, status: Callable[[], None]) -> No
         ("VST3-Instrument, z. B. Surge XT (optional)", "vst_path", False, ("VST3 (*.vst3)",), ""),
         ("Impulsantwort der Gitarrenbox (WAV, optional)", "cabinet_ir", False, ("WAV (*.wav)",), "eingebaute Box"),
         ("Bibliothek der Vorbild-Songs", "reference_folder", True, (), _reference_library()),
+        ("Hintergrundbild des Lyric-Videos (optional)", "video_background", False,
+         ("Bild (*.png;*.jpg;*.jpeg)",), "Farbverlauf des Stils"),
     ):
         with ui.row().classes("w-full items-center no-wrap"):
             ui.input(text, placeholder=f"leer = {default}" if default else "leer = keins") \
@@ -840,6 +899,9 @@ def paths_panel(s: SongSettings, pick: PickFn, status: Callable[[], None]) -> No
             status()
         ui.button("Surge XT gefunden – übernehmen", icon="piano", on_click=use_surge).props("flat dense no-caps") \
             .bind_visibility_from(s, "vst_path", backward=lambda path: not path).mark("use-surge")
+    ui.switch("Lyric-Video in den Farben des Stils").bind_value(s, "video_colors").mark("switch-video_colors") \
+        .tooltip("Farbverlauf wie beim YouTube-Titelbild, Text und Wellenform in den Farben des Stils. Aus: dunkel "
+                 "mit pinkem Text wie bis 1.1. Ein eigenes Hintergrundbild (oben) gilt immer.")
     import voicevox
     ui.input("Adresse von VOICEVOX", placeholder=f"leer = {voicevox.URL}").bind_value(s, "voicevox_url") \
         .classes("w-full").props("dense stack-label").mark("path-voicevox_url")
@@ -887,6 +949,9 @@ def app_settings(s: SongSettings) -> None:
     ui.switch("Nach Updates suchen (einmal am Tag) und nach einem Update zeigen, was neu ist").bind_value(s, "update_check").mark("update-switch")
     ui.switch("Einrichten-Assistent beim Start zeigen, bis er fertig ist").bind_value(s, "setup_wizard") \
         .mark("wizard-switch")
+    ui.switch("Tastenkürzel: Leertaste spielt, Strg+Enter erzeugt, Strg+Z nimmt eine Notenänderung zurück") \
+        .bind_value(s, "shortcuts").mark("switch-shortcuts") \
+        .tooltip("Gilt nicht, während du in ein Feld schreibst")
     ui.switch("Melden, wenn der Song fertig ist").bind_value(s, "done_notice").mark("switch-done_notice") \
         .tooltip("Eine Windows-Benachrichtigung unten rechts, wenn ein Song, mehrere Fassungen oder ein Album "
                  "fertig sind (nur nach Läufen ab 20 Sekunden). So kannst du in der Zeit etwas anderes machen.")

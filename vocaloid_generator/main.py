@@ -173,6 +173,10 @@ def parse_args(argv=None):
                    help="Reihenfolge für --verlauf: neu, bewertung (beste Note zuerst) oder name")
     p.add_argument("--aus-verlauf", type=int, metavar="NR",
                    help="Einstellungen und Seed eines Songs aus dem Verlauf nehmen (1 = der neueste)")
+    p.add_argument("--oeffnen", type=int, metavar="NR",
+                   help="einen Song aus dem Verlauf wieder öffnen: sein Gesang bleibt, Band und Mix entstehen neu")
+    p.add_argument("--ohne-projekt", action="store_true",
+                   help="den Gesang neuer Songs nicht im Verlauf aufheben (spart Platz, Wieder-Öffnen singt neu)")
     p.add_argument("--neu", action="append", type=_rerollable, metavar="TEIL[:SEKTION]",
                    help="nur diesen Teil neu würfeln, der Rest bleibt (mehrfach möglich): " + ", ".join(REROLLABLE)
                    + "; mit :SEKTION nur dort, z. B. melody:Chorus. Ohne --seed und --aus-verlauf gilt der letzte Song.")
@@ -233,7 +237,8 @@ def main(argv=None) -> int:
 
     settings = SongSettings.load(args.settings)
     _logging(settings.log_file, args.verbose)
-    overrides = {"output_ordner": args.output, "reuse_steps": False if args.ohne_wiederverwenden else None}
+    overrides = {"output_ordner": args.output, "reuse_steps": False if args.ohne_wiederverwenden else None,
+                 "keep_projects": False if args.ohne_projekt else None}
     settings = settings.with_updates(**{k: v for k, v in overrides.items() if v is not None})
 
     if args.verlauf is not None:
@@ -345,6 +350,8 @@ def main(argv=None) -> int:
     def progress(f, msg):
         log.info("[%3d%%] %s", round(f * 100), msg)
 
+    if args.oeffnen:
+        return _reopen(settings, args.oeffnen, progress)
     if args.refrains:
         return _hooks(settings, args.refrains, progress)
     if args.casting:
@@ -496,6 +503,26 @@ def _list_history(settings: SongSettings, text: str = "", sort: str = "neu") -> 
         score = f"  Note {entry.score:.1f}" if entry.score is not None else ""
         note = f"  ({entry.note})" if entry.note else ""
         log.info("%2d. %s%s%s%s", numbers[entry.info], "★ " if entry.favorite else "", entry.title, score, note)
+    return 0
+
+
+def _reopen(settings: SongSettings, nr: int, progress) -> int:
+    """Einen Song aus dem Verlauf als Projekt wieder öffnen (project.py)."""
+    import project
+    found = history.entries(settings.output_dir())
+    if not 1 <= nr <= len(found):
+        log.error("Im Verlauf gibt es keinen Song Nr. %d (vorhanden: %d).", nr, len(found))
+        return 1
+    entry = found[nr - 1]
+    restored = entry.restore(settings).with_updates(reuse_steps=True)
+    _, message = project.unpack(entry.audio, restored, restored.output_dir())
+    log.info("%s: %s", entry.title, message)
+    try:
+        result = generate_song(restored, progress=progress, keep_history=False)
+    except (RuntimeError, ValueError) as e:
+        log.error("%s", e)
+        return 1
+    log.info("Fertig! Seed %d: %s", result.seed, result.audio)
     return 0
 
 

@@ -34,6 +34,9 @@ VOCAL_SWING_LINES = {"melody_data": ("vocals.wav", "vocals_double.wav", "vocals_
 
 # Was den Gesang bestimmt: ändert sich nichts davon, bleibt der gesungene Gesang (z. B. beim Neu-Würfeln des Basses)
 VOCAL_KEY = "vocals.key"
+# Die gesungenen Noten aller Stimmen in den Spuren (orchestrate_song)
+NOTE_KEYS = ("melody_data", "silben", "harmony_data", "harmony_silben", "octave_data", "octave_silben", "pads",
+             "adlib_data", "adlib_silben")
 VOCAL_CODE = ("singing.py", "vocal_synthesizer.py", "voice_fx.py", "voicevox.py", "neutrino_score.py", "diffsinger.py")
 VOCAL_FIELDS = ("bpm", "seed", "singer", "vocal_engine", "harmonies", "duet_singer", "support_singer", "style_shift", "vocal_takes",
                 "vibrato", "glide", "breaths", "final_choir", "voicevox_url", "voicevox_singer", "voicevox_dynamics", "diffsinger_voice",
@@ -59,8 +62,7 @@ def _vocal_key(settings: SongSettings, tracks: dict) -> str:
             digest.update(name.encode())
     plan = tracks.get("plan")
     data = {name: getattr(settings, name) for name in VOCAL_FIELDS}
-    data["notes"] = [tracks.get(k) for k in ("melody_data", "silben", "harmony_data", "harmony_silben", "octave_data",
-                                             "octave_silben", "pads", "adlib_data", "adlib_silben")]
+    data["notes"] = [tracks.get(k) for k in NOTE_KEYS]
     data["sections"] = [(sec.kind, sec.start, sec.end) for sec in plan.sections] if plan else []
     data["neutrino"] = neutrino_info(settings.neutrino_dir())
     data["swing"] = _swing_amount(settings)

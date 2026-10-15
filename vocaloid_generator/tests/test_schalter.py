@@ -72,6 +72,7 @@ ELSEWHERE = {
     "album_vary": "test_alltag.py::test_album_plan_takes_the_styles_in_turn_with_their_typical_values",
     "vocal_versions": "test_fassungen.py::test_switched_off_there_are_no_versions_and_no_tags",
     "id3_tags": "test_fassungen.py::test_switched_off_there_are_no_versions_and_no_tags",
+    "keep_projects": "test_projekt.py::test_without_the_switch_nothing_is_kept_and_deleting_takes_the_project_along",
 }
 # Bedienung der App, ändert den Song nicht
 APP = ("show_karaoke", "reuse_steps", "log_file", "update_check", "setup_wizard")

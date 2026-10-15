@@ -252,6 +252,10 @@ def _produce(settings: SongSettings, tracks: dict, out: str, report: ProgressFn,
         import history
         entry = history.record(result.audio, settings, out, keep=settings.history_keep)
         result.history = entry.audio if entry else None
+        if entry and settings.keep_projects:
+            import project
+            report(0.98, "Hebe den Gesang als Projekt auf...")
+            project.save(out, tracks, entry.audio)
     return result
 
 

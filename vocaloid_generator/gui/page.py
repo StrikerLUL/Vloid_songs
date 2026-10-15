@@ -19,6 +19,7 @@ import history
 import pipeline
 import polish
 import preview
+import project
 import rating
 import resume
 import updates
@@ -303,10 +304,14 @@ def build() -> None:
         await generate(f"{part}:{kind}" if kind else part)
 
     async def generate(part: Optional[str] = None, n: Optional[int] = None, same_song: bool = False,
-                       draft: bool = False) -> None:
+                       draft: bool = False, reopened: Optional[history.Entry] = None) -> None:
+        """reopened: ein Song aus dem Verlauf, dessen Gesang project.unpack zurückgelegt hat; er kommt nicht noch
+        einmal in den Verlauf."""
         if job.running:
             return
         current = settings.model_copy(deep=True)
+        if reopened is not None:
+            current = current.with_updates(reuse_steps=True)
         result = state["result"]
         if part is not None or same_song:
             if result is None:
@@ -326,7 +331,7 @@ def build() -> None:
                 results = await run.io_bound(pipeline.generate_variants, current, n, (part,) if part else (),
                                              job.report)
             else:
-                results = [await run.io_bound(pipeline.generate_song, current, job.report)]
+                results = [await run.io_bound(pipeline.generate_song, current, job.report, None, reopened is None)]
         except cancel.Cancelled:
             job.report(job.fraction, CANCELLED)
             ui.notify("Abgebrochen. Fertige Schritte bleiben und werden beim nächsten Mal übernommen.", type="warning")
@@ -342,6 +347,8 @@ def build() -> None:
         if not results:
             return
         chosen = pipeline.best(results)
+        if reopened is not None:
+            chosen.history = reopened.audio
         state["result"] = chosen
         settings.variations = chosen.settings.variations
         settings.melody_edits = chosen.settings.melody_edits
@@ -877,6 +884,11 @@ def build() -> None:
                         ui.button(icon="settings_backup_restore", on_click=lambda _, e=entry: restore(e)) \
                             .props("flat round dense").tooltip("Einstellungen dieses Songs übernehmen") \
                             .mark("history-restore")
+                        if project.available(entry.audio):
+                            ui.button(icon="folder_open", on_click=lambda _, e=entry: reopen(e)) \
+                                .props("flat round dense").mark("history-reopen") \
+                                .tooltip("Wieder öffnen: der Gesang bleibt, Band und Mix entstehen neu; danach "
+                                         "lässt sich der Song weiter bearbeiten")
                         ui.button(icon="delete", on_click=lambda _, e=entry: remove(e)) \
                             .props("flat round dense color=grey").mark("history-delete")
 
@@ -888,6 +900,16 @@ def build() -> None:
         assign(settings, entry.restore(settings))
         ui.notify("Einstellungen samt Seed übernommen: „Song erzeugen“ macht diesen Song noch einmal",
                   type="positive")
+
+    async def reopen(entry) -> None:
+        if job.running:
+            return
+        restored = entry.restore(settings)
+        ok, message = await run.io_bound(project.unpack, entry.audio, restored.with_updates(reuse_steps=True),
+                                         restored.output_dir())
+        ui.notify(message, type="positive" if ok else "warning")
+        assign(settings, restored)
+        await generate(n=1, reopened=entry)
 
     def edit(entry) -> None:
         def save() -> None:

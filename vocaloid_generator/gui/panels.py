@@ -842,6 +842,10 @@ def app_settings(s: SongSettings) -> None:
     ui.number("So viele Songs behält der Verlauf (0 = alle)", min=0, max=1000, step=5, precision=0) \
         .bind_value(s, "history_keep", forward=lambda v: int(v or 0)).classes("w-80").mark("history-keep") \
         .tooltip("Ältere fallen heraus; Favoriten, Songs mit Namen und Album-Songs bleiben immer")
+    ui.switch("Gesang jedes Songs aufheben, zum Wieder-Öffnen aus dem Verlauf").bind_value(s, "keep_projects") \
+        .mark("switch-keep_projects") \
+        .tooltip("Etwa 20 bis 60 MB pro Song (FLAC). Ein wieder geöffneter Song singt nicht neu: Band und Mix "
+                 "entstehen frisch, danach lässt er sich weiter bearbeiten.")
     ui.label(userdata.describe()).classes("text-caption").mark("data-folder")
     ui.switch("Daten im Programmordner lassen statt in Dokumente (gilt ab dem nächsten Start)",
               value=userdata.in_program_folder(), on_change=lambda e: userdata.choose_program_folder(e.value)) \

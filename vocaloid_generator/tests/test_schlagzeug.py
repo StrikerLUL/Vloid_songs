@@ -11,7 +11,7 @@ import config
 import drum_kit
 import einrichten
 import mixer
-import pipeline
+import rendering
 import systemcheck
 from settings import SongSettings
 
@@ -177,13 +177,13 @@ def test_mixer_takes_the_kit_for_drum_tracks(kit, tmp_path):
 
 
 def test_switch_and_own_soundfont_decide(tmp_path):
-    job = pipeline._render_job(SongSettings(), str(tmp_path), "drums")
+    job = rendering._render_job(SongSettings(), str(tmp_path), "drums")
     assert job["real_drums"] is True
-    assert pipeline._render_job(SongSettings(), str(tmp_path), "perc")["real_drums"] is False
-    assert pipeline._render_job(SongSettings(real_drums=False), str(tmp_path), "drums")["real_drums"] is False
+    assert rendering._render_job(SongSettings(), str(tmp_path), "perc")["real_drums"] is False
+    assert rendering._render_job(SongSettings(real_drums=False), str(tmp_path), "drums")["real_drums"] is False
     own = tmp_path / "mein.sf2"
     own.write_bytes(b"x")
-    assert pipeline._render_job(SongSettings(soundfont_pfad=str(own)), str(tmp_path), "drums")["real_drums"] is False
+    assert rendering._render_job(SongSettings(soundfont_pfad=str(own)), str(tmp_path), "drums")["real_drums"] is False
 
 
 def test_setup_and_systemcheck_know_the_kit(kit, tmp_path):

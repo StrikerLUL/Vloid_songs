@@ -274,3 +274,29 @@ def describe_arrangement(plan: SongPlan) -> list:
         elif sec.feel == "halftime":
             out.append(f"{sec.occurrence}. {sec.kind} beginnt im Halftime")
     return out
+
+
+# ── Zeiten der Sektionen in Sekunden (für Gesang und Mix) ─────────────────────
+def sections_in_seconds(plan) -> list:
+    """[(Start, Ende in Sekunden, Sektionsart)]."""
+    spb = plan.seconds_per_beat
+    return [(sec.start * spb, sec.end * spb, sec.kind) for sec in plan.sections]
+
+
+def final_chorus(plan) -> Optional[tuple]:
+    """(Start, Ende) des letzten Refrains in Schlägen; bei leisem Anfang (Breakdown) ab dem vollen Teil."""
+    choruses = [sec for sec in plan.sections if sec.kind == "Chorus" and sec.has_vocals] if plan else []
+    if not choruses:
+        return None
+    sec = choruses[-1]
+    return (sec.resume if sec.feel == "breakdown" and sec.resume is not None else sec.start), sec.end
+
+
+def chorus_windows(plan) -> list:
+    """[(Start, Ende in Sekunden)] der Refrains, ohne ihren leisen Anfang (Breakdown)."""
+    if plan is None:
+        return []
+    spb = plan.seconds_per_beat
+    # im leisen Anfang eines Refrains (Breakdown) bleibt der Gesang einfach
+    return [((sec.resume if sec.feel == "breakdown" else sec.start) * spb, sec.end * spb)
+            for sec in plan.sections if sec.kind == "Chorus"]

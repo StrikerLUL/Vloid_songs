@@ -4,7 +4,7 @@ import pytest
 from pedalboard import HighShelfFilter, Pedalboard
 
 import mixer
-import pipeline
+import mixdown
 import separation
 from settings import ReferenceTrack, SongSettings
 
@@ -70,8 +70,8 @@ def test_the_curve_can_be_switched_off(tmp_path, monkeypatch):
     monkeypatch.setattr(separation, "summarize", lambda refs: {k: dict(v) for k, v in groups.items()})
     s = SongSettings(reference_tracks=[ReferenceTrack(path=path)], ref_mastering=False, ref_energy=False,
                      ref_vocal_level=False)
-    assert "bands" in pipeline._reference_targets(s, {}, str(tmp_path), True)["group_targets"]["vocals"]
-    off = pipeline._reference_targets(s.with_updates(ref_vocal_curve=False), {}, str(tmp_path), True)
+    assert "bands" in mixdown._reference_targets(s, {}, str(tmp_path), True)["group_targets"]["vocals"]
+    off = mixdown._reference_targets(s.with_updates(ref_vocal_curve=False), {}, str(tmp_path), True)
     assert off["group_targets"]["vocals"] == {"level": -3.0, "tilt": -12.0}
 
 

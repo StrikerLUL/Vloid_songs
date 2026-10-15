@@ -64,8 +64,8 @@ def without_style_fx(monkeypatch):
 def without_vocal_swing(monkeypatch):
     """Der Gesang swingt in den Tests nicht mit (Lo-Fi-Songs bleiben wie bisher); test_gesang_swing.py holt es sich
     zurück."""
-    import pipeline
-    monkeypatch.setattr(pipeline, "VOCAL_SWING_FROM", 2.0)
+    import singing
+    monkeypatch.setattr(singing, "VOCAL_SWING_FROM", 2.0)
 
 
 @pytest.fixture(autouse=True)
@@ -162,7 +162,7 @@ def neutrino_attrappe(tmp_path, monkeypatch):
     import numpy as np
     import soundfile as sf
 
-    import pipeline
+    import singing
     import vocal_synthesizer
     root = tmp_path / "NEUTRINO"
     (root / "bin").mkdir(parents=True)
@@ -191,5 +191,5 @@ def neutrino_attrappe(tmp_path, monkeypatch):
 
     monkeypatch.setattr(vocal_synthesizer, "_run", run)
     # die Windows-Sprachausgabe der Vorschau-Stimme hängt in der CI: sie darf hier nie singen
-    monkeypatch.setattr(pipeline, "_sing_preview", lambda *a, **k: pytest.fail("die Vorschau-Stimme sang"))
+    monkeypatch.setattr(singing, "_sing_preview", lambda *a, **k: pytest.fail("die Vorschau-Stimme sang"))
     return root, calls

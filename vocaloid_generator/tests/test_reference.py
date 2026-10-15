@@ -7,6 +7,7 @@ import soundfile as sf
 
 import mixer
 import pipeline
+import mixdown
 import reference
 from settings import ReferenceTrack, SongSettings
 
@@ -165,15 +166,15 @@ def test_reference_targets_follow_the_switches(tmp_path, monkeypatch):
     path = song(tmp_path / "a.wav")
     s = SongSettings(reference_tracks=[ReferenceTrack(path=path)], ref_vocal_level=False)
     plan = type("Plan", (), {"seconds_per_beat": 0.5, "sections": []})()
-    targets = pipeline._reference_targets(s, {"plan": plan}, str(tmp_path), has_vocals=True)
+    targets = mixdown._reference_targets(s, {"plan": plan}, str(tmp_path), has_vocals=True)
     assert targets["reference"] == path
     assert "energy_contrast_db" in targets and "vocal_ratio_db" not in targets
     off = s.with_updates(ref_mastering=False, ref_energy=False)
-    assert pipeline._reference_targets(off, {"plan": plan}, str(tmp_path), has_vocals=True) == {}
+    assert mixdown._reference_targets(off, {"plan": plan}, str(tmp_path), has_vocals=True) == {}
 
 
 def test_no_reference_means_no_targets(tmp_path):
-    assert pipeline._reference_targets(SongSettings(), {}, str(tmp_path), has_vocals=True) == {}
+    assert mixdown._reference_targets(SongSettings(), {}, str(tmp_path), has_vocals=True) == {}
 
 
 # ── Einstellungen ─────────────────────────────────────────────────────────────────

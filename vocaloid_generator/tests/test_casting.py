@@ -12,6 +12,7 @@ from nicegui.testing.user_simulation import user_simulation
 import casting
 import main
 import pipeline
+import singing
 import vocal_check
 import vocal_synthesizer
 from settings import SongSettings
@@ -116,7 +117,7 @@ def test_singing_writes_the_check(tmp_path, neutrino_attrappe):
     s = SongSettings(active_sections=["Chorus"], output_ordner=str(tmp_path / "out"), neutrino_pfad=str(root),
                      harmonies=False, final_choir=False)
     tracks, _ = pipeline.compose(s)
-    pipeline._synthesize_vocals(s, tracks, s.output_dir())
+    singing._synthesize_vocals(s, tracks, s.output_dir())
     with open(os.path.join(s.output_dir(), vocal_check.SUNG_FILE), encoding="utf-8") as f:
         info = json.load(f)
     assert (info["engine"], info["voice"], info["device"]) == ("NEUTRINO", "MERROW", "Grafikkarte")
@@ -130,12 +131,12 @@ def test_the_fallback_to_the_preview_voice_is_recorded(tmp_path, monkeypatch):
     def missing(*a, **k):
         raise RuntimeError("fehlt")
 
-    monkeypatch.setattr(pipeline, "_sing_preview", preview)
-    monkeypatch.setattr(pipeline, "_sing_voicevox", missing)
+    monkeypatch.setattr(singing, "_sing_preview", preview)
+    monkeypatch.setattr(singing, "_sing_voicevox", missing)
     s = SongSettings(active_sections=["Chorus"], output_ordner=str(tmp_path / "out"),
                      neutrino_pfad=str(tmp_path / "kein"), phrase_expression=False, breaths=False, final_choir=False)
     tracks, _ = pipeline.compose(s)
-    pipeline._synthesize_vocals(s, tracks, s.output_dir())
+    singing._synthesize_vocals(s, tracks, s.output_dir())
     assert vocal_check.describe(vocal_check.read(s.output_dir()))[1]
 
 

@@ -8,6 +8,8 @@ import soundfile as sf
 
 import main
 import pipeline
+import song_plan
+import singing
 import vocal_synthesizer
 import voice_fx
 from settings import SongSettings
@@ -69,7 +71,7 @@ def phrase_levels(path, tracks, s):
     mono = audio.mean(axis=1)
     notes = voice_fx.timeline(tracks["melody_data"], s.bpm, vocal_synthesizer.stimmlage(s.singer)[2])
     groups = voice_fx.phrases(notes)
-    kinds = voice_fx.phrase_kinds(groups, pipeline._sections_in_seconds(tracks["plan"]))
+    kinds = voice_fx.phrase_kinds(groups, song_plan.sections_in_seconds(tracks["plan"]))
     out = []
     for group, kind in zip(groups, kinds):
         a, b = int((group[0].start + 0.05) * rate), int((group[-1].end - 0.05) * rate)
@@ -82,7 +84,7 @@ def test_verse_and_chorus_are_sung_with_their_own_style_shift(tmp_path, singing_
     root, calls, _ = singing_neutrino
     s = song(tmp_path, root, style_shift=1)
     tracks, _ = pipeline.compose(s)
-    vocals = pipeline._synthesize_vocals(s, tracks, s.output_dir())
+    vocals = singing._synthesize_vocals(s, tracks, s.output_dir())
     assert sorted(shift for _, _, shift in calls) == [0, 2]           # Strophe 1 − 1, Refrain 1 + 1
     assert all(name.startswith("vocals_stil_") for name, _, _ in calls)
     found = phrase_levels(vocals, tracks, s)
@@ -96,7 +98,7 @@ def test_section_style_can_be_switched_off(tmp_path, singing_neutrino):
     root, calls, _ = singing_neutrino
     s = song(tmp_path, root, section_style=False)
     tracks, _ = pipeline.compose(s)
-    pipeline._synthesize_vocals(s, tracks, s.output_dir())
+    singing._synthesize_vocals(s, tracks, s.output_dir())
     assert calls == [("vocals.xml", "MERROW", 0)]
 
 
@@ -115,12 +117,12 @@ def test_a_phrase_belongs_to_the_section_it_mostly_sits_in():
 
 def test_harmony_and_choir_sing_like_the_chorus(tmp_path, singing_neutrino):
     root, calls, _ = singing_neutrino
-    assert pipeline._chorus_shift(SongSettings(style_shift=1)) == 2
-    assert pipeline._chorus_shift(SongSettings(style_shift=6, chorus_style_shift=3)) == 6
-    assert pipeline._chorus_shift(SongSettings(style_shift=1, section_style=False)) == 1
+    assert singing._chorus_shift(SongSettings(style_shift=1)) == 2
+    assert singing._chorus_shift(SongSettings(style_shift=6, chorus_style_shift=3)) == 6
+    assert singing._chorus_shift(SongSettings(style_shift=1, section_style=False)) == 1
     s = song(tmp_path, root, harmonies=True, final_choir=True)
     tracks, _ = pipeline.compose(s)
-    pipeline._synthesize_vocals(s, tracks, s.output_dir())
+    singing._synthesize_vocals(s, tracks, s.output_dir())
     others = [(name, shift) for name, _, shift in calls if not name.startswith("vocals_stil_")]
     assert others and all(shift == 1 for _, shift in others)
 
@@ -138,7 +140,7 @@ def test_without_style_shift_support_the_song_is_still_sung(tmp_path, singing_ne
     s = song(tmp_path, root)
     tracks, _ = pipeline.compose(s)
     with caplog.at_level(logging.WARNING):
-        vocals = pipeline._synthesize_vocals(s, tracks, s.output_dir())
+        vocals = singing._synthesize_vocals(s, tracks, s.output_dir())
     assert caplog.text.count("keinen StyleShift") == 1
     assert all(sung == pytest.approx(level(0), rel=0.1) for _, sung in phrase_levels(vocals, tracks, s))
 
@@ -167,7 +169,7 @@ def lead(tmp_path, root, s):
     data = [(None, 2.0), (64, 2.0), (67, 2.0), (None, 2.0), (69, 2.0)]
     xml = vocal_synthesizer.erstelle_musicxml(data, ["ら"] * 3, s.bpm, str(tmp_path / "vocals.xml"))
     wav = str(tmp_path / "vocals.wav")
-    pipeline._neutrino_lead(s, data, xml, wav, str(root), "MERROW", (), ["ら"] * 3, ())
+    singing._neutrino_lead(s, data, xml, wav, str(root), "MERROW", (), ["ら"] * 3, ())
     return wav
 
 
@@ -176,12 +178,12 @@ def test_takes_keep_the_style_shift_unless_neutrino_sings_the_same_every_time(tm
     s = SongSettings(vocal_takes=2, bpm=120, reuse_steps=False)    # jedes Mal wirklich singen, nicht aus dem Gedächtnis
     lead(tmp_path, root, s)
     assert [shift for _, _, shift in calls] == [0, 0, 1]      # gleich gesungen: die zweite eine Stufe heller
-    assert pipeline._neutrino_repeats(str(root)) is True
+    assert singing._neutrino_repeats(str(root)) is True
     calls.clear()
     lead(tmp_path, root, s)
     assert [shift for _, _, shift in calls] == [0, 1]         # gemerkt: gleich heller
 
-    pipeline._remember_repeats(str(root), False)
+    singing._remember_repeats(str(root), False)
     state["noisy"] = True
     calls.clear()
     lead(tmp_path, root, s)

@@ -5,6 +5,7 @@ import soundfile as sf
 
 import mix_movement as mm
 import pipeline
+import mixdown
 from mix_movement import Part
 from mixer import mische_spuren
 
@@ -74,7 +75,7 @@ def test_the_pipeline_hands_over_the_sections(tmp_path):
     from settings import SongSettings
     tracks, _ = pipeline.compose(SongSettings(output_ordner=str(tmp_path), seed=3,
                                               active_sections=["Verse", "PreChorus", "Chorus"]))
-    parts = pipeline._movement(tracks["plan"])
+    parts = mixdown._movement(tracks["plan"])
     assert [p.kind for p in parts] == ["Verse", "PreChorus", "Chorus"]
     assert parts[1].end == pytest.approx(parts[2].start) and parts[0].bar == pytest.approx(4 * 60 / tracks["plan"].bpm)
-    assert pipeline._movement(None) is None
+    assert mixdown._movement(None) is None

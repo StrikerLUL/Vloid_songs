@@ -1,4 +1,5 @@
 # config.py – Zentrale Einstellungen für den gesamten Generator
+import logging
 import os
 
 # ── Sektionen: Länge in Takten und ob gesungen wird ─────────────────────────────
@@ -83,3 +84,12 @@ LOG_DIR         = os.path.join(DATA_DIR, "Protokolle")
 # Standard: der Ordner, den setup_neutrino.py im Projektordner anlegt
 NEUTRINO_PFAD       = os.path.join(REPO_ROOT, "NEUTRINO-windows-v3.1", "NEUTRINO")
 
+
+def remove_file(path: str) -> None:
+    """Die Datei löschen, wenn es sie gibt; ein Fehler steht nur im Protokoll."""
+    try:
+        os.remove(path)
+    except FileNotFoundError:
+        pass
+    except OSError as e:
+        logging.getLogger(__name__).warning("Konnte %s nicht löschen: %s", path, e)

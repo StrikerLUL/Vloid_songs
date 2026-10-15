@@ -10,6 +10,7 @@ import soundfile as sf
 import config
 import main
 import pipeline
+import singing
 import polish
 from mixer import mische_spuren
 from settings import SongSettings
@@ -157,7 +158,7 @@ def song(tmp_path, monkeypatch):
         t = np.arange(4 * RATE) / RATE
         sf.write(wav, 0.2 * np.sin(2 * np.pi * 440 * t), RATE)
         return True
-    monkeypatch.setattr(pipeline, "_sing_preview", sing)
+    monkeypatch.setattr(singing, "_sing_preview", sing)
     return SongSettings(output_ordner=str(tmp_path / "out"), seed=4, active_sections=["Chorus"],
                         section_bars={"Chorus": 2})
 

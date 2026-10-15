@@ -14,6 +14,7 @@ import guitar_amp
 import mixer
 import orchestrator
 import pipeline
+import rendering
 import reference
 import synth_engine
 import vst_sounds
@@ -192,10 +193,10 @@ def test_midi_to_wav_with_the_drum_machine(tmp_path):
 
 def test_drum_sound_follows_the_choice_or_the_style():
     s = SongSettings(style="Future Bass")
-    assert pipeline._drum_machine(s) == "808"
-    assert pipeline._drum_machine(s.with_updates(channels={"drums": {"style": "soundfont"}})) is None
-    assert pipeline._drum_machine(SongSettings(style="Rock", channels={"drums": {"style": "909"}})) == "909"
-    assert pipeline._drum_machine(SongSettings(style="Rock")) is None
+    assert rendering._drum_machine(s) == "808"
+    assert rendering._drum_machine(s.with_updates(channels={"drums": {"style": "soundfont"}})) is None
+    assert rendering._drum_machine(SongSettings(style="Rock", channels={"drums": {"style": "909"}})) == "909"
+    assert rendering._drum_machine(SongSettings(style="Rock")) is None
 
 
 # ── Gitarren-Verstärker ─────────────────────────────────────────────────────────
@@ -293,12 +294,12 @@ def test_mix_with_lofi_texture_crackles(tmp_path):
 # ── VST-Klänge pro Spur ─────────────────────────────────────────────────────────
 def test_vst_plays_chosen_parts_or_else_synth_and_lead():
     s = SongSettings(vst_path="C:/Surge XT.vst3")
-    assert pipeline._vst_for(s, "synth") == ("C:/Surge XT.vst3", "") and pipeline._vst_for(s, "bass") == (None, "")
+    assert rendering._vst_for(s, "synth") == ("C:/Surge XT.vst3", "") and rendering._vst_for(s, "bass") == (None, "")
     chosen = s.with_updates(vst_sounds={"bass": "QUJD", "gitarre": "x"})
     assert chosen.vst_sounds == {"bass": "QUJD"}
-    assert pipeline._vst_for(chosen, "bass") == ("C:/Surge XT.vst3", "QUJD")
-    assert pipeline._vst_for(chosen, "synth") == (None, "")
-    assert pipeline._vst_for(SongSettings(vst_sounds={"bass": "QUJD"}), "bass") == (None, "")
+    assert rendering._vst_for(chosen, "bass") == ("C:/Surge XT.vst3", "QUJD")
+    assert rendering._vst_for(chosen, "synth") == (None, "")
+    assert rendering._vst_for(SongSettings(vst_sounds={"bass": "QUJD"}), "bass") == (None, "")
 
 
 class FakePlugin:
@@ -363,8 +364,8 @@ def test_rendering_in_parallel_gives_the_same_tracks(tmp_path, monkeypatch):
     tracks, _ = pipeline.compose(s, seed=6)
     results = {}
     for workers in (1, 4):
-        monkeypatch.setattr(pipeline, "RENDER_WORKERS", workers)
-        wavs = pipeline._render_instruments(s, tracks, s.output_dir(), lambda f, m: None)
+        monkeypatch.setattr(rendering, "RENDER_WORKERS", workers)
+        wavs = rendering._render_instruments(s, tracks, s.output_dir(), lambda f, m: None)
         results[workers] = {inst: sf.read(path)[0] for inst, path in wavs.items()}
     assert results[1].keys() == results[4].keys() and len(results[1]) >= 5
     for inst in results[1]:

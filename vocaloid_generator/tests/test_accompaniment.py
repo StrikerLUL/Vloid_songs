@@ -12,6 +12,8 @@ import accompaniment
 import einrichten
 import main
 import pipeline
+import singing
+import mixdown
 import systemcheck
 from settings import SongSettings
 
@@ -57,7 +59,7 @@ def song(tmp_path):
 
 
 def sections(tracks):
-    return pipeline._section_energies(tracks["plan"])
+    return mixdown._section_energies(tracks["plan"])
 
 
 # ── Zuordnung ─────────────────────────────────────────────────────────────────────
@@ -129,7 +131,7 @@ def quiet_singer(monkeypatch):
     def sing(settings, tracks, wav):      # die Windows-Sprachausgabe hängt in der CI (siehe test_vocals.py)
         sf.write(wav, 0.2 * np.sin(2 * np.pi * 440 * np.arange(4 * 44100) / 44100), 44100)
         return True
-    monkeypatch.setattr(pipeline, "_sing_preview", sing)
+    monkeypatch.setattr(singing, "_sing_preview", sing)
 
 
 def test_a_song_with_ai_accompaniment(song, fake_model, quiet_singer):

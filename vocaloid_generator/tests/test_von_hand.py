@@ -12,6 +12,7 @@ import exporter
 import main
 import own_vocal
 import pipeline
+import singing
 import vocal_check
 import vocal_synthesizer
 import voice_fx
@@ -65,7 +66,7 @@ def test_the_own_track_replaces_the_lead_and_neutrino_sings_the_rest(tmp_path, s
     sf.write(str(tmp_path / "eigen.wav"), np.concatenate([np.zeros(int(bar * RATE)), 0.5 * sung]), RATE)
     calls.clear()
     s = s.with_updates(own_vocal=str(tmp_path / "eigen.wav"))
-    pipeline._synthesize_vocals(s, tracks, out)
+    singing._synthesize_vocals(s, tracks, out)
     names = [c[0] for c in calls]
     assert "vocals.xml" not in names and "vocals_harmony.xml" in names
     lead, _ = sf.read(os.path.join(out, "vocals.wav"))
@@ -79,7 +80,7 @@ def test_a_missing_own_track_lets_the_engine_sing(tmp_path, singing_neutrino):
     root, calls, _ = singing_neutrino
     s = song(tmp_path, root, section_style=False, own_vocal=str(tmp_path / "fehlt.wav"))
     tracks, _ = pipeline.compose(s)
-    pipeline._synthesize_vocals(s, tracks, s.output_dir())
+    singing._synthesize_vocals(s, tracks, s.output_dir())
     assert [c[0] for c in calls] == ["vocals.xml"]
 
 
@@ -111,14 +112,14 @@ def test_what_neutrino_sang_is_not_sung_again(tmp_path, singing_neutrino):
     s = song(tmp_path, root, harmonies=True)
     tracks, _ = pipeline.compose(s)
     out = s.output_dir()
-    pipeline._synthesize_vocals(s, tracks, out)
+    singing._synthesize_vocals(s, tracks, out)
     first = len(calls)
-    assert first >= 2 and os.listdir(os.path.join(out, pipeline.TAKE_CACHE))
+    assert first >= 2 and os.listdir(os.path.join(out, singing.TAKE_CACHE))
     before, _ = sf.read(os.path.join(out, "vocals.wav"))
     calls.clear()
-    pipeline._synthesize_vocals(s.with_updates(glide=0.5), tracks, out)     # anderer Schlüssel, dieselben Noten
+    singing._synthesize_vocals(s.with_updates(glide=0.5), tracks, out)     # anderer Schlüssel, dieselben Noten
     assert calls == []
-    pipeline._synthesize_vocals(s.with_updates(reuse_steps=False), tracks, out)
+    singing._synthesize_vocals(s.with_updates(reuse_steps=False), tracks, out)
     assert len(calls) == first                                              # ohne Wiederverwenden singt alles neu
     assert len(before)
 
@@ -128,13 +129,13 @@ def test_one_phrase_is_sung_again_with_its_own_voice_and_style(tmp_path, singing
     s = song(tmp_path, root, section_style=False)
     tracks, _ = pipeline.compose(s)
     out = s.output_dir()
-    pipeline._synthesize_vocals(s, tracks, out)
+    singing._synthesize_vocals(s, tracks, out)
     notes = voice_fx.timeline(tracks["melody_data"], s.bpm, vocal_synthesizer.stimmlage(s.singer)[2])
     second = voice_fx.phrases(notes)[1]
     key = edit_key((second[0].start + 0.01) * s.bpm / 60)                # ein Ton der Phrase genügt
     calls.clear()
     fixed = s.with_updates(phrase_fixes={key: {"style_shift": 3, "singer": "REINA"}})
-    pipeline._synthesize_vocals(fixed, tracks, out)
+    singing._synthesize_vocals(fixed, tracks, out)
     assert calls == [("vocals_phrase_1.xml", "REINA", 3)]                  # nur die Phrase, der Rest aus dem Gedächtnis
     levels = [v for _, v in phrase_levels(os.path.join(out, "vocals.wav"), tracks, s)]
     assert levels[1] == pytest.approx(level(3), rel=0.1)
@@ -149,5 +150,5 @@ def test_a_phrase_fix_with_a_missing_voice_sings_with_the_singer(tmp_path, singi
     notes = voice_fx.timeline(tracks["melody_data"], s.bpm, vocal_synthesizer.stimmlage(s.singer)[2])
     key = edit_key(voice_fx.phrases(notes)[0][0].start * s.bpm / 60)
     s = s.with_updates(phrase_fixes={key: {"style_shift": -2, "singer": "GIBTSNICHT"}})
-    pipeline._synthesize_vocals(s, tracks, s.output_dir())
+    singing._synthesize_vocals(s, tracks, s.output_dir())
     assert ("vocals_phrase_1.xml", "MERROW", -2) in calls

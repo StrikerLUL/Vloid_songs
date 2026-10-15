@@ -35,6 +35,7 @@ def cast(settings, progress: Optional[Callable] = None) -> list:
     import cancel
     import neutrino_score
     import pipeline
+    import singing
     import voice_fx
     from song_plan import BEATS_PER_BAR
     from vocal_synthesizer import erstelle_musicxml, neutrino_synthese, stimmlage
@@ -65,7 +66,7 @@ def cast(settings, progress: Optional[Callable] = None) -> list:
         vocal = os.path.join(target, "gesang.wav")
         try:
             neutrino_synthese(xml, vocal, neutrino_dir, os.path.join(neutrino_dir, "model", singer),
-                              style_shift=pipeline._chorus_shift(s))
+                              style_shift=singing._chorus_shift(s))
         except Exception as e:  # noqa: BLE001 – eine Stimme, die nicht singt, fehlt eben im Casting
             log.warning("Stimmen-Casting: %s singt nicht: %s", singer, e)
             continue

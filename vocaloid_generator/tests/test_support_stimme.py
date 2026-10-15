@@ -9,7 +9,7 @@ import pytest
 import soundfile as sf
 
 import main
-import pipeline
+import singing
 import vocal_check
 import vocal_synthesizer
 from settings import SongSettings
@@ -84,11 +84,11 @@ def test_only_the_lead_voice_gets_the_support_voice(tmp_path):
         (root / "model" / singer).mkdir(parents=True)
     s = SongSettings(neutrino_pfad=str(root), singer="MERROW", support_singer="SOMA")
     lead, duet = str(root / "model" / "MERROW"), str(root / "model" / "REINA")
-    assert pipeline._support_model(s, str(root), lead) == str(root / "model" / "SOMA")
-    assert pipeline._support_model(s, str(root), duet) is None                       # die Duett-Stimme singt allein
-    assert pipeline._support_model(s.with_updates(support_singer=""), str(root), lead) is None
-    assert pipeline._support_model(s.with_updates(support_singer="MERROW"), str(root), lead) is None
-    assert pipeline._support_model(s.with_updates(support_singer="FEHLT"), str(root), lead) is None
+    assert singing._support_model(s, str(root), lead) == str(root / "model" / "SOMA")
+    assert singing._support_model(s, str(root), duet) is None                       # die Duett-Stimme singt allein
+    assert singing._support_model(s.with_updates(support_singer=""), str(root), lead) is None
+    assert singing._support_model(s.with_updates(support_singer="MERROW"), str(root), lead) is None
+    assert singing._support_model(s.with_updates(support_singer="FEHLT"), str(root), lead) is None
     assert main.parse_args(["--support-stimme", "SOMA"]).support_stimme == "SOMA"
 
 
@@ -112,7 +112,7 @@ def test_a_take_with_support_voice_is_kept_apart(tmp_path, monkeypatch):
     monkeypatch.setattr(vocal_synthesizer, "neutrino_synthese", sing)
     s = SongSettings(neutrino_pfad=str(root), singer="MERROW", reuse_steps=True)
     wav = str(tmp_path / "vocals.wav")
-    pipeline._neutrino(s, xml, wav, str(root), str(root / "model" / "MERROW"), 0)
-    pipeline._neutrino(s.with_updates(support_singer="SOMA"), xml, wav, str(root), str(root / "model" / "MERROW"), 0)
-    pipeline._neutrino(s.with_updates(support_singer="SOMA"), xml, wav, str(root), str(root / "model" / "MERROW"), 0)
+    singing._neutrino(s, xml, wav, str(root), str(root / "model" / "MERROW"), 0)
+    singing._neutrino(s.with_updates(support_singer="SOMA"), xml, wav, str(root), str(root / "model" / "MERROW"), 0)
+    singing._neutrino(s.with_updates(support_singer="SOMA"), xml, wav, str(root), str(root / "model" / "MERROW"), 0)
     assert seen == [None, str(root / "model" / "SOMA")]       # das dritte Mal kommt aus dem Zwischenspeicher

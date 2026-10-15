@@ -9,7 +9,7 @@ import pytest
 import config
 import einrichten
 import main
-import pipeline
+import singing
 import systemcheck
 import updates
 from settings import SongSettings
@@ -117,7 +117,7 @@ def test_real_quick_checks_pass_here():
 
 
 def test_song_check_makes_a_short_song(monkeypatch):
-    monkeypatch.setattr(pipeline, "_sing_preview", lambda *a, **k: False)    # keine Sprachausgabe in der CI
+    monkeypatch.setattr(singing, "_sing_preview", lambda *a, **k: False)    # keine Sprachausgabe in der CI
     ok, message = systemcheck.check_song(SongSettings(neutrino_pfad="fehlt"), "")
     assert ok and "ohne Gesang" in message
     assert os.path.isdir(os.path.join(config.DATA_DIR, systemcheck.FOLDER))

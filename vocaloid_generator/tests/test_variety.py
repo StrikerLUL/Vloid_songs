@@ -11,8 +11,8 @@ from drums import CRASH, KICK, SNARE
 from fx import render_fx
 from melody_writer import harmony_line
 from orchestrator import orchestrate_song
-from pipeline import _chorus_windows, seed_everything
-from song_plan import describe_arrangement
+from pipeline import seed_everything
+from song_plan import chorus_windows, describe_arrangement
 
 STRUCTURE = ["Intro", "Verse", "PreChorus", "Chorus", "Verse", "PreChorus", "Chorus", "Bridge", "Chorus", "Outro"]
 
@@ -86,7 +86,7 @@ def test_singer_is_alone_in_the_quiet_part(varied):
     harmony_starts = [t for t, _ in _starts(varied["harmony_data"])]
     assert not [t for t in harmony_starts if last.start <= t < last.resume]
     assert [t for t in harmony_starts if last.resume <= t < last.end]
-    windows = _chorus_windows(plan)
+    windows = chorus_windows(plan)
     assert windows[-1] == (last.resume * spb, last.end * spb)
 
 

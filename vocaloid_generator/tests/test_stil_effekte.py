@@ -7,6 +7,7 @@ import soundfile as sf
 
 import main
 import pipeline
+import singing
 import style_fx
 import voice_fx
 from settings import SongSettings
@@ -99,10 +100,10 @@ def test_the_pipeline_applies_the_effects_of_the_style(tmp_path, styles, monkeyp
     tracks, _ = pipeline.compose(s)
     seen = {}
     monkeypatch.setattr(style_fx, "apply", lambda path, notes, sections, bpm, effects: seen.update(effects) or ["x"])
-    pipeline._style_effects(s, tracks, str(tmp_path / "v.wav"))
+    singing._style_effects(s, tracks, str(tmp_path / "v.wav"))
     assert seen == {"telephone": True, "stutter": True, "hard_tune": True}
     seen.clear()
-    pipeline._style_effects(s.with_updates(style="Ballade"), tracks, str(tmp_path / "v.wav"))
+    singing._style_effects(s.with_updates(style="Ballade"), tracks, str(tmp_path / "v.wav"))
     assert seen == {}
 
 

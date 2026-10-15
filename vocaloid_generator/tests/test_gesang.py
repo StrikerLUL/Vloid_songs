@@ -132,7 +132,9 @@ def test_romaji_lyrics_reach_the_song():
     text = "[Verse]\nkimi no koe ga kikoeru\n[Chorus]\nzutto issho ni iyou"
     tracks, _ = compose(SongSettings(lyrics=text, active_sections=["Verse", "Chorus"], seed=3))
     assert "き" in tracks["silben"] and not any(s.isascii() for s in tracks["silben"])
-    tracks, _ = compose(SongSettings(lyrics=text, active_sections=["Verse", "Chorus"], seed=3, romaji=False))
+    # ohne Romaji und ohne Englisch bleibt der Text, wie er ist (mit Englisch würde er wie Englisch gelesen)
+    tracks, _ = compose(SongSettings(lyrics=text, active_sections=["Verse", "Chorus"], seed=3, romaji=False,
+                                     english_kana=False))
     assert "kimi" in tracks["silben"]
 
 
@@ -152,7 +154,8 @@ def test_two_takes_are_comped_and_double_the_chorus(tmp_path, neutrino_attrappe,
     root, calls = neutrino_attrappe
     s = SongSettings(active_sections=["Verse", "Chorus"], section_bars={"Verse": 4, "Chorus": 4},
                      output_ordner=str(tmp_path / "out"), neutrino_pfad=str(root), singer="MERROW", seed=5,
-                     vocal_takes=2, harmonies=False, final_choir=False)
+                     vocal_takes=2, harmonies=False, final_choir=False, section_style=False, even_takes=False,
+                     sung_pads=False, adlibs=False)
     tracks, _ = pipeline.compose(s)
     out = s.output_dir()
     with caplog.at_level(logging.INFO):

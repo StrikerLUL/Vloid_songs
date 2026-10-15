@@ -1,11 +1,11 @@
-# Testliste für Vloid Songs 1.0.2
+# Testliste für Vloid Songs 1.1.0
 
-Etwa 30 Minuten auf deinem PC, davon viel Warten. Hak ab, was klappt, und schreib zu allem anderen eine Zeile, was
+Etwa 40 Minuten auf deinem PC, davon viel Warten. Hak ab, was klappt, und schreib zu allem anderen eine Zeile, was
 passiert ist. Am Ende **Hilfe › Fehlerbericht speichern** und das ZIP zusammen mit der Liste zurückschicken.
 
 ## A. Installieren (5 Minuten)
 
-- [ ] `VloidSongs-Setup-1.0.2.exe` starten, durchklicken. Am Ende startet die App von selbst.
+- [ ] `VloidSongs-Setup-1.1.0.exe` starten, durchklicken. Am Ende startet die App von selbst.
 - [ ] Im Startmenü gibt es „Vloid Songs“, und es startet die App.
 - [ ] `Dokumente\Vloid Songs` gibt es, mit `Songs` und `Einstellungen.json`.
 - [ ] Hattest du vorher den entpackten Ordner: In Einrichten unter „Deine Daten“ den alten Ordner wählen,
@@ -52,9 +52,34 @@ passiert ist. Am Ende **Hilfe › Fehlerbericht speichern** und das ZIP zusammen
 ## G. Hilfe-Menü (1 Minute)
 
 - [ ] Hilfe › Erste Schritte, Fehlerbehebung, Was ist neu und Credits gehen auf.
-- [ ] Hilfe › Nach Update suchen meldet „Deine Version 1.0.2 ist die neueste.“ (oder zeigt eine neuere).
+- [ ] Hilfe › Nach Update suchen meldet „Deine Version 1.1.0 ist die neueste.“ (oder zeigt eine neuere).
+
+## H. Gesang 1.1 (10 Minuten)
+
+- [ ] Einrichten: „Airwindows-Effekte“ laden. Danach steht dort „eingerichtet“.
+- [ ] Tab Text: unter `[Chorus]` eine Zeile `I love you` dazuschreiben. Rechts steht アイ ラブ ユー.
+- [ ] „Song erzeugen“ mit NEUTRINO. Unter dem Player steht „Gesungen von NEUTRINO …, MERROW, Grafikkarte“. Steht dort
+      „Prozessor“ oder eine rote Warnung, schreib sie ab.
+- [ ] Klingt die Strophe ruhiger und der Refrain heller und kräftiger? Im Protokoll steht „StyleShift pro Sektion“.
+      Hast du die NEUTRINO-Ausgabe mit Tuning-Tool, steht dort stattdessen ein Hinweis; das ist richtig so.
+- [ ] Refrain anhören: Die zweite Stimme ist links und rechts, im letzten Refrain gibt es Flächen und kurze Rufe.
+      Klingt das wie eine Produktion oder eher störend?
+- [ ] Über den Noten „Stimmen-Casting“. Jede installierte Stimme singt den Refrain; eine mit dem Herz merken.
+- [ ] Doppelklick auf einen Ton in den Noten, StyleShift ändern, „Neu singen“. Nur diese Phrase klingt anders, und es
+      geht schneller als ein ganzer Song.
+- [ ] Über den Noten „Noten für Tuning-Tools“. Im ZIP liegen MusicXML, UST, MIDI und eine Anleitung.
+- [ ] Stil Lo-Fi, „Song erzeugen“. Im Protokoll steht „Gesang swingt mit“; sitzt der Gesang im Groove?
+- [ ] Gesamteindruck in einem Satz: Klingt der Gesang besser als in 1.0.2?
 
 ## Wenn du mehr Zeit hast
+
+- [ ] **DiffSinger (Versuch):** eine freie DiffSinger-Stimme in OpenUtau installieren (oder in
+      `Dokumente\Vloid Songs\DiffSinger` entpacken), Tab Gesang „Gesang mit“ DiffSinger, Song erzeugen. Der
+      Gesangs-Check nennt die Stimme. Wie klingt sie neben NEUTRINO, und wie lange hat es gedauert?
+- [ ] **Support-Stimme (Versuch):** Hat deine NEUTRINO-Ausgabe eine `Run_support_model.bat`, im Tab Gesang eine
+      Support-Stimme wählen (z. B. SOMA zu MERROW). Klingt die Hauptstimme anders?
+- [ ] **Eigene Gesangsspur:** eine WAV (z. B. aus dem NEUTRINO-Tuning-Tool) im Tab Gesang unter „Eigene
+      Gesangsspur“ wählen. Sitzt sie auf den Noten?
 
 - [ ] **Album über Nacht:** „Album“, 3 Songs, zwei Stile, starten und weggehen. Danach liegt in `Songs\Alben` ein
       Ordner mit drei nummerierten MP3s, `Album.m3u8` und `Titelliste.txt`.
@@ -70,4 +95,4 @@ passiert ist. Am Ende **Hilfe › Fehlerbericht speichern** und das ZIP zusammen
 
 1. Hilfe › Fehlerbericht speichern (das ZIP liegt in `Dokumente\Vloid Songs\Fehlerberichte`).
 2. Diese Liste mit deinen Haken und Notizen, oder einfach die Punkte, die nicht geklappt haben.
-3. Ein Satz zum Klang: Schlagzeug, Gesang und, wenn ausprobiert, KI-Begleitung und Mix pro Instrument.
+3. Ein Satz zum Klang: Schlagzeug, Gesang und, wenn ausprobiert, DiffSinger, KI-Begleitung und Mix pro Instrument.

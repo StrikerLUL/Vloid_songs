@@ -1,3 +1,5 @@
+alkana
+e2k
 fugashi
 jaconv
 librosa

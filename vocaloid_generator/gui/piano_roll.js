@@ -2,11 +2,12 @@
 // im Player an diese Stelle ("vg-seek"). Mit editable lassen sich die Töne der Gesangsmelodie nach oben und
 // unten ziehen oder mit den Pfeiltasten verschieben (Umschalt: Oktave); jede Änderung meldet "edit". Am rechten
 // Rand gezogen (oder mit Pfeil links/rechts) wird ein Ton kürzer oder länger, in Sechzehnteln ("step"); das meldet
-// "resize". Länger als bis zum nächsten Ton geht nicht.
+// "resize". Länger als bis zum nächsten Ton geht nicht. Ein Doppelklick auf einen Ton meldet "phrase" (seine Phrase
+// soll neu gesungen werden).
 export default {
   template: `
     <div ref="box" class="vg-roll" :class="{ editing: editable }" :style="{ height: height + 'px' }" tabindex="0"
-         @click="seek" @mousedown="grab" @mousemove="hover" @keydown="key">
+         @click="seek" @mousedown="grab" @mousemove="hover" @keydown="key" @dblclick="phrase">
       <canvas ref="canvas"></canvas>
       <div ref="head" class="vg-head"></div>
     </div>`,
@@ -215,6 +216,11 @@ export default {
       this.$refs.head.style.transform = `translateX(${x}px)`;
       const box = this.$refs.box;
       if (x < box.scrollLeft || x > box.scrollLeft + box.clientWidth - 40) box.scrollLeft = Math.max(0, x - 60);
+    },
+    phrase(e) {
+      if (!this.editable) return;
+      const note = this.noteAt(e);
+      if (note) this.$emit("phrase", { start: note[0] });
     },
     seek(e) {
       if (this.dragged) {

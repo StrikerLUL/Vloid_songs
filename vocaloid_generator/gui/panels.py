@@ -37,7 +37,8 @@ def song_panel(s: SongSettings, pick: PickFn, apply_template: Callable[[SongSett
 
     with ui.grid(columns=2).classes("w-full gap-x-4"):
         with ui.row().classes("items-end no-wrap"):
-            ui.select(list(STYLES), label="Stil").bind_value(s, "style").classes("col").mark("style")
+            ui.select(list(STYLES), label="Stil").bind_value(s, "style").classes("col").mark("style") \
+                .on("update:model-value", lambda: ui.timer(0.05, lambda: favorite_voice(s), once=True))
             ui.button(icon="auto_fix_high", on_click=typical).props("flat round dense").mark("typical") \
                 .tooltip("Typische Werte für diesen Stil: Tempo, Tonart, Ablauf und Lautstärken")
         ui.select(list(KEYS), label="Tonart").bind_value(s, "key")
@@ -245,6 +246,8 @@ REFERENCE_SWITCHES = (
     ("ref_vocal_level", "Gesangslautstärke", "Gesang so laut gegen die Band wie in den Vorbildern (geschätzt)"),
     ("ref_stems", "Mix pro Instrument", "Gesang, Schlagzeug, Bass und Rest einzeln so laut und so hell wie in den "
                                         "Vorbildern; braucht Demucs (Hilfe › Einrichten), das zerlegt die Vorbilder"),
+    ("ref_vocal_curve", "Gesangsklang wie im Vorbild", "Die Klangkurve des Gesangs in Terzbändern wie beim Gesang der "
+                                                       "Vorbilder, höchstens 4 dB je Band; braucht Demucs"),
     ("ref_tempo_key", "Tempo und Tonart vorschlagen", "Ein Klick übernimmt Tempo und Tonart der Vorbilder"),
     ("ref_style", "Stil vorschlagen", "Ein Klick übernimmt den Stil, der am besten zu den Vorbildern passt"),
 )
@@ -403,7 +406,7 @@ def text_panel(s: SongSettings) -> None:
             if header:
                 rows.append(("header", header.group(1)))
             elif line:
-                sylls = syllables(line, s.romaji)
+                sylls = syllables(line, s.romaji, s.english_kana)
                 count += len(sylls)
                 rows.append(("line", " ".join(sylls)))
         ui.label(f"So wird gesungen: {count} Silben").classes("text-subtitle2").mark("syllables")
@@ -499,23 +502,93 @@ def vst_editor(s: SongSettings) -> None:
                 .bind_visibility_from(s, "vst_sounds", backward=lambda d, p=part: p in d).mark(f"vst-forget-{part}")
 
 
+def favorite_voice(s: SongSettings) -> None:
+    """Nach einem Wechsel des Stils: die Lieblingsstimme aus dem Stimmen-Casting wählen, wenn eine gemerkt ist."""
+    import casting
+    chosen = casting.favorite(s).singer
+    if chosen != s.singer:
+        s.singer = chosen
+        ui.notify(f"Lieblingsstimme für {s.style}: {chosen}")
+
+
 # ── Gesang ──────────────────────────────────────────────────────────────────────
 LIVELY_SWITCHES = (
     ("breaths", "Atmer vor den Phrasen", "Vor jeder Zeile ist ein leises Einatmen zu hören"),
+    ("recorded_breaths", "Echte Atmer", "Liegen Atem-Aufnahmen (WAV, z. B. CC0 von Freesound) im Datenordner unter "
+                                        "Atmer, atmet die Stimme mit ihnen, passend zur Länge der Zeile"),
     ("echo_throws", "Echo auf dem letzten Wort", "Am Ende jeder Sektion und jeder zweiten Refrain-Zeile hallt das "
                                                  "letzte Wort links und rechts nach"),
     ("final_choir", "Chor im letzten Refrain", "Mit NEUTRINO oder VOICEVOX singen zwei weitere Stimmen mit, "
                                                "sonst wird die eigene Stimme zum Chor vervielfacht"),
     ("phrase_expression", "Ausdruck pro Phrase", "Jede Zeile wird zu ihrem höchsten Ton hin lauter und heller und "
                                                  "klingt am Ende weicher aus; Strophen leiser als Refrains"),
+    ("syllable_dynamics", "Lautstärke pro Silbe", "Betonte Silben (Wortakzent, Schlag 1 und 3) etwas lauter, kurze "
+                                                  "Silben vor einem Hochton leiser, jede Zeile setzt weich ein"),
+    ("vocal_unmask", "Band macht dem Gesang Platz", "Wie das Plugin Trackspacer: die Band wird genau in den "
+                                                    "Frequenzen bis zu 3 dB leiser, in denen der Gesang gerade laut "
+                                                    "ist. Der Gesang ist verständlich, ohne lauter zu werden."),
+    ("vocal_ride", "Gesang reitet auf der Band", "Alle 50 ms wird gemessen, wie weit der Gesang über der Band steht; "
+                                                 "wo er untergeht oder heraussticht, wird er bis zu 4 dB nachgeführt"),
+    ("convolution_reverb", "Platte aus Impulsantwort", "Der Hall des Gesangs aus einer Impulsantwort statt eines "
+                                                         "Algorithmus, mit Pre-Delay im Tempo. Eigene Impulsantworten "
+                                                         "(WAV) kommen in den Datenordner unter Hall: „platte“ im Namen "
+                                                         "für den Gesang, „raum“ für die Band."),
+    ("ducked_delay", "Delay weicht dem Gesang", "Das Echo auf dem Gesang ist leiser, solange gesungen wird, und "
+                                                "klingt in den Pausen voll nach; die Wörter verschwimmen nicht"),
     ("vocal_chain", "Studio-Gesangskette", "Leichte Bandsättigung, Hall und Delay je Sektion (Strophe trockener, "
                                            "Refrain und Bridge weiter) und im Refrain eine echte Doppelung aus der "
                                            "zweiten Fassung"),
+    ("vocal_tone", "Kette pro Stimme und Stil", "EQ, Kompressor und Sättigung passen zur Stimme und zum Stil: helle "
+                                                "Stimmen weniger spitz, tiefe klarer, Ballade weicher, Rock mit mehr "
+                                                "Sättigung"),
+    ("airwindows", "Airwindows-Effekte", "Mit Airwindows Consolidated (Hilfe › Einrichten): Bandsättigung ToTape9 auf "
+                                         "dem Gesang und das Mischpult Console7 auf jeder Spur und der Summe"),
+)
+
+# Stil-Effekte auf dem Gesang (style_fx.py), jeweils nur in den Stilen, zu denen sie gehören
+STYLE_FX_SWITCHES = (
+    ("telephone_fx", "Telefon in der ersten Zeile", "Die erste Zeile klingt wie durchs Telefon (Future Bass, Drum and "
+                                                    "Bass, Dark Vocaloid, Lo-Fi)"),
+    ("stutter_fx", "Stutter vor dem Refrain", "Im letzten Schlag vor dem Refrain stottert die Stimme in Sechzehnteln "
+                                              "(Future Bass, Drum and Bass, Kawaii, J-Pop Energy)"),
+    ("hard_tune", "Harter Tune im Refrain", "Die Tonhöhe rastet hart auf den Noten ein, wie Auto-Tune auf schnellster "
+                                            "Stufe (Future Bass, Kawaii)"),
+    ("formant_fx", "Formanten verschieben", "Kindlicher bei Kawaii und Idol-Pop, dunkler bei Dark Vocaloid; die "
+                                            "Tonhöhe bleibt"),
+    ("vocal_swing", "Gesang swingt mit", "Swingt die Band (Lo-Fi oder Swing-Regler ab 0,2), setzen die Töne auf der "
+                                         "zweiten Sechzehntel genauso viel später ein; Tonhöhe und Klang bleiben"),
+)
+
+# Begleitstimmen wie in Produktionen (backing_vocals.py), von NEUTRINO gesungen
+BACKING_SWITCHES = (
+    ("harmony_variety", "Harmonie je Refrain anders", "Erster Refrain: Terz nur auf den Phrasenenden, mittlere: Terz "
+                                                      "darunter, letzter: Terz darüber und, wenn sie in die Stimmlage "
+                                                      "passt, die Oktave"),
+    ("harmony_double", "Harmonie gedoppelt", "Die zweite Stimme singt zweimal, eine Fassung links, eine rechts"),
+    ("sung_pads", "Gesungene Flächen", "Drei Stimmen singen im Refrain die Akkordtöne auf う (im letzten auf あ) statt "
+                                       "des Keyboard-Chors; NEUTRINO singt dafür etwas länger"),
+    ("adlibs", "Ad-libs im letzten Refrain", "Kurze Rufe (いぇー, おー) und Echo-Antworten in den Lücken des Gesangs"),
+)
+
+# Noten, die NEUTRINO gut singen kann (neutrino_score.py) und Englisch im Liedtext
+SCORE_SWITCHES = (
+    ("long_vowel_mark", "Haltezeichen ー für lange Vokale", "Lang gezogene Vokale und Melismen bekommen für NEUTRINO "
+                                                            "das Haltezeichen ー statt einer neuen Silbe"),
+    ("breath_marks", "Atemzeichen in langen Zeilen", "Nach spätestens zwei Takten Gesang atmet die Stimme an der "
+                                                     "nächsten kleinen Pause; NEUTRINO braucht dann weniger Speicher"),
+    ("fast_diphthongs", "Schnelle Stellen flüssig", "Zwei sehr schnelle Töne mit Doppelvokal (か + い) singt NEUTRINO "
+                                                    "auf einem Ton, wie es seine Anleitung empfiehlt"),
+    ("english_kana", "Englisch als Katakana", "Englische Wörter im Text werden so gesungen, wie man sie in J-Pop singt "
+                                              "(love → ラブ). NEUTRINO kann kein Englisch."),
+    ("singable_melody", "Singbare Melodie", "Keine Sprünge über eine Quinte auf kurzen Silben, der höchste Ton nicht "
+                                            "nur eine Sechzehntel lang, nach spätestens 8 Sekunden eine Atempause. "
+                                            "Gilt nicht für eine eigene Melodie."),
 )
 
 
-def voice_panel(s: SongSettings, singers: list) -> tuple:
-    """Rückgabe: die Auswahl der Stimme und die der Duett-Stimme, damit die Seite ihre Listen erneuern kann."""
+def voice_panel(s: SongSettings, singers: list, pick: PickFn | None = None) -> tuple:
+    """Rückgabe: die Auswahl der Stimme, der Duett- und der Support-Stimme, damit die Seite ihre Listen erneuern
+    kann."""
     ui.select(labels.ENGINES, label="Gesang mit").bind_value(s, "vocal_engine").classes("w-full").mark("engine")
     hint("Fehlt die gewählte Engine, singt die andere; fehlen beide, die Vorschau-Stimme.")
     section_title("NEUTRINO")
@@ -526,7 +599,13 @@ def voice_panel(s: SongSettings, singers: list) -> tuple:
         .classes("w-full").mark("duet")
     hint("Im Duett wechseln sich die Stimmen in den Strophen ab, die Bridge singt die zweite, im Refrain singt "
          "sie die zweite Stimme. Braucht NEUTRINO.")
+    support = ui.select(support_options(singers, s), label="Support-Stimme (Versuch)") \
+        .bind_value(s, "support_singer").classes("w-full").mark("support")
+    hint("Eine zweite Stimme läuft als Support-Modell mit und gibt der Hauptstimme eine andere Färbung, z. B. MERROW "
+         "mit SOMA. NEUTRINO nennt das selbst experimentell; braucht Run_support_model.bat (ab NEUTRINO 3).")
     ui.switch("Zweite Stimme im Refrain").bind_value(s, "harmonies")
+    ui.switch("Lieblingsstimme je Stil").bind_value(s, "style_singer").props("dense").mark("switch-style_singer") \
+        .tooltip("Beim Wechsel des Stils wählt die App die Stimme, die du im Stimmen-Casting für ihn gemerkt hast")
     with ui.row().classes("w-full items-center gap-4"):
         ui.label("StyleShift").classes("w-28")
         ui.slider(min=-6, max=6, step=1).bind_value(s, "style_shift").props("label markers").classes("col")
@@ -538,8 +617,55 @@ def voice_panel(s: SongSettings, singers: list) -> tuple:
         .mark("switch-vocal_comping") \
         .tooltip("Wie im Studio: jede Zeile kommt aus der Fassung, die ihre Töne am besten trifft. Aus ist es die "
                  "sauberste ganze Fassung. Die zweitbeste Fassung doppelt den Refrain (mit der Studio-Gesangskette).")
+    ui.switch("Fassungen ohne Farbsprung").bind_value(s, "even_takes").props("dense").mark("switch-even_takes") \
+        .tooltip("Alle Fassungen singen mit demselben StyleShift, und eine Phrase wechselt die Fassung nur bei groben "
+                 "Fehlern (falscher Ton, Kiekser), nicht wegen schöner Schleifer. Singt NEUTRINO jedes Mal dasselbe, "
+                 "merkt die App das und singt die weiteren Fassungen eine Stufe heller und dunkler.")
+    section_title("Strophe ruhig, Refrain kräftig")
+    ui.switch("StyleShift pro Sektion").bind_value(s, "section_style").props("dense").mark("switch-section_style") \
+        .tooltip("NEUTRINO singt die Strophen tiefer und ruhiger, die Refrains heller und kräftiger. Jede Sektion "
+                 "wird einzeln gesungen und in den Pausen zusammengesetzt; das dauert etwas länger.")
+    for text, attr in (("Strophe", "verse_style_shift"), ("Refrain", "chorus_style_shift")):
+        with ui.row().classes("w-full items-center gap-4"):
+            ui.label(text).classes("w-28")
+            ui.slider(min=-3, max=3, step=1).bind_value(s, attr).props("label markers").classes("col") \
+                .bind_enabled_from(s, "section_style").mark(f"slider-{attr}")
+    hint("Zum StyleShift oben dazu: minus = dunkler und ruhiger, plus = heller und kräftiger. Zweite Stimme und Chor "
+         "singen wie der Refrain. Die NEUTRINO-Ausgabe mit Tuning-Tool (.ex) kennt keinen StyleShift.")
+    section_title("Begleitstimmen (NEUTRINO)")
+    for attr, text, tip in BACKING_SWITCHES:
+        ui.switch(text).bind_value(s, attr).props("dense").tooltip(tip).mark(f"switch-{attr}")
+    section_title("Stil-Effekte")
+    for attr, text, tip in STYLE_FX_SWITCHES:
+        ui.switch(text).bind_value(s, attr).props("dense").tooltip(tip).mark(f"switch-{attr}")
+    section_title("Noten für NEUTRINO")
+    for attr, text, tip in SCORE_SWITCHES:
+        ui.switch(text).bind_value(s, attr).props("dense").tooltip(tip).mark(f"switch-{attr}")
+    section_title("Eigene Gesangsspur")
+    with ui.row().classes("w-full items-center no-wrap"):
+        ui.input("WAV statt der Hauptstimme", placeholder="leer = die Engine singt") \
+            .bind_value(s, "own_vocal").classes("col").props("dense stack-label clearable").mark("own-vocal")
+        if pick is not None:
+            pick_button(pick, s, "own_vocal", file_types=("WAV (*.wav)",))
+    ui.switch("An den Noten ausrichten").bind_value(s, "own_vocal_align").props("dense").mark("switch-own_vocal_align")
+    hint("Für Feinarbeit im NEUTRINO-Tuning-Tool, in VoiSona oder für eine eigene Aufnahme: „Noten für Tuning-Tools“ "
+         "exportieren, dort bearbeiten, die WAV hier wählen. Sie ersetzt die Hauptstimme und wird gemischt wie der "
+         "eigene Gesang; der Vorlauftakt fällt beim Ausrichten weg. Die Begleitstimmen singt weiter die Engine.")
+    section_title("DiffSinger (Versuch)")
+    with ui.row().classes("w-full items-center no-wrap"):
+        ui.input("Stimme (Ordner mit dsconfig.yaml)", placeholder="leer = die erste aus OpenUtau") \
+            .bind_value(s, "diffsinger_voice").classes("col").props("dense stack-label clearable").mark("diffsinger")
+        if pick is not None:
+            pick_button(pick, s, "diffsinger_voice", folder=True)
+    hint("DiffSinger-Stimmen für OpenUtau (Ordner Singers, Vocoder unter Dependencies) singen ohne OpenUtau: die App "
+         "rechnet ihre Modelle selbst, wie OpenUtau. Ein Versuch: Konsonanten und Tonhöhe setzt die App nach festen "
+         "Regeln. Jede Stimme hat eigene Nutzungsregeln.")
     section_title("VOICEVOX")
     voicevox_editor(s)
+    ui.switch("VOICEVOX singt laut und leise selbst").bind_value(s, "voicevox_dynamics").props("dense") \
+        .mark("switch-voicevox_dynamics") \
+        .tooltip("Betonte Silben und der Weg zum Höhepunkt einer Zeile gehen als Lautstärke in den Gesang ein, statt "
+                 "danach lauter und leiser gedreht zu werden. Leiser klingt dann auch weicher.")
     section_title("Lebendiger Gesang")
     for attr, text, tip in LIVELY_SWITCHES:
         ui.switch(text).bind_value(s, attr).props("dense").tooltip(tip).mark(f"switch-{attr}")
@@ -548,15 +674,18 @@ def voice_panel(s: SongSettings, singers: list) -> tuple:
             ui.label(text).classes("w-28")
             ui.slider(min=0, max=2, step=0.1).bind_value(s, attr).props("label markers").classes("col") \
                 .mark(f"slider-{attr}")
+    ui.switch("Mit PSOLA statt WORLD").bind_value(s, "psola_reshape").props("dense").mark("switch-psola_reshape") \
+        .tooltip("Praat-PSOLA verschiebt nur die Tonhöhe und lässt den Klang der Stimme, wie er ist. Aus: der "
+                 "WORLD-Vocoder baut jede Phrase neu, das klingt eine Spur rauer.")
     hint("1 = wie die Stimme singt. Vibrato 0 = gerade Töne, 2 = doppelt so viel; Übergänge 0 = die Töne springen "
-         "(wie Autotune), 2 = die Stimme gleitet doppelt so lange. Bei NEUTRINO wird die Aufnahme dafür neu "
-         "berechnet (WORLD), das klingt eine Spur rauer.")
+         "(wie Autotune), 2 = die Stimme gleitet doppelt so lange. Bei NEUTRINO wird die Aufnahme dafür Phrase für "
+         "Phrase umgerechnet, bei 1 und 1 bleibt sie unberührt.")
     section_title("Vorschau-Stimme (wenn NEUTRINO und VOICEVOX fehlen)")
     with ui.row().classes("w-full items-center gap-4"):
         ui.label("Hauchigkeit").classes("w-28")
         ui.slider(min=0, max=0.2, step=0.002).bind_value(s, "breathiness").props("label").classes("col")
     ui.switch("Schimmer").bind_value(s, "shimmer")
-    return singer, duet
+    return singer, duet, support
 
 
 def voicevox_editor(s: SongSettings) -> None:
@@ -591,6 +720,11 @@ def voicevox_editor(s: SongSettings) -> None:
 def duet_options(singers: list, s: SongSettings) -> dict:
     names = sorted(set(singers) | ({s.duet_singer} if s.duet_singer else set()))
     return {"": "kein Duett", **{n: n for n in names}}
+
+
+def support_options(singers: list, s: SongSettings) -> dict:
+    names = sorted(set(singers) | ({s.support_singer} if s.support_singer else set()))
+    return {"": "aus", **{n: n for n in names}}
 
 
 # ── Mix ─────────────────────────────────────────────────────────────────────────

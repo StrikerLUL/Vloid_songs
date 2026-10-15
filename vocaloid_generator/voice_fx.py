@@ -3,6 +3,8 @@
 # Chor im letzten Refrain.
 # Alles arbeitet auf fertig gesungenen Spuren und kennt dazu die Noten (in Sekunden ab Songanfang).
 import logging
+import os
+from typing import Callable
 from dataclasses import dataclass
 
 import numpy as np
@@ -19,7 +21,7 @@ GLIDE_ZONE = 0.1             # Sekunden vor und nach einem Tonwechsel, in denen 
 VIBRATO_PERIOD = 0.18        # eine Schwingung eines natürlichen Vibratos (5,5 Hz)
 VIBRATO_DEPTH = 0.3          # Halbtöne, die ein zusätzliches Vibrato auf und ab geht
 NATURAL_VIBRATO = 0.08       # ab dieser Tiefe (Halbtöne) hat die Stimme selbst ein Vibrato
-FRAME = 0.005                # Rahmen der Tonhöhenanalyse mit WORLD (Sekunden)
+FRAME = 0.005                # Rahmen der Tonhöhenanalyse mit WORLD und Praat (Sekunden)
 # Chor aus der eigenen Stimme: (Verstimmung in Cent, Verzögerung in Sekunden, Panorama) je Sänger
 CHOIR_VOICES = ((-14, 0.019, -0.85), (9, 0.027, -0.4), (-7, 0.034, 0.4), (15, 0.042, 0.85))
 CHOIR_PAN = 0.6              # gesungene Chorstimmen stehen abwechselnd so weit links und rechts
@@ -65,6 +67,44 @@ def phrases(notes: list, gap: float = PHRASE_GAP) -> list:
     return out
 
 
+def phrase_kinds(groups: list, sections: list) -> list:
+    """Sektionsart je Phrase: die Sektion (Start, Ende in Sekunden, Art), in der die Phrase am längsten liegt.
+    Ein Auftakt vor dem Refrain gehört so zur Strophe davor, eine Zeile, die im Refrain weiterläuft, zum Refrain."""
+    out = []
+    for group in groups:
+        a, b = group[0].start, group[-1].end
+        best = max(sections, key=lambda s: min(b, s[1]) - max(a, s[0]), default=None)
+        out.append(best[2] if best is not None and min(b, best[1]) > max(a, best[0]) else "")
+    return out
+
+
+def only_notes(melody_data: list, silben: list, keep: set) -> tuple:
+    """Die Melodie gleich lang, aber nur mit den gesungenen Tönen, deren Nummer (0 = erster Ton) in keep steht; die
+    anderen werden Pausen. Rückgabe: (melody_data, Silben der übrigen Töne)."""
+    data, syllables, i = [], [], 0
+    for pitch, dur in melody_data:
+        if pitch is None:
+            data.append((None, dur))
+            continue
+        if i in keep:
+            data.append((pitch, dur))
+            syllables.append(silben[i] if i < len(silben) else "ら")
+        else:
+            data.append((None, dur))
+        i += 1
+    return data, syllables
+
+
+def same_audio(a: str, b: str, tolerance: float = 1e-3) -> bool:
+    """Klingen zwei Fassungen gleich (NEUTRINO singt bei gleichem StyleShift jedes Mal dasselbe)?"""
+    x, _ = sf.read(a, dtype="float32", always_2d=True)
+    y, _ = sf.read(b, dtype="float32", always_2d=True)
+    n = min(len(x), len(y))
+    if n == 0 or abs(len(x) - len(y)) > 1:
+        return n == 0 and len(x) == len(y)
+    return float(np.max(np.abs(x[:n] - y[:n]))) <= tolerance
+
+
 def excerpt(melody_data: list, silben: list, start: float, end: float) -> tuple:
     """Nur die Noten, die zwischen den Schlägen start und end beginnen, als melody_data ab start, mit ihren Silben."""
     data, syllables, t, pos, i = [], [], 0.0, start, 0
@@ -82,14 +122,63 @@ def excerpt(melody_data: list, silben: list, start: float, end: float) -> tuple:
 
 
 # ── Atmer ──────────────────────────────────────────────────────────────────────
-def add_breaths(path: str, notes: list, seed: int = 0) -> int:
+BREATH_FOLDER = "Atmer"       # im Datenordner: eigene Atem-Aufnahmen (WAV, FLAC), z. B. CC0 von Freesound
+
+
+def breath_samples(rate: int, folder: str = None) -> list:
+    """Aufgenommene Atmer aus dem Ordner Atmer: [(Länge in Sekunden, mono, Effektivwert 1)], kürzeste zuerst.
+    Stille am Anfang und Ende wird abgeschnitten."""
+    import config
+    from scipy.signal import resample_poly
+    folder = folder or os.path.join(config.DATA_DIR, BREATH_FOLDER)
+    try:
+        names = sorted(n for n in os.listdir(folder) if n.lower().endswith((".wav", ".flac", ".ogg", ".aiff")))
+    except OSError:
+        return []
+    out = []
+    for name in names:
+        try:
+            data, sr = sf.read(os.path.join(folder, name), dtype="float32", always_2d=True)
+        except Exception as e:  # noqa: BLE001 – eine kaputte Datei zählt nicht
+            log.warning("Atmer %s nicht lesbar: %s", name, e)
+            continue
+        mono = data.mean(axis=1)
+        if sr != rate:
+            mono = resample_poly(mono, rate, sr).astype(np.float32)
+        loud = np.flatnonzero(np.abs(mono) > np.abs(mono).max() * 0.02) if len(mono) else []
+        if len(loud) < rate * 0.1:
+            continue
+        mono = mono[loud[0]:loud[-1] + 1]
+        out.append((len(mono) / rate, (mono / (np.sqrt(np.mean(mono ** 2)) + 1e-12)).astype(np.float32)))
+    return sorted(out, key=lambda x: x[0])
+
+
+def _recorded_breath(samples: list, n: int, rate: int, rng: np.random.Generator) -> np.ndarray:
+    """Ein aufgenommener Atmer mit passender Länge (einer der zwei nächstgelegenen), auf n Samples gebracht:
+    zu lang wird vorn gekürzt (das Ende des Einatmens bleibt), zu kurz beginnt später."""
+    dur = n / rate
+    near = sorted(range(len(samples)), key=lambda k: abs(samples[k][0] - dur))[:2]
+    mono = samples[int(rng.choice(near))][1]
+    out = np.zeros(n, dtype=np.float32)
+    if len(mono) >= n:
+        out[:] = mono[len(mono) - n:]
+        fade = min(n // 4, int(0.05 * rate))
+        out[:fade] *= np.linspace(0, 1, fade, dtype=np.float32)
+    else:
+        out[n - len(mono):] = mono
+    return out
+
+
+def add_breaths(path: str, notes: list, seed: int = 0, recorded: bool = True) -> int:
     """Vor jeder Phrase, vor der genug Pause ist, ein hörbares Einatmen in die Gesangsspur mischen.
-    Längere Phrasen bekommen einen tieferen Atemzug. Rückgabe: Anzahl der Atmer."""
+    Längere Phrasen bekommen einen tieferen Atemzug. Mit recorded und Aufnahmen im Ordner Atmer klingen echte
+    Atmer, sonst gefiltertes Rauschen. Rückgabe: Anzahl der Atmer."""
     audio, rate = sf.read(path, dtype="float32", always_2d=True)
     level = _sung_level(audio.mean(axis=1), rate)
     if level <= 0:
         return 0
     rng = np.random.default_rng(seed)
+    samples = breath_samples(rate) if recorded else []
     track = np.zeros(len(audio), dtype=np.float32)
     count, prev_end = 0, 0.0
     for phrase in phrases(notes):
@@ -105,7 +194,7 @@ def add_breaths(path: str, notes: list, seed: int = 0) -> int:
         if a < 0 or a + n > len(track):
             continue
         gain = level * 10 ** (BREATH_DB / 20) * (0.6 + 0.4 * depth) * rng.uniform(0.85, 1.15)
-        track[a:a + n] += breath(n, rate, rng) * gain
+        track[a:a + n] += (_recorded_breath(samples, n, rate, rng) if samples else breath(n, rate, rng)) * gain
         count += 1
     sf.write(path, audio + track[:, None], rate, subtype="FLOAT")
     return count
@@ -249,39 +338,151 @@ def _glides(base: np.ndarray, t: np.ndarray, notes: list, amount: float) -> np.n
     return out
 
 
-def reshape(path: str, notes: list, vibrato: float = 1.0, glide: float = 1.0) -> bool:
-    """Vibrato und Übergänge einer gesungenen Spur mit dem WORLD-Vocoder ändern. Gerechnet wird Phrase für Phrase,
-    die Pausen bleiben unberührt. False, wenn nichts zu tun war."""
+def reshape(path: str, notes: list, vibrato: float = 1.0, glide: float = 1.0, psola: bool = True) -> bool:
+    """Vibrato und Übergänge einer gesungenen Spur ändern. Gerechnet wird Phrase für Phrase, die Pausen bleiben
+    unberührt. psola: mit Praat-PSOLA (parselmouth), das nur die Tonhöhe verschiebt und den Klang der Stimme lässt;
+    ohne, oder wenn parselmouth fehlt, baut der WORLD-Vocoder die Phrase neu (klingt eine Spur rauer).
+    False, wenn nichts zu tun war."""
     if abs(vibrato - 1.0) < 1e-3 and abs(glide - 1.0) < 1e-3:
         return False
-    import pyworld as pw
+
+    def curve(f0: np.ndarray, frame: float, phrase: list, offset: float) -> np.ndarray:
+        return shape_pitch(f0, frame, phrase, vibrato, glide, offset=offset)
+    repitch(path, notes, curve, psola)
+    log.info("Vibrato %.1f, Übergänge %.1f (%s)", vibrato, glide, "PSOLA" if psola and psola_available() else "WORLD")
+    return True
+
+
+def repitch(path: str, notes: list, curve: Callable, psola: bool = True) -> bool:
+    """Eine neue Tonhöhenkurve für jede Phrase der notes: curve(f0 in Hz je FRAME, FRAME, Phrase, Zeit des ersten
+    Rahmens) gibt sie zurück. Mit PSOLA, wenn psola und parselmouth da sind, sonst mit WORLD."""
+    method = _psola if psola and psola_available() else _world
     audio, rate = sf.read(path, dtype="float64", always_2d=True)
     mono = audio.mean(axis=1)
     out = mono.copy()
     pad = 0.15
+    changed = False
     for phrase in phrases(notes):
         a = max(0, int((phrase[0].start - pad) * rate))
         b = min(len(mono), int((phrase[-1].end + pad) * rate))
         if b - a < int(0.1 * rate):
             continue
         x = np.ascontiguousarray(mono[a:b])
-        f0, times = pw.dio(x, rate, f0_floor=70.0, f0_ceil=1100.0, frame_period=FRAME * 1000)
-        f0 = pw.stonemask(x, f0, times, rate)
-        if not np.any(f0 > 0):
+        y = method(x, rate, lambda f0, frame, offset, phrase=phrase: curve(f0, frame, phrase, offset), a / rate)
+        if y is None:
             continue
-        sp = pw.cheaptrick(x, f0, times, rate)
-        ap = pw.d4c(x, f0, times, rate)
-        new = shape_pitch(f0, FRAME, phrase, vibrato, glide, offset=a / rate)
-        y = pw.synthesize(new, sp, ap, rate, frame_period=FRAME * 1000)[:len(x)]
-        y = np.pad(y, (0, len(x) - len(y)))
+        y = np.pad(y[:len(x)], (0, max(0, len(x) - len(y))))
         fade = min(len(y) // 4, int(0.01 * rate))
         ramp = np.linspace(0, 1, fade)
         y[:fade] = x[:fade] * (1 - ramp) + y[:fade] * ramp
         y[-fade:] = y[-fade:] * ramp[::-1] + x[-fade:] * (1 - ramp[::-1])
         out[a:b] = y
+        changed = True
     sf.write(path, np.repeat(out[:, None], audio.shape[1], axis=1).astype(np.float32), rate, subtype="FLOAT")
-    log.info("Vibrato %.1f, Übergänge %.1f", vibrato, glide)
-    return True
+    return changed
+
+
+def psola_available() -> bool:
+    try:
+        import parselmouth  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def _f0(x: np.ndarray, rate: int) -> tuple:
+    """Tonhöhe je FRAME mit WORLD (DIO und StoneMask): genauer im Vibrato als die Analyse von Praat."""
+    import pyworld as pw
+    f0, times = pw.dio(x, rate, f0_floor=70.0, f0_ceil=1100.0, frame_period=FRAME * 1000)
+    return pw.stonemask(x, f0, times, rate), times
+
+
+def _world(x: np.ndarray, rate: int, curve: Callable, offset: float):
+    """curve(f0, FRAME, Zeit des ersten Rahmens) → neue Tonhöhe; WORLD baut die Phrase damit neu."""
+    import pyworld as pw
+    f0, times = _f0(x, rate)
+    if not np.any(f0 > 0):
+        return None
+    sp = pw.cheaptrick(x, f0, times, rate)
+    ap = pw.d4c(x, f0, times, rate)
+    return pw.synthesize(curve(f0, FRAME, offset), sp, ap, rate, frame_period=FRAME * 1000)
+
+
+def _psola(x: np.ndarray, rate: int, curve: Callable, offset: float):
+    """Die neue Tonhöhenkurve als PitchTier in eine Praat-Manipulation, dann Overlap-Add (PSOLA). Gemessen wird die
+    Tonhöhe mit WORLD, neu gerechnet nicht: die Stimme behält ihren Klang."""
+    import parselmouth
+    from parselmouth.praat import call
+    f0, times = _f0(x, rate)
+    if not np.any(f0 > 0):
+        return None
+    new = curve(f0, FRAME, offset)
+    sound = parselmouth.Sound(x, sampling_frequency=rate)
+    manipulation = call(sound, "To Manipulation", 0.01, 70.0, 1100.0)
+    tier = call("Create PitchTier", "neu", sound.xmin, sound.xmax)
+    for t, hz in zip(times, new):
+        if hz > 0:
+            call(tier, "Add point", float(t), float(hz))
+    call([manipulation, tier], "Replace pitch tier")
+    return call(manipulation, "Get resynthesis (overlap-add)").values[0]
+
+
+# ── Swing (A6) ─────────────────────────────────────────────────────────────────
+def swung(notes: list, bpm: float) -> list:
+    """Die Töne, die auf einer zweiten Sechzehntel beginnen: diese verschiebt der Swing der Band."""
+    spb = 60.0 / bpm
+    out = []
+    for n in notes:
+        sixteenth = n.start / spb * 4
+        if abs(sixteenth - round(sixteenth)) < 1e-3 and round(sixteenth) % 2 == 1:
+            out.append(n)
+    return out
+
+
+def swing(path: str, notes: list, bpm: float, shift_beats: float) -> int:
+    """Der Gesang swingt wie die Band (orchestrator._to_notes): jeder Ton auf einer zweiten Sechzehntel setzt
+    shift_beats später ein. Die Sechzehntel davor wird dafür etwas gedehnt, die danach gestaucht (Praat-PSOLA mit
+    DurationTier); Tonhöhe, Klang und Gesamtlänge bleiben. Gerechnet wird nur in Phrasen mit solchen Tönen.
+    Rückgabe: Zahl der verschobenen Töne (0 ohne parselmouth)."""
+    if shift_beats <= 0 or not psola_available():
+        return 0
+    import parselmouth
+    from parselmouth.praat import call
+    q = 60.0 / bpm / 4                                  # eine Sechzehntel in Sekunden
+    d = min(shift_beats * 60.0 / bpm, q * 0.5)
+    audio, rate = sf.read(path, dtype="float64", always_2d=True)
+    mono = audio.mean(axis=1)
+    out = mono.copy()
+    pad = q + 0.05
+    moved = 0
+    for phrase in phrases(notes):
+        onsets = [n.start for n in swung(phrase, bpm)]
+        a = max(0, int((phrase[0].start - pad) * rate))
+        b = min(len(mono), int((phrase[-1].end + pad) * rate))
+        onsets = [s - a / rate for s in onsets if s - q > a / rate and s + q < b / rate]
+        if not onsets:
+            continue
+        x = np.ascontiguousarray(mono[a:b])
+        sound = parselmouth.Sound(x, sampling_frequency=rate)
+        manipulation = call(sound, "To Manipulation", 0.01, 70.0, 1100.0)
+        tier = call("Create DurationTier", "swing", sound.xmin, sound.xmax)
+        eps = min(0.002, q / 10)
+        for s in onsets:
+            for t, factor in ((s - q, 1.0), (s - q + eps, (q + d) / q), (s - eps, (q + d) / q),
+                              (s + eps, (q - d) / q), (s + q - eps, (q - d) / q), (s + q, 1.0)):
+                call(tier, "Add point", float(t), float(factor))
+        call([manipulation, tier], "Replace duration tier")
+        y = call(manipulation, "Get resynthesis (overlap-add)").values[0]
+        y = np.pad(y[:len(x)], (0, max(0, len(x) - len(y))))
+        fade = min(len(y) // 4, int(0.01 * rate))
+        ramp = np.linspace(0, 1, fade)
+        y[:fade] = x[:fade] * (1 - ramp) + y[:fade] * ramp
+        y[-fade:] = y[-fade:] * ramp[::-1] + x[-fade:] * (1 - ramp[::-1])
+        out[a:b] = y
+        moved += len(onsets)
+    if moved:
+        sf.write(path, np.repeat(out[:, None], audio.shape[1], axis=1).astype(np.float32), rate, subtype="FLOAT")
+    return moved
 
 
 # ── Fassungen ──────────────────────────────────────────────────────────────────
@@ -310,8 +511,16 @@ def _pitch_track(path: str) -> tuple:
     return f0, times, clipped, audio, rate
 
 
-def _note_errors(f0: np.ndarray, times: np.ndarray, notes: list) -> list:
-    """[(Fehler mal Dauer, Dauer)] je Note: mittlere Abweichung in Cent, Aussetzer zählen wie 600 Cent."""
+# Grobe Fehler (Fassungen ohne Farbsprung): bis zu dieser Abweichung (Cent) ist ein Ton nicht falsch, sondern gesungen
+GROSS_CENTS = 50.0
+CRACK_CENTS = 300.0          # ein Sprung der Tonhöhe von einem Rahmen zum nächsten mitten im Ton: ein Kiekser
+CRACK_COST = 300.0           # so viel Cent kostet jeder Kiekser
+SILENT_SCORE = 500.0         # ab diesem Fehler singt eine Fassung die Phrase nicht (z. B. eine andere Sektion)
+
+
+def _note_errors(f0: np.ndarray, times: np.ndarray, notes: list, tolerance: float = 0.0) -> list:
+    """[(Fehler mal Dauer, Dauer)] je Note: mittlere Abweichung in Cent, Aussetzer zählen wie 600 Cent.
+    tolerance: Abweichungen bis zu so vielen Cent zählen nicht; dann kosten auch Kiekser (Sprünge mitten im Ton)."""
     out = []
     for n in notes:
         dur = n.end - n.start
@@ -322,15 +531,19 @@ def _note_errors(f0: np.ndarray, times: np.ndarray, notes: list) -> list:
         sung = sel[sel > 0]
         target = 440.0 * 2 ** ((n.pitch - 69) / 12)
         cents = float(np.median(np.abs(1200 * np.log2(sung / target)))) if len(sung) else 600.0
+        cents = max(0.0, cents - tolerance) if len(sung) else cents
+        if tolerance and len(sung) > 1:
+            cents += CRACK_COST * int(np.sum(np.abs(np.diff(1200 * np.log2(sung))) > CRACK_CENTS))
         out.append(((min(cents, 600.0) + 600.0 * (1 - len(sung) / len(sel))) * dur, dur))
     return out
 
 
-def pitch_error(path: str, notes: list) -> float:
+def pitch_error(path: str, notes: list, tolerance: float = 0.0) -> float:
     """Wie weit eine Fassung danebenliegt (kleiner ist besser): mittlere Abweichung von den Noten in Cent,
-    Aussetzer (stumm, wo gesungen werden soll) zählen wie 600 Cent, übersteuerte Stellen kosten extra."""
+    Aussetzer (stumm, wo gesungen werden soll) zählen wie 600 Cent, übersteuerte Stellen kosten extra.
+    tolerance: siehe _note_errors (grobe Fehler statt jeder Abweichung)."""
     f0, times, clipped, _, _ = _pitch_track(path)
-    errors = _note_errors(f0, times, notes)
+    errors = _note_errors(f0, times, notes, tolerance)
     weight = sum(d for _, d in errors)
     return (sum(e for e, _ in errors) / weight if weight else 600.0) + float(np.mean(clipped)) * 1e4
 
@@ -339,10 +552,10 @@ def pitch_error(path: str, notes: list) -> float:
 COMP_FADE = 0.03             # Überblendung an den Schnitten (Sekunden), mitten in der Pause zwischen zwei Phrasen
 
 
-def phrase_errors(track: tuple, notes: list, groups: list) -> list:
+def phrase_errors(track: tuple, notes: list, groups: list, tolerance: float = 0.0) -> list:
     """Fehler je Phrase (wie pitch_error, nur über die Noten der Phrase und ihre Zeit)."""
     f0, times, clipped = track[:3]
-    errors = _note_errors(f0, times, notes)
+    errors = _note_errors(f0, times, notes, tolerance)
     index = {id(n): i for i, n in enumerate(notes)}
     out = []
     for group in groups:
@@ -372,11 +585,14 @@ def _segment_masks(choice: list, cuts: list, takes: int, length: int, rate: int,
     return np.stack([smooth(m, int(COMP_FADE * rate)) for m in masks])
 
 
-def comp(takes: list, notes: list, out_path: str, double_path: str = None, double_windows: list = ()) -> list:
+def comp(takes: list, notes: list, out_path: str, double_path: str = None, double_windows: list = (),
+         tolerance: float = 0.0, forced: dict = None) -> list:
     """
     Setzt die Hauptstimme Phrase für Phrase aus der saubersten Fassung zusammen und schreibt sie nach out_path.
     double_path: dort landet in den double_windows (Sekunden, z. B. die Refrains) die zweitbeste Fassung jeder Phrase,
-    eine echte Doppelung statt einer Kopie. Rückgabe: die gewählte Fassung (Index in takes) je Phrase.
+    eine echte Doppelung statt einer Kopie; eine Fassung, die die Phrase gar nicht singt, doppelt nicht.
+    tolerance: grobe Fehler statt jeder Abweichung (siehe _note_errors). forced: {Phrase: Fassung}, die feststehen
+    (von Hand neu gesungen); sie bekommen keine Doppelung. Rückgabe: die Fassung je Phrase.
     """
     groups = phrases(notes)
     tracks = [_pitch_track(t) for t in takes]
@@ -387,9 +603,10 @@ def comp(takes: list, notes: list, out_path: str, double_path: str = None, doubl
         if tr[4] != rate:
             raise ValueError("Die Fassungen haben verschiedene Abtastraten")
         audio[k, :len(tr[3])] = tr[3]
-    scores = np.array([phrase_errors(tr, notes, groups) for tr in tracks])      # [Fassung, Phrase]
+    scores = np.array([phrase_errors(tr, notes, groups, tolerance) for tr in tracks])      # [Fassung, Phrase]
     order = np.argsort(scores, axis=0, kind="stable")
-    choice = [int(order[0, p]) for p in range(len(groups))]
+    forced = forced or {}
+    choice = [forced.get(p, int(order[0, p])) for p in range(len(groups))]
     cuts = _cut_points(groups)
     masks = _segment_masks(choice, cuts, len(takes), length, rate)
     sf.write(out_path, np.einsum("kt,ktc->tc", masks, audio), rate, subtype="FLOAT")
@@ -397,7 +614,8 @@ def comp(takes: list, notes: list, out_path: str, double_path: str = None, doubl
         keep = np.zeros(length, dtype=np.float32)
         for start, end in double_windows:
             keep[max(0, int(start * rate)):min(length, int(end * rate))] = 1.0
-        second = [int(order[1, p]) for p in range(len(groups))]
+        second = [int(order[1, p]) if scores[order[1, p], p] < SILENT_SCORE and p not in forced else None
+                  for p in range(len(groups))]
         masks = _segment_masks(second, cuts, len(takes), length, rate, keep)
         double = np.einsum("kt,ktc->tc", masks, audio)
         if np.max(np.abs(double)) > 1e-4:
@@ -458,6 +676,91 @@ def express(path: str, notes: list, sections: list, amount: float = 1.0) -> bool
     shaped = audio * gain[:, None] + highs * ((gain - 1) * BRIGHT)[:, None]
     sf.write(path, shaped.astype(np.float32), rate, subtype="FLOAT")
     return True
+
+
+# ── Lautstärke pro Silbe (C2) ──────────────────────────────────────────────────
+ACCENT_DB = 1.5              # betonte Silbe (Wortakzent oder starke Zählzeit) lauter
+BOTH_DB = 2.5                # Wortakzent auf der starken Zählzeit
+PICKUP_DB = -1.5             # kurze Silbe direkt vor einem Hochton leiser (Anlauf)
+ONSET_DB = -6.0              # weicher Einsatz am Phrasenanfang: so leise beginnt der erste Ton
+ONSET_SECONDS = 0.06
+SYLLABLE_FADE = 0.02         # Sekunden Übergang zwischen den Silben
+
+
+def syllable_gains(melody_data: list, silben: list, bpm: float) -> list:
+    """[(Start, Ende in Sekunden, dB)] je gesungenem Ton: wie stark die Silbe betont wird."""
+    from vocal_synthesizer import _gebunden
+    spb = 60.0 / bpm
+    sung, t, i = [], 0.0, 0
+    for pitch, dur in _gebunden(melody_data):
+        if pitch is not None:
+            syl = silben[i] if i < len(silben) else ""
+            sung.append((t, dur, int(pitch), syl))
+            i += 1
+        t += dur
+    out = []
+    for k, (beat, dur, pitch, syl) in enumerate(sung):
+        strong = abs(beat % 2.0) < 1e-6 or abs(beat % 2.0 - 2.0) < 1e-6        # Schlag 1 und 3
+        accent = getattr(syl, "tone", None) == "H" and getattr(syl, "word_start", False) or (
+            getattr(syl, "tone", None) == "H" and k > 0 and getattr(sung[k - 1][3], "tone", None) == "L")
+        held = getattr(syl, "melisma", False)
+        db = BOTH_DB if strong and accent else (ACCENT_DB if strong or accent else 0.0)
+        nxt = sung[k + 1] if k + 1 < len(sung) else None
+        if nxt is not None and dur <= 0.5 and nxt[2] >= pitch + 3 and abs(nxt[0] - beat - dur) < 1e-6:
+            db = PICKUP_DB
+        if held:
+            db = out[-1][2] if out else 0.0                     # ein gehaltener Vokal bleibt, wie er war
+        out.append((beat * spb, (beat + dur) * spb, db))
+    return out
+
+
+def syllable_curve(gains: list, notes: list, length: int, rate: int) -> np.ndarray:
+    """Pegel über die Zeit in dB aus syllable_gains, um den Mittelwert verschoben, mit weichem Phrasenanfang."""
+    curve = np.zeros(length, dtype=np.float32)
+    for start, end, db in gains:
+        curve[int(start * rate):int(end * rate)] = db
+    sung = np.zeros(length, dtype=bool)
+    for start, end, _ in gains:
+        sung[int(start * rate):int(end * rate)] = True
+    if sung.any():
+        curve[sung] -= float(np.mean(curve[sung]))
+    curve = smooth(curve, int(SYLLABLE_FADE * rate))
+    ramp = int(ONSET_SECONDS * rate)
+    for group in phrases(notes):
+        a = int(group[0].start * rate)
+        n = min(ramp, length - a)
+        if n > 0:
+            curve[a:a + n] += np.linspace(ONSET_DB, 0.0, n, dtype=np.float32)
+    return curve
+
+
+def syllable_dynamics(path: str, melody_data: list, silben: list, bpm: float) -> bool:
+    """Lautstärke pro Silbe auf eine fertige Gesangsspur. False, wenn es nichts zu tun gab."""
+    gains = syllable_gains(melody_data, silben, bpm)
+    if not gains:
+        return False
+    audio, rate = sf.read(path, dtype="float32", always_2d=True)
+    db = syllable_curve(gains, timeline(melody_data, bpm), len(audio), rate)
+    sf.write(path, (audio * (10 ** (db / 20))[:, None]).astype(np.float32), rate, subtype="FLOAT")
+    return True
+
+
+def dynamics_db(melody_data: list, silben: list, bpm: float, sections: list, times: np.ndarray,
+                syllables: bool = True, expression: bool = True) -> np.ndarray:
+    """Pegel (dB) aus Lautstärke pro Silbe und Ausdruck pro Phrase zu den Zeiten times (Sekunden ab Songanfang), für
+    eine Engine, die die Lautstärke selbst singt (VOICEVOX, F2)."""
+    rate = 1000
+    times = np.asarray(times, dtype=np.float64)
+    length = int((max(float(times.max()) if len(times) else 0.0, 0.0) + 1.0) * rate)
+    db = np.zeros(length, dtype=np.float32)
+    notes = timeline(melody_data, bpm)
+    if syllables:
+        gains = syllable_gains(melody_data, silben, bpm)
+        if gains:
+            db += syllable_curve(gains, notes, length, rate)
+    if expression and sections and notes:
+        db += expression_curve(notes, sections, length, rate)
+    return np.interp(times, np.arange(length) / rate, db)
 
 
 # ── Chor im letzten Refrain ────────────────────────────────────────────────────

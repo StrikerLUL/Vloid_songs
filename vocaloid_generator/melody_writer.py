@@ -5,6 +5,7 @@
 # Tonleiterschritten. Der Refrain wiederholt seine erste Phrase (Hook), wiederkehrende Sektionen
 # singen dieselbe Melodie. Wo der Text es verrät, folgt die Melodie dem Tonhöhenakzent der Wörter, und
 # manche Phrasen enden mit einem Melisma: die letzte Silbe gleitet auf einen zweiten Ton.
+import logging
 import math
 import random
 from dataclasses import dataclass
@@ -13,6 +14,8 @@ from typing import Optional
 from lyrics import Mora, vowel
 from song_plan import BEATS_PER_BAR, VOCAL_RANGE, Section, SongPlan
 from theory import Chord, scale_pcs
+
+log = logging.getLogger(__name__)
 
 STEPS_PER_BEAT = 4
 BAR_STEPS = STEPS_PER_BEAT * BEATS_PER_BAR
@@ -501,13 +504,14 @@ def _scale_shift(scale: list, pitch: int, steps: int) -> Optional[int]:
 
 # ── Ganzer Song ──────────────────────────────────────────────────────────────────
 def write_vocal_melody(plan: SongPlan, lyrics: dict, rng: random.Random, rerolls: Optional[dict] = None,
-                       imported: Optional[dict] = None, motifs=None) -> list:
+                       imported: Optional[dict] = None, motifs=None, singable: bool = False) -> list:
     """
     Melodie für alle Sektionen mit Gesang. Jede Sektionsart wird einmal komponiert; spätere Vorkommen
     singen dieselbe Melodie (im Schlussrefrain höher, wenn der Song die Tonart wechselt).
     Jede Sektionsart würfelt für sich; rerolls {Sektionsart: Zufall} schreibt nur ihre Melodie neu.
     imported {Sektionsart: Melodie aus melody_import.load}: dort singt die eigene Melodie, Ton für Ton.
     motifs: zusätzliche Rhythmen und Gesten (motifs.Motifs), None = nur die eingebauten.
+    singable: die komponierten Töne danach auf Singbarkeit prüfen (make_singable).
     """
     seed = rng.getrandbits(64)
     rerolls, imported = rerolls or {}, imported or {}
@@ -530,8 +534,110 @@ def write_vocal_melody(plan: SongPlan, lyrics: dict, rng: random.Random, rerolls
             sec_notes = [MelNote(n.start - first.start + sec.start, n.dur, n.pitch + shift, n.syllable, n.strong)
                          for n in first_notes]
         notes.extend(sec_notes)
-    _fit_to_chords(plan, [n for n in notes if not imported.get(plan.section_at(n.start).kind)])
+    composed = [n for n in notes if not imported.get(plan.section_at(n.start).kind)]
+    _fit_to_chords(plan, composed)
+    if singable:
+        make_singable(plan, composed)
     return notes
+
+
+# ── Singbarkeit (Gesang 1.1, A5) ────────────────────────────────────────────────
+# Laut NEUTRINO-FAQ klingen extreme Sprünge und Melodien ohne Pause unnatürlich. Die Prüfung ändert nur
+# einzelne Töne: Tonhöhen von Sprüngen und Spitzen, und am Ende langer Strecken wird der letzte Ton kürzer.
+MAX_SHORT_LEAP = 7          # Halbtöne: weiter springt die Stimme nur auf einen Ton ab einer Achtel
+SHORT_NOTE = 0.5            # Schläge: kürzer ist eine kurze Silbe
+LEAP_GAP = 1.0              # nach so viel Pause darf die Stimme neu ansetzen, wo sie will
+SIXTEENTH = 0.25
+PEAK_GAP = 0.5              # Pause in Schlägen, an der eine Phrase für die Spitzen-Prüfung endet
+LONG_PHRASE_SECONDS = 8.0   # so lange singt die Stimme höchstens ohne Atempause
+BREATH_SECONDS = 0.25       # so lang ist die Atempause danach mindestens
+
+
+def make_singable(plan: SongPlan, notes: list) -> dict:
+    """
+    Prüft die Melodie so, wie eine Sängerin sie singen müsste, und ändert die Töne an Ort und Stelle:
+    keine Sprünge über eine Quinte auf eine kurze Silbe, der höchste Ton einer Phrase nicht nur auf einer
+    Sechzehntel, und nach spätestens LONG_PHRASE_SECONDS Gesang eine Atempause.
+    Rückgabe: {"leaps": …, "peaks": …, "breaths": …}, wie viele Stellen geändert wurden.
+    """
+    ordered = sorted(notes, key=lambda n: n.start)
+    done = {"leaps": _soften_leaps(plan, ordered), "peaks": _hold_peaks(plan, ordered),
+            "breaths": _breathe(plan, ordered)}
+    if any(done.values()):
+        log.info("Singbarkeit: %d Sprünge kleiner, %d Spitzen nicht mehr auf Sechzehnteln, %d Atempausen",
+                 done["leaps"], done["peaks"], done["breaths"])
+    return done
+
+
+def _scale_at(plan: SongPlan, n: MelNote) -> tuple:
+    sec = plan.section_at(n.start)
+    chord = plan.chord_at(n.start)
+    return _local_scale(sec.tonic, sec.mode, chord), chord
+
+
+def _soften_leaps(plan: SongPlan, ordered: list) -> int:
+    lo, hi = plan.vocal_range
+    changed = 0
+    for prev, n in zip(ordered, ordered[1:]):
+        if (n.start - prev.start - prev.dur >= LEAP_GAP or n.dur >= SHORT_NOTE
+                or abs(n.pitch - prev.pitch) <= MAX_SHORT_LEAP):
+            continue
+        scale, chord = _scale_at(plan, n)
+        candidates = [p for p in range(prev.pitch - MAX_SHORT_LEAP, prev.pitch + MAX_SHORT_LEAP + 1)
+                      if p % 12 in scale and lo <= p <= hi + 1]
+        if candidates:
+            n.pitch = min(candidates, key=lambda p: (abs(p - n.pitch), n.strong and p % 12 not in chord.pcs, p))
+            changed += 1
+    return changed
+
+
+def _phrases(ordered: list, gap: float) -> list:
+    out, current = [], []
+    for n in ordered:
+        if current and n.start - current[-1].start - current[-1].dur >= gap:
+            out.append(current)
+            current = []
+        current.append(n)
+    return out + [current] if current else out
+
+
+def _hold_peaks(plan: SongPlan, ordered: list) -> int:
+    lo = plan.vocal_range[0]
+    changed = 0
+    for phrase in _phrases(ordered, PEAK_GAP):
+        for _ in range(4):
+            top = max(n.pitch for n in phrase)
+            tops = [n for n in phrase if n.pitch == top]
+            if any(n.dur > SIXTEENTH + 1e-6 for n in tops) or all(n.pitch == top for n in phrase):
+                break
+            for n in tops:
+                scale, _ = _scale_at(plan, n)
+                below = [p for p in range(top - 1, top - 4, -1) if p % 12 in scale and p >= lo]
+                if not below:
+                    return changed
+                n.pitch = below[0]
+            changed += 1
+    return changed
+
+
+def _breathe(plan: SongPlan, ordered: list) -> int:
+    beat = 60.0 / plan.bpm
+    breath = max(SIXTEENTH, math.ceil(BREATH_SECONDS / beat / SIXTEENTH) * SIXTEENTH)
+    changed = 0
+    run_start = ordered[0].start if ordered else 0.0
+    for n, nxt in zip(ordered, ordered[1:]):
+        gap = nxt.start - n.start - n.dur
+        if gap >= breath - 1e-6:
+            run_start = nxt.start
+            continue
+        if (n.start + n.dur - run_start) * beat < LONG_PHRASE_SECONDS or getattr(nxt.syllable, "melisma", False):
+            continue
+        shorter = nxt.start - breath - n.start
+        if shorter >= SIXTEENTH - 1e-6:
+            n.dur = shorter
+            run_start = nxt.start
+            changed += 1
+    return changed
 
 
 def _fit_to_chords(plan: SongPlan, notes: list) -> None:
@@ -547,17 +653,31 @@ def _fit_to_chords(plan: SongPlan, notes: list) -> None:
             n.pitch = min(candidates, key=lambda p: (abs(p - n.pitch), p))
 
 
-def harmony_line(plan: SongPlan, notes: list, kinds: tuple = ("Chorus",)) -> list:
+PHRASE_END_GAP = 1.0     # Schläge Pause, ab denen ein Ton eine Phrase beendet
+END_NOTES = 2            # so viele Töne am Phrasenende singt die Harmonie „nur auf Phrasenenden“
+
+
+def harmony_line(plan: SongPlan, notes: list, kinds: tuple = ("Chorus",), modes: Optional[dict] = None) -> list:
     """
     Zweite Stimme für den Refrain: die Terz über der Melodie aus der Tonleiter; auf langen Tönen ein
     Akkordton. Passt sie nicht mehr in die Stimmlage, singt sie darunter. Im Breakdown schweigt sie.
+    modes: {Start der Sektion: Art}; "above" (Terz darüber, Standard), "below" (Terz darunter, wenn sie in die
+    Stimmlage passt) oder "ends" (Terz darüber nur auf den letzten Tönen jeder Phrase).
     """
     lo, hi = plan.vocal_range
+    ordered = sorted(notes, key=lambda n: n.start)
+    ends = set()
+    for k, n in enumerate(ordered):
+        if k + 1 == len(ordered) or ordered[k + 1].start - (n.start + n.dur) >= PHRASE_END_GAP:
+            ends.update(id(m) for m in ordered[max(0, k - END_NOTES + 1):k + 1])
     out = []
     for n in notes:
         sec = plan.section_at(n.start)
         if sec.kind not in kinds or (sec.feel == "breakdown" and n.start < sec.resume):
             continue    # im leisen Teil singt die Stimme allein
+        mode = (modes or {}).get(sec.start, "above")
+        if mode == "ends" and id(n) not in ends:
+            continue
         chord = sec.chord_at(n.start)
         scale = sorted(set(scale_pcs(sec.tonic, sec.mode)) | set(chord.pcs))
         ladder = [p for p in range(n.pitch - 12, n.pitch + 13) if p % 12 in scale]
@@ -567,6 +687,8 @@ def harmony_line(plan: SongPlan, notes: list, kinds: tuple = ("Chorus",)) -> lis
             above = next((p for p in range(n.pitch + 3, n.pitch + 8) if p % 12 in chord.pcs), above)
             below = next((p for p in range(n.pitch - 3, n.pitch - 10, -1) if p % 12 in chord.pcs), below)
         pitch = above if above <= hi + 2 else below
+        if mode == "below" and below >= lo - 2:
+            pitch = below
         out.append(MelNote(n.start, n.dur, max(pitch, lo - 2), n.syllable, n.strong))
     return out
 

@@ -5,7 +5,9 @@
 # UniDic kennt auch den Tonhöhenakzent jedes Worts (Tokio): jede More merkt sich, ob sie hoch oder tief
 # gesprochen wird, damit die Melodie den Wörtern folgen kann.
 # Romaji (kimi no koe) wird mit jaconv zu Hiragana, wenn die ganze Zeile aus Romaji besteht oder neben japanischer
-# Schrift steht; englische Wörter (love, baby) bleiben, wie sie sind.
+# Schrift steht. Englische Wörter (love, baby) werden zu Katakana, so wie man sie in J-Pop singt (ラブ, ベイビー):
+# erst eine kleine Liste typischer Song-Wörter, dann das Wörterbuch von alkana, dann das Modell von e2k. NEUTRINO kann
+# kein Englisch singen. Ohne diesen Schalter bleiben sie, wie sie sind.
 import functools
 import logging
 import re
@@ -71,16 +73,16 @@ def normalize_section(name: str) -> str:
     return _SECTION_ALIASES.get(key, name.strip())
 
 
-def parse_lyrics(text: str, romaji: bool = True) -> dict:
+def parse_lyrics(text: str, romaji: bool = True, english: bool = False) -> dict:
     """
     Zerlegt den Lyrics-Text der App in {Sektion: [Silben]}.
     Format: eine Überschrift wie [Verse] pro Sektion, darunter Silben mit Leerzeichen getrennt.
-    Text vor der ersten Überschrift wird ignoriert.
+    Text vor der ersten Überschrift wird ignoriert. english: englische Wörter als Katakana singen.
     """
-    return {name: [s for line in lines for s in line] for name, lines in section_lines(text, romaji).items()}
+    return {name: [s for line in lines for s in line] for name, lines in section_lines(text, romaji, english).items()}
 
 
-def section_lines(text: str, romaji: bool = True) -> dict:
+def section_lines(text: str, romaji: bool = True, english: bool = False) -> dict:
     """{Sektion: [[Silben einer Zeile], ...]}: wie parse_lyrics, aber Zeile für Zeile (für den Text zum Mitlesen)."""
     sections = {}
     current = None
@@ -91,20 +93,20 @@ def section_lines(text: str, romaji: bool = True) -> dict:
             current = normalize_section(header.group(1))
             sections.setdefault(current, [])
         elif current and line:
-            sung = syllables(line, romaji)
+            sung = syllables(line, romaji, english)
             if sung:
                 sections[current].append(sung)
     return {name: lines for name, lines in sections.items() if lines}
 
 
-def syllables(line: str, romaji: bool = True) -> list:
+def syllables(line: str, romaji: bool = True, english: bool = False) -> list:
     """
     Eine Textzeile als Silben zum Singen. Japanisch wird in Moren zerlegt, ob mit Leerzeichen oder ohne,
-    Kanji werden vorher gelesen. romaji: Romaji wird vorher japanisch (romaji_to_kana). Andere Wörter ohne japanische
-    Schrift bleiben ganz (wie bisher).
+    Kanji werden vorher gelesen. romaji: Romaji wird vorher japanisch (romaji_to_kana). english: übrige Wörter in
+    lateinischer Schrift werden zu Katakana (english_to_kana); ohne bleiben sie ganz (wie bisher).
     """
-    if romaji:
-        line = romaji_to_kana(line)
+    if romaji or english:
+        line = latin_to_kana(line, romaji, english)
     tokens = line.split()
     if len(tokens) > 1 and all(_JAPANESE.search(t) and not _KANJI.search(t) for t in tokens):
         # Kana mit Leerzeichen zwischen den Silben (よ る の ま ち): als ganzen Satz lesen, damit die Wörter
@@ -136,6 +138,88 @@ def romaji_to_kana(line: str) -> str:
     return " ".join(latin.get(t) or t for t in tokens)
 
 
+def latin_to_kana(line: str, romaji: bool = True, english: bool = True) -> str:
+    """
+    Wörter in lateinischer Schrift singbar machen. Romaji wie bei romaji_to_kana: wenn die ganze Zeile Romaji ist oder
+    das Wort neben japanischer Schrift steht. english: alle anderen werden Katakana ('I love you' → 'アイ ラブ ユー',
+    auch wenn „you“ wie Romaji aussieht, weil die Zeile Englisch ist; 'kimi no koe love' → 'きみ の こえ ラブ').
+    """
+    tokens = line.split()
+    latin = {t for t in tokens if _LATIN.search(t) and not _JAPANESE.search(t)}
+    if not latin:
+        return line
+    as_romaji = {t: _romaji_kana(t) for t in latin} if romaji else {}
+    japanese = any(_JAPANESE.search(t) for t in tokens)
+    share = sum(bool(as_romaji.get(t)) for t in latin) / len(latin)
+    # Mit Englisch darf eine Romaji-Zeile ein englisches Wort haben (kimi no koe love); sonst muss alles Romaji sein
+    romaji_ok = japanese or share >= (ROMAJI_LINE_SHARE if english else 1.0)
+    out = []
+    for t in tokens:
+        if t not in latin:
+            out.append(t)
+        elif romaji_ok and as_romaji.get(t):
+            out.append(as_romaji[t])
+        elif english:
+            out.append(english_to_kana(t))
+        else:
+            out.append(t)
+    return " ".join(out)
+
+
+# Ab diesem Anteil an Romaji-Wörtern ist eine Zeile Romaji (die übrigen Wörter sind Englisch), darunter Englisch
+ROMAJI_LINE_SHARE = 0.75
+# Song-Wörter, wie sie in J-Pop gesungen werden; vor dem Wörterbuch, das sie anders liest (yeah → ヤー)
+SONG_WORDS = {"yeah": "イェー", "yeh": "イェー", "oh": "オー", "ooh": "ウー", "ah": "アー", "baby": "ベイビー",
+              "love": "ラブ", "hey": "ヘイ", "wow": "ワオ", "la": "ラ", "na": "ナ", "my": "マイ", "you": "ユー",
+              "i": "アイ", "me": "ミー", "uh": "ア", "woah": "ウォー", "whoa": "ウォー", "go": "ゴー"}
+# ヴ (v) gibt es nicht in jeder Stimme: wie im Alltag als b singen
+_V_KANA = {"ヴァ": "バ", "ヴィ": "ビ", "ヴェ": "ベ", "ヴォ": "ボ", "ヴュ": "ビュ", "ヴ": "ブ"}
+
+
+def english_to_kana(token: str) -> str:
+    """'love' → 'ラブ', 'forever,' → 'フォーエバー'. Satzzeichen fallen weg; was nicht klappt, bleibt, wie es war."""
+    word = re.sub(r"[^a-z']", "", token.lower()).replace("'", "")
+    if not word:
+        return token
+    kana = SONG_WORDS.get(word) or _dictionary_kana(word) or _model_kana(word)
+    if not kana:
+        return token
+    for v, b in _V_KANA.items():
+        kana = kana.replace(v, b)
+    return kana
+
+
+def _dictionary_kana(word: str) -> str:
+    try:
+        import alkana
+        return alkana.get_kana(word) or ""
+    except Exception as e:  # noqa: BLE001 – ohne Wörterbuch bleibt das Modell
+        log.debug("alkana: %s", e)
+        return ""
+
+
+@functools.lru_cache(maxsize=1)
+def _english_model():
+    try:
+        from e2k import C2K
+        return C2K()
+    except Exception as e:  # noqa: BLE001
+        log.debug("e2k nicht verfügbar: %s", e)
+        return None
+
+
+def _model_kana(word: str) -> str:
+    model = _english_model()
+    if model is None:
+        return ""
+    try:
+        kana = model(word)
+    except Exception as e:  # noqa: BLE001
+        log.debug("e2k %s: %s", word, e)
+        return ""
+    return kana if kana and all("\u30a0" <= c <= "\u30ff" for c in kana) else ""
+
+
 def _romaji_kana(token: str) -> str:
     """Ein Wort in Romaji als Hiragana, sonst ""."""
     core = token.lower().translate(_MACRONS).strip(_PUNCTUATION)
@@ -158,12 +242,16 @@ def accented_morae(text: str) -> list:
             continue
         if pos1 in _FUNCTION_WORDS:
             level = ("H" if flat_before else "L") if out and out[-1].tone else None
-            out += [Mora(m, level) for m in ms]
+            out += [Mora(m, level, melisma=_held(m)) for m in ms]
             continue
         tones = _tones(len(ms), accent) if len(ms) > 1 or accent is not None else [None]
-        out += [Mora(m, t, word_start=i == 0) for i, (m, t) in enumerate(zip(ms, tones))]
+        out += [Mora(m, t, word_start=i == 0, melisma=_held(m)) for i, (m, t) in enumerate(zip(ms, tones))]
         flat_before = accent == 0
     return out
+
+
+def _held(m) -> bool:
+    return bool(getattr(m, "melisma", False))
 
 
 def _tones(n: int, accent) -> list:
@@ -185,7 +273,8 @@ def vowel(syllable: str):
 
 
 def morae(kana: str) -> list:
-    """'きゃっとー' → ['きゃ', 'っ', 'と', 'お']; alles außer Kana fällt weg."""
+    """'きゃっとー' → ['きゃ', 'っ', 'と', 'お']; alles außer Kana fällt weg. Der Vokal aus „ー“ ist eine Mora mit
+    melisma=True: kein neuer Einsatz, die Silbe davor klingt weiter (für NEUTRINO wird daraus wieder ー)."""
     out = []
     for ch in _hiragana(kana):
         if ch in _SMALL and out:
@@ -193,7 +282,7 @@ def morae(kana: str) -> list:
         elif "\u3041" <= ch <= "\u3096":
             out.append(ch)
         elif ch == "ー" and out and out[-1][-1] in _VOWELS:
-            out.append(_VOWELS[out[-1][-1]])
+            out.append(Mora(_VOWELS[out[-1][-1]], melisma=True))
     return out
 
 

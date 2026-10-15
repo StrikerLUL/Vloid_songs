@@ -45,6 +45,30 @@ def without_sound_library(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def without_airwindows(tmp_path, monkeypatch):
+    """Ein eingerichtetes Airwindows (setup_airwindows.py) färbt die Mixe der Tests nicht."""
+    import airwindows
+    monkeypatch.setattr(airwindows, "FOLDER", str(tmp_path / "airwindows"))
+    monkeypatch.setattr(airwindows, "system_folders", lambda: ())
+
+
+@pytest.fixture(autouse=True)
+def without_style_fx(monkeypatch):
+    """Stil-Effekte (Telefon, Stutter, harter Tune, Formanten) ändern die Gesangsspuren der Tests nicht;
+    test_stil_effekte.py holt sie sich zurück."""
+    import style_fx
+    monkeypatch.setattr(style_fx, "STYLES", {})
+
+
+@pytest.fixture(autouse=True)
+def without_vocal_swing(monkeypatch):
+    """Der Gesang swingt in den Tests nicht mit (Lo-Fi-Songs bleiben wie bisher); test_gesang_swing.py holt es sich
+    zurück."""
+    import pipeline
+    monkeypatch.setattr(pipeline, "VOCAL_SWING_FROM", 2.0)
+
+
+@pytest.fixture(autouse=True)
 def isolated_motifs(tmp_path, monkeypatch):
     """MIDI-Dateien im echten Motiv-Ordner ändern die Melodien der Tests nicht."""
     import motifs

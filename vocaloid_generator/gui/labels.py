@@ -16,6 +16,7 @@ PART_HINTS = {
 }
 SCALES = {"minor": "Moll", "major": "Dur", "dorian": "Dorisch", "phrygian": "Phrygisch"}
 ENGINES = {"NEUTRINO": "NEUTRINO", "VOICEVOX": "VOICEVOX (kostenlos, läuft als App)",
+           "DiffSinger": "DiffSinger (Versuch, Stimmen für OpenUtau)",
            "Vorschau": "Vorschau-Stimme (ohne NEUTRINO und VOICEVOX)"}
 SECTIONS = {
     "Intro": "Intro", "Build-up": "Build-up", "Verse": "Strophe", "PreChorus": "Pre-Chorus", "Chorus": "Refrain",

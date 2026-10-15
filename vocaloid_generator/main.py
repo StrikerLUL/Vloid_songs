@@ -54,8 +54,13 @@ def parse_args(argv=None):
     p.add_argument("--output", help="Ausgabeordner")
     p.add_argument("--stimme", metavar="NAME", help="NEUTRINO-Stimme, z. B. MERROW")
     p.add_argument("--duett", metavar="NAME", help="zweite NEUTRINO-Stimme fürs Duett ('' = kein Duett)")
-    p.add_argument("--engine", choices=["NEUTRINO", "VOICEVOX", "Vorschau"], help="wer singt")
+    p.add_argument("--support-stimme", metavar="NAME", help="NEUTRINO-Stimme, die als Support-Modell die Hauptstimme "
+                   "färbt (Versuch, braucht Run_support_model.bat; '' = aus)")
+    p.add_argument("--engine", choices=["NEUTRINO", "VOICEVOX", "DiffSinger", "Vorschau"], help="wer singt")
+    p.add_argument("--diffsinger-stimme", metavar="ORDNER", help="DiffSinger-Stimme für OpenUtau: ihr Ordner oder Name "
+                   "(Versuch; leer = die erste gefundene)")
     p.add_argument("--voicevox-stimme", type=int, metavar="ID", help="VOICEVOX-Singstimme (Stil-ID)")
+    p.add_argument("--ohne-voicevox-dynamik", action="store_true", help="VOICEVOX singt gleich laut; Silben und Phrasen werden erst danach lauter und leiser")
     p.add_argument("--fassungen", type=int, choices=[1, 2, 3], help="NEUTRINO singt so oft, die sauberste zählt")
     p.add_argument("--album", type=int, metavar="N",
                    help="Album über Nacht: N Songs (bis 30) am Stück, nach Note sortiert in Alben\\<Datum> <Name>")
@@ -70,6 +75,8 @@ def parse_args(argv=None):
     p.add_argument("--vibrato", type=float, metavar="X", help="0 = gerade Töne, 1 = wie gesungen, 2 = doppelt")
     p.add_argument("--uebergaenge", type=float, metavar="X",
                    help="Übergänge zwischen Tönen: 0 = springen, 1 = wie gesungen, 2 = doppelt so lang")
+    p.add_argument("--ohne-psola", action="store_true",
+                   help="Vibrato und Übergänge mit dem WORLD-Vocoder statt mit Praat-PSOLA ändern")
     p.add_argument("--ohne-atmer", action="store_true", help="kein Einatmen vor den Phrasen")
     p.add_argument("--ohne-echo", action="store_true", help="kein Echo auf dem letzten Wort")
     p.add_argument("--ohne-chor", action="store_true", help="kein Chor im letzten Refrain")
@@ -78,7 +85,47 @@ def parse_args(argv=None):
     p.add_argument("--ohne-ausdruck", action="store_true", help="kein Ausdruck pro Phrase (Lautstärke, Helligkeit)")
     p.add_argument("--ohne-gesangskette", action="store_true",
                    help="ohne Sättigung, Hall und Delay je Sektion und echte Doppelung für den Gesang")
+    p.add_argument("--ohne-stimmkette", action="store_true",
+                   help="dieselbe Gesangskette für jede Stimme und jeden Stil (wie bis 1.0)")
+    p.add_argument("--ohne-airwindows", action="store_true",
+                   help="Airwindows Consolidated nicht benutzen, auch wenn es eingerichtet ist")
+    p.add_argument("--ohne-telefon", action="store_true", help="die erste Zeile nicht wie durchs Telefon")
+    p.add_argument("--ohne-stutter", action="store_true", help="kein Stottern der Stimme vor dem Refrain")
+    p.add_argument("--ohne-hardtune", action="store_true", help="kein harter Tune im Refrain")
+    p.add_argument("--ohne-formant", action="store_true", help="die Formanten der Stimme nicht verschieben")
+    p.add_argument("--ohne-gesangsswing", action="store_true", help="der Gesang bleibt gerade, auch wenn die Band swingt")
     p.add_argument("--ohne-romaji", action="store_true", help="Romaji im Liedtext nicht japanisch singen")
+    p.add_argument("--ohne-haltezeichen", action="store_true", help="lange Vokale für NEUTRINO nicht als ー schreiben")
+    p.add_argument("--ohne-atemzeichen", action="store_true", help="keine Atemzeichen in langen Zeilen")
+    p.add_argument("--ohne-doppelvokale", action="store_true", help="schnelle Töne nicht auf einem Ton zusammenlegen")
+    p.add_argument("--ohne-englisch", action="store_true", help="englische Wörter nicht als Katakana singen")
+    p.add_argument("--ohne-singbarkeit", action="store_true",
+                   help="die Melodie nicht auf Sprünge, Spitzen auf Sechzehnteln und Atempausen prüfen")
+    p.add_argument("--ohne-sektions-stil", action="store_true",
+                   help="Strophe und Refrain mit demselben StyleShift singen")
+    p.add_argument("--strophe-stil", type=int, choices=range(-3, 4), metavar="-3..3",
+                   help="StyleShift der Strophen zum StyleShift dazu (Standard -1)")
+    p.add_argument("--refrain-stil", type=int, choices=range(-3, 4), metavar="-3..3",
+                   help="StyleShift der Refrains zum StyleShift dazu (Standard +1)")
+    p.add_argument("--ohne-harmonie-wechsel", action="store_true",
+                   help="in jedem Refrain dieselbe Harmonie (die Terz darüber), keine Oktave")
+    p.add_argument("--ohne-doppel-harmonie", action="store_true", help="die zweite Stimme nur einmal singen")
+    p.add_argument("--ohne-flaechen", action="store_true", help="keine gesungenen Flächen im Refrain")
+    p.add_argument("--ohne-adlibs", action="store_true", help="keine Ad-libs im letzten Refrain")
+    p.add_argument("--ohne-echte-atmer", action="store_true",
+                   help="Atmer aus Rauschen, auch wenn im Ordner Atmer Aufnahmen liegen")
+    p.add_argument("--ohne-silben-lautstaerke", action="store_true",
+                   help="alle Silben gleich laut (keine Betonung, kein weicher Einsatz)")
+    p.add_argument("--ohne-platte", action="store_true",
+                   help="Gesangshall wie bisher (Algorithmus) statt der Platte aus einer Impulsantwort")
+    p.add_argument("--ohne-delay-ducking", action="store_true",
+                   help="das Gesangs-Delay nicht leiser machen, solange gesungen wird")
+    p.add_argument("--ohne-platz", action="store_true",
+                   help="die Band macht dem Gesang keinen Platz (keine Absenkung in seinen Frequenzen)")
+    p.add_argument("--ohne-nachfuehren", action="store_true",
+                   help="die Lautstärke des Gesangs nicht auf der Band nachführen")
+    p.add_argument("--ohne-gleiche-fassungen", action="store_true",
+                   help="Fassungen eine Stufe heller und dunkler singen und nach jeder Abweichung werten")
     p.add_argument("--schlagzeug", choices=["soundfont", "808", "909"],
                    help="Klang des Schlagzeugs: SoundFont oder Drum-Machine (sonst wie der Stil)")
     p.add_argument("--ohne-verstaerker", action="store_true",
@@ -109,6 +156,8 @@ def parse_args(argv=None):
                    "KI-Begleitung in den Einstellungen an ist")
     p.add_argument("--ohne-vorbild-gruppen", action="store_true",
                    help="Gesang, Schlagzeug, Bass und Rest nicht einzeln an die Vorbilder angleichen (Demucs)")
+    p.add_argument("--ohne-vorbild-gesangsklang", action="store_true",
+                   help="die Klangkurve des Gesangs nicht an den Gesang der Vorbilder angleichen")
     p.add_argument("--vom-vorbild", action="store_true",
                    help="Tempo, Tonart und Stil der Vorbilder übernehmen (soweit in den Einstellungen erlaubt)")
     p.add_argument("--lautheit", type=float, metavar="LUFS", help="Ziel-Lautheit des Masters, z. B. -14 für YouTube")
@@ -123,6 +172,8 @@ def parse_args(argv=None):
                    + "; mit :SEKTION nur dort, z. B. melody:Chorus. Ohne --seed und --aus-verlauf gilt der letzte Song.")
     p.add_argument("--refrains", type=int, metavar="N",
                    help="N neue Refrain-Melodien als kurze Vorschau (WAV) schreiben, ohne den ganzen Song")
+    p.add_argument("--casting", action="store_true",
+                   help="Stimmen-Casting: den Refrain-Hook mit jeder installierten NEUTRINO-Stimme singen (WAVs)")
     p.add_argument("--refrain", type=int, metavar="NR",
                    help="den ganzen Song mit dieser Refrain-Melodie erzeugen (Nummer aus der Ausgabe von --refrains, "
                         "mit demselben --seed)")
@@ -130,6 +181,13 @@ def parse_args(argv=None):
                    help="eigene Akkorde, z. B. 'Chorus=F G Em Am' oder 'Verse=vi IV I V' (mehrfach möglich, "
                         "'Chorus=' nimmt wieder die des Stils)")
     p.add_argument("--melodie-midi", metavar="DATEI", help="eigene Melodie als MIDI-Datei ('' = komponieren)")
+    p.add_argument("--eigener-gesang", metavar="WAV",
+                   help="eigene Gesangsspur statt der Hauptstimme, z. B. aus dem NEUTRINO-Tuning-Tool ('' = die "
+                        "Engine singt)")
+    p.add_argument("--ohne-ausrichten", action="store_true",
+                   help="die eigene Gesangsspur nicht an den Noten ausrichten (sie beginnt mit dem Song)")
+    p.add_argument("--noten-zip", metavar="DATEI",
+                   help="die Noten des Gesangs für Tuning-Tools als ZIP exportieren (MusicXML, UST, MIDI)")
     p.add_argument("--summen", metavar="AUFNAHME",
                    help="eine gesummte Melodie (WAV, MP3 …) in Noten verwandeln und singen lassen")
     p.add_argument("--takte", action="append", type=_section_bars, metavar="SEKTION=N",
@@ -192,15 +250,43 @@ def main(argv=None) -> int:
     if args.vom_vorbild:
         settings = from_references(settings)
     overrides = {"seed": args.seed, "bpm": args.bpm, "style": args.style, "key": args.key, "scale": args.scale,
-                 "singer": args.stimme, "duet_singer": args.duett, "master_lufs": args.lautheit,
-                 "vocal_engine": args.engine, "voicevox_singer": args.voicevox_stimme, "vocal_takes": args.fassungen,
+                 "singer": args.stimme, "duet_singer": args.duett, "support_singer": args.support_stimme, "master_lufs": args.lautheit,
+                 "vocal_engine": args.engine, "voicevox_singer": args.voicevox_stimme,
+                 "voicevox_dynamics": False if args.ohne_voicevox_dynamik else None,
+                 "diffsinger_voice": args.diffsinger_stimme, "vocal_takes": args.fassungen,
                  "vibrato": args.vibrato, "glide": args.uebergaenge,
+                 "psola_reshape": False if args.ohne_psola else None,
                  "breaths": False if args.ohne_atmer else None, "echo_throws": False if args.ohne_echo else None,
                  "final_choir": False if args.ohne_chor else None,
                  "vocal_comping": False if args.ohne_comping else None,
                  "phrase_expression": False if args.ohne_ausdruck else None,
                  "vocal_chain": False if args.ohne_gesangskette else None,
+                 "vocal_tone": False if args.ohne_stimmkette else None,
+                 "airwindows": False if args.ohne_airwindows else None,
+                 "telephone_fx": False if args.ohne_telefon else None,
+                 "stutter_fx": False if args.ohne_stutter else None,
+                 "hard_tune": False if args.ohne_hardtune else None,
+                 "formant_fx": False if args.ohne_formant else None,
+                 "vocal_swing": False if args.ohne_gesangsswing else None,
                  "romaji": False if args.ohne_romaji else None,
+                 "long_vowel_mark": False if args.ohne_haltezeichen else None,
+                 "breath_marks": False if args.ohne_atemzeichen else None,
+                 "fast_diphthongs": False if args.ohne_doppelvokale else None,
+                 "english_kana": False if args.ohne_englisch else None,
+                 "singable_melody": False if args.ohne_singbarkeit else None,
+                 "section_style": False if args.ohne_sektions_stil else None,
+                 "verse_style_shift": args.strophe_stil, "chorus_style_shift": args.refrain_stil,
+                 "even_takes": False if args.ohne_gleiche_fassungen else None,
+                 "harmony_variety": False if args.ohne_harmonie_wechsel else None,
+                 "harmony_double": False if args.ohne_doppel_harmonie else None,
+                 "sung_pads": False if args.ohne_flaechen else None,
+                 "adlibs": False if args.ohne_adlibs else None,
+                 "syllable_dynamics": False if args.ohne_silben_lautstaerke else None,
+                 "recorded_breaths": False if args.ohne_echte_atmer else None,
+                 "convolution_reverb": False if args.ohne_platte else None,
+                 "ducked_delay": False if args.ohne_delay_ducking else None,
+                 "vocal_unmask": False if args.ohne_platz else None,
+                 "vocal_ride": False if args.ohne_nachfuehren else None,
                  "guitar_amp": False if args.ohne_verstaerker else None, "cabinet_ir": args.box,
                  "samples": False if args.ohne_samples else None,
                  "real_drums": False if args.ohne_echtes_schlagzeug else None,
@@ -211,10 +297,12 @@ def main(argv=None) -> int:
                  "lofi_texture": False if args.ohne_lofi_klang else None,
                  "mix_movement": False if args.ohne_bewegung else None,
                  "ref_stems": False if args.ohne_vorbild_gruppen else None,
+                 "ref_vocal_curve": False if args.ohne_vorbild_gesangsklang else None,
                  "ai_accompaniment": False if args.ohne_ki_begleitung else (True if args.ki_begleitung else None),
                  "polish": False if args.ohne_veredler else None, "polish_strength": args.veredler_staerke,
                  "polish_caption": args.veredler_klang,
                  "melody_midi": args.melodie_midi, "melody_midi_section": args.melodie_sektion,
+                 "own_vocal": args.eigener_gesang, "own_vocal_align": False if args.ohne_ausrichten else None,
                  "motif_folder": args.motive,
                  "more_motifs": False if args.ohne_motive else None,
                  "learned_motifs": False if args.ohne_motive else None}
@@ -234,6 +322,9 @@ def main(argv=None) -> int:
         if settings is None:
             return 1
     parts = tuple(args.neu or ())
+    if args.style and not args.stimme:
+        import casting
+        settings = casting.favorite(settings)
     if args.entwurf:
         settings = draft_settings(settings)
 
@@ -246,6 +337,8 @@ def main(argv=None) -> int:
 
     if args.refrains:
         return _hooks(settings, args.refrains, progress)
+    if args.casting:
+        return _casting(settings, progress)
     if args.album:
         return _album(settings.with_updates(album_vary=not args.album_gleich), args, progress)
     try:
@@ -281,6 +374,9 @@ def main(argv=None) -> int:
     if args.zip:
         from exporter import exportiere_projekt
         log.info("ZIP: %s", exportiere_projekt(chosen, args.zip))
+    if args.noten_zip:
+        from exporter import exportiere_noten
+        log.info("Noten für Tuning-Tools: %s", exportiere_noten(chosen, args.noten_zip))
     return 0
 
 
@@ -346,6 +442,18 @@ def _hooks(settings: SongSettings, count: int, progress) -> int:
     for choice in choices:
         log.info("Refrain %d: %s  (ganzer Song: --seed %d --refrain %d)", choice.number, choice.preview,
                  choice.settings.seed, choice.settings.variations[key])
+    return 0
+
+
+def _casting(settings: SongSettings, progress) -> int:
+    import casting
+    try:
+        auditions = casting.cast(settings, progress)
+    except ValueError as e:
+        log.error("%s", e)
+        return 1
+    for a in auditions:
+        log.info("%s: %s", a.singer, a.wav)
     return 0
 
 

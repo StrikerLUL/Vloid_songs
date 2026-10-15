@@ -20,7 +20,8 @@ from version import VERSION
 log = logging.getLogger(__name__)
 
 PACKAGES = ("nicegui", "numpy", "scipy", "librosa", "pedalboard", "pyfluidsynth", "tinysoundfont", "pretty_midi",
-            "music21", "matchering", "pydub", "pyworld", "pyttsx3", "pywebview", "soundfile", "jaconv")
+            "music21", "matchering", "pydub", "pyworld", "pyttsx3", "pywebview", "soundfile", "jaconv",
+            "praat-parselmouth", "alkana", "e2k", "onnxruntime")
 FOLDER = "Fehlerberichte"
 
 

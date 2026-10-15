@@ -89,3 +89,38 @@ def _song_info(s) -> str:
         "Alle MIDI- und WAV-Spuren starten bei 0:00 und lassen sich so in jede DAW ziehen.\n"
         "Mit einstellungen.json entsteht derselbe Song wieder: python main.py --settings einstellungen.json\n"
     )
+
+
+NOTEN_LIESMICH = """Noten des Gesangs für Tuning-Tools
+
+vocals.xml          MusicXML, genau so, wie NEUTRINO sie bekommt (ein Takt Vorlauf). Liest das NEUTRINO-Tuning-Tool,
+                    VoiSona und MuseScore.
+vocals_harmony.xml  die zweite Stimme im Refrain, wenn es eine gibt
+*.ust               für OpenUtau (UTAU-Format)
+vocal_melody.mid    die Melodie als MIDI, z. B. für Synthesizer V
+
+Zurück in den Song: die gerenderte WAV in Vloid Songs unter Gesang, „Eigene Gesangsspur“ wählen und den Song neu
+singen. Die App richtet die Spur an den Noten aus (der Vorlauftakt fällt weg) und mischt sie wie ihren eigenen Gesang;
+die Begleitstimmen singt weiter NEUTRINO.
+"""
+
+
+def exportiere_noten(result, zip_pfad: str) -> str:
+    """Die Noten des Gesangs für Tuning-Tools (Gesang 1.1, E2): MusicXML für NEUTRINO, UST, MIDI und eine kurze
+    Anleitung, wie die bearbeitete Aufnahme zurück in den Song kommt."""
+    import os
+    import zipfile
+
+    out = result.output_dir
+    names = ("vocals.xml", "vocals_harmony.xml", "vocals.ust", "vocals_harmony.ust", "vocals_duett_1.ust",
+             "vocals_duett_2.ust", "vocal_melody.mid")
+    found = [n for n in names if os.path.exists(os.path.join(out, n))]
+    if not found:
+        raise FileNotFoundError("Der Song hat keine Gesangsnoten (Gesang ausgeschaltet?)")
+    os.makedirs(os.path.dirname(os.path.abspath(zip_pfad)), exist_ok=True)
+    with zipfile.ZipFile(zip_pfad, "w", compression=zipfile.ZIP_DEFLATED) as z:
+        for name in found:
+            z.write(os.path.join(out, name), name)
+        z.writestr("LIESMICH.txt", NOTEN_LIESMICH)
+    log.info("Noten exportiert: %s (%s)", zip_pfad, ", ".join(found))
+    return zip_pfad

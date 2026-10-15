@@ -160,11 +160,14 @@ def score(melody_data: list, silben: list, bpm: float, transpose: int = 0) -> di
 
 
 def sing(melody_data: list, silben: list, bpm: float, wav: str, url: str = URL, singer: int = 0,
-         transpose: int = 0, pitch: Optional[PitchFn] = None, timeout: float = 900.0) -> str:
+         transpose: int = 0, pitch: Optional[PitchFn] = None, timeout: float = 900.0,
+         volume: Optional[PitchFn] = None) -> str:
     """
     Singt die Melodie mit VOICEVOX in die Datei wav (Beginn = Songanfang).
     pitch: ändert die Tonhöhenkurve vor dem Singen, bekommt (f0 in Hz je Rahmen, Rahmenlänge, Zeit des ersten
-    Rahmens ab Songanfang). Silben, die VOICEVOX nicht kennt, singt die Stimme als „ら“.
+    Rahmens ab Songanfang). volume: genauso für die Lautstärke je Rahmen, die die Lehrer-Stimme vorgibt (F2); die
+    Stimme singt sie selbst, leiser klingt dabei auch weicher. Silben, die VOICEVOX nicht kennt, singt die Stimme
+    als „ら“.
     """
     notes = score(melody_data, silben, bpm, transpose)
     teacher = _teacher(url)
@@ -185,6 +188,9 @@ def sing(melody_data: list, silben: list, bpm: float, wav: str, url: str = URL, 
     if pitch is not None:
         f0 = np.asarray(query["f0"], dtype=np.float64)
         query["f0"] = [float(v) for v in pitch(f0, 1.0 / FRAME_RATE, -PAD_FRAMES / FRAME_RATE)]
+    if volume is not None and query.get("volume"):
+        loud = np.asarray(query["volume"], dtype=np.float64)
+        query["volume"] = [max(0.0, float(v)) for v in volume(loud, 1.0 / FRAME_RATE, -PAD_FRAMES / FRAME_RATE)]
     data = _request(url, "/frame_synthesis", {"speaker": singer}, query, timeout)
     audio, rate = sf.read(io.BytesIO(data), dtype="float32", always_2d=True)
     audio = audio[int(round(PAD_FRAMES / FRAME_RATE * rate)):]

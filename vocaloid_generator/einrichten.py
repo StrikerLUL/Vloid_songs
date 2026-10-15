@@ -47,6 +47,11 @@ def _grooves() -> bool:
     return grooves.load() is not None
 
 
+def _airwindows() -> bool:
+    import airwindows
+    return airwindows.available()
+
+
 def _rating() -> bool:
     import rating
     return rating.available()
@@ -93,6 +98,8 @@ COMPONENTS = (
               "aufgenommen", "etwa 130 MB Download, 50 MB Platz", "setup_drums.py", _drums),
     Component("grooves", "Echte Grooves", "Schlagzeug-Phrasen und Fills von zehn Profi-Schlagzeugern (Groove MIDI "
               "Dataset)", "etwa 3 MB", "setup_grooves.py", _grooves),
+    Component("airwindows", "Airwindows-Effekte", "Bandsättigung für den Gesang und ein analoges Mischpult aus "
+              "Airwindows Consolidated", "etwa 15 MB", "setup_airwindows.py", _airwindows),
     Component("rating", "Automatische Bewertung", "Bei mehreren Fassungen hört ein Modell zu und lädt die beste",
               "etwa 3 GB", "setup_bewertung.py", _rating),
     Component("demucs", "Mix wie die Vorbilder", "Demucs zerlegt deine Vorbild-Songs; Gesang, Schlagzeug, Bass und "

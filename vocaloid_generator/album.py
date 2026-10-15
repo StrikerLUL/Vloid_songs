@@ -73,7 +73,7 @@ def plan(settings: SongSettings, count: int, styles: list, lyrics: list = (), se
     for i in range(count):
         style = styles[i % len(styles)]
         s = preset_settings(style, settings) or settings.with_updates(style=style)
-        changes = {"seed": None, "variations": {}, "melody_edits": {}, "melody_lengths": {}, "draft": False}
+        changes = {"seed": None, "variations": {}, "melody_edits": {}, "melody_lengths": {}, "phrase_fixes": {}, "draft": False}
         if settings.album_vary:
             changes["key"] = rng.choice(KEYS)
             changes["bpm"] = max(40, min(260, round(s.bpm * rng.uniform(1 - TEMPO_SPREAD, 1 + TEMPO_SPREAD))))

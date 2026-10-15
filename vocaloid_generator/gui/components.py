@@ -53,7 +53,8 @@ class PianoRoll(Element, component="piano_roll.js"):
     Noten aller Spuren; Spuren lassen sich ausblenden. Mit editable lassen sich die Töne der Gesangsmelodie
     nach oben und unten ziehen (oder mit den Pfeiltasten verschieben); jede Änderung meldet das Ereignis "edit"
     mit {start, pitch} (Anfang in Sekunden, neue Tonhöhe). Am rechten Rand gezogen (oder mit Pfeil links/rechts)
-    wird ein Ton kürzer oder länger; das meldet "resize" mit {start, end} (Sekunden).
+    wird ein Ton kürzer oder länger; das meldet "resize" mit {start, end} (Sekunden). Ein Doppelklick auf einen Ton
+    meldet "phrase" mit {start}: seine Phrase soll neu gesungen werden.
     """
 
     def __init__(self) -> None:

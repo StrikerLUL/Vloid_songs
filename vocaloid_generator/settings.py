@@ -152,22 +152,64 @@ class SongSettings(BaseModel):
     lyrics: str = DEFAULT_LYRICS
 
     singer: str = "MERROW"
-    vocal_engine: str = "NEUTRINO"     # NEUTRINO, VOICEVOX oder Vorschau; fehlt eine, singt die andere
+    vocal_engine: str = "NEUTRINO"     # NEUTRINO, VOICEVOX, DiffSinger oder Vorschau; fehlt eine, singt die andere
     harmonies: bool = True             # zweite Stimme im Refrain (mit NEUTRINO oder VOICEVOX)
     duet_singer: str = ""              # zweite NEUTRINO-Stimme fürs Duett (leer = kein Duett)
+    support_singer: str = ""           # B5: Support-Modell, eine zweite Stimme färbt die Hauptstimme (leer = aus)
     style_shift: int = Field(0, ge=-6, le=6)   # NEUTRINO StyleShift: + heller, - dunkler
     vocal_takes: int = Field(1, ge=1, le=3)    # NEUTRINO singt so oft (StyleShift ±1), die sauberste Fassung zählt
     vibrato: float = Field(1.0, ge=0.0, le=2.0)   # 0 = gerade Töne, 1 = wie gesungen, 2 = doppelt so viel
     glide: float = Field(1.0, ge=0.0, le=2.0)     # Übergänge zwischen Tönen: 0 = springen, 1 = wie gesungen, 2 = länger
+    psola_reshape: bool = True         # Vibrato und Übergänge mit Praat-PSOLA statt WORLD (Klang bleibt)
+    own_vocal: str = ""                 # eigene Gesangsspur (WAV), ersetzt die Hauptstimme; leer = die Engine singt
+    own_vocal_align: bool = True       # die eigene Spur an den Noten ausrichten (z. B. Vorlauftakt weg)
+    # von Hand neu gesungene Phrasen (E3): {Schlag einer Note der Phrase (edit_key): {"style_shift": int, "singer": str}}
+    phrase_fixes: dict[str, dict] = Field(default_factory=dict)
     breaths: bool = True               # hörbares Einatmen vor den Phrasen
+    recorded_breaths: bool = True      # aufgenommene Atmer aus dem Ordner Atmer statt Rauschen (wenn welche da sind)
     echo_throws: bool = True           # Echo auf dem letzten Wort einer Phrase
     final_choir: bool = True           # im letzten Refrain singt ein Chor mit
     vocal_comping: bool = True         # bei mehreren Fassungen jede Phrase aus der saubersten (voice_fx.comp)
     phrase_expression: bool = True     # Ausdruck pro Phrase: zum Höhepunkt lauter und heller, am Ende weicher
+    syllable_dynamics: bool = True     # Lautstärke pro Silbe: Betonungen lauter, weicher Einsatz, Anlauf leiser
     vocal_chain: bool = True           # Studio-Kette: Sättigung, Hall und Delay je Sektion, echte Doppelung
+    vocal_tone: bool = True            # Kette pro Stimme und Stil: EQ und Sättigung für helle/tiefe Stimmen, Ballade, Rock
+    airwindows: bool = True            # Airwindows Consolidated (setup_airwindows.py): Band auf dem Gesang, Console7
+    # Stil-Effekte (style_fx.py), jeweils nur in den Stilen, zu denen sie gehören
+    telephone_fx: bool = True          # die erste Zeile wie durchs Telefon
+    stutter_fx: bool = True            # die Stimme stottert im letzten Schlag vor dem Refrain
+    hard_tune: bool = True             # harter Tune im Refrain (Future Bass, Kawaii)
+    formant_fx: bool = True            # Formanten verschoben: kindlicher (Kawaii, Idol) oder dunkler
+    vocal_swing: bool = True           # der Gesang swingt mit der Band, wenn der Song swingt (Lo-Fi)
     romaji: bool = True                # Liedtext in lateinischen Buchstaben (Romaji) japanisch singen
+    # Gesang 1.1, jedes mit Schalter. Noten, die NEUTRINO gut singen kann (neutrino_score.py):
+    long_vowel_mark: bool = True       # lang gezogene Vokale und Melisma als ー statt als neue Silbe
+    breath_marks: bool = True          # Atemzeichen in langen Phrasen (NEUTRINO trennt dort, braucht weniger Speicher)
+    fast_diphthongs: bool = True       # zwei schnelle Töne mit Doppelvokal (か + い) auf einem Ton
+    english_kana: bool = True          # englische Wörter als Katakana singen (love → ラブ)
+    singable_melody: bool = True       # Melodie auf Singbarkeit prüfen: Sprünge, Spitzen, Atempausen
+    # StyleShift pro Sektion: Strophe ruhiger und tiefer, Refrain kräftiger und heller (Versatz zum StyleShift)
+    section_style: bool = True
+    verse_style_shift: int = Field(-1, ge=-3, le=3)
+    chorus_style_shift: int = Field(1, ge=-3, le=3)
+    even_takes: bool = True            # Fassungen mit demselben StyleShift, gewertet nur nach groben Fehlern
+    # Gesang sitzt vorn (vocal_mix.py)
+    vocal_unmask: bool = True          # die Band wird dort leiser, wo der Gesang gerade laut ist (wie Trackspacer)
+    vocal_ride: bool = True            # der Gesang wird nachgeführt, damit er gleich weit über der Band steht
+    convolution_reverb: bool = True    # Gesangsplatte aus einer Impulsantwort, Pre-Delay im Tempo
+    ducked_delay: bool = True          # das Gesangs-Delay ist leiser, solange gesungen wird
+    # Begleitstimmen wie in Produktionen (backing_vocals.py), von NEUTRINO gesungen
+    harmony_variety: bool = True       # Harmonie je Refrain anders (Phrasenenden, Terz darunter, darüber, Oktave)
+    harmony_double: bool = True        # jede Harmonie zweimal gesungen, links und rechts
+    sung_pads: bool = True             # gesungene Flächen (う, あ) im Refrain statt des Keyboard-Chors
+    adlibs: bool = True                # Rufe und Echo-Antworten im letzten Refrain
+    # Stimmen-Casting (casting.py): Lieblingsstimme je Stil, beim Wechsel des Stils gewählt
+    style_singer: bool = True
+    style_singers: dict[str, str] = Field(default_factory=dict)
     voicevox_url: str = ""             # Adresse von VOICEVOX (leer = http://127.0.0.1:50021, App oder Engine)
     voicevox_singer: int = Field(0, ge=0)          # VOICEVOX-Singstimme (Stil-ID, 0 = die erste)
+    voicevox_dynamics: bool = True     # F2: VOICEVOX singt Silben- und Phrasen-Lautstärke selbst (statt nachher)
+    diffsinger_voice: str = ""         # F1: DiffSinger-Stimme (Ordner oder Name; leer = die erste gefundene)
     # Vorbild-Songs (reference.py) und was sie bestimmen dürfen; jedes lässt sich abschalten
     reference_tracks: list[ReferenceTrack] = Field(default_factory=list)
     reference_folder: str = ""         # Ordner mit Lieblingssongs zum Anhaken (leer = Vorbilder im Datenordner)
@@ -175,6 +217,7 @@ class SongSettings(BaseModel):
     ref_energy: bool = True            # leise und laute Teile so weit auseinander wie in den Vorbildern
     ref_vocal_level: bool = True       # Gesang so laut gegen die Band wie in den Vorbildern
     ref_stems: bool = True             # Gesang, Schlagzeug, Bass und Rest einzeln wie die Vorbilder (mit Demucs)
+    ref_vocal_curve: bool = True       # die Klangkurve des Gesangs (Terzbänder, ±4 dB) wie im Vorbild-Gesang
     ref_tempo_key: bool = True         # Tempo und Tonart der Vorbilder vorschlagen
     ref_style: bool = True             # passenden Stil vorschlagen
     vst_path: str = ""
@@ -352,7 +395,8 @@ class SongSettings(BaseModel):
         new_melody = part.partition(":")[0] in ("melody", "chords")
         return self.with_updates(variations={**self.variations, part: self.variations.get(part, 0) + 1},
                                  melody_edits={} if new_melody else self.melody_edits,
-                                 melody_lengths={} if new_melody else self.melody_lengths)
+                                 melody_lengths={} if new_melody else self.melody_lengths,
+                                 phrase_fixes={} if new_melody else self.phrase_fixes)
 
     def section_config(self) -> dict:
         """config.SECTION_CONFIG mit den eigenen Längen der Sektionen."""

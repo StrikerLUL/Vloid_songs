@@ -24,7 +24,7 @@ FOLDER = os.path.join(config.REPO_ROOT, "tools", "demucs")
 WORKER = os.path.join(config.BASE_DIR, "separation_worker.py")
 MARKER = "ZERLEGT "
 CACHE = os.path.join(config.DATA_DIR, "vorbild_gruppen.json")
-VERSION = 1
+VERSION = 2                     # 2: der Gesang bekommt seine Kurve in Terzbändern dazu ("bands")
 GROUPS = ("vocals", "drums", "bass", "other")
 NAMES = {"vocals": "Gesang", "drums": "Schlagzeug", "bass": "Bass", "other": "Rest"}
 RATE = 44100
@@ -98,6 +98,26 @@ def tilt_db(audio: np.ndarray, rate: int = RATE) -> float:
     return float(10 * np.log10((highs + 1e-12) / (mids + 1e-12)))
 
 
+# Terzbänder für die Klangkurve des Gesangs (D3): Mitten von 125 Hz bis 10 kHz
+BAND_CENTERS = tuple(round(1000 * 2 ** (k / 3), 1) for k in range(-9, 11))
+
+
+def bands_db(audio: np.ndarray, rate: int = RATE) -> list:
+    """Die Klangkurve: Pegel je Terzband in dB, um den Mittelwert verschoben (nur die Form zählt)."""
+    mono = audio.mean(axis=0) if audio.ndim == 2 else audio
+    if len(mono) < 4096:
+        return [0.0] * len(BAND_CENTERS)
+    frames = mono[:len(mono) // 4096 * 4096].reshape(-1, 4096) * np.hanning(4096)
+    power = np.square(np.abs(np.fft.rfft(frames, axis=1))).sum(axis=0)
+    freqs = np.fft.rfftfreq(4096, 1.0 / rate)
+    out = []
+    for center in BAND_CENTERS:
+        sel = (freqs >= center / 2 ** (1 / 6)) & (freqs < center * 2 ** (1 / 6))
+        out.append(float(10 * np.log10(power[sel].sum() + 1e-12)))
+    mean = float(np.mean(out))
+    return [round(v - mean, 2) for v in out]
+
+
 def measure(groups: dict) -> dict:
     """{Gruppe: Audio (Kanäle × Samples)} → {Gruppe: {"level": dB gegen alle zusammen, "tilt": dB}}; stille
     Gruppen fehlen."""
@@ -110,6 +130,8 @@ def measure(groups: dict) -> dict:
         level = _loudness(audio) - total
         if level > SILENT_DB:
             out[name] = {"level": round(float(level), 2), "tilt": round(tilt_db(audio), 2)}
+            if name == "vocals":
+                out[name]["bands"] = bands_db(audio)
     return out
 
 
@@ -171,6 +193,11 @@ def summarize(refs) -> Optional[dict]:
         if values:
             total = sum(w for _, w in values)
             out[group] = {k: round(sum(v[k] * w for v, w in values) / total, 2) for k in ("level", "tilt")}
+            curves = [(v["bands"], w) for v, w in values if len(v.get("bands") or []) == len(BAND_CENTERS)]
+            if curves:
+                weight = sum(w for _, w in curves)
+                out[group]["bands"] = [round(sum(c[k] * w for c, w in curves) / weight, 2)
+                                       for k in range(len(BAND_CENTERS))]
     return out or None
 
 

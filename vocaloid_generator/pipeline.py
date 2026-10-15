@@ -518,10 +518,10 @@ def _write_karaoke(settings: SongSettings, tracks: dict, out: str) -> None:
     """Der Liedtext mit der Zeit jeder Silbe, zum Mitlesen im Player und fürs Lyric-Video."""
     import karaoke
     from lyrics import section_lines
-    from settings import DEFAULT_LYRICS
+    from settings import DEFAULT_LYRICS, DEFAULT_RAP_LYRICS
     own = section_lines(settings.lyrics, settings.romaji, settings.english_kana)
     lengths = {kind: [len(line) for line in text_lines]
-               for kind, text_lines in {**section_lines(DEFAULT_LYRICS),
+               for kind, text_lines in {**section_lines(DEFAULT_LYRICS + DEFAULT_RAP_LYRICS),
                                         **(own if settings.numbered_lyrics else shared_only(own))}.items()}
     found = karaoke.lines(tracks["vocal_melody"], tracks["silben"], settings.bpm, tracks.get("plan"), lengths)
     try:

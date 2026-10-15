@@ -62,6 +62,8 @@ def parse_args(argv=None):
                    "(Versuch; leer = die erste gefundene)")
     p.add_argument("--voicevox-stimme", type=int, metavar="ID", help="VOICEVOX-Singstimme (Stil-ID)")
     p.add_argument("--ohne-voicevox-dynamik", action="store_true", help="VOICEVOX singt gleich laut; Silben und Phrasen werden erst danach lauter und leiser")
+    p.add_argument("--rap-stimme", type=int, metavar="ID", help="VOICEVOX-Sprechstimme für den Rap-Teil (Stil-ID)")
+    p.add_argument("--ohne-rap-stimme", action="store_true", help="die Gesangsstimme singt den Rap-Teil, statt dass VOICEVOX ihn spricht")
     p.add_argument("--fassungen", type=int, choices=[1, 2, 3], help="NEUTRINO singt so oft, die sauberste zählt")
     p.add_argument("--album", type=int, metavar="N",
                    help="Album über Nacht: N Songs (bis 30) am Stück, nach Note sortiert in Alben\\<Datum> <Name>")
@@ -268,6 +270,7 @@ def main(argv=None) -> int:
                  "singer": args.stimme, "duet_singer": args.duett, "support_singer": args.support_stimme, "master_lufs": args.lautheit,
                  "vocal_engine": args.engine, "voicevox_singer": args.voicevox_stimme,
                  "voicevox_dynamics": False if args.ohne_voicevox_dynamik else None,
+                 "rap_speaker": args.rap_stimme, "rap_voice": False if args.ohne_rap_stimme else None,
                  "diffsinger_voice": args.diffsinger_stimme, "vocal_takes": args.fassungen,
                  "vibrato": args.vibrato, "glide": args.uebergaenge,
                  "psola_reshape": False if args.ohne_psola else None,

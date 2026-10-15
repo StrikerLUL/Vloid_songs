@@ -54,6 +54,7 @@ ROLE_SEQUENCES = {
     "Verse":     ["A", "A2", "B", "C"],
     "PreChorus": ["P", "P2", "P", "PUP"],
     "Bridge":    ["A", "A2", "B", "OPEN"],
+    "Rap":       ["R", "R2", "R", "R2"],
 }
 CONTOURS = {
     "A":    lambda t: 3.0 * math.sin(math.pi * t) - 1.0,
@@ -67,8 +68,10 @@ CONTOURS = {
     "P":    lambda t: -2.0 + 4.0 * t,
     "P2":   lambda t: -1.0 + 4.0 * t,
     "PUP":  lambda t: 1.0 + 5.0 * t,
+    "R":    lambda t: 0.0,
+    "R2":   lambda t: 0.0,
 }
-KIND_OFFSET = {"Verse": -3, "PreChorus": -1, "Chorus": 2, "Bridge": -2}
+KIND_OFFSET = {"Verse": -3, "PreChorus": -1, "Chorus": 2, "Bridge": -2, "Rap": -4}
 
 # Gesten pro Takt: Abweichung der Töne eines Takts von der Phrasenkontur (k = Töne im Takt)
 def _span(k: int) -> list:
@@ -89,16 +92,16 @@ GESTURE_WEIGHTS = {
     "PreChorus": {"rise": 3, "arch": 1, "neighbor": 1},
     "Bridge":    {"arch": 2, "valley": 1, "fall": 1},
 }
-GESTURE_DEPTH = {"Chorus": 1.0, "Verse": 0.7, "PreChorus": 0.8, "Bridge": 0.8}
+GESTURE_DEPTH = {"Chorus": 1.0, "Verse": 0.7, "PreChorus": 0.8, "Bridge": 0.8, "Rap": 0.2}
 # Singbare Silben pro Sekunde, an denen sich die Dichte orientiert
-SYLLABLES_PER_SECOND = {"Verse": 3.3, "PreChorus": 3.5, "Chorus": 3.6, "Bridge": 3.0}
+SYLLABLES_PER_SECOND = {"Verse": 3.3, "PreChorus": 3.5, "Chorus": 3.6, "Bridge": 3.0, "Rap": 5.0}
 SINGING_SHARE = 0.75
 # Steigt der Akzent im Wort (tief → hoch), soll die Melodie nicht fallen, und umgekehrt
 ACCENT_COST = 1.5
 # ん und っ springen nicht, sie hängen am Ton davor
 SPECIAL_MORAE = ("ん", "っ")
 # Anteil der Phrasen, deren langer Schlusston ein Melisma bekommt (mal melisma des Stils)
-MELISMA_SHARE = {"Chorus": 0.35, "Verse": 0.2, "PreChorus": 0.25, "Bridge": 0.45}
+MELISMA_SHARE = {"Chorus": 0.35, "Verse": 0.2, "PreChorus": 0.25, "Bridge": 0.45, "Rap": 0.0}
 MELISMA_MIN_STEPS = 6
 LEARNED_SHARE = 0.5     # so oft singt ein Takt einen aus MIDI-Dateien gelernten Rhythmus (motifs.py), wenn es einen gibt
 
@@ -543,6 +546,8 @@ def write_vocal_melody(plan: SongPlan, lyrics: dict, rng: random.Random, rerolls
             else:
                 kind_rng = rerolls.get(sec.kind) or random.Random(f"{seed}:{sec.kind}")
                 sec_notes = SectionMelodyWriter(plan, sec, kind_rng, motifs).write(lyrics.get(sec.kind, []))
+                if sec.kind == "Rap":
+                    _chant(sec_notes)
             written[sec.kind] = (sec, sec_notes)
         else:
             first, first_notes = written[sec.kind]
@@ -559,6 +564,18 @@ def write_vocal_melody(plan: SongPlan, lyrics: dict, rng: random.Random, rerolls
     if singable:
         make_singable(plan, composed)
     return notes
+
+
+RAP_RANGE = 2           # Halbtöne um die Mitte: ein Rap ohne Sprechstimme klingt wie ein Sprechgesang
+
+
+def _chant(notes: list) -> None:
+    """Der Rap-Teil fast auf einem Ton (rap.py spricht ihn; singt ihn die Engine, klingt er wie ein Sprechgesang)."""
+    if not notes:
+        return
+    center = sorted(n.pitch for n in notes)[len(notes) // 2]
+    for n in notes:
+        n.pitch = center + max(-RAP_RANGE, min(RAP_RANGE, round((n.pitch - center) * 0.35)))
 
 
 # ── Eigener Text für eine wiederholte Sektion (v6, Nr. 1) ───────────────────────

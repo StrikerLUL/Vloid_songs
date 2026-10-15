@@ -68,6 +68,14 @@ DEFAULT_LYRICS = (
     "な み だ の あ と も わ ら え る よ う に\n"
     "も う い ち ど だ け し ん じ て み た い"
 )
+# Text für einen Rap-Teil ohne eigenen Text (nicht im Textfeld der App, damit es so bleibt wie bisher)
+DEFAULT_RAP_LYRICS = (
+    "\n\n[Rap]\n"
+    "き み の な ま え を よ ぶ た び に\n"
+    "こ こ ろ の お く が さ わ ぐ ん だ\n"
+    "ま よ わ ず い こ う よ こ の み ち を\n"
+    "ふ り む か な い で は し り だ せ"
+)
 
 DEFAULT_VOLUMES = {
     "drums": 1.0, "bass": 0.9, "piano": 0.8, "guitar": 0.8, "strings": 0.7,
@@ -211,6 +219,9 @@ class SongSettings(BaseModel):
     style_singers: dict[str, str] = Field(default_factory=dict)
     voicevox_url: str = ""             # Adresse von VOICEVOX (leer = http://127.0.0.1:50021, App oder Engine)
     voicevox_singer: int = Field(0, ge=0)          # VOICEVOX-Singstimme (Stil-ID, 0 = die erste)
+    # Rap-Teil (v6 Nr. 7): die VOICEVOX-Sprechstimme spricht ihn im Takt; aus (oder ohne VOICEVOX) singt ihn die Engine
+    rap_voice: bool = True
+    rap_speaker: int = Field(0, ge=0)              # VOICEVOX-Sprechstimme für den Rap (Stil-ID, 0 = die erste)
     voicevox_dynamics: bool = True     # F2: VOICEVOX singt Silben- und Phrasen-Lautstärke selbst (statt nachher)
     diffsinger_voice: str = ""         # F1: DiffSinger-Stimme (Ordner oder Name; leer = die erste gefundene)
     # Vorbild-Songs (reference.py) und was sie bestimmen dürfen; jedes lässt sich abschalten

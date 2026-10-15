@@ -674,6 +674,8 @@ def voice_panel(s: SongSettings, singers: list, pick: PickFn | None = None) -> t
         .mark("switch-voicevox_dynamics") \
         .tooltip("Betonte Silben und der Weg zum Höhepunkt einer Zeile gehen als Lautstärke in den Gesang ein, statt "
                  "danach lauter und leiser gedreht zu werden. Leiser klingt dann auch weicher.")
+    section_title("Rap-Teil")
+    rap_editor(s)
     section_title("Lebendiger Gesang")
     for attr, text, tip in LIVELY_SWITCHES:
         ui.switch(text).bind_value(s, attr).props("dense").tooltip(tip).mark(f"switch-{attr}")
@@ -694,6 +696,36 @@ def voice_panel(s: SongSettings, singers: list, pick: PickFn | None = None) -> t
         ui.slider(min=0, max=0.2, step=0.002).bind_value(s, "breathiness").props("label").classes("col")
     ui.switch("Schimmer").bind_value(s, "shimmer")
     return singer, duet, support
+
+
+def rap_editor(s: SongSettings) -> None:
+    """Sprechstimme für die Sektion „Rap“ (rap.py); die Liste kommt von der laufenden VOICEVOX-App."""
+    import voicevox
+
+    def options(found: dict) -> dict:
+        names = {0: "die erste Sprechstimme", **found}
+        if s.rap_speaker not in names:
+            names[s.rap_speaker] = f"Stimme {s.rap_speaker}"
+        return names
+
+    ui.switch("Rap von der VOICEVOX-Sprechstimme").bind_value(s, "rap_voice").props("dense") \
+        .mark("switch-rap_voice")
+    with ui.row().classes("w-full items-center no-wrap gap-2"):
+        select = ui.select(options({}), label="Sprechstimme").bind_value(s, "rap_speaker").classes("col") \
+            .mark("rap-speaker")
+        reload_button = ui.button(icon="refresh").props("flat round dense").tooltip("Stimmen neu laden")
+    hint("Eine Sektion „Rap“ (Ablauf und [Rap] im Liedtext) spricht VOICEVOX im Takt, wie der Rap in „Idol“; NEUTRINO "
+         "kann nicht rappen. Dafür muss die VOICEVOX-App laufen, auch wenn NEUTRINO singt. Ohne VOICEVOX oder mit dem "
+         "Schalter aus singt die Gesangsstimme den Rap fast auf einem Ton.")
+
+    async def load() -> None:
+        found = await run.io_bound(voicevox.talkers, s.voicevox_url or voicevox.URL)
+        if found is None:       # die App wird gerade beendet
+            return
+        select.set_options(options(found), value=s.rap_speaker)
+
+    reload_button.on_click(load)
+    ui.timer(0.3, load, once=True)
 
 
 def voicevox_editor(s: SongSettings) -> None:

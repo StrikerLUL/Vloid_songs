@@ -93,6 +93,10 @@ def test_every_style_arranges_every_section():
                 assert style.part(kind, "melody") == "solo" and style.groove(kind) == style.groove("Chorus")
                 assert style.part(kind, "bass") == style.part("Chorus", "bass"), style.name
                 continue
+            if kind == "Rap":       # die Band spielt wie in der Strophe, die Sprechstimme rappt darüber (rap.py)
+                assert style.part(kind, "bass") == style.part("Verse", "bass"), style.name
+                assert style.groove(kind) == style.groove("Verse"), style.name
+                continue
             assert style.parts.get(kind), (style.name, kind)
             assert kind in style.grooves, (style.name, kind)
 

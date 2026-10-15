@@ -38,8 +38,8 @@ VOCAL_KEY = "vocals.key"
 NOTE_KEYS = ("melody_data", "silben", "harmony_data", "harmony_silben", "octave_data", "octave_silben", "pads",
              "adlib_data", "adlib_silben")
 VOCAL_CODE = ("singing.py", "vocal_synthesizer.py", "voice_fx.py", "voicevox.py", "neutrino_score.py", "diffsinger.py",
-              "meter.py")
-VOCAL_FIELDS = ("bpm", "meter", "seed", "singer", "vocal_engine", "harmonies", "duet_singer", "support_singer", "style_shift", "vocal_takes",
+              "meter.py", "rap.py")
+VOCAL_FIELDS = ("bpm", "meter", "seed", "rap_voice", "rap_speaker", "singer", "vocal_engine", "harmonies", "duet_singer", "support_singer", "style_shift", "vocal_takes",
                 "vibrato", "glide", "breaths", "final_choir", "voicevox_url", "voicevox_singer", "voicevox_dynamics", "diffsinger_voice",
                 "neutrino_pfad",
                 "vocal_comping", "phrase_expression", "long_vowel_mark", "breath_marks", "fast_diphthongs",
@@ -96,6 +96,11 @@ def _remember_vocals(out: str, key: str) -> None:
 
 def _synthesize_vocals(settings: SongSettings, tracks: dict, out: str) -> Optional[str]:
     vocals_wav = os.path.join(out, "vocals.wav")
+    spans = _rap_spans(settings, tracks)
+    whole = tracks
+    if spans:
+        import rap
+        tracks = rap.without(tracks, spans)       # die Engine singt den Rap nicht, VOICEVOX spricht ihn
     melody_data = tracks.get("melody_data", [])
     silben = tracks.get("silben", [])
     key = _vocal_key(settings, tracks) if settings.reuse_steps and settings.channels["vocals"].enabled else None
@@ -108,6 +113,8 @@ def _synthesize_vocals(settings: SongSettings, tracks: dict, out: str) -> Option
     if not settings.channels["vocals"].enabled:
         log.info("Gesang ist ausgeschaltet.")
         return None
+    if spans and not silben:
+        return _rap_only(settings, whole, out, vocals_wav, spans, key)
     if not melody_data or not silben:
         log.warning("Keine Melodie oder keine Silben vorhanden, überspringe den Gesang.")
         return None
@@ -146,11 +153,75 @@ def _synthesize_vocals(settings: SongSettings, tracks: dict, out: str) -> Option
         if not _sing_preview(settings, tracks, vocals_wav):
             return None
         vocal_check.record(out, settings, "Vorschau")
+    if spans:
+        _speak_rap(settings, whole, vocals_wav, spans)
     _liven(settings, tracks, out, vocals_wav, sung_dynamics=engine == "VOICEVOX" and _voicevox_dynamics(settings))
     _style_effects(settings, tracks, vocals_wav)
     _vocal_swing(settings, tracks, out)
     if sung and key:
         _remember_vocals(out, key)     # die Vorschau-Stimme nicht: fehlte NEUTRINO nur kurz, singt es beim nächsten Mal
+    return vocals_wav
+
+
+def _rap_spans(settings: SongSettings, tracks: dict) -> list:
+    """Wo die VOICEVOX-Sprechstimme rappt (Schläge, rap.windows). Leer ohne Rap-Teil, mit dem Schalter aus, mit eigener
+    Gesangsspur oder wenn VOICEVOX nicht läuft: dann singt die Engine den Rap."""
+    import own_vocal
+    import rap
+    import voicevox
+    spans = rap.windows(tracks.get("plan"))
+    if not spans or not settings.rap_voice or own_vocal.available(settings.own_vocal):
+        return []
+    if not voicevox.running(settings.voicevox_url or voicevox.URL):
+        log.warning("Rap-Teil: VOICEVOX läuft nicht, die Gesangsstimme singt ihn")
+        return []
+    return spans
+
+
+def _speak_rap(settings: SongSettings, tracks: dict, vocals_wav: str, spans: list) -> bool:
+    """Den Rap von der VOICEVOX-Sprechstimme in die Hauptstimme sprechen, so laut wie der Gesang."""
+    import soundfile as sf
+
+    import rap
+    import vocal_check
+    import voicevox
+    url = settings.voicevox_url or voicevox.URL
+    try:
+        audio, rate = sf.read(vocals_wav, dtype="float32", always_2d=True)
+        speaker, name = voicevox.pick_talker(url, settings.rap_speaker)
+        spoken = rap.render(tracks["melody_data"], tracks["silben"], settings.bpm, spans, url, speaker, rate,
+                            len(audio))
+    except Exception as e:  # noqa: BLE001 – ohne Rap bleibt der übrige Gesang
+        log.warning("Rap-Teil nicht gesprochen: %s", e)
+        return False
+    if spoken is None:
+        return False
+    if len(spoken) > len(audio):
+        audio = np.concatenate([audio, np.zeros((len(spoken) - len(audio), audio.shape[1]), dtype=np.float32)])
+    spoken = rap.level_like(spoken, audio.mean(axis=1), rate)
+    audio[:len(spoken)] += spoken[:, None]
+    sf.write(vocals_wav, audio if audio.shape[1] > 1 else audio[:, 0], rate, subtype="FLOAT")
+    log.info("Rap-Teil von der VOICEVOX-Sprechstimme %s", name)
+    vocal_check.note_rap(os.path.dirname(vocals_wav), name)
+    return True
+
+
+def _rap_only(settings: SongSettings, tracks: dict, out: str, vocals_wav: str, spans: list,
+              key: Optional[str]) -> Optional[str]:
+    """Der ganze Gesang ist Rap: keine Engine singt, VOICEVOX spricht alles."""
+    import soundfile as sf
+
+    import vocal_check
+    plan = tracks["plan"]
+    rate = 48000
+    sf.write(vocals_wav, np.zeros(int((plan.total_beats * 60.0 / settings.bpm + 1.0) * rate), dtype=np.float32),
+             rate, subtype="FLOAT")
+    vocal_check.record(out, settings, "VOICEVOX", "nur Rap")
+    if not _speak_rap(settings, tracks, vocals_wav, spans):
+        remove_file(vocals_wav)
+        return None
+    if key:
+        _remember_vocals(out, key)
     return vocals_wav
 
 

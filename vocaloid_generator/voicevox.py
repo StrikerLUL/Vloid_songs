@@ -1,7 +1,8 @@
 # voicevox.py – Singen mit VOICEVOX (kostenlos, https://voicevox.hiroshiba.jp, Singstimmen ab Version 0.16).
 # Die VOICEVOX-App oder die Engine läuft im Hintergrund; wir schicken ihr die Noten über ihre Schnittstelle
 # (Standard http://127.0.0.1:50021) und bekommen den Gesang als WAV zurück. Tonhöhe und Lautstärke rechnet
-# dabei eine Lehrer-Stimme aus, gesungen wird mit der gewählten Stimme.
+# dabei eine Lehrer-Stimme aus, gesungen wird mit der gewählten Stimme. Die Sprechstimmen sprechen den Rap-Teil
+# (rap.py).
 import io
 import json
 import logging
@@ -93,6 +94,34 @@ def pick_singer(url: str, wanted: int = 0) -> tuple:
     first = next(iter(found))
     if wanted:
         log.warning("VOICEVOX-Stimme %s gibt es nicht, singe mit %s", wanted, found[first])
+    return first, found[first]
+
+
+def talkers(url: str = URL, timeout: float = 2.0) -> dict:
+    """{Stil-ID: "Name (Stil)"} der Sprechstimmen (für den Rap-Teil, rap.py). Leer, wenn VOICEVOX nicht läuft."""
+    if not running(url):
+        return {}
+    try:
+        data = json.loads(_request(url, "/speakers", timeout=timeout))
+        return {style["id"]: f'{speaker["name"]} ({style["name"]})' for speaker in data
+                for style in speaker.get("styles", []) if style.get("type", "talk") == "talk"}
+    except (ConnectionError, VoicevoxError, ValueError, KeyError, TypeError) as e:
+        log.debug("Keine VOICEVOX-Sprechstimmen: %s", e)
+        return {}
+
+
+def pick_talker(url: str, wanted: int = 0) -> tuple:
+    """(Stil-ID, Name) der gewünschten Sprechstimme, sonst der ersten. Wirft ConnectionError ohne VOICEVOX."""
+    if not running(url):
+        raise ConnectionError(f"VOICEVOX läuft nicht unter {url}")
+    found = talkers(url, 3.0)
+    if not found:
+        raise VoicevoxError("VOICEVOX hat keine Sprechstimmen")
+    if wanted in found:
+        return wanted, found[wanted]
+    first = next(iter(found))
+    if wanted:
+        log.warning("VOICEVOX-Sprechstimme %s gibt es nicht, es spricht %s", wanted, found[first])
     return first, found[first]
 
 

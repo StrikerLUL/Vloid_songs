@@ -44,8 +44,8 @@ REROLLABLE = ("chords",) + INSTRUMENTS
 
 
 def _default_lyrics() -> dict:
-    from settings import DEFAULT_LYRICS
-    return parse_lyrics(DEFAULT_LYRICS)
+    from settings import DEFAULT_LYRICS, DEFAULT_RAP_LYRICS
+    return parse_lyrics(DEFAULT_LYRICS + DEFAULT_RAP_LYRICS)
 
 
 def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: str, section_config: dict,

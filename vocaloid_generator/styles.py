@@ -100,7 +100,7 @@ CADENCES = {
 # ── Energie pro Sektion (0 = still, 1 = volle Band) ──────────────────────────────
 SECTION_ENERGY = {
     "Intro": 0.75, "Build-up": 0.6, "Verse": 0.45, "PreChorus": 0.65,
-    "Chorus": 0.9, "Bridge": 0.4, "Drop": 0.7, "Solo": 0.85, "Outro": 0.6,
+    "Chorus": 0.9, "Bridge": 0.4, "Drop": 0.7, "Solo": 0.85, "Outro": 0.6, "Rap": 0.6,
 }
 
 # Klänge für neue Instrumente, falls ein Stil keine eigenen nennt (General MIDI)

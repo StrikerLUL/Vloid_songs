@@ -29,6 +29,8 @@ _SECTION_ALIASES = {
     "build-up": "Build-up",
     "buildup": "Build-up",
     "drop": "Drop",
+    "rap": "Rap",
+    "sprechteil": "Rap",
 }
 
 _HEADER = re.compile(r"^\[(.+)\]$")

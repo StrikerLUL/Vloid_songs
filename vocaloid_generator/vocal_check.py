@@ -34,6 +34,19 @@ def record(out: str, settings, engine: str, voice: str = "") -> dict:
     return info
 
 
+def note_rap(out: str, voice: str) -> None:
+    """Festhalten, dass die VOICEVOX-Sprechstimme voice den Rap-Teil spricht (rap.py)."""
+    info = read(out)
+    if info is None:
+        return
+    info["rap"] = voice
+    try:
+        with open(os.path.join(out, SUNG_FILE), "w", encoding="utf-8") as f:
+            json.dump(info, f, ensure_ascii=False)
+    except OSError as e:
+        log.debug("%s nicht gespeichert: %s", SUNG_FILE, e)
+
+
 def read(out: str) -> Optional[dict]:
     try:
         with open(os.path.join(out, SUNG_FILE), encoding="utf-8") as f:
@@ -63,4 +76,6 @@ def describe(info: Optional[dict]) -> tuple:
     text = "Gesungen von " + ", ".join(parts)
     if engine != info.get("chosen") and info.get("chosen"):
         text += f" ({info['chosen']} fehlte)"
+    if info.get("rap"):
+        text += f"; Rap: VOICEVOX-Sprechstimme {info['rap']}"
     return text, False

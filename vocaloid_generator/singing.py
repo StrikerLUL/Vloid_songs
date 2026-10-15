@@ -42,7 +42,7 @@ VOCAL_FIELDS = ("bpm", "seed", "singer", "vocal_engine", "harmonies", "duet_sing
                 "english_kana", "section_style", "verse_style_shift", "chorus_style_shift", "even_takes",
                 "harmony_variety", "harmony_double", "sung_pads", "adlibs", "syllable_dynamics",
                 "recorded_breaths", "psola_reshape", "own_vocal", "own_vocal_align", "phrase_fixes", "style",
-                "telephone_fx", "stutter_fx", "hard_tune", "formant_fx", "vocal_swing")
+                "telephone_fx", "stutter_fx", "hard_tune", "formant_fx", "vocal_swing", "breathiness", "shimmer")
 
 
 def _vocal_key(settings: SongSettings, tracks: dict) -> str:

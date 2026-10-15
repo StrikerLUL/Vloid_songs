@@ -12,6 +12,7 @@ import config
 import drums
 import einrichten
 import grooves
+import orchestrator
 import systemcheck
 from orchestrator import orchestrate_song
 from settings import SongSettings
@@ -172,6 +173,15 @@ def test_songs_use_real_grooves_only_when_switched_on_and_straight(library, tmp_
     built_in = _song(tmp_path, "a")
     assert _song(tmp_path, "b", real_grooves=True) != built_in
     assert _song(tmp_path, "c", real_grooves=True, swing=0.4) == _song(tmp_path, "d", swing=0.4)
+
+
+def test_the_default_light_swing_keeps_the_real_drummer(library, tmp_path):
+    # Der Grundwert des Swing-Reglers (0,12) ist nur ein Hauch: der echte Schlagzeuger spielt trotzdem, mit seinem
+    # eigenen Timing (bis 1.1 blieben die Grooves dadurch fast immer aus)
+    light = SongSettings().swing
+    assert 0 < light < orchestrator.GROOVE_SWING_UNTIL
+    assert _song(tmp_path, "e", real_grooves=True, swing=light) != _song(tmp_path, "f", swing=light)
+    assert _song(tmp_path, "g", real_grooves=True, swing=light) == _song(tmp_path, "h", real_grooves=True)
 
 
 def test_setup_and_systemcheck_know_the_grooves(library, tmp_path):

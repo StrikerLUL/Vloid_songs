@@ -34,6 +34,9 @@ TIMING_SPREAD = {"drums": 0.003, "bass": 0.004, "piano": 0.006, "guitar": 0.006,
                  "synth": 0.002, "brass": 0.006, "melody": 0.004, "bells": 0.003, "choir": 0.01,
                  "counter": 0.006, "perc": 0.006}
 SWING_MAX = 1 / 6                       # Swing 0.5 schiebt die zweite Sechzehntel um 1/12 Schlag
+# Bis zu diesem Swing (Stil plus Regler) spielt der echte Schlagzeuger: der Grundwert 0,12 ist nur ein Hauch, erst
+# Stile, die wirklich swingen (Lo-Fi), spielen die eingebauten Grooves. Sein eigenes Timing ersetzt dann den Swing.
+GROOVE_SWING_UNTIL = 0.2
 SLIDE_SECONDS, SLIDE_STEPS = 0.08, 8     # so lange gleitet ein Bass-Slide, in so vielen Schritten
 # Teile mit eigenem Zufall (wie settings.REROLLABLE): Akkorde und Ablauf, Gesangsmelodie, jedes Instrument
 REROLLABLE = ("chords",) + INSTRUMENTS
@@ -66,8 +69,8 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
     melody_edits: {Schlag: Tonhöhe} (settings.edit_key): Töne der Gesangsmelodie, die von Hand geändert wurden.
     melody_lengths: {Schlag: Länge in Schlägen}: Töne, die von Hand kürzer oder länger gemacht wurden.
     motifs: zusätzliche Rhythmen und Gesten für die Gesangsmelodie (motifs.for_settings), None = nur eingebaute.
-    real_grooves: Grooves und Fills echter Schlagzeuger (grooves.py), soweit geladen; Stile mit Swing spielen weiter
-    die eingebauten.
+    real_grooves: Grooves und Fills echter Schlagzeuger (grooves.py), soweit geladen; Stile, die wirklich swingen (ab
+    GROOVE_SWING_UNTIL), spielen weiter die eingebauten.
     lively_bass: Ghost-Notes und Slides im Bass. guitar_strums: Anschlagmuster je nach Energie statt eines festen.
     singable: die komponierte Gesangsmelodie auf Singbarkeit prüfen (melody_writer.make_singable).
     Rückgabe: {Instrument: [pretty_midi.Note]}, dazu "melody_data", "silben", "vocal_melody", die zweite
@@ -98,7 +101,7 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
     contexts = {inst: {"vocal": vocal_notes} for inst in PARTS}
     contexts["bass"]["lively"] = lively_bass and dice.label("bass")      # eigener Zufall: aus = wie bisher
     contexts["guitar"]["strums"] = guitar_strums and dice.label("guitar")
-    drummer = grooves.for_song(bpm, dice.label("drums")) if real_grooves and not swing else None
+    drummer = grooves.for_song(bpm, dice.label("drums")) if real_grooves and swing < GROOVE_SWING_UNTIL else None
     seen = {}
     for sec in plan.sections:
         seen[sec.kind] = seen.get(sec.kind, 0) + 1
@@ -126,7 +129,8 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
 
     tracks = {}
     for inst in INSTRUMENTS:
-        tracks[inst] = _to_notes(events[inst], bpm, inst, dice.label(inst), swing, jitter_scale)
+        swung = 0.0 if inst == "drums" and drummer is not None else swing     # der Schlagzeuger hat sein Timing
+        tracks[inst] = _to_notes(events[inst], bpm, inst, dice.label(inst), swung, jitter_scale)
     out_dir = output_dir or _default_output()
     os.makedirs(out_dir, exist_ok=True)
     for inst in INSTRUMENTS:

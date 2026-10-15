@@ -199,7 +199,7 @@ def overnight(monkeypatch, tmp_path):
     """Erzeugen nachgestellt: jeder Song legt eine MP3 ab und landet im Verlauf; Song 2 scheitert."""
     made = []
 
-    def fake_song(settings, progress=None, seed=None):
+    def fake_song(settings, progress=None, seed=None, keep_history=True):
         nr = len(made) + 1
         made.append(settings)
         progress(0.5, "Rendere...")

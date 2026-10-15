@@ -58,7 +58,7 @@ def fake_generation(monkeypatch):
     """Ersetzt das echte Erzeugen: jeder Aufruf merkt sich seine Einstellungen und legt einen Song ab."""
     calls = []
 
-    def fake_song(settings, progress=None, seed=None):
+    def fake_song(settings, progress=None, seed=None, keep_history=True):
         seed = settings.seed if settings.seed is not None else 1000 + len(calls)
         settings = settings.with_updates(seed=seed)
         calls.append(settings)
@@ -79,7 +79,7 @@ def sung_generation(fake_generation, monkeypatch):
     """Wie fake_generation, aber der Song hat Gesang: eine Gesangsmelodie und den Text zum Mitlesen."""
     fake_song = pipeline.generate_song
 
-    def sung_song(settings, progress=None, seed=None):
+    def sung_song(settings, progress=None, seed=None, keep_history=True):
         result = fake_song(settings, progress, seed)
         midi = pretty_midi.PrettyMIDI()
         inst = pretty_midi.Instrument(0)
@@ -377,7 +377,7 @@ async def test_paths_tab_tells_whether_the_extra_soundfonts_are_there(user):
 async def test_the_polished_version_can_be_played_and_tuned(user, fake_generation, monkeypatch):
     fake_song = pipeline.generate_song
 
-    def polished_song(settings, progress=None, seed=None):
+    def polished_song(settings, progress=None, seed=None, keep_history=True):
         result = fake_song(settings, progress, seed)
         result.polished_wav = os.path.join(result.output_dir, "final_mix_veredelt.wav")
         shutil.copy(result.mix_wav, result.polished_wav)
@@ -719,7 +719,7 @@ async def test_stop_cancels_a_running_song(user, monkeypatch):
     import cancel
     started = []
 
-    def slow_song(settings, progress=None, seed=None):
+    def slow_song(settings, progress=None, seed=None, keep_history=True):
         started.append(settings)
         progress(0.3, "Rendere Instrumente...")
         for _ in range(400):

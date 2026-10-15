@@ -16,6 +16,7 @@ import cancel
 import casting
 import einrichten
 import history
+import laufzeit
 import meter
 import pipeline
 import polish
@@ -48,14 +49,20 @@ class Job:
     step_start: float = 0.0
     steps: list = field(default_factory=list)       # [[Schritt, Sekunden]]
     running: bool = False
+    kind: str = ""                                  # laufzeit.kind: welche früheren Läufe die Restzeit schätzen
+    past: list = field(default_factory=list)
+    marks: list = field(default_factory=list)       # [(Anteil, Sekunden)] für laufzeit.record
 
-    def start(self) -> None:
+    def start(self, kind: str = "") -> None:
         cancel.reset()          # ein alter Abbruch gilt nicht für den neuen Song
         self.fraction, self.message, self.steps, self.running = 0.0, "", [], True
         self.started = self.step_start = time.monotonic()
+        self.kind, self.past, self.marks = kind, laufzeit.past(kind) if kind else [], []
 
     def report(self, fraction: float, message: str) -> None:
         now = time.monotonic()
+        if fraction > self.fraction or not self.marks:
+            self.marks.append((fraction, now - self.started))
         if self.steps:
             self.steps[-1][1] = now - self.step_start
         if message != self.message:
@@ -66,6 +73,16 @@ class Job:
     @property
     def elapsed(self) -> float:
         return time.monotonic() - self.started if self.started else 0.0
+
+    @property
+    def remaining(self) -> str:
+        """„noch etwa 3 Min.“ aus früheren Läufen derselben Art; leer, solange sich nichts sagen lässt."""
+        return laufzeit.describe(laufzeit.remaining(self.past, self.fraction, self.elapsed)) if self.kind else ""
+
+    def finish(self) -> None:
+        """Ein fertiger Lauf: für die nächste Schätzung merken."""
+        if self.kind:
+            laufzeit.record(self.kind, self.marks + [(1.0, self.elapsed)], self.elapsed)
 
 
 class Picker:
@@ -236,6 +253,13 @@ def build() -> None:
                         .tooltip("Drei neue Melodien für den Refrain, kurz zum Anhören; der Rest des Songs bleibt")
                     hook_row = ui.row().classes("items-center gap-1")
                 with ui.row().classes("w-full items-center gap-1 q-mt-sm"):
+                    remix_style = ui.select(list(STYLES), label="Remix als").props("dense outlined dark") \
+                        .classes("w-48").mark("remix-style")
+                    remix_button = ui.button("Remix", icon="shuffle", on_click=lambda: make_remix()) \
+                        .props("outline no-caps dense").mark("remix") \
+                        .tooltip("Derselbe Song mit Band, Tempo und Klang eines anderen Stils: Melodie, Text, Akkorde "
+                                 "und Stimme bleiben. Der ursprüngliche Stil bringt den Song zurück.")
+                with ui.row().classes("w-full items-center gap-1 q-mt-sm"):
                     cast_button = ui.button("Stimmen-Casting", icon="groups", on_click=lambda: cast_voices()) \
                         .props("outline no-caps dense").mark("casting") \
                         .tooltip("Jede installierte NEUTRINO-Stimme singt den Refrain, kurz zum Anhören. Die "
@@ -320,13 +344,14 @@ def build() -> None:
                 return
             current = current.with_updates(seed=result.seed, variations=result.settings.variations)
         elif current.seed is None:
-            current = current.with_updates(variations={}, melody_edits={}, melody_lengths={}, phrase_fixes={})
+            current = current.with_updates(variations={}, melody_edits={}, melody_lengths={}, phrase_fixes={},
+                                           remix_from="", remix_bpm=0)
         save_settings()
         if draft:
             current, n = pipeline.draft_settings(current), 1
-        job.start()
-        set_busy(True)
         n = n or int(count.value or 1)
+        job.start(laufzeit.kind(current, n if not part else 1, draft))
+        set_busy(True)
         try:
             if n > 1 or part:
                 results = await run.io_bound(pipeline.generate_variants, current, n, (part,) if part else (),
@@ -347,6 +372,10 @@ def build() -> None:
         results = [r for r in results or [] if r is not None]   # None: abgebrochen, weil die App schließt
         if not results:
             return
+        job.finish()
+        if settings.done_notice:
+            laufzeit.notify("Vloid Songs", f"{len(results)} Fassungen fertig" if len(results) > 1 else
+                            f"Song fertig: {results[0].settings.style}, Seed {results[0].seed}", job.elapsed)
         chosen = pipeline.best(results)
         if reopened is not None:
             chosen.history = reopened.audio
@@ -402,7 +431,7 @@ def build() -> None:
             return
         save_settings()
         current = settings.model_copy(deep=True)
-        job.start()
+        job.start(f"Album|{n}|{current.vocal_engine}")
         set_busy(True)
         try:
             made = await run.io_bound(album.make, current, n, styles, texts, job.report, name)
@@ -417,6 +446,9 @@ def build() -> None:
         if not made.results:
             ui.notify(f"Kein Song fertig geworden: {made.describe()}", type="negative", multi_line=True)
             return
+        job.finish()
+        if settings.done_notice:
+            laufzeit.notify("Vloid Songs", f"Album „{made.name}“ fertig: {made.describe()}", job.elapsed)
         chosen = made.results[0]
         state["result"] = chosen
         await show_result(chosen)
@@ -463,6 +495,21 @@ def build() -> None:
                     ui.button("nehmen", icon="check", on_click=lambda _, c=choice: take(c)) \
                         .props("outline no-caps dense color=secondary").mark(f"hook-take-{choice.number}")
         await play("Refrain 1", choices[0].preview)
+
+    async def make_remix() -> None:
+        result = state["result"]
+        if job.running or result is None:
+            ui.notify("Erst einen Song erzeugen, dann davon einen Remix machen.", type="warning")
+            return
+        if not remix_style.value:
+            ui.notify("Erst den Stil für den Remix wählen.", type="warning")
+            return
+        previous = settings.seed
+        assign(settings, pipeline.remix(result.settings, remix_style.value))
+        ui.notify(f"Remix als {settings.style}: {settings.bpm} BPM" + (
+            f", Melodie und Akkorde aus {settings.remix_from}" if settings.remix_from else ""), type="info")
+        await generate(n=1)
+        settings.seed = previous        # „Song erzeugen“ macht danach wieder einen neuen Song
 
     async def cast_voices() -> None:
         if job.running:
@@ -788,7 +835,7 @@ def build() -> None:
         if not busy:
             cancel.reset()
         for button in (generate_button, draft_button, full_button, album_button, zip_button, notes_button, video_button,
-                       youtube_button, hooks_button, cast_button, *reroll_buttons.values()):
+                       youtube_button, hooks_button, cast_button, remix_button, *reroll_buttons.values()):
             button.set_enabled(not busy)
         resing_button.set_enabled(not busy and _edited(settings) > 0)
         preview_button.set_enabled(not busy and _edited(settings) > 0)
@@ -797,7 +844,8 @@ def build() -> None:
     def show_steps() -> None:
         progress.set_value(job.fraction)
         if job.running:
-            step_label.set_text(f"{job.message} ({job.elapsed:.0f} s)")
+            left = job.remaining
+            step_label.set_text(f"{job.message} ({job.elapsed:.0f} s{', ' + left if left else ''})")
         elif job.steps:
             done = "Abgebrochen" if job.message == CANCELLED else "Fertig"
             step_label.set_text(f"{done} nach {job.elapsed:.0f} s")

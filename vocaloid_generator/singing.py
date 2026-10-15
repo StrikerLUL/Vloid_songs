@@ -17,8 +17,8 @@ from song_plan import chorus_windows, final_chorus, sections_in_seconds
 log = logging.getLogger(__name__)
 
 
-# Begleitstimmen, die nur NEUTRINO singt (backing_vocals.py): Oktave im letzten Refrain, Flächen, Ad-libs
-EXTRA_VOCALS = ("vocals_harmony_2.wav", "vocals_flaechen.wav", "vocals_adlibs.wav")
+# Begleitstimmen, die nur NEUTRINO singt (backing_vocals.py): Oktave im letzten Refrain, Flächen, Ad-libs, Idol-Rufe
+EXTRA_VOCALS = ("vocals_harmony_2.wav", "vocals_flaechen.wav", "vocals_adlibs.wav", "vocals_rufe.wav")
 VOCAL_FILES = ("vocals.wav", "vocals_duett_1.wav", "vocals_duett_2.wav", "vocals_harmony.wav", "vocals_chor.wav",
                "vocals_double.wav") + EXTRA_VOCALS
 # Welche Engine singt, wenn die gewählte fehlt; ganz zuletzt die lokale Vorschau-Stimme
@@ -36,7 +36,7 @@ VOCAL_SWING_LINES = {"melody_data": ("vocals.wav", "vocals_double.wav", "vocals_
 VOCAL_KEY = "vocals.key"
 # Die gesungenen Noten aller Stimmen in den Spuren (orchestrate_song)
 NOTE_KEYS = ("melody_data", "silben", "harmony_data", "harmony_silben", "octave_data", "octave_silben", "pads",
-             "adlib_data", "adlib_silben")
+             "adlib_data", "adlib_silben", "call_data", "call_silben")
 VOCAL_CODE = ("singing.py", "vocal_synthesizer.py", "voice_fx.py", "voicevox.py", "neutrino_score.py", "diffsinger.py",
               "meter.py", "rap.py")
 VOCAL_FIELDS = ("bpm", "meter", "seed", "rap_voice", "rap_speaker", "singer", "vocal_engine", "harmonies", "duet_singer", "support_singer", "style_shift", "vocal_takes",
@@ -44,7 +44,7 @@ VOCAL_FIELDS = ("bpm", "meter", "seed", "rap_voice", "rap_speaker", "singer", "v
                 "neutrino_pfad",
                 "vocal_comping", "phrase_expression", "long_vowel_mark", "breath_marks", "fast_diphthongs",
                 "english_kana", "section_style", "verse_style_shift", "chorus_style_shift", "even_takes",
-                "harmony_variety", "harmony_double", "sung_pads", "adlibs", "syllable_dynamics",
+                "harmony_variety", "harmony_double", "sung_pads", "adlibs", "idol_calls", "syllable_dynamics",
                 "recorded_breaths", "psola_reshape", "own_vocal", "own_vocal_align", "phrase_fixes", "style",
                 "telephone_fx", "stutter_fx", "hard_tune", "formant_fx", "vocal_swing", "breathiness", "shimmer")
 
@@ -921,7 +921,7 @@ def _stereo(paths: list, pans: tuple, out: str) -> None:
 
 
 def _neutrino_backing(settings: SongSettings, tracks: dict, out: str, neutrino_dir: str, duet: Optional[str]) -> None:
-    """Begleitstimmen aus backing_vocals: Oktave im letzten Refrain, gesungene Flächen, Ad-libs."""
+    """Begleitstimmen aus backing_vocals: Oktave im letzten Refrain, gesungene Flächen, Ad-libs, Idol-Rufe."""
     singer = duet or settings.singer
     shift = _chorus_shift(settings)
     if settings.harmonies and tracks.get("octave_data"):
@@ -943,6 +943,35 @@ def _neutrino_backing(settings: SongSettings, tracks: dict, out: str, neutrino_d
         if _sing_line(settings, tracks["adlib_data"], tracks["adlib_silben"], out, "vocals_adlibs", neutrino_dir,
                       singer, min(6, shift + 1)):
             log.info("Ad-libs im letzten Refrain")
+    if settings.idol_calls and tracks.get("call_data"):
+        _neutrino_calls(settings, tracks, out, neutrino_dir, shift)
+
+
+CALL_SHIFT = 2       # ohne weitere installierte Stimme rufen dieselbe Stimme heller und dunkler mit
+
+
+def _neutrino_calls(settings: SongSettings, tracks: dict, out: str, neutrino_dir: str, shift: int) -> None:
+    """Idol-Rufe (backing_vocals.calls) von mehreren Stimmen: die Hauptstimme und bis zu zwei weitere installierte,
+    sonst dieselbe heller und dunkler; leicht versetzt links und rechts wie eine Gruppe."""
+    import soundfile as sf
+    import voice_fx
+    from vocal_synthesizer import installed_singers
+    others = [n for n in installed_singers(neutrino_dir) if n != settings.singer
+              and os.path.isdir(os.path.join(neutrino_dir, "model", n))]
+    voices = [(settings.singer, min(6, shift + 1))] + [(n, shift) for n in others[:2]]
+    if len(voices) == 1:
+        voices += [(settings.singer, max(-6, shift - CALL_SHIFT)), (settings.singer, min(6, shift + CALL_SHIFT + 1))]
+    sung, rate = [], 48000
+    for k, (singer, voice_shift) in enumerate(voices):
+        wav = _sing_line(settings, tracks["call_data"], tracks["call_silben"], out, f"vocals_rufe_{k + 1}",
+                         neutrino_dir, singer, voice_shift)
+        if wav:
+            audio, rate = sf.read(wav, dtype="float32", always_2d=True)
+            sung.append(audio.mean(axis=1))
+            remove_file(wav)
+    if sung:
+        voice_fx.write_choir(os.path.join(out, "vocals_rufe.wav"), sung, rate, 0.0)
+        log.info("Idol-Rufe von %d Stimmen: %s", len(sung), ", ".join(f"{n} ({s:+d})" for n, s in voices))
 
 
 def _sing_line(settings: SongSettings, data: list, silben: list, out: str, name: str, neutrino_dir: str,

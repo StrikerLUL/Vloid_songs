@@ -196,3 +196,25 @@ def neutrino_attrappe(tmp_path, monkeypatch):
     # die Windows-Sprachausgabe der Vorschau-Stimme hängt in der CI: sie darf hier nie singen
     monkeypatch.setattr(singing, "_sing_preview", lambda *a, **k: pytest.fail("die Vorschau-Stimme sang"))
     return root, calls
+
+
+@pytest.fixture(autouse=True)
+def without_idol_calls(monkeypatch):
+    """Keine Idol-Rufe (v6 Nr. 15): die Songs der Tests singen wie bisher; test_idol_rufe.py holt sie sich zurück."""
+    import backing_vocals
+    monkeypatch.setattr(backing_vocals, "IDOL_CALLS", {})
+
+
+@pytest.fixture(autouse=True)
+def without_vocal_chops(monkeypatch):
+    """Keine Vocal Chops (v6 Nr. 14): die Mixe der Tests klingen wie bisher; test_vocal_chops.py holt sie sich zurück."""
+    import vocal_chops
+    monkeypatch.setattr(vocal_chops, "CHOP_STYLES", {})
+
+
+@pytest.fixture(autouse=True)
+def without_ritardando(monkeypatch):
+    """Kein Ritardando am Ende (v6 Nr. 16): Balladen der Tests enden wie bisher; test_ritardando.py holt es sich
+    zurück."""
+    import ritardando
+    monkeypatch.setattr(ritardando, "STYLES", {})

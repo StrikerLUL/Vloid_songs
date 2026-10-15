@@ -26,11 +26,11 @@ TRUE_PEAK_OVERSAMPLING = 4
 DEFAULT_LEVELS = {"drums": -17.0, "bass": -19.5, "piano": -22.0, "guitar": -23.0, "strings": -24.5,
                   "synth": -24.0, "brass": -24.0, "bells": -28.0, "choir": -27.0, "counter": -24.5,
                   "perc": -28.5, "melody": -21.0, "fx": -27.0, "vocals": -17.0, "harmony": -24.0, "gang": -23.0,
-                  "double": -25.0}
+                  "double": -25.0, "chops": -23.0}
 DEFAULT_REVERB = {"drums": 0.06, "bass": 0.0, "piano": 0.16, "guitar": 0.12, "strings": 0.28,
                   "synth": 0.2, "brass": 0.15, "bells": 0.35, "choir": 0.4, "counter": 0.24,
                   "perc": 0.08, "melody": 0.2, "fx": 0.3, "vocals": 0.18, "harmony": 0.26, "gang": 0.32,
-                  "double": 0.18, "band": 0.03}
+                  "double": 0.18, "band": 0.03, "chops": 0.25}
 # Gesangsdoppelung im Refrain: zwei leicht verstimmte, verzögerte Kopien links und rechts
 DOUBLE_CENTS, DOUBLE_DELAYS, DOUBLE_DB = 12, (0.017, 0.026), -9.0
 # Echte Doppelung (zweitbeste Fassung im Refrain, vocals_double.wav): so viel leiser als die Hauptstimme, rechts später
@@ -213,7 +213,9 @@ def _basic_synth(midi: pretty_midi.PrettyMIDI) -> np.ndarray:
 # ── Mischen ──────────────────────────────────────────────────────────────────────
 def _track_key(path: str) -> str:
     name = os.path.splitext(os.path.basename(path))[0].lower()
-    if "vocals_chor" in name or "flaechen" in name:
+    if name == "chops":
+        return "chops"            # Vocal Chops spielen wie ein Instrument (vocal_chops.py)
+    if "vocals_chor" in name or "flaechen" in name or "vocals_rufe" in name:
         return "gang"
     if "adlib" in name:
         return "harmony"
@@ -317,6 +319,8 @@ def _channel_chain(key: str, tone=None) -> Pedalboard:
                     HighShelfFilter(10000, 1.5), Compressor(threshold_db=-22, ratio=4, attack_ms=5, release_ms=100)],
         "gang":    [HighpassFilter(200), PeakFilter(350, -3.0, 1.0), PeakFilter(2500, 1.0, 1.0),
                     HighShelfFilter(9000, 1.0), Compressor(threshold_db=-24, ratio=4, attack_ms=8, release_ms=120)],
+        "chops":   [HighpassFilter(250), PeakFilter(3000, 1.5, 1.0),
+                    Compressor(threshold_db=-20, ratio=3, attack_ms=3, release_ms=80)],
     }
     return Pedalboard(chains.get(key, [HighpassFilter(80)]))
 

@@ -140,6 +140,10 @@ class SongSettings(BaseModel):
     scale: Literal["minor", "major", "dorian", "phrygian"] = "minor"
     # Takt (meter.py): 4/4 wie bisher, 3/4 (Walzer) oder 6/8 (dort zählt bpm die punktierten Viertel)
     meter: Literal["4/4", "3/4", "6/8"] = "4/4"
+    # Remix (v6 Nr. 8, pipeline.remix): Melodie und Akkorde wie im Stil remix_from bei remix_bpm, die Band spielt style
+    remix_from: str = ""
+    remix_bpm: int = Field(0, ge=0)
+    ritardando: bool = True            # Ballade: vor dem Schlussakkord langsamer, der Akkord klingt länger (Fermate)
     seed: Optional[int] = Field(None, ge=0)
     # Wie oft ein Teil bei gleichem Seed neu gewürfelt wurde; ohne Eintrag bleibt er, wie der Seed ihn macht.
     # Schlüssel: Teil ("bass") oder Teil in einer Sektionsart ("melody:Chorus")
@@ -214,6 +218,8 @@ class SongSettings(BaseModel):
     harmony_double: bool = True        # jede Harmonie zweimal gesungen, links und rechts
     sung_pads: bool = True             # gesungene Flächen (う, あ) im Refrain statt des Keyboard-Chors
     adlibs: bool = True                # Rufe und Echo-Antworten im letzten Refrain
+    idol_calls: bool = True            # „はい！はい！“ mehrerer Stimmen im Refrain (Idol-Pop, Kawaii, J-Pop, Rock)
+    vocal_chops: bool = True           # Schnipsel der Hauptstimme als Riff im Drop (vocal_chops.py)
     # Stimmen-Casting (casting.py): Lieblingsstimme je Stil, beim Wechsel des Stils gewählt
     style_singer: bool = True
     style_singers: dict[str, str] = Field(default_factory=dict)
@@ -259,6 +265,7 @@ class SongSettings(BaseModel):
     log_file: bool = True              # Protokoll in Protokolle\vloid_songs.log im Datenordner (applog.py)
     update_check: bool = True          # beim Start nach einer neuen Version schauen (updates.py)
     setup_wizard: bool = True          # Einrichten-Assistent beim Start, solange er nicht abgeschlossen ist
+    done_notice: bool = True           # Windows-Benachrichtigung, wenn ein längerer Lauf fertig ist (laufzeit.py)
     # Alltag (1.0.0)
     history_keep: int = Field(30, ge=0, le=1000)   # so viele Songs behält der Verlauf (0 = alle); benannte immer
     keep_projects: bool = True         # den Gesang jedes Songs im Verlauf aufheben, zum Wieder-Öffnen (project.py)

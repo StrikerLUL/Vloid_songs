@@ -8,7 +8,7 @@ import sys
 import applog
 import history
 import userdata
-from pipeline import (best, draft_settings, from_references, generate_song, generate_variants, hook_choices,
+from pipeline import (best, draft_settings, from_references, generate_song, generate_variants, hook_choices, remix,
                       hook_kind, lyric_video)
 from settings import KEYS, REROLLABLE, ReferenceTrack, SongSettings, is_rerollable
 from styles import STYLES
@@ -49,6 +49,9 @@ def parse_args(argv=None):
     p.add_argument("--seed", type=int, help="gleicher Seed = gleicher Song")
     p.add_argument("--bpm", type=int)
     p.add_argument("--style", help="Preset-Stil, z. B. 'J-Pop Energy', 'Rock', 'Kawaii Chiptune'")
+    p.add_argument("--remix", metavar="STIL",
+                   help="derselbe Song (--seed oder --aus-verlauf) mit Band, Tempo und Klang dieses Stils; Melodie, "
+                        "Text und Akkorde bleiben")
     p.add_argument("--key", choices=KEYS)
     p.add_argument("--scale", choices=["minor", "major", "dorian", "phrygian"])
     p.add_argument("--takt", choices=["4/4", "3/4", "6/8"], help="Takt; im 6/8-Takt zählt --bpm die punktierten Viertel")
@@ -117,6 +120,7 @@ def parse_args(argv=None):
     p.add_argument("--ohne-doppel-harmonie", action="store_true", help="die zweite Stimme nur einmal singen")
     p.add_argument("--ohne-flaechen", action="store_true", help="keine gesungenen Flächen im Refrain")
     p.add_argument("--ohne-adlibs", action="store_true", help="keine Ad-libs im letzten Refrain")
+    p.add_argument("--ohne-idol-rufe", action="store_true", help="keine Rufe (はい！はい！) im Refrain")
     p.add_argument("--ohne-echte-atmer", action="store_true",
                    help="Atmer aus Rauschen, auch wenn im Ordner Atmer Aufnahmen liegen")
     p.add_argument("--ohne-silben-lautstaerke", action="store_true",
@@ -145,6 +149,8 @@ def parse_args(argv=None):
     p.add_argument("--ohne-echte-grooves", action="store_true",
                    help="eingebaute Schlagzeug-Muster statt Grooves echter Schlagzeuger (setup_grooves.py)")
     p.add_argument("--ohne-bass-leben", action="store_true", help="Bass ohne Ghost-Notes und Slides")
+    p.add_argument("--ohne-chops", action="store_true", help="keine Vocal Chops im Drop")
+    p.add_argument("--ohne-ritardando", action="store_true", help="Ballade bis zum Schluss im Tempo")
     p.add_argument("--ohne-anschlagmuster", action="store_true",
                    help="Gitarre schlägt immer dasselbe Muster an statt je nach Teil")
     p.add_argument("--ohne-lofi-klang", action="store_true", help="Lo-Fi ohne Knistern und Bandmaschine")
@@ -300,6 +306,7 @@ def main(argv=None) -> int:
                  "harmony_double": False if args.ohne_doppel_harmonie else None,
                  "sung_pads": False if args.ohne_flaechen else None,
                  "adlibs": False if args.ohne_adlibs else None,
+                 "idol_calls": False if args.ohne_idol_rufe else None,
                  "syllable_dynamics": False if args.ohne_silben_lautstaerke else None,
                  "recorded_breaths": False if args.ohne_echte_atmer else None,
                  "convolution_reverb": False if args.ohne_platte else None,
@@ -313,6 +320,8 @@ def main(argv=None) -> int:
                  "real_grooves": False if args.ohne_echte_grooves else None,
                  "lively_bass": False if args.ohne_bass_leben else None,
                  "guitar_strums": False if args.ohne_anschlagmuster else None,
+                 "vocal_chops": False if args.ohne_chops else None,
+                 "ritardando": False if args.ohne_ritardando else None,
                  "auto_rating": False if args.ohne_bewertung else None,
                  "lofi_texture": False if args.ohne_lofi_klang else None,
                  "mix_movement": False if args.ohne_bewegung else None,
@@ -340,6 +349,12 @@ def main(argv=None) -> int:
         channels["drums"]["style"] = args.schlagzeug
         overrides["channels"] = channels
     settings = settings.with_updates(**{k: v for k, v in overrides.items() if v is not None})
+    if args.remix:
+        try:
+            settings = remix(settings, args.remix)
+        except ValueError as e:
+            log.error("%s Mit --seed oder --aus-verlauf geht es.", e)
+            return 1
     if args.summen:
         settings = _hummed(settings, args.summen)
         if settings is None:

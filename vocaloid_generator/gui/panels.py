@@ -476,6 +476,12 @@ def band_panel(s: SongSettings) -> None:
         .mark("switch-guitar_strums") \
         .tooltip("Ruhige Teile in Vierteln, Refrains in Sechzehnteln mit abgedämpften Anschlägen; runter klingen die "
                  "tiefen Saiten, hoch die hohen (Spielweise geschlagen)")
+    ui.switch("Vocal Chops im Drop").bind_value(s, "vocal_chops").mark("switch-vocal_chops") \
+        .tooltip("Kurze Schnipsel der Hauptstimme, umgestimmt auf die Akkorde, spielen im Drop einen Riff (im Future "
+                 "Bass auch im Intro). Nur in Stilen mit Drop, nicht in Ballade, Rock, City Pop und Lo-Fi")
+    ui.switch("Ballade: langsamer zum Schluss").bind_value(s, "ritardando").mark("switch-ritardando") \
+        .tooltip("In den letzten zwei Takten vor dem Schlussakkord wird die Band langsamer (Ritardando), der "
+                 "Schlussakkord klingt länger aus. Nur im Stil Ballade und wenn der Song mit einem Outro endet")
     hint("Echtes Schlagzeug und Grooves echter Schlagzeuger schaltest du unter Pfade ein oder aus, sobald sie "
          "eingerichtet sind.")
     section_title("Klänge aus dem VST-Instrument")
@@ -576,6 +582,9 @@ BACKING_SWITCHES = (
     ("sung_pads", "Gesungene Flächen", "Drei Stimmen singen im Refrain die Akkordtöne auf う (im letzten auf あ) statt "
                                        "des Keyboard-Chors; NEUTRINO singt dafür etwas länger"),
     ("adlibs", "Ad-libs im letzten Refrain", "Kurze Rufe (いぇー, おー) und Echo-Antworten in den Lücken des Gesangs"),
+    ("idol_calls", "Idol-Rufe", "Mehrere Stimmen rufen „はい！はい！“ (Rock: „おい！“) auf den Gegenschlägen, an denen "
+                                "die Hauptstimme Pause hat, und „ふっふー“ vor dem Refrain. Im Idol-Pop und Kawaii in "
+                                "jedem Refrain, in J-Pop Energy und Rock im letzten"),
 )
 
 # Noten, die NEUTRINO gut singen kann (neutrino_score.py) und Englisch im Liedtext
@@ -878,6 +887,9 @@ def app_settings(s: SongSettings) -> None:
     ui.switch("Nach Updates suchen (einmal am Tag) und nach einem Update zeigen, was neu ist").bind_value(s, "update_check").mark("update-switch")
     ui.switch("Einrichten-Assistent beim Start zeigen, bis er fertig ist").bind_value(s, "setup_wizard") \
         .mark("wizard-switch")
+    ui.switch("Melden, wenn der Song fertig ist").bind_value(s, "done_notice").mark("switch-done_notice") \
+        .tooltip("Eine Windows-Benachrichtigung unten rechts, wenn ein Song, mehrere Fassungen oder ein Album "
+                 "fertig sind (nur nach Läufen ab 20 Sekunden). So kannst du in der Zeit etwas anderes machen.")
     ui.number("So viele Songs behält der Verlauf (0 = alle)", min=0, max=1000, step=5, precision=0) \
         .bind_value(s, "history_keep", forward=lambda v: int(v or 0)).classes("w-80").mark("history-keep") \
         .tooltip("Ältere fallen heraus; Favoriten, Songs mit Namen und Album-Songs bleiben immer")

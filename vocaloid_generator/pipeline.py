@@ -102,7 +102,9 @@ def compose(settings: SongSettings, seed: Optional[int] = None):
         swing=settings.swing,
         jitter_scale=settings.jitter / DEFAULT_JITTER,
         instrument_styles=settings.instrument_styles(),
-        style=settings.style,
+        style=settings.remix_from or settings.style,
+        band_style=settings.style if settings.remix_from else None,
+        melody_bpm=settings.remix_bpm or None,
         vocal_range=(lo, hi),
         variations=settings.variations,
         custom_chords=settings.custom_chords,
@@ -115,10 +117,31 @@ def compose(settings: SongSettings, seed: Optional[int] = None):
         guitar_strums=settings.guitar_strums,
         singable=settings.singable_melody,
         meter=settings.meter,
+        ritardando=settings.ritardando,
     )
     import backing_vocals
     backing_vocals.add(tracks, settings)
     return tracks, seed
+
+
+def remix(settings: SongSettings, style: str) -> SongSettings:
+    """
+    Remix (v6 Nr. 8): derselbe Song (Seed, Melodie, Text, Akkorde, Stimme) mit Band, Tempo und Lautstärken des
+    Stils style. Ein Remix eines Remixes geht vom ursprünglichen Song aus. Wirft ValueError ohne Seed.
+    """
+    if settings.seed is None:
+        raise ValueError("Erst einen Song erzeugen, dann davon einen Remix machen.")
+    original, melody_bpm = settings.remix_from or settings.style, settings.remix_bpm or settings.bpm
+    if style == original:
+        return settings.with_updates(style=style, bpm=melody_bpm, remix_from="", remix_bpm=0)
+    from preset_manager import preset_settings
+    typical = preset_settings(style, settings)
+    if typical is None:
+        return settings.with_updates(style=style, remix_from=original, remix_bpm=melody_bpm)
+    bpm = typical.bpm if settings.meter != "6/8" else round(typical.bpm / 1.5)    # 6/8 zählt punktierte Viertel
+    log.info("Remix von %s als %s: %d statt %d BPM", original, style, bpm, melody_bpm)
+    return settings.with_updates(style=style, bpm=max(40, bpm), channels=typical.channels, remix_from=original,
+                                 remix_bpm=melody_bpm)
 
 
 def _own_melody(settings: SongSettings) -> dict:
@@ -218,7 +241,8 @@ def _produce(settings: SongSettings, tracks: dict, out: str, report: ProgressFn,
     if fx_wav:
         result.wav_files["fx"] = fx_wav
 
-    stems = list(result.wav_files.values()) + _vocal_stems(settings, result, out)
+    stems = list(result.wav_files.values()) + _vocal_stems(settings, result, out) + \
+        _vocal_chops(settings, tracks, result, out)
     if not stems:
         raise RuntimeError("Keine Audiospuren zum Mischen vorhanden.")
 
@@ -321,6 +345,22 @@ def _vocal_stems(settings: SongSettings, result: SongResult, out: str) -> list:
     if settings.vocal_chain and os.path.exists(double):
         stems.append(double)          # echte Doppelung im Refrain aus der zweitbesten Fassung
     return stems + [p for p in (os.path.join(out, n) for n in singing.EXTRA_VOCALS) if os.path.exists(p)]
+
+
+def _vocal_chops(settings: SongSettings, tracks: dict, result: SongResult, out: str) -> list:
+    """Vocal Chops im Drop aus dem fertigen Gesang (v6 Nr. 14); leer ohne Schalter, Gesang oder Drop."""
+    import vocal_chops
+    path = os.path.join(out, vocal_chops.FILE)
+    remove_file(path)
+    if not settings.vocal_chops or not result.vocals_wav or tracks.get("plan") is None:
+        return []
+    try:
+        made = vocal_chops.render(tracks["plan"], tracks["melody_data"], tracks["silben"], settings.bpm,
+                                  result.vocals_wav, path)
+    except Exception as e:  # noqa: BLE001 – Chops sind kein Grund, den Song aufzugeben
+        log.warning("Vocal Chops übersprungen: %s", e)
+        return []
+    return [made] if made else []
 
 
 def _polish(settings: SongSettings, tracks: dict, result: SongResult, stems: list, mix_args: dict,

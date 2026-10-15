@@ -13,6 +13,7 @@ from nicegui.testing.user_simulation import user_simulation
 
 import history
 import karaoke
+import laufzeit
 import pipeline
 import vorlagen
 from gui import media, page
@@ -534,6 +535,30 @@ async def test_hooks_that_cannot_be_made_explain_why(user, monkeypatch):
     await user.open("/")
     user.find(marker="hooks").click()
     await user.should_see("eigene MIDI-Melodie", retries=50)
+
+
+async def test_a_finished_song_is_announced_and_remembered_for_the_estimate(user, fake_generation, monkeypatch):
+    told = []
+    monkeypatch.setattr(laufzeit, "notify", lambda title, message, elapsed: told.append(message))
+    await user.open("/")
+    user.find(marker="generate").click()
+    await user.should_see("Seed 1000", retries=50)
+    assert told == ["Song fertig: J-Pop Energy, Seed 1000"]
+    assert len(laufzeit.past(laufzeit.kind(SongSettings(), 1))) == 1
+
+
+async def test_a_remix_plays_the_same_song_in_another_style(user, fake_generation):
+    await user.open("/")
+    user.find(marker="remix").click()
+    await user.should_see("Erst einen Song erzeugen", retries=20)
+    user.find(marker="generate").click()
+    await user.should_see("Seed 1000", retries=50)
+    user.find(marker="remix-style").elements.pop().set_value("Rock")
+    user.find(marker="remix").click()
+    await until(lambda: len(fake_generation) == 2)
+    remixed = fake_generation[-1]
+    assert (remixed.seed, remixed.style, remixed.remix_from, remixed.remix_bpm) == (1000, "Rock", "J-Pop Energy", 160)
+    await user.should_see("Remix als Rock", retries=20)
 
 
 async def test_own_chords_and_melody_are_saved(user):

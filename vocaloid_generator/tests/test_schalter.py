@@ -74,9 +74,12 @@ ELSEWHERE = {
     "id3_tags": "test_fassungen.py::test_switched_off_there_are_no_versions_and_no_tags",
     "keep_projects": "test_projekt.py::test_without_the_switch_nothing_is_kept_and_deleting_takes_the_project_along",
     "rap_voice": "test_rap.py::test_without_the_switch_or_without_voicevox_the_singer_sings_the_rap",
+    "idol_calls": "test_idol_rufe.py::test_without_the_switch_there_are_no_calls",
+    "vocal_chops": "test_vocal_chops.py::test_the_song_mixes_the_chops_only_with_the_switch",
+    "ritardando": "test_ritardando.py::test_a_ballad_slows_down_and_holds_the_last_chord",
 }
 # Bedienung der App, ändert den Song nicht
-APP = ("show_karaoke", "reuse_steps", "log_file", "update_check", "setup_wizard")
+APP = ("show_karaoke", "reuse_steps", "log_file", "update_check", "setup_wizard", "done_notice")
 
 GROUPS = {"NOTES": NOTES, "MIX": tuple(MIX), "RENDER": RENDER, "LIVEN": LIVEN, "STYLE_FX": tuple(STYLE_FX),
           "SCORE": SCORE, "SUGGESTIONS": SUGGESTIONS, "WIRED": WIRED, "ELSEWHERE": tuple(ELSEWHERE), "APP": APP}

@@ -261,7 +261,7 @@ async def _confirm(question: str, detail: str) -> bool:
 
 # ── System prüfen ─────────────────────────────────────────────────────────────
 def system_check(s: SongSettings) -> ui.dialog:
-    state = {"running": False}
+    state = {"busy": False}
     with ui.dialog() as dialog, ui.card().classes("w-[720px] max-w-full bg-grey-9"):
         _title("System prüfen")
         _hint("Jeder Baustein macht etwas Kleines echt: einen Takt Klavier, zwei Töne mit NEUTRINO, einen Probeton "
@@ -296,25 +296,46 @@ def system_check(s: SongSettings) -> ui.dialog:
                             .classes("text-body2")
                         ui.label(r.message).classes("text-caption text-grey-5")
 
-    async def check(deep: bool) -> None:
-        if state["running"]:
-            return
-        state["running"] = True
-        cancel.reset()
+    def enable(on: bool) -> None:
         for button in (check_button, thorough):
-            button.set_enabled(False)
+            button.set_enabled(on)
+
+    def watch() -> None:
+        """Eine Prüfung gibt es nur einmal: Jedes offene Fenster zeigt die laufende und sperrt die Knöpfe."""
+        if not dialog.value:
+            return
+        busy = systemcheck.running()
+        enable(not busy)
+        if busy:
+            fraction, step = systemcheck.current_step()
+            progress.set_value(fraction)
+            summary.set_text(step or "Prüfung läuft...")
+        elif state["busy"]:
+            progress.set_value(1.0)
+            show(systemcheck.load())
+        state["busy"] = busy
+
+    async def check(deep: bool) -> None:
+        if systemcheck.running():
+            ui.notify("Die Prüfung läuft schon, das Ergebnis erscheint gleich hier.", type="info")
+            return
+        cancel.reset()
+        enable(False)
         try:
-            await run.io_bound(systemcheck.run_all, s.model_copy(deep=True),
-                               lambda f, m: (progress.set_value(f), summary.set_text(m)), deep)
+            await run.io_bound(systemcheck.run_all, s.model_copy(deep=True), None, deep)
+        except systemcheck.Busy:
+            ui.notify("Die Prüfung läuft schon, das Ergebnis erscheint gleich hier.", type="info")
+            return
         except cancel.Cancelled:
             ui.notify("Prüfung abgebrochen.", type="warning")
-        finally:
-            state["running"] = False
-            for button in (check_button, thorough):
-                button.set_enabled(True)
+        else:
+            progress.set_value(1.0)
+        enable(not systemcheck.running())
         show(systemcheck.load())
 
     show(systemcheck.load())
+    with dialog:
+        ui.timer(0.3, watch)
     return dialog
 
 

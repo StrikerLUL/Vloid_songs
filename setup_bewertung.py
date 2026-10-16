@@ -5,8 +5,9 @@
 # Grafikkarte (mit NVIDIA rechnet sie, sonst der Prozessor). Danach bewertet die App mehrere Fassungen eines Songs von
 # selbst und lädt die beste; ausschalten lässt sich das im Tab „Pfade“. Löschen: den Ordner tools/bewertung löschen.
 #
-#   uv run setup_bewertung.py          mit Grafikkarte etwa 3 GB, ohne deutlich weniger
-#   uv run setup_bewertung.py --cpu    PyTorch nur für den Prozessor (kleiner, langsamer)
+#   uv run setup_bewertung.py              mit Grafikkarte etwa 3 GB, ohne deutlich weniger
+#   uv run setup_bewertung.py --cpu        PyTorch nur für den Prozessor (kleiner, langsamer)
+#   uv run setup_bewertung.py --ergaenzen  nur fehlende Pakete in eine schon eingerichtete Umgebung (macht die Setup.exe)
 import argparse
 import os
 import shutil
@@ -18,7 +19,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "voc
 import config  # noqa: E402
 import rating  # noqa: E402
 
-PAKETE = ("audiobox_aesthetics==0.0.4", "soundfile")
+# requests braucht Audiobox zum Laden des Modells, gibt es aber nicht an; früher kam es mit huggingface_hub, seit dessen
+# Version 1.0 nicht mehr („No module named 'requests'“)
+PAKETE = ("audiobox_aesthetics==0.0.4", "soundfile", "requests")
 PYTHON = "3.12"     # ohne Setup.exe; sonst nimmt die Umgebung deren Python (config.venv_python)
 
 
@@ -31,10 +34,34 @@ def _ausfuehren(befehl: list, **kwargs) -> bool:
         return False
 
 
-def setup(cpu: bool = False) -> bool:
+def _uv():
     uv = shutil.which("uv")
     if not uv:
         print("uv fehlt. Einmal in PowerShell ausführen: winget install astral-sh.uv")
+    return uv
+
+
+def ergaenzen() -> bool:
+    """
+    Nach einem Update: lädt Pakete, die neu in PAKETE stehen, in die schon eingerichtete Umgebung, ohne das Modell
+    zu laden. Was schon da ist, bleibt, wie es ist. Ohne Umgebung passiert nichts.
+    """
+    if not rating.available():
+        return True
+    uv = _uv()
+    if not uv:
+        return False
+    print("Ergänze die automatische Bewertung", flush=True)
+    if not _ausfuehren([uv, "pip", "install", "--python", rating.python(), "--torch-backend", "auto", *PAKETE]):
+        print("Das Ergänzen hat nicht geklappt; unter Hilfe › Einrichten lässt es sich wiederholen.")
+        return False
+    rating.mark_complete()
+    return True
+
+
+def setup(cpu: bool = False) -> bool:
+    uv = _uv()
+    if not uv:
         return False
     venv = os.path.join(rating.FOLDER, "venv")
     print(f"Richte die Bewertung in {rating.FOLDER} ein")
@@ -63,4 +90,6 @@ def setup(cpu: bool = False) -> bool:
 if __name__ == "__main__":
     p = argparse.ArgumentParser(description="Richtet die automatische Bewertung (Audiobox Aesthetics) ein")
     p.add_argument("--cpu", action="store_true", help="PyTorch nur für den Prozessor, ohne Grafikkarte")
-    sys.exit(0 if setup(p.parse_args().cpu) else 1)
+    p.add_argument("--ergaenzen", action="store_true", help="nur fehlende Pakete in die eingerichtete Umgebung laden")
+    args = p.parse_args()
+    sys.exit(0 if (ergaenzen() if args.ergaenzen else setup(args.cpu)) else 1)

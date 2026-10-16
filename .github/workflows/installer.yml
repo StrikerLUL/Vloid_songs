@@ -72,6 +72,12 @@ jobs:
         run: |
           $setup = Get-ChildItem installer/Output/*.exe | Select-Object -First 1
           $target = Join-Path $env:RUNNER_TEMP "VloidSongs"
+          # Wie bei Striker nach 1.2.0: Die automatische Bewertung ist eingerichtet, aber ihr fehlt requests. Das Setup
+          # ergänzt sie (setup_bewertung.py --ergaenzen); hier ist sie leer, also lädt es alle ihre Pakete.
+          $bewertung = Join-Path $target "tools\bewertung\venv"
+          $mitgebracht = (Resolve-Path installer/python/python.exe).Path
+          uv venv $bewertung --python $mitgebracht
+          if ($LASTEXITCODE -ne 0) { exit 1 }
           Start-Process $setup.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=$target", "/TASKS=" -Wait
           foreach ($file in "vocaloid_generator\app.py", "uv\uv.exe", "python\python.exe", "Vloid Songs starten.bat", ".venv\Scripts\python.exe") {
             if (-not (Test-Path (Join-Path $target $file))) { Write-Error "$file fehlt nach dem Installieren"; exit 1 }
@@ -86,6 +92,8 @@ jobs:
           if ($python -ne (Join-Path $target "python\python.exe")) { Write-Error "Modelle bekämen $python statt des mitgebrachten Pythons"; exit 1 }
           & (Join-Path $target "uv\uv.exe") venv (Join-Path $env:RUNNER_TEMP "modell-venv") --python $python
           if ($LASTEXITCODE -ne 0) { exit 1 }
+          & (Join-Path $bewertung "Scripts\python.exe") -c "import requests, audiobox_aesthetics.infer; print('Bewertung ergaenzt')"
+          if ($LASTEXITCODE -ne 0) { Write-Error "Das Setup hat der Bewertung requests nicht nachgeladen"; exit 1 }
           Start-Process (Join-Path $target "unins000.exe") -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES" -Wait
       - uses: actions/upload-artifact@v4
         with:

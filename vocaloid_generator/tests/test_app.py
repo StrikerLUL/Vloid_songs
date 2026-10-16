@@ -345,6 +345,19 @@ def test_app_starts_in_the_browser_without_pywebview(monkeypatch):
     monkeypatch.setattr(app.importlib.util, "find_spec", lambda name: None)
     app.main([])
     assert seen["native"] is False and seen["show"] is True and seen["host"] == "127.0.0.1"
+    assert seen["favicon"].endswith("vloid.png")
+
+
+def test_the_own_window_gets_an_ico(monkeypatch):
+    """Unter Windows setzt das Fenster sein Symbol nur aus einer .ico (sonst „Could not set native window icon“)."""
+    import app
+    seen = {}
+    monkeypatch.setattr(ui, "run", lambda *a, **kw: seen.update(kw))
+    monkeypatch.setattr(app.importlib.util, "find_spec", lambda name: object())
+    app.main([])
+    assert seen["native"] is True and seen["favicon"] == app.WINDOW_ICON and os.path.isfile(app.WINDOW_ICON)
+    with open(app.WINDOW_ICON, "rb") as f:
+        assert f.read(4) == b"\x00\x00\x01\x00"                       # eine echte .ico-Datei
 
 
 async def test_typical_values_of_a_style(user):
@@ -796,6 +809,39 @@ async def test_help_menu_opens_the_system_check(user, monkeypatch):
     user.find(marker="check-run").click()
     await user.should_see("Alles läuft", retries=100)
     await user.should_see("klappt")
+
+
+async def test_the_system_check_runs_only_once(user, monkeypatch):
+    """Läuft schon eine Prüfung (z. B. aus einem zweiten Fenster), startet „Prüfen“ keine zweite daneben."""
+    import threading
+
+    import systemcheck
+    started, go, calls = threading.Event(), threading.Event(), []
+
+    def slow(s, folder):
+        calls.append(folder)
+        started.set()
+        go.wait(10)
+        return True, "klappt"
+    monkeypatch.setattr(systemcheck, "CHECKS", ())
+    systemcheck.register("a", "Probe", slow)
+    await user.open("/")
+    user.find(marker="help-menu").click()
+    user.find(marker="menu-check").click()
+    await user.should_see(marker="check-run")
+    other = threading.Thread(target=systemcheck.run_all, args=(SongSettings(),))
+    other.start()
+    try:
+        assert started.wait(10)
+        user.find(marker="check-run").click()
+        await user.should_see("Die Prüfung läuft schon")
+        await user.should_see("Prüfe Probe...")
+        await until(lambda: not user.find(marker="check-run").elements.pop().enabled)
+    finally:
+        go.set()
+        other.join(10)
+    await user.should_see("Alles läuft", retries=100)
+    assert len(calls) == 1 and user.find(marker="check-run").elements.pop().enabled
 
 
 async def test_help_menu_shows_credits_and_news(user):

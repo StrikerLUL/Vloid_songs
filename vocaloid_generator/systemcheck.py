@@ -8,6 +8,7 @@ import logging
 import os
 import shutil
 import tempfile
+import threading
 import time
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -24,6 +25,14 @@ log = logging.getLogger(__name__)
 RESULT_FILE = "systemcheck.json"
 FOLDER = "Systemcheck"            # im Datenordner: der kurze Probesong
 MIN_FREE_GB = 5.0
+# Immer nur eine Prüfung: Zwei gleichzeitige (z. B. „Prüfen“ in einem zweiten Fenster „System prüfen“) singen den
+# Probesong in denselben Ordner und löschen sich gegenseitig die Gesangsdateien (Errno 2, „System error“).
+_lock = threading.Lock()
+_progress = [0.0, ""]             # wie weit die laufende Prüfung ist, für jedes Fenster „System prüfen“
+
+
+class Busy(RuntimeError):
+    """Es läuft schon eine Prüfung."""
 
 
 @dataclass
@@ -204,8 +213,7 @@ def check_rating(settings, folder: str) -> tuple:
     if not rating.available():
         return None, "Automatische Bewertung nicht eingerichtet"
     found = rating.rate([_tone(os.path.join(folder, "bewertung.wav"))])[0]
-    return (True, f"Probeton bewertet: {found.describe()}") if found else (False, "Die Bewertung lief nicht "
-                                                                                  "(Protokoll ansehen)")
+    return (True, f"Probeton bewertet: {found.describe()}") if found else (False, rating.problem())
 
 
 def check_demucs(settings, folder: str) -> tuple:
@@ -291,10 +299,35 @@ def register(key: str, name: str, check: Callable, slow: bool = False, before: s
     CHECKS = tuple(rest[:at] + [(key, name, check, slow)] + rest[at:])
 
 
+def running() -> bool:
+    return _lock.locked()
+
+
+def current_step() -> tuple:
+    """(Anteil, Schritt) der laufenden Prüfung."""
+    return tuple(_progress)
+
+
 def run_all(settings, progress: Optional[Callable[[float, str], None]] = None, thorough: bool = False,
             only: tuple = ()) -> list:
-    """Alle Prüfungen nacheinander; eine fehlgeschlagene hält die anderen nicht auf. thorough: auch ACE-Step und KI-Begleitung."""
-    report = progress or (lambda fraction, message: None)
+    """
+    Alle Prüfungen nacheinander; eine fehlgeschlagene hält die anderen nicht auf. thorough: auch ACE-Step und
+    KI-Begleitung. Läuft schon eine Prüfung, wirft sie Busy, statt eine zweite daneben zu starten.
+    """
+    if not _lock.acquire(blocking=False):
+        raise Busy("Die Prüfung läuft schon")
+    try:
+        return _run_all(settings, progress, thorough, only)
+    finally:
+        _progress[:] = [0.0, ""]
+        _lock.release()
+
+
+def _run_all(settings, progress, thorough: bool, only: tuple) -> list:
+    def report(fraction: float, message: str) -> None:
+        _progress[:] = [fraction, message]
+        if progress:
+            progress(fraction, message)
     chosen = [c for c in CHECKS if (thorough or not c[3]) and (not only or c[0] in only)]
     results = []
     with tempfile.TemporaryDirectory() as folder:

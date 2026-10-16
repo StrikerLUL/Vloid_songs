@@ -1,3 +1,3 @@
 # version.py – Versionsnummer der App (dieselbe wie in pyproject.toml) und woher Updates kommen
-VERSION = "1.2.0"
+VERSION = "1.2.1"
 REPO = "StrikerLUL/Vloid_songs"

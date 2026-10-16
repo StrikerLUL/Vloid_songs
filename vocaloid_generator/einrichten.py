@@ -59,7 +59,7 @@ def _airwindows() -> bool:
 
 def _rating() -> bool:
     import rating
-    return rating.available()
+    return rating.complete()        # fehlt der Umgebung ein Paket, bietet der Assistent sie wieder an
 
 
 def _demucs() -> bool:

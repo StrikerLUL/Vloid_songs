@@ -153,3 +153,18 @@ def test_mp3_export_without_ffmpeg_leaves_no_empty_file(tmp_path, monkeypatch):
 
     assert exportiere_song(wav, mp3) is None
     assert not os.path.exists(mp3)
+
+
+def test_pydub_does_not_warn_about_its_regexes():
+    """pydub 0.25.1 meldet beim ersten Import unter Python 3.12 SyntaxWarnings im Fenster; nur diese bleiben weg."""
+    import subprocess
+    import sys
+
+    import config
+    bad = "x = '\\('"                                         # ein ungültiges Escape wie in pydub/utils.py
+    code = (f"import exporter\n"
+            f"compile({bad!r}, {os.path.join('C:', 'x', 'pydub', 'utils.py')!r}, 'exec')\n"
+            f"compile({bad!r}, 'eigen.py', 'exec')\n")
+    done = subprocess.run([sys.executable, "-c", code], cwd=config.BASE_DIR, capture_output=True, text=True)
+    assert done.returncode == 0, done.stderr
+    assert "eigen.py" in done.stderr and "SyntaxWarning" in done.stderr and "pydub" not in done.stderr

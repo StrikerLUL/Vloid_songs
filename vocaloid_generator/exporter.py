@@ -1,8 +1,12 @@
 # exporter.py
 import io
 import logging
+import warnings
 
 log = logging.getLogger(__name__)
+# pydub 0.25.1 schreibt reguläre Ausdrücke ohne r"…"; Python 3.12 meldet das beim ersten Import nach jeder
+# Installation als SyntaxWarning im Fenster. Am MP3-Export ändert das nichts.
+warnings.filterwarnings("ignore", "invalid escape sequence", SyntaxWarning, r".*[\\/]pydub[\\/]")
 
 def exportiere_song(wav_pfad, mp3_pfad=None):
     """Exportiert den fertigen Mix als MP3. Gibt den MP3-Pfad zurück, oder None, wenn das nicht ging."""

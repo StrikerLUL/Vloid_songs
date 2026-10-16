@@ -107,6 +107,41 @@ def test_checks_run_on_and_record_failures(monkeypatch):
         "Alles läuft (nicht eingerichtet: Fehlt)"
 
 
+def test_only_one_check_runs_at_a_time(monkeypatch):
+    """Zwei gleichzeitige Prüfungen sangen den Probesong in denselben Ordner und löschten sich die Dateien."""
+    import threading
+    started, go = threading.Event(), threading.Event()
+
+    def slow(settings, folder):
+        started.set()
+        assert go.wait(10)
+        return True, "fertig"
+    monkeypatch.setattr(systemcheck, "CHECKS", ())
+    systemcheck.register("langsam", "Langsam", slow)
+    first = threading.Thread(target=systemcheck.run_all, args=(SongSettings(),))
+    first.start()
+    assert started.wait(10)
+    try:
+        assert systemcheck.running() and systemcheck.current_step() == (0.0, "Prüfe Langsam...")
+        with pytest.raises(systemcheck.Busy):
+            systemcheck.run_all(SongSettings())
+    finally:
+        go.set()
+        first.join(10)
+    assert not systemcheck.running() and systemcheck.current_step() == (0.0, "")
+    assert [r.message for r in systemcheck.load()[1]] == ["fertig"]
+    assert systemcheck.run_all(SongSettings())[0].ok                         # danach geht die nächste
+
+
+def test_a_failed_rating_says_what_is_missing(monkeypatch, tmp_path):
+    import rating
+    monkeypatch.setattr(rating, "available", lambda: True)
+    monkeypatch.setattr(rating, "rate", lambda paths: [None])
+    monkeypatch.setattr(rating, "missing_package", lambda: "requests")
+    ok, message = systemcheck.check_rating(SongSettings(), str(tmp_path))
+    assert ok is False and "„requests“" in message and "Einrichten" in message
+
+
 def test_real_quick_checks_pass_here():
     results = systemcheck.run_all(SongSettings(), only=("space", "instruments", "mp3", "neutrino", "soundfonts",
                                                         "samples", "rating", "polish"), thorough=True)

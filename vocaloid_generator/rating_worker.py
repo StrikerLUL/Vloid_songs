@@ -12,12 +12,25 @@ import sys
 MARKER = "BEWERTUNG "
 
 
+def without_links() -> None:
+    """
+    Echte Modelldateien statt Verknüpfungen (Symlinks), auch mit huggingface_hub vor 2.0, das HF_HUB_DISABLE_SYMLINKS
+    nicht kennt: manche Windows-PCs öffnen die Verknüpfungen nicht („[Errno 22] Invalid argument“ bei config.json).
+    """
+    try:
+        import huggingface_hub.file_download as download
+    except ImportError:
+        return
+    download.are_symlinks_supported = lambda *args, **kwargs: False
+
+
 def main(paths: list) -> int:
     import numpy as np
     import soundfile as sf
     import torch
     from audiobox_aesthetics.infer import initialize_predictor
 
+    without_links()
     predictor = initialize_predictor()
     results = []
     for path in paths:

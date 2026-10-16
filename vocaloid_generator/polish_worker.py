@@ -12,6 +12,18 @@ MARKER = "VEREDELT "
 MODEL = "acestep-v15-turbo"
 
 
+def without_links() -> None:
+    """
+    Echte Modelldateien statt Verknüpfungen (Symlinks), auch mit huggingface_hub vor 2.0, das HF_HUB_DISABLE_SYMLINKS
+    nicht kennt: manche Windows-PCs öffnen die Verknüpfungen nicht („[Errno 22] Invalid argument“ bei config.json).
+    """
+    try:
+        import huggingface_hub.file_download as download
+    except ImportError:
+        return
+    download.are_symlinks_supported = lambda *args, **kwargs: False
+
+
 def _gpu() -> dict:
     import torch
     if not torch.cuda.is_available():
@@ -65,6 +77,7 @@ def main(argv: list) -> int:
         import acestep  # noqa: F401  (ist ACE-Step installiert?)
         found = _gpu()
     else:
+        without_links()
         found = polish(job)
     print(MARKER + json.dumps(found), flush=True)
     return 0

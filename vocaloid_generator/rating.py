@@ -57,9 +57,13 @@ class Rating:
             return None
 
 
+def model_folder() -> str:
+    return os.path.join(FOLDER, "huggingface")
+
+
 def environment() -> dict:
     """Umgebungsvariablen für die Bewertung: das Modell liegt mit in tools/bewertung, nicht irgendwo im Profil."""
-    return {**os.environ, "HF_HOME": os.path.join(FOLDER, "huggingface"), "PYTHONIOENCODING": "utf-8"}
+    return {**os.environ, **config.hf_environment(model_folder()), "PYTHONIOENCODING": "utf-8"}
 
 
 def python() -> str:
@@ -152,6 +156,7 @@ def rate(paths: list) -> list:
     if not paths or not available():
         return [None] * len(paths)
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)       # unter Windows ohne schwarzes Fenster
+    config.hf_without_links(model_folder())                 # 1.2.1 und älter legten Verknüpfungen an
     try:
         done = cancel.run([python(), WORKER, *paths], capture_output=True, timeout=TIMEOUT, env=environment(),
                           encoding="utf-8", errors="replace", creationflags=flags)

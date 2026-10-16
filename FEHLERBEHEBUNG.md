@@ -60,6 +60,9 @@ und Systeminfo (keine Songs) und landet in `Dokumente\Vloid Songs\Fehlerberichte
 - **Ein Modell (Bewertung, Demucs, KI-Begleitung, Veredler) startet nicht.** Beim ersten Mal lädt es noch Dateien
   nach; ein zweiter Versuch hilft oft. Die ganze Ausgabe steht bei der KI-Begleitung in
   `tools\begleitung\letzter_lauf.log` und beim Veredler in `tools\ace-step\letzter_lauf.log` im Programmordner.
+- **Im Protokoll steht „[Errno 22] Invalid argument“ bei einer Datei in `tools\…\huggingface`.** Bis 1.2.1 lagen
+  die Modelle als Verknüpfungen dort, und manche Windows-PCs öffnen sie nicht. Ab 1.2.2 stellt die App sie beim
+  nächsten Start des Modells auf echte Dateien um; einfach die neueste Setup.exe installieren.
 - **System prüfen: „In der Umgebung der Bewertung fehlt das Paket …“.** Unter Hilfe › Einrichten ist die
   automatische Bewertung dann wieder angehakt; „Ausgewählte einrichten“ lädt nur das fehlende Paket nach.
 - **Das Update geht nicht.** Die App braucht dafür Internet. Sonst die neue Setup.exe von

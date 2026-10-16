@@ -164,6 +164,16 @@ def test_cli_switches_the_ai_accompaniment(monkeypatch, tmp_path):
     assert [s.ai_accompaniment for s in seen] == [True, False, False]
 
 
+def test_the_model_folder_holds_real_files(tmp_path, fake_model, monkeypatch):
+    """Verknüpfungen öffnen manche Windows-PCs nicht (wie bei der Bewertung, test_rating)."""
+    repaired = []
+    monkeypatch.setattr(accompaniment.config, "hf_without_links", repaired.append)
+    job = {"notes": [], "seconds": 1, "seed": 0, "output": str(tmp_path / "begleitung.json")}
+    assert accompaniment.run(job, str(tmp_path)) is not None
+    assert repaired == [accompaniment.model_folder()]
+    assert accompaniment.environment()["HF_HUB_DISABLE_SYMLINKS"] == "1"
+
+
 def test_offered_in_the_setup_but_not_preselected():
     found = einrichten.find("begleitung")
     assert found.script == "setup_begleitung.py" and not found.recommended

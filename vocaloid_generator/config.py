@@ -1,6 +1,7 @@
 # config.py – Zentrale Einstellungen für den gesamten Generator
 import logging
 import os
+import shutil
 
 # ── Sektionen: Länge in Takten und ob gesungen wird ─────────────────────────────
 SECTION_CONFIG = {
@@ -27,6 +28,54 @@ BUNDLED_PYTHON  = os.path.join(REPO_ROOT, "python", "python.exe")
 def venv_python(version: str = "3.12") -> str:
     """Python für die eigenen Umgebungen der Modelle (tools/…): das mitgebrachte, ohne Setup.exe sucht uv version."""
     return BUNDLED_PYTHON if os.path.isfile(BUNDLED_PYTHON) else version
+
+
+# ── Modelle von Hugging Face (Bewertung, KI-Begleitung, Klang-Veredler) ───────
+# huggingface_hub legt jede Modelldatei sonst als Verknüpfung (Symlink) auf einen Speicher daneben an. Manche Windows-PCs
+# folgen solchen Verknüpfungen nicht (wie den Junctions von uv, os error 448): dann scheitert schon das Öffnen von
+# config.json mit „[Errno 22] Invalid argument“. Deshalb legt huggingface_hub in den eigenen Umgebungen echte Dateien
+# an; neue Fassungen lesen dafür HF_HUB_DISABLE_SYMLINKS, ältere stellen die Worker selbst um.
+def hf_environment(home: str) -> dict:
+    """Umgebungsvariablen für Modelle in home: echte Dateien statt Verknüpfungen, ohne Warnung deswegen."""
+    return {"HF_HOME": home, "HF_HUB_DISABLE_SYMLINKS": "1", "HF_HUB_DISABLE_SYMLINKS_WARNING": "1"}
+
+
+def _link_target(path: str) -> str:
+    """Wohin eine Verknüpfung am Ende zeigt, ohne ihr zu folgen (das klappt ja gerade nicht)."""
+    for _ in range(8):
+        if not os.path.islink(path):
+            break
+        path = os.path.normpath(os.path.join(os.path.dirname(path), os.readlink(path)))
+    return path
+
+
+def hf_without_links(home: str) -> int:
+    """
+    Ersetzt die Verknüpfungen, die frühere Fassungen in home angelegt haben, durch die Dateien selbst. Verschoben, nicht
+    kopiert, damit kein Platz verloren geht und nichts neu geladen werden muss. Gibt zurück, wie viele es waren.
+    """
+    links = []
+    for root, _dirs, names in os.walk(os.path.join(home, "hub")):
+        links += [os.path.join(root, name) for name in names if os.path.islink(os.path.join(root, name))]
+    files = [p for p in links if f"{os.sep}snapshots{os.sep}" in p]      # die Dateien, die das Modell öffnet
+    moved = {}
+    for path in files:
+        try:
+            target = _link_target(path)
+            os.remove(path)
+            if target in moved:                     # zwei Fassungen teilen sich eine Datei
+                shutil.copyfile(moved[target], path)
+            elif os.path.isfile(target):
+                os.replace(target, path)
+                moved[target] = path
+        except OSError as e:                        # dann holt huggingface_hub die Datei neu
+            logging.getLogger(__name__).warning("Modelldatei %s nicht ersetzt: %s", path, e)
+    for path in set(links) - set(files):            # die Verweise im Speicher daneben zeigen jetzt ins Leere
+        remove_file(path)
+    replaced = sum(os.path.isfile(p) and not os.path.islink(p) for p in files)
+    if replaced:
+        logging.getLogger(__name__).info("%s: %d Verknüpfungen durch echte Dateien ersetzt", home, replaced)
+    return replaced
 
 
 # ── Deine Daten ───────────────────────────────────────────────────────────────

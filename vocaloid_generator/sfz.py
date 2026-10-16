@@ -4,8 +4,9 @@
 # Dieser Sampler kann, was Orchester-Bibliotheken wie VSCO 2 brauchen: Tonbereiche und Anschlag-Schichten,
 # Wechsel zwischen mehreren Aufnahmen desselben Tons (seq_length/seq_position, lorand/hirand), Lautstärke,
 # Stimmung, Panorama und eine Hüllkurve (Einschwingen, Halten, Abklingen, Ausklingen). Töne zwischen zwei
-# Aufnahmen stimmt er aus der nächsten Aufnahme hoch oder herunter (kubische Interpolation). Umschalt-Töne
-# (sw_*) und Loslass-Aufnahmen (trigger=release) spielt er nicht.
+# Aufnahmen stimmt er aus der nächsten Aufnahme hoch oder herunter (kubische Interpolation). Pitch-Bends (Slides
+# im Bass) zieht er mit. Umschalt-Töne (sw_*) und Loslass-Aufnahmen (trigger=release) spielt er nicht. write()
+# schreibt Regionen als eigene SFZ-Datei.
 import functools
 import logging
 import os
@@ -243,18 +244,20 @@ def _onsets(data: np.ndarray, rate: int) -> tuple:
 # ── Spielen ─────────────────────────────────────────────────────────────────────────
 
 def render(instrument: Instrument, notes: list, sample_rate: int = SAMPLE_RATE, seed: int = 0,
-           swell: float = None, retrigger: bool = True) -> np.ndarray:
+           swell: float = None, retrigger: bool = True, bends: list = None) -> np.ndarray:
     """
     Spielt notes (mit start, end, pitch, velocity, z. B. pretty_midi.Note) und gibt float32 der Form (2, Samples)
     zurück. seed macht die Auswahl zwischen gleichwertigen Aufnahmen wiederholbar. Stille am Anfang einer Aufnahme
     überspringt der Sampler, damit jeder Ton auf dem Schlag kommt. swell: braucht eine Aufnahme länger als so viele
     Sekunden, bis sie fast laut ist (langsam einsetzende Streicher), beginnt sie entsprechend später; None = nie.
     retrigger: ein neuer Ton gleicher Höhe beendet den alten; aus (Schlagzeug), wenn die Tonlängen das schon regeln.
+    bends: [(Sekunde, Halbtöne)] wie die Pitch-Bends einer MIDI-Spur: ab dann klingen alle Töne so viel höher.
     """
     notes = sorted(notes, key=lambda n: (n.start, n.pitch))
     if not notes:
         return np.zeros((2, 0), dtype=np.float32)
     rng = np.random.default_rng(seed)
+    curve = _bend_curve(bends, sample_rate) if bends else None
     out = np.zeros((2, int((max(n.end for n in notes) + MAX_RELEASE) * sample_rate) + 2), dtype=np.float32)
     used, turns = 0, {}
     for n, again in zip(notes, _next_same_pitch(notes)):
@@ -263,7 +266,8 @@ def render(instrument: Instrument, notes: list, sample_rate: int = SAMPLE_RATE, 
         start = int(round(n.start * sample_rate))
         until = None if again is None or not retrigger else again - n.start + CHOKE_FADE
         for region in instrument.pick(n.pitch, n.velocity, turn, float(rng.random())):
-            audio = _voice(region, n.pitch, n.velocity, n.end - n.start, sample_rate, until, swell)
+            bend = None if curve is None else functools.partial(curve, n.start)
+            audio = _voice(region, n.pitch, n.velocity, n.end - n.start, sample_rate, until, swell, bend)
             if audio is not None:
                 audio = audio[:, :out.shape[1] - start]
                 out[:, start:start + audio.shape[1]] += audio
@@ -280,11 +284,24 @@ def _next_same_pitch(notes: list) -> list:
     return following
 
 
+def _bend_curve(bends: list, rate: int):
+    """Aus [(Sekunde, Halbtöne)]: Funktion (Tonbeginn, Samples) → Verstimmung in Halbtönen für jedes Sample."""
+    ordered = sorted(bends, key=lambda b: b[0])
+    times = np.array([b[0] for b in ordered], dtype=np.float64)
+    values = np.array([b[1] for b in ordered], dtype=np.float64)
+
+    def at(start: float, n: int) -> np.ndarray:
+        k = np.searchsorted(times, start + np.arange(n) / rate, side="right") - 1
+        return np.where(k >= 0, values[np.maximum(k, 0)], 0.0)
+    return at
+
+
 def _voice(r: Region, pitch: int, velocity: int, duration: float, rate: int, until: float = None,
-           swell: float = None):
+           swell: float = None, bend=None):
     """
     Ein Ton aus einer Aufnahme: umgestimmt, mit Hüllkurve, Lautstärke und Panorama. (2, Samples) oder None.
     until: spätestens nach so vielen Sekunden ist der Ton aus (weil derselbe Ton neu anschlägt).
+    bend: Funktion Samples → Verstimmung in Halbtönen ab Tonbeginn (_bend_curve), None = keine.
     """
     rec = _sample(r.sample)
     if rec is None:
@@ -302,7 +319,15 @@ def _voice(r: Region, pitch: int, velocity: int, duration: float, rate: int, unt
     n = min(available, full, full if until is None else int(until * rate))
     if n <= 0:
         return None
-    audio = _cubic(rec.data, first + step * np.arange(n))
+    pos = first + step * np.arange(n)
+    semitones = bend(n) if bend is not None else None
+    if semitones is not None and np.any(semitones):
+        pos = first + step * np.concatenate(([0.0], np.cumsum(2 ** (semitones[:-1] / 12))))
+        n = min(n, int(np.searchsorted(pos, len(rec.data) - 3)))     # höher gezogen ist die Aufnahme eher zu Ende
+        if n <= 0:
+            return None
+        pos = pos[:n]
+    audio = _cubic(rec.data, pos)
     # abgeschnitten (Aufnahme zu Ende, derselbe Ton schlägt neu an): etwas länger ausblenden
     end_fade = MIN_FADE if n == full else END_FADE if n == available else CHOKE_FADE
     attack = max(r.attack, MIN_FADE if first <= rec.sound else SKIP_FADE)
@@ -343,3 +368,33 @@ def balance(audio: np.ndarray, pan: float) -> np.ndarray:
     angle = (max(-1.0, min(1.0, pan)) + 1) * np.pi / 4
     gains = np.array([[np.cos(angle)], [np.sin(angle)]], dtype=np.float32) * np.float32(np.sqrt(2))
     return audio * gains
+
+
+# ── Schreiben ───────────────────────────────────────────────────────────────────────
+
+_OPCODES = (("lokey", "lokey"), ("hikey", "hikey"), ("keycenter", "pitch_keycenter"), ("lovel", "lovel"),
+            ("hivel", "hivel"), ("volume", "volume"), ("tune", "tune"), ("transpose", "transpose"),
+            ("keytrack", "pitch_keytrack"), ("veltrack", "amp_veltrack"), ("pan", "pan"), ("offset", "offset"),
+            ("attack", "ampeg_attack"), ("hold", "ampeg_hold"), ("decay", "ampeg_decay"),
+            ("sustain", "ampeg_sustain"), ("release", "ampeg_release"), ("seq_length", "seq_length"),
+            ("seq_position", "seq_position"), ("lorand", "lorand"), ("hirand", "hirand"))
+
+
+def write(path: str, regions: list, comment: str = "") -> None:
+    """Schreibt regions als SFZ-Datei path (Aufnahmen relativ zu ihr); erst fertig geschrieben bekommt sie ihren
+    Namen. parse(path) liest dieselben Regionen wieder."""
+    folder = os.path.dirname(os.path.abspath(path))
+    default = Region(sample="")
+    lines = [f"// {line}" for line in comment.splitlines()]
+    for r in regions:
+        opcodes = [f"{name}={_number(getattr(r, field))}" for field, name in _OPCODES
+                   if getattr(r, field) != getattr(default, field)]
+        sample = os.path.relpath(r.sample, folder).replace(os.sep, "/")
+        lines.append(" ".join(["<region>", *opcodes, f"sample={sample}"]))
+    with open(path + ".tmp", "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    os.replace(path + ".tmp", path)
+
+
+def _number(value) -> str:
+    return f"{value:g}" if isinstance(value, float) else str(value)

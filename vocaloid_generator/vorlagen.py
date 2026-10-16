@@ -15,7 +15,7 @@ log = logging.getLogger(__name__)
 FOLDER = os.path.join(config.DATA_DIR, "Vorlagen")
 NOT_IN_TEMPLATE = ("seed", "variations", "lyrics", "neutrino_pfad", "soundfont_pfad", "output_ordner", "vst_path",
                    "cabinet_ir", "melody_midi", "melody_midi_section", "motif_folder", "reuse_steps", "log_file",
-                   "update_check", "setup_wizard")
+                   "update_check", "setup_wizard", "remix_from", "remix_bpm", "video_background")
 
 
 def names(folder: str = None) -> list:

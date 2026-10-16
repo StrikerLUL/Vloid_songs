@@ -44,9 +44,10 @@ def exportiere_projekt(result, zip_pfad: str) -> str:
     out = result.output_dir
     dateien = []
     for pfad in (result.mp3, result.mix_wav, getattr(result, "polished_mp3", None),
-                 getattr(result, "polished_wav", None)):
+                 getattr(result, "polished_wav", None), *getattr(result, "versions", {}).values()):
         if pfad:
             dateien.append((pfad, os.path.basename(pfad)))
+    dateien.append((os.path.join(out, "cover.png"), "cover.png"))
     for name, pfad in sorted(result.wav_files.items()):
         dateien.append((pfad, f"Spuren/{name}.wav"))
     for pfad in (result.vocals_wav, result.harmony_wav, getattr(result, "choir_wav", None)):

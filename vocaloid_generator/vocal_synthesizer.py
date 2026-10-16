@@ -191,7 +191,7 @@ def generiere_lokale_vocals(melodie_daten, silben, bpm, output_wav_pfad, **kwarg
 _REST_WERTE = (4.0, 3.0, 2.0, 1.5, 1.0, 0.75, 0.5, 0.25, 0.125)
 # NEUTRINO setzt vor einen Song ohne Pausentakt selbst einen. Wir schreiben immer einen Takt Pause
 # davor und schneiden ihn nach dem Rendern wieder ab, dann bleibt der Gesang im Takt der Band.
-VORLAUF_SCHLAEGE = 4.0
+VORLAUF_SCHLAEGE = 4.0      # im 4/4-Takt; im 3/4- und 6/8-Takt sind es drei Viertel (_vorlauf)
 # Kurze Pausen in einer Phrase klingen bei NEUTRINO abgehackt; bis zu dieser Länge wird gebunden (neutrino_score)
 from neutrino_score import LEGATO_BIS  # noqa: E402
 # Empfohlener Tonumfang der NEUTRINO-Stimmen (MIDI, C4 = 60) laut studio-neutrino.com.
@@ -248,25 +248,29 @@ def _gebunden(melodie_daten) -> list:
 
 
 def erstelle_musicxml(melodie_daten, liedtext_silben, bpm, output_xml_pfad, transpose: int = 0, options=None):
-    """Gesangsstimme als MusicXML für NEUTRINO: ein Takt Vorlauf, jede Note mit Silbe, Tempo, 4/4.
-    options: neutrino_score.ScoreOptions (Haltezeichen, Atemzeichen, schnelle Stellen); None = nur gebunden."""
+    """Gesangsstimme als MusicXML für NEUTRINO: ein Takt Vorlauf, jede Note mit Silbe, Tempo und Takt.
+    options: neutrino_score.ScoreOptions (Haltezeichen, Atemzeichen, schnelle Stellen, Takt); None = nur gebunden, 4/4.
+    Im 6/8-Takt sind Dauern und bpm in punktierten Vierteln; die Noten zählen in Vierteln wie jedes MusicXML."""
     try:
         from music21 import articulations, meter, note, stream, tempo
     except ImportError:
         log.warning("music21 nicht installiert. MusicXML kann nicht generiert werden.")
         return ""
+    import meter as takte
     import neutrino_score
 
+    takt = takte.get(options.meter if options is not None else None)
+    viertel = takt.quarters_per_beat
     s = stream.Stream()
-    s.append(tempo.MetronomeMark(number=bpm))
-    s.append(meter.TimeSignature("4/4"))
-    s.append(note.Rest(quarterLength=VORLAUF_SCHLAEGE))
+    s.append(tempo.MetronomeMark(number=bpm * viertel))
+    s.append(meter.TimeSignature(takt.name))
+    s.append(note.Rest(quarterLength=_vorlauf(takt)))
     for n in neutrino_score.build(melodie_daten, list(liedtext_silben), bpm, options):
         if n.pitch is None:
-            for teil in _pausen(n.beats):
+            for teil in _pausen(n.beats * viertel):
                 s.append(note.Rest(quarterLength=teil))
             continue
-        n_ = note.Note(n.pitch + transpose, quarterLength=_quantisiere_dauer(n.beats))
+        n_ = note.Note(n.pitch + transpose, quarterLength=_quantisiere_dauer(n.beats * viertel))
         n_.addLyric(n.lyric)
         if n.breath:
             n_.articulations.append(articulations.BreathMark())
@@ -443,7 +447,7 @@ def neutrino_synthese(xml_pfad, output_wav_pfad, neutrino_pfad, model_pfad, thre
 
         audio, sr = sf.read(wav, always_2d=True, dtype="float32")
     bpm = _tempo_aus_musicxml(xml_pfad)
-    audio = audio[int(round(VORLAUF_SCHLAEGE * 60.0 / bpm * sr)):]
+    audio = audio[int(round(_vorlauf_aus_musicxml(xml_pfad) * 60.0 / bpm * sr)):]
     os.makedirs(os.path.dirname(os.path.abspath(output_wav_pfad)), exist_ok=True)
     sf.write(output_wav_pfad, audio, sr, subtype="FLOAT")
     log.info(f"[OK] NEUTRINO-Gesang: {output_wav_pfad}")
@@ -509,6 +513,21 @@ def _run_bat_aufruf(neutrino_pfad: str, neutrino_exe: str, dateien: dict, thread
     if "support" in dateien and not support:
         return None
     return cmd if dateien[".wav"] in cmd else None
+
+
+def _vorlauf(takt) -> float:
+    """Ein Takt Pause in Vierteln: 4 im 4/4-Takt, 3 im 3/4- und im 6/8-Takt."""
+    return takt.numerator * 4 / takt.denominator
+
+
+def _vorlauf_aus_musicxml(xml_pfad: str) -> float:
+    """Der Vorlauf (ein Takt Pause) einer MusicXML-Datei in Vierteln, aus ihrer Taktangabe."""
+    import re
+    text = open(xml_pfad, encoding="utf-8").read()
+    beats, beat_type = re.search(r"<beats>(\d+)</beats>", text), re.search(r"<beat-type>(\d+)</beat-type>", text)
+    if not beats or not beat_type:
+        return VORLAUF_SCHLAEGE
+    return int(beats.group(1)) * 4 / int(beat_type.group(1))
 
 
 def _tempo_aus_musicxml(xml_pfad: str) -> float:

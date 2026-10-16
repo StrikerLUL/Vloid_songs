@@ -12,6 +12,7 @@ import soundfile as sf
 import karaoke
 import main
 import pipeline
+import rendering
 from lyrics import Mora, section_lines
 from pipeline import SongResult, compose
 from settings import DEFAULT_LYRICS, INSTRUMENTS, SongSettings, edit_key
@@ -125,7 +126,7 @@ def test_the_pipeline_writes_the_lyrics_and_builds_the_video_from_them(tmp_path,
     mp3 = tmp_path / "out" / "final_song.mp3"
     mp3.write_bytes(b"ID3")
     seen = {}
-    monkeypatch.setattr(karaoke, "video", lambda audio, lines, path, title="": seen.update(
+    monkeypatch.setattr(karaoke, "video", lambda audio, lines, path, title="", background=None, style="": seen.update(
         audio=audio, lines=lines, path=path, title=title) or path)
     path = pipeline.lyric_video(SongResult(seed=21, output_dir=out, mp3=str(mp3), settings=s))
     assert path == os.path.join(out, "lyric_video.mp4") and seen["lines"] == found
@@ -150,22 +151,22 @@ def test_unchanged_tracks_are_not_rendered_again(tmp_path, counted_renders):
     s = make_settings(tmp_path)
     tracks, _ = compose(s)
     out = s.output_dir()
-    first = pipeline._render_instruments(s, tracks, out, lambda f, m: None)
+    first = rendering._render_instruments(s, tracks, out, lambda f, m: None)
     active = sorted(counted_renders)
     assert active and sorted(first) == active
 
     counted_renders.clear()
-    again = pipeline._render_instruments(s, tracks, out, lambda f, m: None)
+    again = rendering._render_instruments(s, tracks, out, lambda f, m: None)
     assert counted_renders == [] and again == first
 
     rerolled = s.rerolled("drums")
     tracks, _ = compose(rerolled)
-    pipeline._render_instruments(rerolled, tracks, out, lambda f, m: None)
+    rendering._render_instruments(rerolled, tracks, out, lambda f, m: None)
     assert counted_renders == ["drums"]
 
     counted_renders.clear()
     louder = rerolled.with_updates(guitar_amp=False)        # ein anderer Klang: alles neu
-    pipeline._render_instruments(louder, tracks, out, lambda f, m: None)
+    rendering._render_instruments(louder, tracks, out, lambda f, m: None)
     assert sorted(counted_renders) == active
 
 
@@ -173,11 +174,11 @@ def test_a_switched_off_track_leaves_no_old_wav(tmp_path, counted_renders):
     s = make_settings(tmp_path)
     tracks, _ = compose(s)
     out = s.output_dir()
-    pipeline._render_instruments(s, tracks, out, lambda f, m: None)
+    rendering._render_instruments(s, tracks, out, lambda f, m: None)
     channels = {ch: data.model_dump() for ch, data in s.channels.items()}
     channels["piano"]["enabled"] = False
     without_piano = s.with_updates(channels=channels)
-    files = pipeline._render_instruments(without_piano, tracks, out, lambda f, m: None)
+    files = rendering._render_instruments(without_piano, tracks, out, lambda f, m: None)
     assert "piano" not in files and not os.path.exists(os.path.join(out, "piano.wav"))
 
 

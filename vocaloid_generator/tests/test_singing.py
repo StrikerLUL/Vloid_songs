@@ -12,7 +12,8 @@ from lyrics import Mora, syllables, vowel
 from melody_writer import accent_moves, duet_voice, split_for_duet
 from orchestrator import orchestrate_song
 from exporter import exportiere_projekt
-from pipeline import UST_FILES, SongResult, _synthesize_vocals, _write_ust, compose, seed_everything
+from pipeline import UST_FILES, SongResult, _write_ust, compose, seed_everything
+from singing import _synthesize_vocals
 from settings import SongSettings
 from ust_export import TICKS_PER_QUARTER, lies_ust, schreibe_ust
 

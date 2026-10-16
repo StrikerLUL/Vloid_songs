@@ -37,6 +37,11 @@ def _samples() -> bool:
     return len(sample_library.installed()) == len(sample_library.files())
 
 
+def _band() -> bool:
+    import band_library
+    return len(band_library.installed()) == len(band_library.files())
+
+
 def _drums() -> bool:
     import drum_kit
     return drum_kit.complete()
@@ -94,6 +99,8 @@ COMPONENTS = (
               "SoundFonts", "etwa 250 MB Download, 550 MB Platz", "setup_soundfonts.py", _soundfonts),
     Component("samples", "Orchester aus echten Aufnahmen", "Streicher, Bläser, Harfe, Pauken und Stabspiele aus "
               "VSCO 2", "etwa 1,2 GB", "setup_samples.py", _samples),
+    Component("band", "Flügel, Bass und Gitarre aus Aufnahmen", "Salamander-Flügel, ein E-Bass und eine direkt "
+              "eingespielte E-Gitarre statt der SoundFont-Klänge", "etwa 550 MB", "setup_band.py", _band),
     Component("drums", "Echtes Schlagzeug", "Bassdrum, Snare, Toms, Hi-Hat und Becken aus dem DRS Kit, im Studio "
               "aufgenommen", "etwa 130 MB Download, 50 MB Platz", "setup_drums.py", _drums),
     Component("grooves", "Echte Grooves", "Schlagzeug-Phrasen und Fills von zehn Profi-Schlagzeugern (Groove MIDI "

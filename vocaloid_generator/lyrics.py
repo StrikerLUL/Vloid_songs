@@ -15,19 +15,29 @@ import re
 # Schreibweisen der Sektions-Überschriften, die auf den internen Namen zeigen
 _SECTION_ALIASES = {
     "verse": "Verse",
+    "strophe": "Verse",
     "prechorus": "PreChorus",
     "pre-chorus": "PreChorus",
     "pre chorus": "PreChorus",
+    "pre-refrain": "PreChorus",
+    "vorrefrain": "PreChorus",
     "chorus": "Chorus",
+    "refrain": "Chorus",
     "bridge": "Bridge",
     "intro": "Intro",
     "outro": "Outro",
     "build-up": "Build-up",
     "buildup": "Build-up",
     "drop": "Drop",
+    "rap": "Rap",
+    "sprechteil": "Rap",
 }
 
 _HEADER = re.compile(r"^\[(.+)\]$")
+# „[Verse 2]“, „[Chorus 3]“, „[2. Strophe]“: der Text nur für dieses Vorkommen der Sektion (Schlüssel „Verse#2“)
+_NUMBER_AFTER = re.compile(r"^(.*\D)\s*(\d+)$")
+_NUMBER_BEFORE = re.compile(r"^(\d+)\.?\s*(\D.*)$")
+OCCURRENCE = "#"
 _JAPANESE = re.compile(r"[\u3041-\u30ff\u4e00-\u9fff々〆]")
 _KANJI = re.compile(r"[\u4e00-\u9fff々〆]")
 # Lesung von Hand vorgeben: 君[きみ] oder 君［きみ］
@@ -68,9 +78,32 @@ class Mora(str):
 
 
 def normalize_section(name: str) -> str:
-    """'[Pre-Chorus]' und 'prechorus' werden beide zu 'PreChorus'."""
-    key = name.strip().lower()
-    return _SECTION_ALIASES.get(key, name.strip())
+    """'[Pre-Chorus]' und 'prechorus' werden beide zu 'PreChorus'. Mit Nummer ('[Verse 2]', '[2. Strophe]') gilt der
+    Text nur für dieses Vorkommen: 'Verse#2'; '[Verse 1]' ist derselbe Text wie '[Verse]'."""
+    text = name.strip()
+    number = 1
+    after, before = _NUMBER_AFTER.match(text), _NUMBER_BEFORE.match(text)
+    if after:
+        text, number = after.group(1).strip(), int(after.group(2))
+    elif before:
+        number, text = int(before.group(1)), before.group(2).strip()
+    kind = _SECTION_ALIASES.get(text.lower(), text)
+    return f"{kind}{OCCURRENCE}{number}" if number > 1 else kind
+
+
+def for_occurrence(lyrics: dict, kind: str, number: int):
+    """Der eigene Text des number-ten Vorkommens einer Sektionsart ('[Verse 2]'); None, wenn es keinen hat."""
+    return lyrics.get(f"{kind}{OCCURRENCE}{number}") if number > 1 else None
+
+
+def kind_of(key: str) -> str:
+    """'Verse#2' → 'Verse'."""
+    return key.split(OCCURRENCE)[0]
+
+
+def shared_only(lyrics: dict) -> dict:
+    """Ohne die Texte einzelner Vorkommen ('Verse#2'): jede Wiederholung singt den Text des ersten (wie bis 1.1)."""
+    return {key: value for key, value in lyrics.items() if OCCURRENCE not in key}
 
 
 def parse_lyrics(text: str, romaji: bool = True, english: bool = False) -> dict:

@@ -12,9 +12,9 @@ Lizenz. Was mit „lädt die App“ markiert ist, kommt erst über den Einrichte
 - **DiffSinger-Stimmen** (Versuch, lädst du selbst): Jede hat eigene Bedingungen, oft nur nicht kommerziell und mit
   Namensnennung. Sie stehen in der Readme oder `character.yaml` im Ordner der Stimme.
 - **Eigene Atmer und Räume** (Ordner `Atmer` und `Hall`): Es gilt die Lizenz der Aufnahmen, die du dort hinlegst.
-- **Klänge mit CC-BY oder CC-BY-SA** (AVL-Schlagzeuge, DRS Kit, Groove MIDI Dataset): Für Songs, die du damit
-  machst, verlangen diese Lizenzen nichts. Sie gelten für die Klang- und Notendateien selbst, falls du die
-  weitergibst.
+- **Klänge mit CC-BY oder CC-BY-SA** (AVL-Schlagzeuge, DRS Kit, Salamander-Flügel, Groove MIDI Dataset): Für
+  Songs, die du damit machst, verlangen diese Lizenzen nichts. Sie gelten für die Klang- und Notendateien selbst,
+  falls du die weitergibst.
 
 ## Gesang
 
@@ -45,6 +45,8 @@ Lizenz. Was mit „lädt die App“ markiert ist, kommt erst über den Einrichte
 | Red Zeppelin, Black Pearl (lädt die App) | Glen MacArthur, AVL Drumkits | CC-BY-SA 3.0 |
 | VSCO 2 Community Edition (lädt die App) | Versilian Studios | CC0 |
 | DRS Kit (lädt die App) | DrumGizmo-Team, Jes Eiler (DRSDrums) | CC-BY 4.0 |
+| Salamander Grand Piano V3 (lädt die App) | Alexander Holm; SFZ-Fassung sfzinstruments | CC-BY 3.0 |
+| Growlybass, Emily Guitar (lädt die App) | Karoryfer Samples | CC0 |
 | Groove MIDI Dataset (lädt die App) | Google Magenta | CC-BY 4.0 |
 
 ## Mix, Analyse und Modelle
@@ -71,7 +73,8 @@ Lizenz. Was mit „lädt die App“ markiert ist, kommt erst über den Einrichte
 | NiceGUI | Zauberzeug | MIT |
 | pywebview | Roman Sirokov | BSD-3 |
 | wavesurfer.js | katspaugh | BSD-3 |
-| Pillow (Titelbild für YouTube) | Jeffrey A. Clark und Mitwirkende | MIT-CMU |
+| Pillow (Titelbilder, Hintergrund des Lyric-Videos) | Jeffrey A. Clark und Mitwirkende | MIT-CMU |
+| mutagen (Titel, Liedtext und Titelbild in der MP3) | Joe Wreschnig, Michael Urman, Christoph Reiter und Mitwirkende | GPL-2.0 oder später |
 | uv | Astral | MIT / Apache-2.0 |
 | Python (bringt die Setup.exe mit, aus python-build-standalone) | Python Software Foundation, Astral | PSF-2.0, MPL-2.0 |
 | Inno Setup (baut die Setup.exe) | Jordan Russell, Martijn Laan | eigene, freie Lizenz |

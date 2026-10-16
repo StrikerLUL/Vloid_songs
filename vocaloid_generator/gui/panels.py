@@ -45,6 +45,9 @@ def song_panel(s: SongSettings, pick: PickFn, apply_template: Callable[[SongSett
         ui.select(labels.SCALES, label="Tonleiter").bind_value(s, "scale")
         ui.number("Tempo (BPM)", min=40, max=260, step=1, precision=0) \
             .bind_value(s, "bpm", forward=lambda v: int(v or 160)).mark("bpm")
+        ui.select(labels.METERS, label="Takt").bind_value(s, "meter").mark("meter") \
+            .tooltip("3/4: Bum-Tschak-Tschak wie ein Walzer. 6/8: wiegend, das Tempo zählt dann die punktierten Viertel "
+                     "(zwei pro Takt, eine Ballade hat etwa 50 bis 70). 4/4 = wie bisher.")
     with ui.row().classes("w-full items-center gap-4"):
         ui.label("Swing").classes("w-24")
         ui.slider(min=0, max=0.5, step=0.01).bind_value(s, "swing").props("label").classes("col")
@@ -72,6 +75,9 @@ def song_panel(s: SongSettings, pick: PickFn, apply_template: Callable[[SongSett
 
     section_title("Vorbild-Songs")
     reference_editor(s, pick, apply_template)
+
+    section_title("Song-Rezepte")
+    recipes_editor(apply_template, s)
 
     section_title("Vorlagen")
     templates_editor(s, apply_template)
@@ -355,6 +361,26 @@ def reference_editor(s: SongSettings, pick: PickFn, apply_template: Callable[[So
     ui.timer(0.1, measure, once=True)
 
 
+def recipes_editor(apply_template: Callable[[SongSettings], None], s: SongSettings) -> None:
+    """Fertige Ausgangspunkte mit Beispieltext (rezepte.py, v6 Nr. 13)."""
+    import rezepte
+    about = {r.name: r.about for r in rezepte.RECIPES}
+
+    def load() -> None:
+        if not choice.value:
+            return
+        apply_template(rezepte.apply(choice.value, s))
+        ui.notify(f"Rezept „{choice.value}“ geladen, jetzt auf „Song erzeugen“ drücken", type="positive")
+
+    with ui.row().classes("w-full items-center no-wrap gap-2"):
+        choice = ui.select(rezepte.names(), label="Rezept").classes("col").mark("recipe")
+        ui.button("Rezept laden", icon="restaurant_menu", on_click=load).props("flat no-caps").mark("load-recipe")
+    ui.label().classes("text-caption").bind_text_from(choice, "value", backward=lambda v: about.get(v, "")) \
+        .mark("recipe-about")
+    hint("Ein Rezept bringt Stil, Tempo, Tonart, Takt, Ablauf und einen passenden Beispieltext mit (ersetzt deinen "
+         "Text). Es entsteht ein neuer Song; Stimme, Pfade und Mix bleiben.")
+
+
 def templates_editor(s: SongSettings, apply_template: Callable[[SongSettings], None]) -> None:
     with ui.row().classes("w-full items-center no-wrap gap-2"):
         choice = ui.select(vorlagen.names(), label="Vorlage").classes("col").mark("template")
@@ -389,16 +415,31 @@ def templates_editor(s: SongSettings, apply_template: Callable[[SongSettings], N
 
 
 # ── Text ────────────────────────────────────────────────────────────────────────
-def text_panel(s: SongSettings) -> None:
+def text_panel(s: SongSettings) -> Callable[[], None]:
+    """Gibt zurück, wie sich die Vorschau neu zeichnet (nach Tempo, Takt oder Ablauf auf einem anderen Reiter)."""
     hint("Eine Überschrift wie [Verse], [Pre-Chorus], [Chorus] oder [Bridge] pro Abschnitt. Japanisch darf ganz "
-         "normal geschrieben werden, auch mit Kanji; 君[きみ] gibt eine Lesung von Hand vor.")
+         "normal geschrieben werden, auch mit Kanji; 君[きみ] gibt eine Lesung von Hand vor. [Verse 2] oder "
+         "[Chorus 3] gibt einer Wiederholung ihren eigenen Text auf dieselbe Melodie.")
+    ui.switch("Eigener Text für [Verse 2], [Chorus 3] …").bind_value(s, "numbered_lyrics").props("dense") \
+        .mark("switch-numbered_lyrics") \
+        .tooltip("Aus: jede Wiederholung singt wieder den Text der ersten Strophe oder des ersten Refrains (wie bis "
+                 "1.1), Überschriften mit Nummer werden übergangen.")
     ui.switch("Romaji japanisch singen (kimi no koe → きみ の こえ)").bind_value(s, "romaji").props("dense") \
         .mark("switch-romaji").on_value_change(lambda: preview.refresh()) \
         .tooltip("Eine Zeile ganz in Romaji wird japanisch gesungen; ist ein englisches Wort darin (love, baby), bleibt "
                  "die Zeile, wie sie ist. Neben japanischer Schrift wird jedes Romaji-Wort umgewandelt.")
 
+    ui.switch("Text-Helfer: Silben gegen Platz, Reime und Lesungen pro Zeile").bind_value(s, "lyric_hints") \
+        .props("dense").mark("switch-lyric_hints").on_value_change(lambda: preview.refresh()) \
+        .tooltip("Neben jeder Zeile: wie viele Silben sie hat und wie viele bequem in ihre Phrase passen (rot = zu "
+                 "viele), auf welchem Vokal sie endet (gleicher Buchstabe = Reim) und wie Kanji gelesen werden. "
+                 "Rechnet mit Tempo, Takt und Takten der Sektion.")
+
     @ui.refreshable
     def preview() -> None:
+        if s.lyric_hints:
+            helped()
+            return
         rows, count = [], 0
         for raw in (s.lyrics or "").splitlines():
             line = raw.strip()
@@ -417,11 +458,35 @@ def text_panel(s: SongSettings) -> None:
                 else:
                     ui.label(text).classes("text-body2")
 
+    def helped() -> None:
+        import lyric_helper
+        sections = lyric_helper.check(s)
+        count = sum(line.count for sec in sections for line in sec.lines)
+        ui.label(f"So wird gesungen: {count} Silben").classes("text-subtitle2").mark("syllables")
+        with ui.scroll_area().classes("w-full h-96"):
+            for sec in sections:
+                if sec.name:
+                    about = f" · {sec.bars} Takte, {sec.phrases} Phrasen" if sec.phrases else ""
+                    ui.label(f"[{sec.name}]{about}").classes("text-caption text-deep-purple-3 q-mt-sm")
+                if sec.note():
+                    ui.label(sec.note()).classes("text-caption text-amber-5").mark("lyric-note")
+                for line in sec.lines:
+                    with ui.row().classes("w-full no-wrap items-baseline gap-2"):
+                        ui.label(line.letter or " ").classes("text-caption text-grey-5 w-4") \
+                            .tooltip(f"endet auf {line.rhyme}: gleicher Buchstabe = Reim" if line.rhyme else "")
+                        ui.label(" ".join(str(x) for x in line.sung)).classes("text-body2 col")
+                    color = {"zu viel": "text-red-5", "schnell": "text-orange-5"}.get(line.status, "text-grey-5")
+                    ui.label(line.describe()).classes(f"text-caption q-ml-lg {color}").mark("line-hint")
+                    if line.unread:
+                        ui.label("Kanji ohne Lesung: schreib sie in Kana oder mit Lesung wie 君[きみ]") \
+                            .classes("text-caption q-ml-lg text-red-5").mark("line-unread")
+
     with ui.row().classes("w-full no-wrap gap-4 items-start"):
         ui.textarea().bind_value(s, "lyrics").props("outlined autogrow input-style=min-height:360px") \
             .classes("col").mark("lyrics").on_value_change(lambda: preview.refresh())
         with ui.column().classes("col"):
             preview()
+    return preview.refresh
 
 
 # ── Band ────────────────────────────────────────────────────────────────────────
@@ -468,6 +533,12 @@ def band_panel(s: SongSettings) -> None:
         .mark("switch-guitar_strums") \
         .tooltip("Ruhige Teile in Vierteln, Refrains in Sechzehnteln mit abgedämpften Anschlägen; runter klingen die "
                  "tiefen Saiten, hoch die hohen (Spielweise geschlagen)")
+    ui.switch("Vocal Chops im Drop").bind_value(s, "vocal_chops").mark("switch-vocal_chops") \
+        .tooltip("Kurze Schnipsel der Hauptstimme, umgestimmt auf die Akkorde, spielen im Drop einen Riff (im Future "
+                 "Bass auch im Intro). Nur in Stilen mit Drop, nicht in Ballade, Rock, City Pop und Lo-Fi")
+    ui.switch("Ballade: langsamer zum Schluss").bind_value(s, "ritardando").mark("switch-ritardando") \
+        .tooltip("In den letzten zwei Takten vor dem Schlussakkord wird die Band langsamer (Ritardando), der "
+                 "Schlussakkord klingt länger aus. Nur im Stil Ballade und wenn der Song mit einem Outro endet")
     hint("Echtes Schlagzeug und Grooves echter Schlagzeuger schaltest du unter Pfade ein oder aus, sobald sie "
          "eingerichtet sind.")
     section_title("Klänge aus dem VST-Instrument")
@@ -568,6 +639,9 @@ BACKING_SWITCHES = (
     ("sung_pads", "Gesungene Flächen", "Drei Stimmen singen im Refrain die Akkordtöne auf う (im letzten auf あ) statt "
                                        "des Keyboard-Chors; NEUTRINO singt dafür etwas länger"),
     ("adlibs", "Ad-libs im letzten Refrain", "Kurze Rufe (いぇー, おー) und Echo-Antworten in den Lücken des Gesangs"),
+    ("idol_calls", "Idol-Rufe", "Mehrere Stimmen rufen „はい！はい！“ (Rock: „おい！“) auf den Gegenschlägen, an denen "
+                                "die Hauptstimme Pause hat, und „ふっふー“ vor dem Refrain. Im Idol-Pop und Kawaii in "
+                                "jedem Refrain, in J-Pop Energy und Rock im letzten"),
 )
 
 # Noten, die NEUTRINO gut singen kann (neutrino_score.py) und Englisch im Liedtext
@@ -666,6 +740,8 @@ def voice_panel(s: SongSettings, singers: list, pick: PickFn | None = None) -> t
         .mark("switch-voicevox_dynamics") \
         .tooltip("Betonte Silben und der Weg zum Höhepunkt einer Zeile gehen als Lautstärke in den Gesang ein, statt "
                  "danach lauter und leiser gedreht zu werden. Leiser klingt dann auch weicher.")
+    section_title("Rap-Teil")
+    rap_editor(s)
     section_title("Lebendiger Gesang")
     for attr, text, tip in LIVELY_SWITCHES:
         ui.switch(text).bind_value(s, attr).props("dense").tooltip(tip).mark(f"switch-{attr}")
@@ -686,6 +762,36 @@ def voice_panel(s: SongSettings, singers: list, pick: PickFn | None = None) -> t
         ui.slider(min=0, max=0.2, step=0.002).bind_value(s, "breathiness").props("label").classes("col")
     ui.switch("Schimmer").bind_value(s, "shimmer")
     return singer, duet, support
+
+
+def rap_editor(s: SongSettings) -> None:
+    """Sprechstimme für die Sektion „Rap“ (rap.py); die Liste kommt von der laufenden VOICEVOX-App."""
+    import voicevox
+
+    def options(found: dict) -> dict:
+        names = {0: "die erste Sprechstimme", **found}
+        if s.rap_speaker not in names:
+            names[s.rap_speaker] = f"Stimme {s.rap_speaker}"
+        return names
+
+    ui.switch("Rap von der VOICEVOX-Sprechstimme").bind_value(s, "rap_voice").props("dense") \
+        .mark("switch-rap_voice")
+    with ui.row().classes("w-full items-center no-wrap gap-2"):
+        select = ui.select(options({}), label="Sprechstimme").bind_value(s, "rap_speaker").classes("col") \
+            .mark("rap-speaker")
+        reload_button = ui.button(icon="refresh").props("flat round dense").tooltip("Stimmen neu laden")
+    hint("Eine Sektion „Rap“ (Ablauf und [Rap] im Liedtext) spricht VOICEVOX im Takt, wie der Rap in „Idol“; NEUTRINO "
+         "kann nicht rappen. Dafür muss die VOICEVOX-App laufen, auch wenn NEUTRINO singt. Ohne VOICEVOX oder mit dem "
+         "Schalter aus singt die Gesangsstimme den Rap fast auf einem Ton.")
+
+    async def load() -> None:
+        found = await run.io_bound(voicevox.talkers, s.voicevox_url or voicevox.URL)
+        if found is None:       # die App wird gerade beendet
+            return
+        select.set_options(options(found), value=s.rap_speaker)
+
+    reload_button.on_click(load)
+    ui.timer(0.3, load, once=True)
 
 
 def voicevox_editor(s: SongSettings) -> None:
@@ -744,6 +850,17 @@ def mix_panel(s: SongSettings) -> None:
     hint("Die Lautheit gilt immer, auch beim Mastering nach Vorbild-Songs; der Limiter hält die Spitzen unten.")
     ui.switch("Bewegung im Mix").bind_value(s, "mix_movement").mark("switch-mix_movement") \
         .tooltip("Anlauf mit Filter vor jedem Refrain, Hall je nach Sektion, breitere Refrains")
+    ui.switch("Spitzen auch zwischen den Samples begrenzen (-1 dBTP)").bind_value(s, "true_peak") \
+        .mark("switch-true_peak") \
+        .tooltip("MP3 und Streaming heben Spitzen zwischen den Samples sonst über 0 dB; das kann knacksen. "
+                 "YouTube und Spotify empfehlen -1 dBTP.")
+    ui.switch("Off-Vocal und A-cappella dazu (ohne Gesang / nur Gesang)").bind_value(s, "vocal_versions") \
+        .mark("switch-vocal_versions") \
+        .tooltip("Zwei weitere MP3s neben dem Song, so laut wie im Song: zum Mitsingen, für Cover und Remixe. "
+                 "Im Player unter den Spuren.")
+    ui.switch("Titel, Liedtext und Titelbild in die MP3 schreiben").bind_value(s, "id3_tags") \
+        .mark("switch-id3_tags") \
+        .tooltip("Handy, Auto und Musik-Apps zeigen den Song dann mit Namen, Stil, Tempo, Text und Cover.")
     with ui.column().classes("w-full gap-1").bind_visibility_from(s, "polish"):
         ui.label("Klang-Veredler (ACE-Step, Versuch)").classes("text-subtitle2 q-mt-sm")
         with ui.row().classes("w-full items-center gap-4"):
@@ -766,6 +883,8 @@ def paths_panel(s: SongSettings, pick: PickFn, status: Callable[[], None]) -> No
         ("VST3-Instrument, z. B. Surge XT (optional)", "vst_path", False, ("VST3 (*.vst3)",), ""),
         ("Impulsantwort der Gitarrenbox (WAV, optional)", "cabinet_ir", False, ("WAV (*.wav)",), "eingebaute Box"),
         ("Bibliothek der Vorbild-Songs", "reference_folder", True, (), _reference_library()),
+        ("Hintergrundbild des Lyric-Videos (optional)", "video_background", False,
+         ("Bild (*.png;*.jpg;*.jpeg)",), "Farbverlauf des Stils"),
     ):
         with ui.row().classes("w-full items-center no-wrap"):
             ui.input(text, placeholder=f"leer = {default}" if default else "leer = keins") \
@@ -780,6 +899,9 @@ def paths_panel(s: SongSettings, pick: PickFn, status: Callable[[], None]) -> No
             status()
         ui.button("Surge XT gefunden – übernehmen", icon="piano", on_click=use_surge).props("flat dense no-caps") \
             .bind_visibility_from(s, "vst_path", backward=lambda path: not path).mark("use-surge")
+    ui.switch("Lyric-Video in den Farben des Stils").bind_value(s, "video_colors").mark("switch-video_colors") \
+        .tooltip("Farbverlauf wie beim YouTube-Titelbild, Text und Wellenform in den Farben des Stils. Aus: dunkel "
+                 "mit pinkem Text wie bis 1.1. Ein eigenes Hintergrundbild (oben) gilt immer.")
     import voicevox
     ui.input("Adresse von VOICEVOX", placeholder=f"leer = {voicevox.URL}").bind_value(s, "voicevox_url") \
         .classes("w-full").props("dense stack-label").mark("path-voicevox_url")
@@ -789,6 +911,10 @@ def paths_panel(s: SongSettings, pick: PickFn, status: Callable[[], None]) -> No
     ui.switch("Orchester aus echten Aufnahmen (setup_samples.py)") \
         .bind_value(s, "samples").mark("samples-switch") \
         .tooltip("Streicher, Bläser, Harfe, Pauken und Stabspiele aus VSCO 2; gilt nur ohne eigenen SoundFont")
+    ui.switch("Flügel, E-Bass und E-Gitarre aus echten Aufnahmen (setup_band.py)") \
+        .bind_value(s, "band_samples").mark("band-samples-switch") \
+        .tooltip("Salamander-Flügel, Growlybass und Emily-Gitarre; verzerrte Gitarren spielen die Emily-Gitarre "
+                 "in den Verstärker. Gilt nur ohne eigenen SoundFont")
     ui.switch("Echtes Schlagzeug aus Aufnahmen (setup_drums.py, DRS Kit)") \
         .bind_value(s, "real_drums").mark("real-drums-switch") \
         .tooltip("Bassdrum, Snare, Toms, Hi-Hat und Becken aus einem im Studio aufgenommenen Schlagzeug; "
@@ -823,9 +949,19 @@ def app_settings(s: SongSettings) -> None:
     ui.switch("Nach Updates suchen (einmal am Tag) und nach einem Update zeigen, was neu ist").bind_value(s, "update_check").mark("update-switch")
     ui.switch("Einrichten-Assistent beim Start zeigen, bis er fertig ist").bind_value(s, "setup_wizard") \
         .mark("wizard-switch")
+    ui.switch("Tastenkürzel: Leertaste spielt, Strg+Enter erzeugt, Strg+Z nimmt eine Notenänderung zurück") \
+        .bind_value(s, "shortcuts").mark("switch-shortcuts") \
+        .tooltip("Gilt nicht, während du in ein Feld schreibst")
+    ui.switch("Melden, wenn der Song fertig ist").bind_value(s, "done_notice").mark("switch-done_notice") \
+        .tooltip("Eine Windows-Benachrichtigung unten rechts, wenn ein Song, mehrere Fassungen oder ein Album "
+                 "fertig sind (nur nach Läufen ab 20 Sekunden). So kannst du in der Zeit etwas anderes machen.")
     ui.number("So viele Songs behält der Verlauf (0 = alle)", min=0, max=1000, step=5, precision=0) \
         .bind_value(s, "history_keep", forward=lambda v: int(v or 0)).classes("w-80").mark("history-keep") \
         .tooltip("Ältere fallen heraus; Favoriten, Songs mit Namen und Album-Songs bleiben immer")
+    ui.switch("Gesang jedes Songs aufheben, zum Wieder-Öffnen aus dem Verlauf").bind_value(s, "keep_projects") \
+        .mark("switch-keep_projects") \
+        .tooltip("Etwa 20 bis 60 MB pro Song (FLAC). Ein wieder geöffneter Song singt nicht neu: Band und Mix "
+                 "entstehen frisch, danach lässt er sich weiter bearbeiten.")
     ui.label(userdata.describe()).classes("text-caption").mark("data-folder")
     ui.switch("Daten im Programmordner lassen statt in Dokumente (gilt ab dem nächsten Start)",
               value=userdata.in_program_folder(), on_change=lambda e: userdata.choose_program_folder(e.value)) \

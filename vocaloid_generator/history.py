@@ -23,7 +23,7 @@ KEEP = 30                      # ältere Songs fallen heraus; Favoriten, benannt
 # Pfade gehören zum Rechner, nicht zum Song: beim Wiederherstellen bleiben die aktuellen
 MACHINE_FIELDS = ("neutrino_pfad", "soundfont_pfad", "output_ordner", "vst_path", "reference_folder", "voicevox_url",
                   "cabinet_ir", "motif_folder", "reuse_steps", "log_file", "update_check", "setup_wizard",
-                  "history_keep", "album_vary")
+                  "history_keep", "album_vary", "keep_projects", "video_background")
 SORTS = {"neu": "Neueste zuerst", "bewertung": "Beste Note zuerst", "name": "Nach Name"}
 _STAMP = "%Y%m%d-%H%M%S"
 
@@ -169,11 +169,13 @@ def _update(info: str, **meta) -> None:
 
 
 def delete(entry: Entry) -> None:
+    import project
     for path in (entry.audio, entry.info):
         try:
             os.remove(path)
         except FileNotFoundError:
             pass
+    project.delete(entry.audio)          # der aufgehobene Gesang (Projektordner) gehört dazu
 
 
 def _write(path: str, settings: SongSettings, meta: dict) -> None:

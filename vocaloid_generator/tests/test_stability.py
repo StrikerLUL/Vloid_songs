@@ -16,6 +16,8 @@ import cancel
 import config
 import fehlerbericht
 import pipeline
+import singing
+import rendering
 import resume
 from settings import SongSettings
 
@@ -174,11 +176,11 @@ def test_vocals_are_sung_again_when_reuse_is_off(tmp_path, neutrino_attrappe):
     s = e2e_settings(tmp_path, root)
     tracks, _ = pipeline.compose(s)
     out = s.output_dir()
-    pipeline._synthesize_vocals(s, tracks, out)
+    singing._synthesize_vocals(s, tracks, out)
     sung = calls.count("NEUTRINO.exe")
-    pipeline._synthesize_vocals(s, tracks, out)
+    singing._synthesize_vocals(s, tracks, out)
     assert calls.count("NEUTRINO.exe") == sung
-    pipeline._synthesize_vocals(s.with_updates(reuse_steps=False), tracks, out)
+    singing._synthesize_vocals(s.with_updates(reuse_steps=False), tracks, out)
     assert calls.count("NEUTRINO.exe") > sung
 
 
@@ -206,7 +208,7 @@ def test_crash_leaves_a_note_to_continue(tmp_path, neutrino_attrappe, monkeypatc
 
     def crash(*args, **kwargs):
         raise MemoryError("Absturz")
-    monkeypatch.setattr(pipeline, "_render_instruments", crash)
+    monkeypatch.setattr(rendering, "_render_instruments", crash)
     with pytest.raises(MemoryError):
         pipeline.generate_song(e2e_settings(tmp_path, root, bpm=111))
     saved, _ = resume.pending()

@@ -9,7 +9,7 @@ import soundfile as sf
 
 import einrichten
 import mixer
-import pipeline
+import mixdown
 import separation
 import systemcheck
 from settings import ReferenceTrack, SongSettings
@@ -181,14 +181,14 @@ def test_reference_targets_take_the_groups_instead_of_the_vocal_guess(tmp_path, 
     groups = {"vocals": {"level": -3.0, "tilt": -12.0}, "drums": {"level": -6.0, "tilt": -5.0}}
     monkeypatch.setattr(separation, "summarize", lambda refs: {k: dict(v) for k, v in groups.items()})
     s = SongSettings(reference_tracks=[ReferenceTrack(path=path)], ref_mastering=False, ref_energy=False)
-    targets = pipeline._reference_targets(s, {}, str(tmp_path), has_vocals=True)
+    targets = mixdown._reference_targets(s, {}, str(tmp_path), has_vocals=True)
     assert targets == {"group_targets": groups}
     # ohne Gesang im Song zählt die Schätzung nicht und der Gesang der Vorbilder auch nicht
-    assert pipeline._reference_targets(s, {}, str(tmp_path), has_vocals=False) == \
+    assert mixdown._reference_targets(s, {}, str(tmp_path), has_vocals=False) == \
         {"group_targets": {"drums": groups["drums"]}}
     # ausgeschaltet bleibt es bei der Schätzung
     off = s.with_updates(ref_stems=False)
-    assert pipeline._reference_targets(off, {}, str(tmp_path), has_vocals=True) == {"vocal_ratio_db": -4.0}
+    assert mixdown._reference_targets(off, {}, str(tmp_path), has_vocals=True) == {"vocal_ratio_db": -4.0}
 
 
 def test_reference_targets_survive_a_broken_separation(tmp_path, monkeypatch):
@@ -197,7 +197,7 @@ def test_reference_targets_survive_a_broken_separation(tmp_path, monkeypatch):
     monkeypatch.setattr(separation, "summarize", boom)
     s = SongSettings(reference_tracks=[ReferenceTrack(path=write(tmp_path / "a.wav", noise(4)))],
                      ref_mastering=False, ref_energy=False, ref_vocal_level=False)
-    assert pipeline._reference_targets(s, {}, str(tmp_path), has_vocals=True) == {}
+    assert mixdown._reference_targets(s, {}, str(tmp_path), has_vocals=True) == {}
 
 
 def test_demucs_is_offered_in_the_setup_but_not_preselected():

@@ -150,6 +150,7 @@ def test_two_takes_are_comped_and_double_the_chorus(tmp_path, neutrino_attrappe,
     import logging
 
     import pipeline
+    import singing
     from settings import SongSettings
     root, calls = neutrino_attrappe
     s = SongSettings(active_sections=["Verse", "Chorus"], section_bars={"Verse": 4, "Chorus": 4},
@@ -159,7 +160,7 @@ def test_two_takes_are_comped_and_double_the_chorus(tmp_path, neutrino_attrappe,
     tracks, _ = pipeline.compose(s)
     out = s.output_dir()
     with caplog.at_level(logging.INFO):
-        vocals = pipeline._synthesize_vocals(s, tracks, out)
+        vocals = singing._synthesize_vocals(s, tracks, out)
     assert calls.count("NEUTRINO.exe") == 2
     assert "Phrasen aus den saubersten Fassungen" in caplog.text
     assert os.path.exists(os.path.join(out, "vocals_double.wav"))
@@ -167,5 +168,5 @@ def test_two_takes_are_comped_and_double_the_chorus(tmp_path, neutrino_attrappe,
     assert sf.info(vocals).frames > 0
 
     # ohne Comping: die sauberste ganze Fassung, keine Doppelung
-    pipeline._synthesize_vocals(s.with_updates(vocal_comping=False), tracks, out)
+    singing._synthesize_vocals(s.with_updates(vocal_comping=False), tracks, out)
     assert not os.path.exists(os.path.join(out, "vocals_double.wav"))

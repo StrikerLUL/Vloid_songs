@@ -8,6 +8,8 @@
 #       des Keyboard-Chors.
 #   Ad-libs (C3): im letzten Refrain kurze Rufe (いぇー, おー) und Echo-Antworten (die letzten Silben der Zeile davor)
 #       in den Lücken des Gesangs.
+#   Idol-Rufe (v6 Nr. 15): „はい！はい！“ (Rock: „おい！“) von mehreren Stimmen auf den Schlägen, an denen die
+#       Hauptstimme Pause hat, und „ふっふー“ vor dem Refrain; im Idol-Pop in jedem Refrain, sonst im letzten.
 # Alles als melody_data (Tonhöhe oder None, Dauer in Schlägen) ab Songanfang, mit den Silben dazu.
 from lyrics import Mora
 from melody_writer import MelNote, harmony_line, melody_data
@@ -20,6 +22,14 @@ ADLIB_GAP = 1.0              # Schläge Lücke im Gesang, ab der ein Ad-lib hine
 ADLIB_OVERLAP = 0.5          # so weit darf ein Ad-lib in die nächste Zeile hineinklingen (leiser, zur Seite)
 MAX_ADLIBS = 4
 CALLS = (("いぇ", "え"), ("お", "お"), ("あ", "あ"))     # Ruf: Silbe, dann ihr Vokal gehalten einen Ton tiefer
+# Idol-Rufe je Stil: welches Wort und ob in jedem Refrain (sonst nur im letzten)
+HAI, OI = ("は", "い"), ("お", "い")
+IDOL_CALLS = {"Idol-Pop": (HAI, True), "Kawaii Chiptune": (HAI, True), "J-Pop Energy": (HAI, False),
+              "Rock": (OI, False)}
+FUFU = ("ふ", "ふ")             # „ふっふー“ im Auftakt zum Refrain (nur zu „はい“)
+CALL_STEP = 0.25                # Schläge pro Silbe: kurz gerufen
+CALL_BELOW = 3                  # so viele Halbtöne unter der Mitte der Stimmlage wird gerufen
+MAX_CALLS_PER_GAP = 2
 
 
 def notes_of(melody_data_: list, silben: list) -> list:
@@ -117,9 +127,52 @@ def adlibs(plan, notes: list) -> list:
     return [n for n in out if n.dur > 0.1 and lo - 3 <= n.pitch]
 
 
+def calls(plan, notes: list) -> list:
+    """Idol-Rufe in den Refrains (IDOL_CALLS): auf den Gegenschlägen (2 und 4, im 3/4-Takt 2 und 3), an denen die
+    Hauptstimme Pause hat, höchstens zwei hintereinander; zu „はい“ ein „ふっふー“ im letzten Schlag vor dem Refrain,
+    wenn dort niemand singt."""
+    word, every = IDOL_CALLS.get(plan.style.name, (None, False))
+    found = choruses(plan)
+    if not word or not found:
+        return []
+    lo, hi = plan.vocal_range
+    center = (lo + hi) // 2 - CALL_BELOW
+    step = 1 / 3 if plan.meter == "6/8" else CALL_STEP          # im 6/8-Takt Achtel der Triole
+
+    def free(a: float, b: float) -> bool:
+        return not any(n.start < b - 1e-6 and n.start + n.dur > a + 1e-6 for n in notes)
+
+    def pitch_at(beat: float) -> int:
+        pcs = plan.chord_at(beat).pcs
+        return min((p for p in range(center - 4, center + 5) if p % 12 in pcs), key=lambda p: abs(p - center),
+                   default=center)
+
+    out = []
+    for sec in (found if every else found[-1:]):
+        if word == HAI and sec.start >= 1.0 and free(sec.start - 1.0, sec.start) \
+                and not any(n.start + n.dur > sec.start - 1.0 + 1e-6 for n in out):     # Ruf am Ende des Refrains davor
+            t = sec.start - 1.0
+            # „ふっ“ kurz, dann „ふー“ einen Ganzton höher gehalten bis zum Refrain
+            out += [MelNote(t, step, pitch_at(t), FUFU[0]), MelNote(t + 2 * step, 1.0 - 2 * step, pitch_at(t) + 2,
+                                                                     FUFU[1])]
+        backbeats = (1.0, 3.0) if sec.bar_beats == 4 else tuple(float(b) for b in range(1, int(sec.bar_beats)))
+        run, beat = 0, sec.start
+        while beat < sec.end - 1e-6:
+            if not free(beat, beat + 1.0):
+                run = 0
+            if round(beat - sec.start, 6) % sec.bar_beats in backbeats and run < MAX_CALLS_PER_GAP \
+                    and free(beat, beat + 2 * step):
+                pitch = pitch_at(beat)
+                out += [MelNote(beat, step, pitch, word[0]), MelNote(beat + step, step, pitch, word[1])]
+                run += 1
+            beat += 1.0
+    return [n for n in out if lo - 5 <= n.pitch <= hi]
+
+
 def add(tracks: dict, settings) -> None:
     """Die Begleitstimmen zu den Spuren eines komponierten Songs: harmony_data/-silben (mit Abwechslung),
-    octave_data/-silben, pads [(Daten, Silben)] und adlib_data/-silben, jeweils nur mit ihrem Schalter."""
+    octave_data/-silben, pads [(Daten, Silben)], adlib_data/-silben und call_data/-silben (Idol-Rufe), jeweils nur
+    mit ihrem Schalter."""
     plan = tracks.get("plan")
     if plan is None or not tracks.get("melody_data"):
         return
@@ -132,3 +185,7 @@ def add(tracks: dict, settings) -> None:
         tracks["pads"] = [melody_data(line) for line in pads(plan) if line]
     if getattr(settings, "adlibs", False):
         tracks["adlib_data"], tracks["adlib_silben"] = melody_data(adlibs(plan, notes))
+    if getattr(settings, "idol_calls", False):
+        found = calls(plan, notes)
+        if found:
+            tracks["call_data"], tracks["call_silben"] = melody_data(found)

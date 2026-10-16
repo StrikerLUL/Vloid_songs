@@ -15,12 +15,13 @@ PART_HINTS = {
     "chords": "Neue Akkorde und neuer Ablauf; alles, was auf den Akkorden spielt, ändert sich mit.",
 }
 SCALES = {"minor": "Moll", "major": "Dur", "dorian": "Dorisch", "phrygian": "Phrygisch"}
+METERS = {"4/4": "4/4", "3/4": "3/4 (Walzer)", "6/8": "6/8 (wiegend)"}
 ENGINES = {"NEUTRINO": "NEUTRINO", "VOICEVOX": "VOICEVOX (kostenlos, läuft als App)",
            "DiffSinger": "DiffSinger (Versuch, Stimmen für OpenUtau)",
            "Vorschau": "Vorschau-Stimme (ohne NEUTRINO und VOICEVOX)"}
 SECTIONS = {
     "Intro": "Intro", "Build-up": "Build-up", "Verse": "Strophe", "PreChorus": "Pre-Chorus", "Chorus": "Refrain",
-    "Bridge": "Bridge", "Drop": "Drop", "Solo": "Solo", "Outro": "Outro",
+    "Bridge": "Bridge", "Drop": "Drop", "Solo": "Solo", "Rap": "Rap", "Outro": "Outro",
 }
 STRUCTURES = {
     "Kurz": ["Intro", "Verse", "PreChorus", "Chorus", "Outro"],

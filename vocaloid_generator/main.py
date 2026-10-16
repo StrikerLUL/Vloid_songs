@@ -7,8 +7,9 @@ import sys
 
 import applog
 import history
+import rezepte
 import userdata
-from pipeline import (best, draft_settings, from_references, generate_song, generate_variants, hook_choices,
+from pipeline import (best, draft_settings, from_references, generate_song, generate_variants, hook_choices, remix,
                       hook_kind, lyric_video)
 from settings import KEYS, REROLLABLE, ReferenceTrack, SongSettings, is_rerollable
 from styles import STYLES
@@ -49,8 +50,15 @@ def parse_args(argv=None):
     p.add_argument("--seed", type=int, help="gleicher Seed = gleicher Song")
     p.add_argument("--bpm", type=int)
     p.add_argument("--style", help="Preset-Stil, z. B. 'J-Pop Energy', 'Rock', 'Kawaii Chiptune'")
+    p.add_argument("--remix", metavar="STIL",
+                   help="derselbe Song (--seed oder --aus-verlauf) mit Band, Tempo und Klang dieses Stils; Melodie, "
+                        "Text und Akkorde bleiben")
+    p.add_argument("--rezept", choices=rezepte.names(), metavar="NAME",
+                   help="ein neuer Song nach einem Rezept: Stil, Tempo, Tonart, Takt, Ablauf und ein Beispieltext ("
+                        + "; ".join(rezepte.names()) + "); --bpm, --style usw. ändern es danach noch")
     p.add_argument("--key", choices=KEYS)
     p.add_argument("--scale", choices=["minor", "major", "dorian", "phrygian"])
+    p.add_argument("--takt", choices=["4/4", "3/4", "6/8"], help="Takt; im 6/8-Takt zählt --bpm die punktierten Viertel")
     p.add_argument("--output", help="Ausgabeordner")
     p.add_argument("--stimme", metavar="NAME", help="NEUTRINO-Stimme, z. B. MERROW")
     p.add_argument("--duett", metavar="NAME", help="zweite NEUTRINO-Stimme fürs Duett ('' = kein Duett)")
@@ -61,6 +69,8 @@ def parse_args(argv=None):
                    "(Versuch; leer = die erste gefundene)")
     p.add_argument("--voicevox-stimme", type=int, metavar="ID", help="VOICEVOX-Singstimme (Stil-ID)")
     p.add_argument("--ohne-voicevox-dynamik", action="store_true", help="VOICEVOX singt gleich laut; Silben und Phrasen werden erst danach lauter und leiser")
+    p.add_argument("--rap-stimme", type=int, metavar="ID", help="VOICEVOX-Sprechstimme für den Rap-Teil (Stil-ID)")
+    p.add_argument("--ohne-rap-stimme", action="store_true", help="die Gesangsstimme singt den Rap-Teil, statt dass VOICEVOX ihn spricht")
     p.add_argument("--fassungen", type=int, choices=[1, 2, 3], help="NEUTRINO singt so oft, die sauberste zählt")
     p.add_argument("--album", type=int, metavar="N",
                    help="Album über Nacht: N Songs (bis 30) am Stück, nach Note sortiert in Alben\\<Datum> <Name>")
@@ -95,6 +105,8 @@ def parse_args(argv=None):
     p.add_argument("--ohne-formant", action="store_true", help="die Formanten der Stimme nicht verschieben")
     p.add_argument("--ohne-gesangsswing", action="store_true", help="der Gesang bleibt gerade, auch wenn die Band swingt")
     p.add_argument("--ohne-romaji", action="store_true", help="Romaji im Liedtext nicht japanisch singen")
+    p.add_argument("--ohne-eigene-texte", action="store_true",
+                   help="[Verse 2], [Chorus 3] übergehen: jede Wiederholung singt den Text der ersten")
     p.add_argument("--ohne-haltezeichen", action="store_true", help="lange Vokale für NEUTRINO nicht als ー schreiben")
     p.add_argument("--ohne-atemzeichen", action="store_true", help="keine Atemzeichen in langen Zeilen")
     p.add_argument("--ohne-doppelvokale", action="store_true", help="schnelle Töne nicht auf einem Ton zusammenlegen")
@@ -112,6 +124,7 @@ def parse_args(argv=None):
     p.add_argument("--ohne-doppel-harmonie", action="store_true", help="die zweite Stimme nur einmal singen")
     p.add_argument("--ohne-flaechen", action="store_true", help="keine gesungenen Flächen im Refrain")
     p.add_argument("--ohne-adlibs", action="store_true", help="keine Ad-libs im letzten Refrain")
+    p.add_argument("--ohne-idol-rufe", action="store_true", help="keine Rufe (はい！はい！) im Refrain")
     p.add_argument("--ohne-echte-atmer", action="store_true",
                    help="Atmer aus Rauschen, auch wenn im Ordner Atmer Aufnahmen liegen")
     p.add_argument("--ohne-silben-lautstaerke", action="store_true",
@@ -133,16 +146,24 @@ def parse_args(argv=None):
     p.add_argument("--box", metavar="WAV", help="Impulsantwort einer Gitarrenbox")
     p.add_argument("--ohne-samples", action="store_true",
                    help="Orchester aus dem SoundFont statt aus den echten Aufnahmen (setup_samples.py)")
+    p.add_argument("--ohne-band-samples", action="store_true",
+                   help="Flügel, E-Bass und E-Gitarre aus dem SoundFont statt aus echten Aufnahmen (setup_band.py)")
     p.add_argument("--ohne-echtes-schlagzeug", action="store_true",
                    help="Schlagzeug aus dem SoundFont statt aus dem DRS Kit (setup_drums.py)")
     p.add_argument("--ohne-echte-grooves", action="store_true",
                    help="eingebaute Schlagzeug-Muster statt Grooves echter Schlagzeuger (setup_grooves.py)")
     p.add_argument("--ohne-bass-leben", action="store_true", help="Bass ohne Ghost-Notes und Slides")
+    p.add_argument("--ohne-chops", action="store_true", help="keine Vocal Chops im Drop")
+    p.add_argument("--ohne-ritardando", action="store_true", help="Ballade bis zum Schluss im Tempo")
     p.add_argument("--ohne-anschlagmuster", action="store_true",
                    help="Gitarre schlägt immer dasselbe Muster an statt je nach Teil")
     p.add_argument("--ohne-lofi-klang", action="store_true", help="Lo-Fi ohne Knistern und Bandmaschine")
     p.add_argument("--ohne-bewegung", action="store_true",
                    help="Mix ohne Anlauf vor dem Refrain, Hall pro Sektion und breitere Refrains")
+    p.add_argument("--ohne-true-peak", action="store_true",
+                   help="nur die Samples begrenzen, nicht die Spitzen dazwischen (-1 dBTP)")
+    p.add_argument("--ohne-offvocal", action="store_true", help="keine MP3s ohne Gesang (Off-Vocal) und nur mit Gesang")
+    p.add_argument("--ohne-tags", action="store_true", help="MP3 ohne Titel, Liedtext und Titelbild in den Tags")
     p.add_argument("--ohne-veredler", action="store_true",
                    help="keine zweite Fassung mit von ACE-Step veredelter Band (setup_ace_step.py)")
     p.add_argument("--veredler-staerke", type=float, metavar="0.1-0.9",
@@ -167,6 +188,10 @@ def parse_args(argv=None):
                    help="Reihenfolge für --verlauf: neu, bewertung (beste Note zuerst) oder name")
     p.add_argument("--aus-verlauf", type=int, metavar="NR",
                    help="Einstellungen und Seed eines Songs aus dem Verlauf nehmen (1 = der neueste)")
+    p.add_argument("--oeffnen", type=int, metavar="NR",
+                   help="einen Song aus dem Verlauf wieder öffnen: sein Gesang bleibt, Band und Mix entstehen neu")
+    p.add_argument("--ohne-projekt", action="store_true",
+                   help="den Gesang neuer Songs nicht im Verlauf aufheben (spart Platz, Wieder-Öffnen singt neu)")
     p.add_argument("--neu", action="append", type=_rerollable, metavar="TEIL[:SEKTION]",
                    help="nur diesen Teil neu würfeln, der Rest bleibt (mehrfach möglich): " + ", ".join(REROLLABLE)
                    + "; mit :SEKTION nur dort, z. B. melody:Chorus. Ohne --seed und --aus-verlauf gilt der letzte Song.")
@@ -196,6 +221,10 @@ def parse_args(argv=None):
                    help="danach MP3, Video, Titelbild und Beschreibung in einen Ordner unter YouTube legen")
     p.add_argument("--lyric-video", nargs="?", const="", metavar="DATEI",
                    help="dazu ein Lyric-Video (MP4) mit dem Text zum Mitlesen; ohne DATEI neben dem Song")
+    p.add_argument("--video-hintergrund", metavar="BILD",
+                   help="eigenes Bild als Hintergrund des Lyric-Videos ('' = Farbverlauf des Stils)")
+    p.add_argument("--ohne-stilfarben", action="store_true",
+                   help="Lyric-Video einfarbig dunkel mit pinkem Text wie bis 1.1 statt in den Farben des Stils")
     p.add_argument("--melodie-sektion", metavar="SEKTION", help="dort singt die eigene Melodie (Standard: Chorus)")
     p.add_argument("--motive", metavar="ORDNER", help="Rhythmen und Gesten aus den MIDI-Melodien in diesem Ordner lernen")
     p.add_argument("--ohne-motive", action="store_true",
@@ -227,7 +256,8 @@ def main(argv=None) -> int:
 
     settings = SongSettings.load(args.settings)
     _logging(settings.log_file, args.verbose)
-    overrides = {"output_ordner": args.output, "reuse_steps": False if args.ohne_wiederverwenden else None}
+    overrides = {"output_ordner": args.output, "reuse_steps": False if args.ohne_wiederverwenden else None,
+                 "keep_projects": False if args.ohne_projekt else None}
     settings = settings.with_updates(**{k: v for k, v in overrides.items() if v is not None})
 
     if args.verlauf is not None:
@@ -249,10 +279,14 @@ def main(argv=None) -> int:
         settings = settings.with_updates(reference_tracks=[ReferenceTrack(path=p).model_dump() for p in args.vorbild])
     if args.vom_vorbild:
         settings = from_references(settings)
+    if args.rezept:
+        settings = rezepte.apply(args.rezept, settings)
     overrides = {"seed": args.seed, "bpm": args.bpm, "style": args.style, "key": args.key, "scale": args.scale,
+                 "meter": args.takt,
                  "singer": args.stimme, "duet_singer": args.duett, "support_singer": args.support_stimme, "master_lufs": args.lautheit,
                  "vocal_engine": args.engine, "voicevox_singer": args.voicevox_stimme,
                  "voicevox_dynamics": False if args.ohne_voicevox_dynamik else None,
+                 "rap_speaker": args.rap_stimme, "rap_voice": False if args.ohne_rap_stimme else None,
                  "diffsinger_voice": args.diffsinger_stimme, "vocal_takes": args.fassungen,
                  "vibrato": args.vibrato, "glide": args.uebergaenge,
                  "psola_reshape": False if args.ohne_psola else None,
@@ -269,6 +303,7 @@ def main(argv=None) -> int:
                  "formant_fx": False if args.ohne_formant else None,
                  "vocal_swing": False if args.ohne_gesangsswing else None,
                  "romaji": False if args.ohne_romaji else None,
+                 "numbered_lyrics": False if args.ohne_eigene_texte else None,
                  "long_vowel_mark": False if args.ohne_haltezeichen else None,
                  "breath_marks": False if args.ohne_atemzeichen else None,
                  "fast_diphthongs": False if args.ohne_doppelvokale else None,
@@ -281,6 +316,7 @@ def main(argv=None) -> int:
                  "harmony_double": False if args.ohne_doppel_harmonie else None,
                  "sung_pads": False if args.ohne_flaechen else None,
                  "adlibs": False if args.ohne_adlibs else None,
+                 "idol_calls": False if args.ohne_idol_rufe else None,
                  "syllable_dynamics": False if args.ohne_silben_lautstaerke else None,
                  "recorded_breaths": False if args.ohne_echte_atmer else None,
                  "convolution_reverb": False if args.ohne_platte else None,
@@ -290,12 +326,18 @@ def main(argv=None) -> int:
                  "guitar_amp": False if args.ohne_verstaerker else None, "cabinet_ir": args.box,
                  "samples": False if args.ohne_samples else None,
                  "real_drums": False if args.ohne_echtes_schlagzeug else None,
+                 "band_samples": False if args.ohne_band_samples else None,
                  "real_grooves": False if args.ohne_echte_grooves else None,
                  "lively_bass": False if args.ohne_bass_leben else None,
                  "guitar_strums": False if args.ohne_anschlagmuster else None,
+                 "vocal_chops": False if args.ohne_chops else None,
+                 "ritardando": False if args.ohne_ritardando else None,
                  "auto_rating": False if args.ohne_bewertung else None,
                  "lofi_texture": False if args.ohne_lofi_klang else None,
                  "mix_movement": False if args.ohne_bewegung else None,
+                 "true_peak": False if args.ohne_true_peak else None,
+                 "vocal_versions": False if args.ohne_offvocal else None,
+                 "id3_tags": False if args.ohne_tags else None,
                  "ref_stems": False if args.ohne_vorbild_gruppen else None,
                  "ref_vocal_curve": False if args.ohne_vorbild_gesangsklang else None,
                  "ai_accompaniment": False if args.ohne_ki_begleitung else (True if args.ki_begleitung else None),
@@ -303,7 +345,8 @@ def main(argv=None) -> int:
                  "polish_caption": args.veredler_klang,
                  "melody_midi": args.melodie_midi, "melody_midi_section": args.melodie_sektion,
                  "own_vocal": args.eigener_gesang, "own_vocal_align": False if args.ohne_ausrichten else None,
-                 "motif_folder": args.motive,
+                 "motif_folder": args.motive, "video_background": args.video_hintergrund,
+                 "video_colors": False if args.ohne_stilfarben else None,
                  "more_motifs": False if args.ohne_motive else None,
                  "learned_motifs": False if args.ohne_motive else None}
     if args.akkorde:
@@ -317,6 +360,12 @@ def main(argv=None) -> int:
         channels["drums"]["style"] = args.schlagzeug
         overrides["channels"] = channels
     settings = settings.with_updates(**{k: v for k, v in overrides.items() if v is not None})
+    if args.remix:
+        try:
+            settings = remix(settings, args.remix)
+        except ValueError as e:
+            log.error("%s Mit --seed oder --aus-verlauf geht es.", e)
+            return 1
     if args.summen:
         settings = _hummed(settings, args.summen)
         if settings is None:
@@ -335,6 +384,8 @@ def main(argv=None) -> int:
     def progress(f, msg):
         log.info("[%3d%%] %s", round(f * 100), msg)
 
+    if args.oeffnen:
+        return _reopen(settings, args.oeffnen, progress)
     if args.refrains:
         return _hooks(settings, args.refrains, progress)
     if args.casting:
@@ -354,6 +405,8 @@ def main(argv=None) -> int:
         log.info("Fertig! Seed %d: %s", result.seed, result.history or result.audio)
         if result.polished_wav:
             log.info("Veredelte Fassung: %s", result.polished_mp3 or result.polished_wav)
+        for path in result.versions.values():
+            log.info("Fassung: %s", path)
     chosen = best(results)
     if chosen.rating:
         log.info("Beste Fassung: Seed %d, %s", chosen.seed, chosen.rating.describe())
@@ -484,6 +537,26 @@ def _list_history(settings: SongSettings, text: str = "", sort: str = "neu") -> 
         score = f"  Note {entry.score:.1f}" if entry.score is not None else ""
         note = f"  ({entry.note})" if entry.note else ""
         log.info("%2d. %s%s%s%s", numbers[entry.info], "★ " if entry.favorite else "", entry.title, score, note)
+    return 0
+
+
+def _reopen(settings: SongSettings, nr: int, progress) -> int:
+    """Einen Song aus dem Verlauf als Projekt wieder öffnen (project.py)."""
+    import project
+    found = history.entries(settings.output_dir())
+    if not 1 <= nr <= len(found):
+        log.error("Im Verlauf gibt es keinen Song Nr. %d (vorhanden: %d).", nr, len(found))
+        return 1
+    entry = found[nr - 1]
+    restored = entry.restore(settings).with_updates(reuse_steps=True)
+    _, message = project.unpack(entry.audio, restored, restored.output_dir())
+    log.info("%s: %s", entry.title, message)
+    try:
+        result = generate_song(restored, progress=progress, keep_history=False)
+    except (RuntimeError, ValueError) as e:
+        log.error("%s", e)
+        return 1
+    log.info("Fertig! Seed %d: %s", result.seed, result.audio)
     return 0
 
 

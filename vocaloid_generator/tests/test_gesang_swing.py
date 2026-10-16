@@ -5,7 +5,7 @@ import soundfile as sf
 from scipy.ndimage import uniform_filter1d
 
 import main
-import pipeline
+import singing
 import voice_fx
 from settings import SongSettings
 from voice_fx import SungNote
@@ -16,7 +16,7 @@ SPB = 60 / BPM
 
 @pytest.fixture
 def swinging(monkeypatch):
-    monkeypatch.setattr(pipeline, "VOCAL_SWING_FROM", 0.2)
+    monkeypatch.setattr(singing, "VOCAL_SWING_FROM", 0.2)
 
 
 def sixteenths(count, first_beat=1.0):
@@ -75,10 +75,10 @@ def test_without_second_sixteenths_the_take_stays_untouched(tmp_path):
 
 
 def test_the_vocal_swings_only_when_the_band_swings_enough(swinging):
-    assert pipeline._swing_amount(SongSettings(style="Lo-Fi")) == pytest.approx(0.57)
-    assert pipeline._swing_amount(SongSettings(style="J-Pop Energy")) == 0.0          # Grundwert 0,12 allein nicht
-    assert pipeline._swing_amount(SongSettings(style="City Pop", swing=0.3)) == pytest.approx(0.3)
-    assert pipeline._swing_amount(SongSettings(style="Lo-Fi", vocal_swing=False)) == 0.0
+    assert singing._swing_amount(SongSettings(style="Lo-Fi")) == pytest.approx(0.57)
+    assert singing._swing_amount(SongSettings(style="J-Pop Energy")) == 0.0          # Grundwert 0,12 allein nicht
+    assert singing._swing_amount(SongSettings(style="City Pop", swing=0.3)) == pytest.approx(0.3)
+    assert singing._swing_amount(SongSettings(style="Lo-Fi", vocal_swing=False)) == 0.0
     assert main.parse_args(["--ohne-gesangsswing"]).ohne_gesangsswing
 
 
@@ -89,6 +89,6 @@ def test_each_vocal_track_swings_after_its_own_notes(swinging, tmp_path, monkeyp
     monkeypatch.setattr(voice_fx, "swing", lambda path, notes, bpm, shift: calls.append(
         (path.rsplit("/", 1)[-1].rsplit("\\", 1)[-1], len(notes), round(shift, 4))) or 1)
     tracks = {"melody_data": [(None, 1.25), (60, 0.25), (62, 0.5)], "harmony_data": [(None, 1.0), (64, 1.0)]}
-    pipeline._vocal_swing(SongSettings(style="Lo-Fi", bpm=BPM), tracks, str(tmp_path))
+    singing._vocal_swing(SongSettings(style="Lo-Fi", bpm=BPM), tracks, str(tmp_path))
     # die Harmonie hat keinen Ton auf der zweiten Sechzehntel, die Flächen swingen nie
     assert calls == [("vocals.wav", 2, round(0.57 / 12, 4))]

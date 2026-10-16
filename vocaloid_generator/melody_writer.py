@@ -11,7 +11,8 @@ import random
 from dataclasses import dataclass
 from typing import Optional
 
-from lyrics import Mora, vowel
+from lyrics import Mora, for_occurrence, vowel
+from meter import END_RHYTHMS_34, RHYTHMS_34
 from song_plan import BEATS_PER_BAR, VOCAL_RANGE, Section, SongPlan
 from theory import Chord, scale_pcs
 
@@ -53,6 +54,7 @@ ROLE_SEQUENCES = {
     "Verse":     ["A", "A2", "B", "C"],
     "PreChorus": ["P", "P2", "P", "PUP"],
     "Bridge":    ["A", "A2", "B", "OPEN"],
+    "Rap":       ["R", "R2", "R", "R2"],
 }
 CONTOURS = {
     "A":    lambda t: 3.0 * math.sin(math.pi * t) - 1.0,
@@ -66,8 +68,10 @@ CONTOURS = {
     "P":    lambda t: -2.0 + 4.0 * t,
     "P2":   lambda t: -1.0 + 4.0 * t,
     "PUP":  lambda t: 1.0 + 5.0 * t,
+    "R":    lambda t: 0.0,
+    "R2":   lambda t: 0.0,
 }
-KIND_OFFSET = {"Verse": -3, "PreChorus": -1, "Chorus": 2, "Bridge": -2}
+KIND_OFFSET = {"Verse": -3, "PreChorus": -1, "Chorus": 2, "Bridge": -2, "Rap": -4}
 
 # Gesten pro Takt: Abweichung der Töne eines Takts von der Phrasenkontur (k = Töne im Takt)
 def _span(k: int) -> list:
@@ -88,16 +92,16 @@ GESTURE_WEIGHTS = {
     "PreChorus": {"rise": 3, "arch": 1, "neighbor": 1},
     "Bridge":    {"arch": 2, "valley": 1, "fall": 1},
 }
-GESTURE_DEPTH = {"Chorus": 1.0, "Verse": 0.7, "PreChorus": 0.8, "Bridge": 0.8}
+GESTURE_DEPTH = {"Chorus": 1.0, "Verse": 0.7, "PreChorus": 0.8, "Bridge": 0.8, "Rap": 0.2}
 # Singbare Silben pro Sekunde, an denen sich die Dichte orientiert
-SYLLABLES_PER_SECOND = {"Verse": 3.3, "PreChorus": 3.5, "Chorus": 3.6, "Bridge": 3.0}
+SYLLABLES_PER_SECOND = {"Verse": 3.3, "PreChorus": 3.5, "Chorus": 3.6, "Bridge": 3.0, "Rap": 5.0}
 SINGING_SHARE = 0.75
 # Steigt der Akzent im Wort (tief → hoch), soll die Melodie nicht fallen, und umgekehrt
 ACCENT_COST = 1.5
 # ん und っ springen nicht, sie hängen am Ton davor
 SPECIAL_MORAE = ("ん", "っ")
 # Anteil der Phrasen, deren langer Schlusston ein Melisma bekommt (mal melisma des Stils)
-MELISMA_SHARE = {"Chorus": 0.35, "Verse": 0.2, "PreChorus": 0.25, "Bridge": 0.45}
+MELISMA_SHARE = {"Chorus": 0.35, "Verse": 0.2, "PreChorus": 0.25, "Bridge": 0.45, "Rap": 0.0}
 MELISMA_MIN_STEPS = 6
 LEARNED_SHARE = 0.5     # so oft singt ein Takt einen aus MIDI-Dateien gelernten Rhythmus (motifs.py), wenn es einen gibt
 
@@ -129,8 +133,8 @@ def roles_for(kind: str, n_phrases: int) -> list:
     return body + [seq[-1]]
 
 
-def phrase_bars_for(bars: int, bpm: float) -> int:
-    bar_seconds = BEATS_PER_BAR * 60.0 / bpm
+def phrase_bars_for(bars: int, bpm: float, bar_beats: float = BEATS_PER_BAR) -> int:
+    bar_seconds = bar_beats * 60.0 / bpm
     if bars % 4 == 0 and bar_seconds * 4 <= 8.5:
         return 4
     if bars % 2 == 0:
@@ -138,8 +142,13 @@ def phrase_bars_for(bars: int, bpm: float) -> int:
     return bars
 
 
-def max_syllables(bars: int) -> int:
-    return bars * MAX_PER_BAR
+def max_syllables(bars: int, bar_steps: int = BAR_STEPS) -> int:
+    return bars * _per_bar(bar_steps)
+
+
+def _per_bar(bar_steps: int) -> int:
+    """So viele Silben passen höchstens in einen Takt: 12 im 4/4-Takt, 9 im 3/4-Takt."""
+    return MAX_PER_BAR * bar_steps // BAR_STEPS
 
 
 def _local_scale(tonic: int, mode: str, chord: Chord) -> set:
@@ -168,20 +177,28 @@ class SectionMelodyWriter:
         self.motifs = {}
         self.gestures = {}
         self.melisma = {}
+        # Sechzehntel pro Takt: 16, im 3/4-Takt 12 (dort schreibt der Writer im fertigen Takt, meter.py)
+        self.bar_steps = int(round(section.bar_beats * STEPS_PER_BEAT))
+        self.waltz = self.bar_steps == 12
+        self.body = RHYTHMS_34 if self.waltz else BODY_RHYTHMS
+        self.ends = END_RHYTHMS_34 if self.waltz else END_RHYTHMS
+        self.strong_steps = (0,) if self.waltz else (0, 8)
+        self.release = self.bar_steps - 4         # der Schlusston endet einen Schlag vor dem Taktende
+        self.own_rhythms = bool(motifs) and self.bar_steps == BAR_STEPS   # gelernte Rhythmen sind 4/4
 
     # ── Silben verteilen ─────────────────────────────────────────────────────────
     def allocate(self, syllables: list) -> tuple:
         """Silben auf Phrasen verteilen. Kurze Texte werden wiederholt, damit die Sektion nicht leer klingt."""
         bars = self.sec.bars
-        pb = phrase_bars_for(bars, self.plan.bpm)
+        pb = phrase_bars_for(bars, self.plan.bpm, self.sec.bar_beats)
         n_phrases = max(bars // pb, 1)
         syllables = list(syllables) or ["ら"]
-        seconds = bars * BEATS_PER_BAR * self.plan.seconds_per_beat
+        seconds = bars * self.sec.bar_beats * self.plan.seconds_per_beat
         comfortable = SYLLABLES_PER_SECOND.get(self.kind, 3.3) * seconds * SINGING_SHARE
         reps = max(1, round(comfortable / len(syllables)))
-        while reps > 1 and len(syllables) * reps > max_syllables(bars):
+        while reps > 1 and len(syllables) * reps > max_syllables(bars, self.bar_steps):
             reps -= 1
-        stream = (syllables * reps)[:max_syllables(bars)]
+        stream = (syllables * reps)[:max_syllables(bars, self.bar_steps)]
         if reps > 1 and n_phrases % reps == 0:
             per_pass = n_phrases // reps
             chunks = []
@@ -201,11 +218,11 @@ class SectionMelodyWriter:
             return self.motifs[key]
         for other in (count - 1, count + 1):
             if (other, variant) in self.motifs and other > 0:
-                self.motifs[key] = _derive(self.motifs[(other, variant)], count)
+                self.motifs[key] = _derive(self.motifs[(other, variant)], count, self.bar_steps)
                 return self.motifs[key]
-        if count in BODY_RHYTHMS:
-            options = list(BODY_RHYTHMS[count])
-            if self.extra:
+        if count in self.body:
+            options = list(self.body[count])
+            if self.own_rhythms:
                 options += self.extra.body.get(count, [])
                 learned = self.extra.learned.get(count, [])
                 if learned and self.rng.random() < LEARNED_SHARE:
@@ -215,16 +232,17 @@ class SectionMelodyWriter:
                 options = [o for o in options if o != first]
             motif = self.rng.choice(options)
         else:
-            extra = [3, 11, 7, 15, 1, 9, 5, 13][:count - 8]
-            motif = tuple(sorted(set(range(0, 16, 2)) | set(extra)))[:count]
+            eighths = set(range(0, self.bar_steps, 2))
+            extra = [s for s in (3, 11, 7, 15, 1, 9, 5, 13) if s < self.bar_steps][:count - len(eighths)]
+            motif = tuple(sorted(eighths | set(extra)))[:count]
         self.motifs[key] = motif
         return motif
 
     def _end_rhythm(self, count: int, role: str) -> tuple:
         key = ("end", role, count)
         if key not in self.motifs:
-            options = END_RHYTHMS.get(min(count, 6))
-            if self.extra:
+            options = self.ends.get(min(count, 6))
+            if self.own_rhythms:
                 options = options + self.extra.end.get(min(count, 6), [])
             self.motifs[key] = self.rng.choice(options) if count <= 6 else self._motif(count)
         return self.motifs[key]
@@ -237,7 +255,7 @@ class SectionMelodyWriter:
             body = phrase_bars - 1
             end = 1 if n <= body + 1 else max(1, min(6, round(n / phrase_bars * 0.6)))
             rest = n - end
-            while rest > body * MAX_PER_BAR and end < 6:
+            while rest > body * _per_bar(self.bar_steps) and end < 6:
                 end += 1
                 rest -= 1
             base, extra = divmod(rest, body)
@@ -248,18 +266,18 @@ class SectionMelodyWriter:
         onsets = []
         for b, c in enumerate(counts):
             variant = b % 2 if len(counts) > 2 else 0
-            onsets.extend(b * BAR_STEPS + s for s in self._motif(c, variant))
-        last_bar = len(counts) * BAR_STEPS
+            onsets.extend(b * self.bar_steps + s for s in self._motif(c, variant))
+        last_bar = len(counts) * self.bar_steps
         onsets.extend(last_bar + s for s in self._end_rhythm(end, role))
-        phrase_end = last_bar + END_RELEASE
+        phrase_end = last_bar + self.release
         if onsets and onsets[-1] >= phrase_end - 1:
-            phrase_end = min(last_bar + BAR_STEPS, onsets[-1] + 2)
+            phrase_end = min(last_bar + self.bar_steps, onsets[-1] + 2)
         slots = []
         for i, step in enumerate(onsets):
             nxt = onsets[i + 1] if i + 1 < len(onsets) else phrase_end
-            in_bar = step % BAR_STEPS
+            in_bar = step % self.bar_steps
             dur = max(1, nxt - step)
-            strong = in_bar in (0, 8) or dur >= 4 or i == len(onsets) - 1
+            strong = in_bar in self.strong_steps or dur >= 4 or i == len(onsets) - 1
             slots.append(_Slot(step, dur, strong, i == len(onsets) - 1))
         return slots
 
@@ -277,7 +295,7 @@ class SectionMelodyWriter:
     def _gesture_offsets(self, slots: list, role: str) -> list:
         by_bar = {}
         for i, s in enumerate(slots):
-            by_bar.setdefault(s.step // BAR_STEPS, []).append(i)
+            by_bar.setdefault(s.step // self.bar_steps, []).append(i)
         depth = GESTURE_DEPTH.get(self.kind, 0.8)
         offsets = [0.0] * len(slots)
         for bar, idxs in by_bar.items():
@@ -350,7 +368,7 @@ class SectionMelodyWriter:
         out, history, prev_move = [], [], 0
         ref_by_step = {s.step: p for s, p in reference} if reference else {}
         gesture = self._gesture_offsets(slots, role)
-        last_bar_start = (slots[-1].step // BAR_STEPS) * BAR_STEPS
+        last_bar_start = (slots[-1].step // self.bar_steps) * self.bar_steps
         for i, slot in enumerate(slots):
             chord = self._chord_at_step(phrase_start, slot.step)
             target = self.center + contour(slot.step / total) + gesture[i]
@@ -376,7 +394,7 @@ class SectionMelodyWriter:
         """Hook-Technik: weitere Takte wiederholen das Motiv des ersten Takts, verschoben auf den neuen Akkord."""
         bars = {}
         for i, s in enumerate(slots):
-            bars.setdefault(s.step // BAR_STEPS, []).append(i)
+            bars.setdefault(s.step // self.bar_steps, []).append(i)
         first = bars.get(0, [])
         if not first:
             return pitches
@@ -386,10 +404,10 @@ class SectionMelodyWriter:
         for b, idxs in bars.items():
             if b == 0 or b == max(bars):
                 continue
-            steps = [slots[i].step - b * BAR_STEPS for i in idxs]
+            steps = [slots[i].step - b * self.bar_steps for i in idxs]
             if steps != motif_steps:
                 continue
-            chord = self._chord_at_step(phrase_start, b * BAR_STEPS)
+            chord = self._chord_at_step(phrase_start, b * self.bar_steps)
             best = None
             for shift in (0, 1, -1, 2, -2, 3, -3, 4, -4):
                 moved = [_scale_shift(scale, out[i], shift) for i in first]
@@ -411,7 +429,7 @@ class SectionMelodyWriter:
         notes, prev = [], None
         written = {}
         for ph, (chunk, role) in enumerate(zip(chunks, roles)):
-            phrase_start = self.sec.start + ph * pb * BEATS_PER_BAR
+            phrase_start = self.sec.start + ph * pb * self.sec.bar_beats
             slots = self.phrase_rhythm(len(chunk), pb, role)
             base_role = role.rstrip("2")
             reference = written.get(base_role)
@@ -475,11 +493,11 @@ def _split_even(items: list, parts: int) -> list:
     return [c for c in out if c] or [items]
 
 
-def _derive(motif: tuple, count: int) -> tuple:
+def _derive(motif: tuple, count: int, bar_steps: int = BAR_STEPS) -> tuple:
     """Motiv mit einer Silbe mehr oder weniger, so ähnlich wie möglich."""
     onsets = list(motif)
     while len(onsets) < count:
-        bounds = onsets + [BAR_STEPS]
+        bounds = onsets + [bar_steps]
         gaps = [(bounds[i + 1] - bounds[i], i) for i in range(len(onsets))]
         size, i = max(gaps)
         if size < 2:
@@ -488,7 +506,7 @@ def _derive(motif: tuple, count: int) -> tuple:
         new = onsets[i] + (half if half % 2 == 0 or size < 4 else half - 1)
         onsets.insert(i + 1, new)
     while len(onsets) > count:
-        bounds = onsets + [BAR_STEPS]
+        bounds = onsets + [bar_steps]
         gaps = [(bounds[i + 1] - bounds[i], i) for i in range(1, len(onsets))]
         _, i = min(gaps) if gaps else (0, 0)
         onsets.pop(i if i else len(onsets) - 1)
@@ -507,7 +525,8 @@ def write_vocal_melody(plan: SongPlan, lyrics: dict, rng: random.Random, rerolls
                        imported: Optional[dict] = None, motifs=None, singable: bool = False) -> list:
     """
     Melodie für alle Sektionen mit Gesang. Jede Sektionsart wird einmal komponiert; spätere Vorkommen
-    singen dieselbe Melodie (im Schlussrefrain höher, wenn der Song die Tonart wechselt).
+    singen dieselbe Melodie (im Schlussrefrain höher, wenn der Song die Tonart wechselt). Hat ein späteres Vorkommen
+    einen eigenen Text (lyrics["Verse#2"], aus „[Verse 2]“), singt es ihn auf dieselbe Melodie (fit_text).
     Jede Sektionsart würfelt für sich; rerolls {Sektionsart: Zufall} schreibt nur ihre Melodie neu.
     imported {Sektionsart: Melodie aus melody_import.load}: dort singt die eigene Melodie, Ton für Ton.
     motifs: zusätzliche Rhythmen und Gesten (motifs.Motifs), None = nur die eingebauten.
@@ -527,18 +546,109 @@ def write_vocal_melody(plan: SongPlan, lyrics: dict, rng: random.Random, rerolls
             else:
                 kind_rng = rerolls.get(sec.kind) or random.Random(f"{seed}:{sec.kind}")
                 sec_notes = SectionMelodyWriter(plan, sec, kind_rng, motifs).write(lyrics.get(sec.kind, []))
+                if sec.kind == "Rap":
+                    _chant(sec_notes)
             written[sec.kind] = (sec, sec_notes)
         else:
             first, first_notes = written[sec.kind]
             shift = (sec.tonic - first.tonic + 6) % 12 - 6
             sec_notes = [MelNote(n.start - first.start + sec.start, n.dur, n.pitch + shift, n.syllable, n.strong)
                          for n in first_notes]
+            own = for_occurrence(lyrics, sec.kind, sec.occurrence)
+            if own:
+                sec_notes = fit_text(sec_notes, own)
+                log.info("%s %d singt seinen eigenen Text (%d Silben)", sec.kind, sec.occurrence, len(own))
         notes.extend(sec_notes)
     composed = [n for n in notes if not imported.get(plan.section_at(n.start).kind)]
     _fit_to_chords(plan, composed)
     if singable:
         make_singable(plan, composed)
     return notes
+
+
+RAP_RANGE = 2           # Halbtöne um die Mitte: ein Rap ohne Sprechstimme klingt wie ein Sprechgesang
+
+
+def _chant(notes: list) -> None:
+    """Der Rap-Teil fast auf einem Ton (rap.py spricht ihn; singt ihn die Engine, klingt er wie ein Sprechgesang)."""
+    if not notes:
+        return
+    center = sorted(n.pitch for n in notes)[len(notes) // 2]
+    for n in notes:
+        n.pitch = center + max(-RAP_RANGE, min(RAP_RANGE, round((n.pitch - center) * 0.35)))
+
+
+# ── Eigener Text für eine wiederholte Sektion (v6, Nr. 1) ───────────────────────
+# Die Melodie bleibt, der Rhythmus passt sich an: mehr Silben teilen die längsten Töne, weniger Silben lassen kurze
+# Töne direkt nach einem anderen auf dem Vokal davor weiterklingen (Melisma) oder binden sie an ihn.
+MIN_SPLIT = 0.5             # Schläge: kürzere Töne werden nicht mehr geteilt (zwei Sechzehntel)
+SPLIT_GRID = 0.25
+
+
+def _held(note: MelNote) -> bool:
+    return bool(getattr(note.syllable, "melisma", False))
+
+
+def fit_text(notes: list, syllables: list) -> list:
+    """
+    Die Töne einer wiederholten Sektion mit einem eigenen Text. notes: die Töne des ersten Vorkommens (an die Stelle
+    dieses Vorkommens verschoben), syllables: der neue Text. Ist er viel kürzer als der alte, wird er wie beim ersten
+    Vorkommen wiederholt. Rückgabe: neue Töne mit den neuen Silben; Tonhöhen und Phrasen bleiben.
+    """
+    out = [[MelNote(n.start, n.dur, n.pitch, n.syllable, n.strong), not _held(n)] for n in sorted(notes, key=lambda n: n.start)]
+    words = [w for w in syllables if w]
+    if not out or not words:
+        return [n for n, _ in out]
+    slots = sum(1 for _, sung in out if sung)
+    stream = words * max(1, round(slots / len(words)))
+    # mehr Silben als Töne: erst Melismen zu eigenen Silben, dann die längsten Töne teilen
+    while sum(1 for _, sung in out if sung) < len(stream):
+        held = next((item for item in out if not item[1]), None)
+        if held:
+            held[1] = True
+            continue
+        longest = max(out, key=lambda item: (item[0].dur, -item[0].start))
+        note = longest[0]
+        if note.dur < MIN_SPLIT:
+            break
+        first = max(SPLIT_GRID, round(note.dur / 2 / SPLIT_GRID) * SPLIT_GRID)
+        rest = MelNote(note.start + first, note.dur - first, note.pitch, None, False)
+        note.dur = first
+        out.insert(out.index(longest) + 1, [rest, True])
+    # weniger Silben als Töne: kurze, unbetonte Töne direkt nach einem anderen klingen auf dessen Silbe weiter
+    surplus = sum(1 for _, sung in out if sung) - len(stream)
+    if surplus > 0:
+        candidates = [i for i in range(1, len(out)) if out[i][1]
+                      and abs(out[i - 1][0].start + out[i - 1][0].dur - out[i][0].start) < 1e-6]
+        candidates.sort(key=lambda i: (out[i][0].strong, out[i][0].dur, out[i][0].start))
+        for i in candidates[:surplus]:
+            out[i][1] = False
+        surplus -= min(surplus, len(candidates))
+        while surplus > 0:                       # sonst die kürzesten Töne weglassen (eine Pause mehr)
+            shortest = min((item for item in out if item[1]), key=lambda item: (item[0].dur, -item[0].start))
+            out.remove(shortest)
+            surplus -= 1
+    fitted, words = [], iter(stream)
+    for note, sung in out:
+        if sung:
+            note.syllable = next(words, None)
+        elif fitted and fitted[-1].pitch == note.pitch and \
+                abs(fitted[-1].start + fitted[-1].dur - note.start) < 1e-6:
+            fitted[-1].dur += note.dur            # gleicher Ton: einfach länger halten
+            continue
+        else:
+            sound = vowel(str(fitted[-1].syllable or "")) if fitted else None
+            if sound is None:                     # nach っ oder vor dem ersten Ton: ein Ton weniger
+                if fitted and abs(fitted[-1].start + fitted[-1].dur - note.start) < 1e-6:
+                    fitted[-1].dur += note.dur
+                continue
+            note.syllable = Mora(sound, melisma=True)
+            note.strong = False
+        fitted.append(note)
+    left = sum(1 for _ in words)
+    if left:
+        log.warning("Eigener Text: %d Silben passen nicht mehr auf die Melodie und fallen weg", left)
+    return fitted
 
 
 # ── Singbarkeit (Gesang 1.1, A5) ────────────────────────────────────────────────
@@ -745,9 +855,9 @@ def melody_data(notes: list) -> tuple:
     return data, syllables
 
 
-def required_bars(n_syllables: int) -> int:
+def required_bars(n_syllables: int, bar_steps: int = BAR_STEPS) -> int:
     """Takte (Zweierpotenz), die eine Sektion mindestens braucht, damit n Silben singbar hineinpassen."""
     bars = 1
-    while n_syllables > max_syllables(bars):
+    while n_syllables > max_syllables(bars, bar_steps):
         bars *= 2
     return bars

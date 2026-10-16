@@ -10,6 +10,7 @@ import backing_vocals
 import main
 import mixer
 import pipeline
+import singing
 import vocal_synthesizer
 from lyrics import Mora
 from settings import SongSettings
@@ -120,7 +121,7 @@ def test_neutrino_sings_every_backing_voice(tmp_path, neutrino):
                      final_choir=False, section_style=False)
     tracks, _ = pipeline.compose(s)
     out = s.output_dir()
-    pipeline._synthesize_vocals(s, tracks, out)
+    singing._synthesize_vocals(s, tracks, out)
     names = [c[0] for c in calls]
     assert names.count("vocals_harmony.xml") == 2                     # gedoppelt
     assert [n for n in names if n.startswith("vocals_flaechen_")] == [f"vocals_flaechen_{k}.xml" for k in (1, 2, 3)]
@@ -141,7 +142,7 @@ def test_backing_voices_can_be_switched_off(tmp_path, neutrino):
                      final_choir=False, section_style=False, harmony_double=False, sung_pads=False, adlibs=False,
                      harmony_variety=False)
     tracks, _ = pipeline.compose(s)
-    pipeline._synthesize_vocals(s, tracks, s.output_dir())
+    singing._synthesize_vocals(s, tracks, s.output_dir())
     assert [c[0] for c in calls] == ["vocals.xml", "vocals_harmony.xml"]
 
 

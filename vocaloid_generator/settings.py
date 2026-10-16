@@ -68,6 +68,14 @@ DEFAULT_LYRICS = (
     "な み だ の あ と も わ ら え る よ う に\n"
     "も う い ち ど だ け し ん じ て み た い"
 )
+# Text für einen Rap-Teil ohne eigenen Text (nicht im Textfeld der App, damit es so bleibt wie bisher)
+DEFAULT_RAP_LYRICS = (
+    "\n\n[Rap]\n"
+    "き み の な ま え を よ ぶ た び に\n"
+    "こ こ ろ の お く が さ わ ぐ ん だ\n"
+    "ま よ わ ず い こ う よ こ の み ち を\n"
+    "ふ り む か な い で は し り だ せ"
+)
 
 DEFAULT_VOLUMES = {
     "drums": 1.0, "bass": 0.9, "piano": 0.8, "guitar": 0.8, "strings": 0.7,
@@ -130,6 +138,12 @@ class SongSettings(BaseModel):
     energy: str = "Hoch"
     key: str = "A"
     scale: Literal["minor", "major", "dorian", "phrygian"] = "minor"
+    # Takt (meter.py): 4/4 wie bisher, 3/4 (Walzer) oder 6/8 (dort zählt bpm die punktierten Viertel)
+    meter: Literal["4/4", "3/4", "6/8"] = "4/4"
+    # Remix (v6 Nr. 8, pipeline.remix): Melodie und Akkorde wie im Stil remix_from bei remix_bpm, die Band spielt style
+    remix_from: str = ""
+    remix_bpm: int = Field(0, ge=0)
+    ritardando: bool = True            # Ballade: vor dem Schlussakkord langsamer, der Akkord klingt länger (Fermate)
     seed: Optional[int] = Field(None, ge=0)
     # Wie oft ein Teil bei gleichem Seed neu gewürfelt wurde; ohne Eintrag bleibt er, wie der Seed ihn macht.
     # Schlüssel: Teil ("bass") oder Teil in einer Sektionsart ("melody:Chorus")
@@ -150,6 +164,7 @@ class SongSettings(BaseModel):
     melody_edits: dict[str, int] = Field(default_factory=dict)
     melody_lengths: dict[str, float] = Field(default_factory=dict)   # {Schlag: neue Länge in Schlägen}
     lyrics: str = DEFAULT_LYRICS
+    numbered_lyrics: bool = True       # „[Verse 2]“ im Liedtext: das zweite Vorkommen singt seinen eigenen Text
 
     singer: str = "MERROW"
     vocal_engine: str = "NEUTRINO"     # NEUTRINO, VOICEVOX, DiffSinger oder Vorschau; fehlt eine, singt die andere
@@ -203,11 +218,16 @@ class SongSettings(BaseModel):
     harmony_double: bool = True        # jede Harmonie zweimal gesungen, links und rechts
     sung_pads: bool = True             # gesungene Flächen (う, あ) im Refrain statt des Keyboard-Chors
     adlibs: bool = True                # Rufe und Echo-Antworten im letzten Refrain
+    idol_calls: bool = True            # „はい！はい！“ mehrerer Stimmen im Refrain (Idol-Pop, Kawaii, J-Pop, Rock)
+    vocal_chops: bool = True           # Schnipsel der Hauptstimme als Riff im Drop (vocal_chops.py)
     # Stimmen-Casting (casting.py): Lieblingsstimme je Stil, beim Wechsel des Stils gewählt
     style_singer: bool = True
     style_singers: dict[str, str] = Field(default_factory=dict)
     voicevox_url: str = ""             # Adresse von VOICEVOX (leer = http://127.0.0.1:50021, App oder Engine)
     voicevox_singer: int = Field(0, ge=0)          # VOICEVOX-Singstimme (Stil-ID, 0 = die erste)
+    # Rap-Teil (v6 Nr. 7): die VOICEVOX-Sprechstimme spricht ihn im Takt; aus (oder ohne VOICEVOX) singt ihn die Engine
+    rap_voice: bool = True
+    rap_speaker: int = Field(0, ge=0)              # VOICEVOX-Sprechstimme für den Rap (Stil-ID, 0 = die erste)
     voicevox_dynamics: bool = True     # F2: VOICEVOX singt Silben- und Phrasen-Lautstärke selbst (statt nachher)
     diffsinger_voice: str = ""         # F1: DiffSinger-Stimme (Ordner oder Name; leer = die erste gefundene)
     # Vorbild-Songs (reference.py) und was sie bestimmen dürfen; jedes lässt sich abschalten
@@ -225,6 +245,7 @@ class SongSettings(BaseModel):
     sound_library: bool = True         # bessere Klänge aus tools/soundfonts (setup_soundfonts.py), wenn vorhanden
     samples: bool = True               # Orchester aus echten Aufnahmen (setup_samples.py, VSCO 2), wenn vorhanden
     real_drums: bool = True            # echtes Schlagzeug aus Aufnahmen (setup_drums.py, DRS Kit), wenn vorhanden
+    band_samples: bool = True          # Flügel, E-Bass, E-Gitarre aus Aufnahmen (setup_band.py), wenn vorhanden
     real_grooves: bool = True          # Grooves und Fills echter Schlagzeuger (setup_grooves.py), wenn vorhanden
     lively_bass: bool = True           # Ghost-Notes und Slides im Bass
     guitar_strums: bool = True         # Gitarre schlägt je nach Energie andere Muster an, mit Abdämpfern
@@ -239,13 +260,19 @@ class SongSettings(BaseModel):
     ai_accompaniment: bool = False     # Begleitstimmen vom Anticipatory Music Transformer (setup_begleitung.py)
     polish_caption: str = ""           # eigene Klangbeschreibung für ACE-Step (Englisch); leer = passend zum Stil
     show_karaoke: bool = True          # Text zum Mitlesen unter dem Player
+    lyric_hints: bool = True           # Text-Helfer: Silben gegen Platz, Reime und Lesungen pro Zeile (lyric_helper.py)
+    shortcuts: bool = True             # Leertaste spielt, Strg+Enter erzeugt, Strg+Z nimmt die letzte Notenänderung zurück
+    video_colors: bool = True          # Lyric-Video im Farbverlauf des Stils, Text und Wellenform in seinen Farben
+    video_background: str = ""         # eigenes Bild als Hintergrund des Lyric-Videos; leer = Farbverlauf des Stils
     # Verlässlichkeit (1.0.0); jedes hat einen Schalter
     reuse_steps: bool = True           # fertigen Gesang wiederverwenden, nach einem Absturz weitermachen (resume.py)
     log_file: bool = True              # Protokoll in Protokolle\vloid_songs.log im Datenordner (applog.py)
     update_check: bool = True          # beim Start nach einer neuen Version schauen (updates.py)
     setup_wizard: bool = True          # Einrichten-Assistent beim Start, solange er nicht abgeschlossen ist
+    done_notice: bool = True           # Windows-Benachrichtigung, wenn ein längerer Lauf fertig ist (laufzeit.py)
     # Alltag (1.0.0)
     history_keep: int = Field(30, ge=0, le=1000)   # so viele Songs behält der Verlauf (0 = alle); benannte immer
+    keep_projects: bool = True         # den Gesang jedes Songs im Verlauf aufheben, zum Wieder-Öffnen (project.py)
     album_vary: bool = True            # Album über Nacht: jeder Song in eigener Tonart und leicht anderem Tempo
     breathiness: float = Field(0.028, ge=0.0, le=0.2)
     shimmer: bool = True
@@ -260,6 +287,9 @@ class SongSettings(BaseModel):
     compressor_ratio: float = Field(2.0, ge=1.0, le=20.0)
     limiter_threshold: float = Field(-0.3, ge=-20.0, le=0.0)
     master_lufs: float = Field(-12.0, ge=-20.0, le=-6.0)   # Ziel-Lautheit des Masters (MASTER_TARGETS)
+    true_peak: bool = True             # auch zwischen den Samples höchstens -1 dBTP (mixer.TRUE_PEAK_DB)
+    vocal_versions: bool = True        # Off-Vocal (ohne Gesang) und A-cappella (nur Gesang) als eigene MP3
+    id3_tags: bool = True              # Titel, Stimme, Stil, Tempo, Tonart, Liedtext und Titelbild in die MP3
 
     channels: dict[str, ChannelSettings] = Field(default_factory=_default_channels)
 

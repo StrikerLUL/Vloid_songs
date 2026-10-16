@@ -33,6 +33,7 @@ class ScoreOptions:
     long_vowels: bool = True         # A1: ー statt des Vokals als neue Silbe
     breath_marks: bool = True        # A2: Atemzeichen in langen Phrasen
     fast_diphthongs: bool = True     # A4: zwei Moren auf einem schnellen Ton
+    meter: str = "4/4"               # Takt der Noten (meter.py)
 
 
 @dataclass
@@ -48,7 +49,8 @@ def options(settings) -> ScoreOptions:
     """Die Optionen aus den Einstellungen eines Songs."""
     return ScoreOptions(long_vowels=getattr(settings, "long_vowel_mark", True),
                         breath_marks=getattr(settings, "breath_marks", True),
-                        fast_diphthongs=getattr(settings, "fast_diphthongs", True))
+                        fast_diphthongs=getattr(settings, "fast_diphthongs", True),
+                        meter=getattr(settings, "meter", "4/4"))
 
 
 def build(melody_data: list, syllables: list, bpm: float, opts: Optional[ScoreOptions] = None) -> list:

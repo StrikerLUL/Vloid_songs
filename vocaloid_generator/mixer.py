@@ -17,16 +17,20 @@ log = logging.getLogger(__name__)
 SAMPLE_RATE = 44100
 MASTER_LUFS = -12.0          # laut wie ein Pop-Master, ohne zu zerren
 MIX_REFERENCE_LUFS = -18.0   # Pegel des Mixes vor dem Master-Kompressor
+# True Peak: so hoch darf das Signal auch zwischen den Samples werden. -1 dBTP empfehlen YouTube, Spotify und die EBU,
+# weil MP3 und AAC Spitzen zwischen den Samples sonst über 0 dB heben (Knacksen beim Abspielen)
+TRUE_PEAK_DB = -1.0
+TRUE_PEAK_OVERSAMPLING = 4
 
 # Ziel-Lautheit der einzelnen Spuren (LUFS), falls der Stil nichts anderes sagt
 DEFAULT_LEVELS = {"drums": -17.0, "bass": -19.5, "piano": -22.0, "guitar": -23.0, "strings": -24.5,
                   "synth": -24.0, "brass": -24.0, "bells": -28.0, "choir": -27.0, "counter": -24.5,
                   "perc": -28.5, "melody": -21.0, "fx": -27.0, "vocals": -17.0, "harmony": -24.0, "gang": -23.0,
-                  "double": -25.0}
+                  "double": -25.0, "chops": -23.0}
 DEFAULT_REVERB = {"drums": 0.06, "bass": 0.0, "piano": 0.16, "guitar": 0.12, "strings": 0.28,
                   "synth": 0.2, "brass": 0.15, "bells": 0.35, "choir": 0.4, "counter": 0.24,
                   "perc": 0.08, "melody": 0.2, "fx": 0.3, "vocals": 0.18, "harmony": 0.26, "gang": 0.32,
-                  "double": 0.18, "band": 0.03}
+                  "double": 0.18, "band": 0.03, "chops": 0.25}
 # Gesangsdoppelung im Refrain: zwei leicht verstimmte, verzögerte Kopien links und rechts
 DOUBLE_CENTS, DOUBLE_DELAYS, DOUBLE_DB = 12, (0.017, 0.026), -9.0
 # Echte Doppelung (zweitbeste Fassung im Refrain, vocals_double.wav): so viel leiser als die Hauptstimme, rechts später
@@ -52,7 +56,7 @@ VINYL_LUFS, VINYL_CLICKS_PER_SECOND = -40.0, 7.0
 def midi_zu_wav(midi_pfad: str, wav_pfad: str, is_drum: bool = False, instrument_type: str = "piano",
                 vst_pfad: str = None, soundfont_pfad: str = None, voices: dict = None,
                 library: bool = True, drum_machine: str = None, amp: bool = False, cabinet_ir: str = "",
-                vst_state: str = "", samples: bool = False, real_drums: bool = False) -> None:
+                vst_state: str = "", samples: bool = False, real_drums: bool = False, band: bool = False) -> None:
     """
     MIDI → Stereo-WAV. Reihenfolge: eigenes VST3-Instrument (wenn angegeben), SoundFont über
     FluidSynth oder tinysoundfont, zuletzt eine einfache eingebaute Klangerzeugung. Die Spur wird nicht normalisiert,
@@ -65,6 +69,7 @@ def midi_zu_wav(midi_pfad: str, wav_pfad: str, is_drum: bool = False, instrument
     vst_state: gespeicherter Klang des VST-Instruments (vst_sounds), leer = sein Standardklang.
     samples: Orchester-Instrumente spielen aus echten Aufnahmen (sample_library), soweit vorhanden.
     real_drums: akustische Schlagzeuge spielen aus dem DRS Kit (drum_kit), soweit vorhanden.
+    band: Flügel, E-Bass und E-Gitarre spielen aus echten Aufnahmen (band_library), soweit vorhanden.
     """
     soundfont_pfad = soundfont_pfad or SOUNDFONT_PFAD
     midi = pretty_midi.PrettyMIDI(midi_pfad)
@@ -85,7 +90,7 @@ def midi_zu_wav(midi_pfad: str, wav_pfad: str, is_drum: bool = False, instrument
     if amp and not vst_pfad:
         import guitar_amp
         for inst in [i for i in midi.instruments if guitar_amp.wants_amp(i)]:
-            audio = guitar_amp.play(inst, soundfont_pfad, library, cabinet_ir)
+            audio = guitar_amp.play(inst, soundfont_pfad, library, cabinet_ir, band)
             if audio is not None:
                 synths.append(audio)
                 midi.instruments.remove(inst)
@@ -98,6 +103,13 @@ def midi_zu_wav(midi_pfad: str, wav_pfad: str, is_drum: bool = False, instrument
         import sample_library
         for inst in [i for i in midi.instruments if sample_library.covers(i)]:
             audio = sample_library.render(inst, SAMPLE_RATE)
+            if audio is not None:
+                synths.append(audio)
+                midi.instruments.remove(inst)
+    if band and not vst_pfad:
+        import band_library
+        for inst in [i for i in midi.instruments if band_library.covers(i)]:
+            audio = band_library.render(inst, SAMPLE_RATE)
             if audio is not None:
                 synths.append(audio)
                 midi.instruments.remove(inst)
@@ -201,7 +213,9 @@ def _basic_synth(midi: pretty_midi.PrettyMIDI) -> np.ndarray:
 # ── Mischen ──────────────────────────────────────────────────────────────────────
 def _track_key(path: str) -> str:
     name = os.path.splitext(os.path.basename(path))[0].lower()
-    if "vocals_chor" in name or "flaechen" in name:
+    if name == "chops":
+        return "chops"            # Vocal Chops spielen wie ein Instrument (vocal_chops.py)
+    if "vocals_chor" in name or "flaechen" in name or "vocals_rufe" in name:
         return "gang"
     if "adlib" in name:
         return "harmony"
@@ -305,6 +319,8 @@ def _channel_chain(key: str, tone=None) -> Pedalboard:
                     HighShelfFilter(10000, 1.5), Compressor(threshold_db=-22, ratio=4, attack_ms=5, release_ms=100)],
         "gang":    [HighpassFilter(200), PeakFilter(350, -3.0, 1.0), PeakFilter(2500, 1.0, 1.0),
                     HighShelfFilter(9000, 1.0), Compressor(threshold_db=-24, ratio=4, attack_ms=8, release_ms=120)],
+        "chops":   [HighpassFilter(250), PeakFilter(3000, 1.5, 1.0),
+                    Compressor(threshold_db=-20, ratio=3, attack_ms=3, release_ms=80)],
     }
     return Pedalboard(chains.get(key, [HighpassFilter(80)]))
 
@@ -485,7 +501,9 @@ def mische_spuren(
     ducked_delay: bool = False,
     vocal_tone=None,
     airwindows: bool = False,
-) -> None:
+    true_peak: bool = False,
+    level_of: Optional[float] = None,
+) -> Optional[float]:
     """
     Mischt die Spuren zu einem Stereo-Master:
     jede Spur auf ihre Ziel-Lautheit (levels, LUFS) bringen, Fader/Panorama/Mute/Solo aus der App anwenden,
@@ -514,6 +532,10 @@ def mische_spuren(
     vocal_tone: EQ, Kompressor und Sättigung des Gesangs für Stimme und Stil (vocal_tone.Tone); None = die feste Kette.
     airwindows: mit Airwindows Consolidated (setup_airwindows.py), wenn es da ist: Bandsättigung ToTape9 statt der
     eigenen auf dem Gesang, Console7 auf jeder Spur und der Summe.
+    true_peak: auch zwischen den Samples höchstens TRUE_PEAK_DB (gemessen mit vierfacher Überabtastung).
+    level_of: die Lautheit des ganzen Songs vor dem Master (der Rückgabewert seines Mixes); dann ist dieser Mix ein
+    Teil davon (Off-Vocal, A-cappella) und bleibt so laut, wie er im Song klingt, statt auf target_lufs zu kommen.
+    Rückgabe: die Lautheit dieses Mixes vor dem Master (LUFS), None ohne Mix.
     """
     from settings import DEFAULT_VOLUMES
 
@@ -524,7 +546,7 @@ def mische_spuren(
     paths = [p for p in spur_pfade if os.path.exists(p)]
     if not paths:
         log.error("Kein Mix erstellt: keine Spuren vorhanden.")
-        return
+        return None
     length = max(sf.info(p).frames for p in paths)
     any_solo = any(solos.values())
     real_double = vocal_chain and any(_track_key(p) == "double" for p in paths)
@@ -568,7 +590,7 @@ def mische_spuren(
 
     if not tracks:
         log.error("Kein Mix erstellt: alle Spuren stumm.")
-        return
+        return None
 
     if energy_contrast_db is not None and sections:
         _shape_energy(tracks, sections, energy_contrast_db, length)
@@ -650,11 +672,16 @@ def mische_spuren(
         mix = buss(mix, SAMPLE_RATE)
     master_volume = min(max(volumes.get("master", 1.0), 0.05), 1.0)
     target_lufs += 20 * np.log10(master_volume)
-    if reference and _master_like(mix, reference, output_pfad, target_lufs, limiter_threshold):
-        return
-    mix = master(mix, compressor_threshold, compressor_ratio, limiter_threshold, target_lufs=target_lufs)
+    premaster = _loudness(mix)
+    if level_of is not None and premaster != float("-inf"):
+        target_lufs += premaster - level_of           # ein Teil des Songs: so viel leiser wie vor dem Master
+    if reference and _master_like(mix, reference, output_pfad, target_lufs, limiter_threshold, true_peak):
+        return premaster
+    mix = master(mix, compressor_threshold, compressor_ratio, limiter_threshold, target_lufs=target_lufs,
+                 true_peak=true_peak)
     sf.write(output_pfad, mix.T, SAMPLE_RATE, subtype="PCM_24")
     log.info("Mix fertig: %s (%.1f LUFS)", output_pfad, _loudness(mix))
+    return premaster
 
 
 def _airwindows(tone, vocal_chain: bool) -> tuple:
@@ -898,7 +925,7 @@ def _match_vocal_level(tracks: dict, target_db: float) -> None:
 
 
 def _master_like(mix: np.ndarray, reference: str, output_pfad: str, target_lufs: float = MASTER_LUFS,
-                 limiter_threshold: float = -0.3) -> bool:
+                 limiter_threshold: float = -0.3, true_peak: bool = False) -> bool:
     """
     Mastering nach Vorbild mit matchering: Frequenzgang und Stereobreite wie beim Vorbild-Song. Die Lautheit
     kommt danach auf target_lufs, damit die gewählte Plattform (YouTube, Spotify, ...) auch hier gilt.
@@ -921,7 +948,7 @@ def _master_like(mix: np.ndarray, reference: str, output_pfad: str, target_lufs:
         log.warning("Mastering nach Vorbild fehlgeschlagen (%s), nutze das normale Mastering", e)
         return False
     done, _ = sf.read(output_pfad, always_2d=True, dtype="float32")
-    done = _limit_to(done.T, target_lufs, limiter_threshold)
+    done = _limit_to(done.T, target_lufs, limiter_threshold, true_peak)
     sf.write(output_pfad, done.T, SAMPLE_RATE, subtype="PCM_24")
     log.info("Mix fertig: %s, gemastert nach %s (%.1f LUFS)", output_pfad, os.path.basename(reference),
              _loudness(done))
@@ -929,7 +956,7 @@ def _master_like(mix: np.ndarray, reference: str, output_pfad: str, target_lufs:
 
 
 def master(mix: np.ndarray, compressor_threshold: float = -20.0, compressor_ratio: float = 2.0,
-           limiter_threshold: float = -0.3, target_lufs: float = MASTER_LUFS) -> np.ndarray:
+           limiter_threshold: float = -0.3, target_lufs: float = MASTER_LUFS, true_peak: bool = False) -> np.ndarray:
     loud = _loudness(mix)
     if loud == float("-inf"):
         return mix
@@ -941,14 +968,17 @@ def master(mix: np.ndarray, compressor_threshold: float = -20.0, compressor_rati
         PeakFilter(3000, 0.8, 0.8),
         HighShelfFilter(10000, 1.5),
     ])
-    return _limit_to(chain(mix, SAMPLE_RATE), target_lufs, limiter_threshold)
+    return _limit_to(chain(mix, SAMPLE_RATE), target_lufs, limiter_threshold, true_peak)
 
 
-def _limit_to(mix: np.ndarray, target_lufs: float, limiter_threshold: float) -> np.ndarray:
-    """Auf target_lufs bringen, ohne über limiter_threshold zu kommen."""
+def _limit_to(mix: np.ndarray, target_lufs: float, limiter_threshold: float, true_peak: bool = False) -> np.ndarray:
+    """Auf target_lufs bringen, ohne über limiter_threshold zu kommen; mit true_peak auch zwischen den Samples
+    nicht über TRUE_PEAK_DB."""
     loud = _loudness(mix)
     if loud == float("-inf"):
         return mix
+    if true_peak:
+        limiter_threshold = min(limiter_threshold, TRUE_PEAK_DB)
     # Der Limiter verändert die Lautheit selbst, deshalb die Vorverstärkung ein paar Mal nachregeln
     limiter = Limiter(threshold_db=limiter_threshold, release_ms=80)
     gain_db = target_lufs - loud
@@ -964,4 +994,25 @@ def _limit_to(mix: np.ndarray, target_lufs: float, limiter_threshold: float) -> 
     peak = float(np.max(np.abs(mix)))
     if peak > ceiling:
         mix *= ceiling / peak
+    if true_peak:
+        over = true_peak_db(mix) - TRUE_PEAK_DB
+        if over > 0:                    # Spitzen zwischen den Samples: der Limiter sieht nur die Samples
+            mix *= 10 ** (-over / 20)
     return mix.astype(np.float32)
+
+
+def true_peak_db(mix: np.ndarray, chunk: int = 10 * SAMPLE_RATE) -> float:
+    """Der höchste Pegel auch zwischen den Samples (dBTP), mit vierfacher Überabtastung wie in ITU-R BS.1770.
+    Stückweise, damit ein langer Song nicht vierfach in den Speicher muss; jedes Stück sieht ein paar Samples über
+    seine Ränder hinaus, damit dort keine falschen Spitzen entstehen."""
+    from scipy.signal import resample_poly
+    up, pad = TRUE_PEAK_OVERSAMPLING, 64
+    mix = np.atleast_2d(mix)
+    peak = 0.0
+    for start in range(0, mix.shape[-1], chunk):
+        lo = max(0, start - pad)
+        piece = resample_poly(mix[:, lo:start + chunk + pad], up, 1, axis=-1)
+        inner = piece[:, (start - lo) * up:(start - lo + min(chunk, mix.shape[-1] - start)) * up]
+        if inner.size:
+            peak = max(peak, float(np.max(np.abs(inner))))
+    return 20 * np.log10(peak) if peak > 0 else float("-inf")

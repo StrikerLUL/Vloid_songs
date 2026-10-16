@@ -8,6 +8,7 @@ import soundfile as sf
 import diffsinger
 import main
 import pipeline
+import singing
 from lyrics import Mora
 from settings import SongSettings
 
@@ -191,7 +192,7 @@ def test_diffsinger_sings_in_the_song_and_the_check_names_it(openutau, tmp_path,
     s = SongSettings(active_sections=["Verse"], output_ordner=str(tmp_path / "out"), vocal_engine="DiffSinger",
                      harmonies=False, final_choir=False, breaths=False)
     tracks, _ = pipeline.compose(s, seed=4)
-    vocals = pipeline._synthesize_vocals(s, tracks, s.output_dir())
+    vocals = singing._synthesize_vocals(s, tracks, s.output_dir())
     import vocal_check
     info = vocal_check.read(s.output_dir())
     assert vocals and os.path.exists(vocals) and info["engine"] == "DiffSinger" and info["voice"] == "Probe"
@@ -203,6 +204,6 @@ def test_diffsinger_sings_in_the_song_and_the_check_names_it(openutau, tmp_path,
 def test_without_a_voice_the_next_engine_sings(tmp_path, monkeypatch):
     monkeypatch.setattr(diffsinger, "search_folders", lambda: [str(tmp_path / "leer")])
     with pytest.raises(FileNotFoundError):
-        pipeline._sing_diffsinger(SongSettings(), {"melody_data": [(60, 1.0)], "silben": ["ら"]}, str(tmp_path),
+        singing._sing_diffsinger(SongSettings(), {"melody_data": [(60, 1.0)], "silben": ["ら"]}, str(tmp_path),
                                   str(tmp_path / "vocals.wav"))
-    assert pipeline.ENGINE_ORDER["DiffSinger"][1:] == ("NEUTRINO", "VOICEVOX")
+    assert singing.ENGINE_ORDER["DiffSinger"][1:] == ("NEUTRINO", "VOICEVOX")

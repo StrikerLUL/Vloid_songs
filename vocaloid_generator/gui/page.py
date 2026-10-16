@@ -16,9 +16,12 @@ import cancel
 import casting
 import einrichten
 import history
+import laufzeit
+import meter
 import pipeline
 import polish
 import preview
+import project
 import rating
 import resume
 import updates
@@ -46,14 +49,20 @@ class Job:
     step_start: float = 0.0
     steps: list = field(default_factory=list)       # [[Schritt, Sekunden]]
     running: bool = False
+    kind: str = ""                                  # laufzeit.kind: welche früheren Läufe die Restzeit schätzen
+    past: list = field(default_factory=list)
+    marks: list = field(default_factory=list)       # [(Anteil, Sekunden)] für laufzeit.record
 
-    def start(self) -> None:
+    def start(self, kind: str = "") -> None:
         cancel.reset()          # ein alter Abbruch gilt nicht für den neuen Song
         self.fraction, self.message, self.steps, self.running = 0.0, "", [], True
         self.started = self.step_start = time.monotonic()
+        self.kind, self.past, self.marks = kind, laufzeit.past(kind) if kind else [], []
 
     def report(self, fraction: float, message: str) -> None:
         now = time.monotonic()
+        if fraction > self.fraction or not self.marks:
+            self.marks.append((fraction, now - self.started))
         if self.steps:
             self.steps[-1][1] = now - self.step_start
         if message != self.message:
@@ -64,6 +73,16 @@ class Job:
     @property
     def elapsed(self) -> float:
         return time.monotonic() - self.started if self.started else 0.0
+
+    @property
+    def remaining(self) -> str:
+        """„noch etwa 3 Min.“ aus früheren Läufen derselben Art; leer, solange sich nichts sagen lässt."""
+        return laufzeit.describe(laufzeit.remaining(self.past, self.fraction, self.elapsed)) if self.kind else ""
+
+    def finish(self) -> None:
+        """Ein fertiger Lauf: für die nächste Schätzung merken."""
+        if self.kind:
+            laufzeit.record(self.kind, self.marks + [(1.0, self.elapsed)], self.elapsed)
 
 
 class Picker:
@@ -234,6 +253,13 @@ def build() -> None:
                         .tooltip("Drei neue Melodien für den Refrain, kurz zum Anhören; der Rest des Songs bleibt")
                     hook_row = ui.row().classes("items-center gap-1")
                 with ui.row().classes("w-full items-center gap-1 q-mt-sm"):
+                    remix_style = ui.select(list(STYLES), label="Remix als").props("dense outlined dark") \
+                        .classes("w-48").mark("remix-style")
+                    remix_button = ui.button("Remix", icon="shuffle", on_click=lambda: make_remix()) \
+                        .props("outline no-caps dense").mark("remix") \
+                        .tooltip("Derselbe Song mit Band, Tempo und Klang eines anderen Stils: Melodie, Text, Akkorde "
+                                 "und Stimme bleiben. Der ursprüngliche Stil bringt den Song zurück.")
+                with ui.row().classes("w-full items-center gap-1 q-mt-sm"):
                     cast_button = ui.button("Stimmen-Casting", icon="groups", on_click=lambda: cast_voices()) \
                         .props("outline no-caps dense").mark("casting") \
                         .tooltip("Jede installierte NEUTRINO-Stimme singt den Refrain, kurz zum Anhören. Die "
@@ -268,11 +294,12 @@ def build() -> None:
                                    ("Gesang", "mic"), ("Mix", "tune"), ("Verlauf", "history"),
                                    ("Pfade", "folder")):
                     ui.tab(name, icon=icon).mark(f"tab-{name}")
+            tabs.on_value_change(lambda e: refresh_text() if e.value == "Text" else None)
             with ui.tab_panels(tabs, value="Song").classes("w-full bg-transparent") as panel_box:
                 with ui.tab_panel("Song"):
                     panels.song_panel(settings, picker, lambda new: assign(settings, new))
                 with ui.tab_panel("Text"):
-                    panels.text_panel(settings)
+                    refresh_text = panels.text_panel(settings)
                 with ui.tab_panel("Band"):
                     panels.band_panel(settings)
                 with ui.tab_panel("Gesang"):
@@ -303,10 +330,14 @@ def build() -> None:
         await generate(f"{part}:{kind}" if kind else part)
 
     async def generate(part: Optional[str] = None, n: Optional[int] = None, same_song: bool = False,
-                       draft: bool = False) -> None:
+                       draft: bool = False, reopened: Optional[history.Entry] = None) -> None:
+        """reopened: ein Song aus dem Verlauf, dessen Gesang project.unpack zurückgelegt hat; er kommt nicht noch
+        einmal in den Verlauf."""
         if job.running:
             return
         current = settings.model_copy(deep=True)
+        if reopened is not None:
+            current = current.with_updates(reuse_steps=True)
         result = state["result"]
         if part is not None or same_song:
             if result is None:
@@ -314,19 +345,20 @@ def build() -> None:
                 return
             current = current.with_updates(seed=result.seed, variations=result.settings.variations)
         elif current.seed is None:
-            current = current.with_updates(variations={}, melody_edits={}, melody_lengths={}, phrase_fixes={})
+            current = current.with_updates(variations={}, melody_edits={}, melody_lengths={}, phrase_fixes={},
+                                           remix_from="", remix_bpm=0)
         save_settings()
         if draft:
             current, n = pipeline.draft_settings(current), 1
-        job.start()
-        set_busy(True)
         n = n or int(count.value or 1)
+        job.start(laufzeit.kind(current, n if not part else 1, draft))
+        set_busy(True)
         try:
             if n > 1 or part:
                 results = await run.io_bound(pipeline.generate_variants, current, n, (part,) if part else (),
                                              job.report)
             else:
-                results = [await run.io_bound(pipeline.generate_song, current, job.report)]
+                results = [await run.io_bound(pipeline.generate_song, current, job.report, None, reopened is None)]
         except cancel.Cancelled:
             job.report(job.fraction, CANCELLED)
             ui.notify("Abgebrochen. Fertige Schritte bleiben und werden beim nächsten Mal übernommen.", type="warning")
@@ -341,7 +373,13 @@ def build() -> None:
         results = [r for r in results or [] if r is not None]   # None: abgebrochen, weil die App schließt
         if not results:
             return
+        job.finish()
+        if settings.done_notice:
+            laufzeit.notify("Vloid Songs", f"{len(results)} Fassungen fertig" if len(results) > 1 else
+                            f"Song fertig: {results[0].settings.style}, Seed {results[0].seed}", job.elapsed)
         chosen = pipeline.best(results)
+        if reopened is not None:
+            chosen.history = reopened.audio
         state["result"] = chosen
         settings.variations = chosen.settings.variations
         settings.melody_edits = chosen.settings.melody_edits
@@ -394,7 +432,7 @@ def build() -> None:
             return
         save_settings()
         current = settings.model_copy(deep=True)
-        job.start()
+        job.start(f"Album|{n}|{current.vocal_engine}")
         set_busy(True)
         try:
             made = await run.io_bound(album.make, current, n, styles, texts, job.report, name)
@@ -409,6 +447,9 @@ def build() -> None:
         if not made.results:
             ui.notify(f"Kein Song fertig geworden: {made.describe()}", type="negative", multi_line=True)
             return
+        job.finish()
+        if settings.done_notice:
+            laufzeit.notify("Vloid Songs", f"Album „{made.name}“ fertig: {made.describe()}", job.elapsed)
         chosen = made.results[0]
         state["result"] = chosen
         await show_result(chosen)
@@ -455,6 +496,21 @@ def build() -> None:
                     ui.button("nehmen", icon="check", on_click=lambda _, c=choice: take(c)) \
                         .props("outline no-caps dense color=secondary").mark(f"hook-take-{choice.number}")
         await play("Refrain 1", choices[0].preview)
+
+    async def make_remix() -> None:
+        result = state["result"]
+        if job.running or result is None:
+            ui.notify("Erst einen Song erzeugen, dann davon einen Remix machen.", type="warning")
+            return
+        if not remix_style.value:
+            ui.notify("Erst den Stil für den Remix wählen.", type="warning")
+            return
+        previous = settings.seed
+        assign(settings, pipeline.remix(result.settings, remix_style.value))
+        ui.notify(f"Remix als {settings.style}: {settings.bpm} BPM" + (
+            f", Melodie und Akkorde aus {settings.remix_from}" if settings.remix_from else ""), type="info")
+        await generate(n=1)
+        settings.seed = previous        # „Song erzeugen“ macht danach wieder einen neuen Song
 
     async def cast_voices() -> None:
         if job.running:
@@ -509,12 +565,34 @@ def build() -> None:
         await generate(n=1)
 
     # ── Gesang bearbeiten ─────────────────────────────────────────────────────────
+    undo_steps: list = []       # (Änderungen vorher, Längen vorher, der Ton vorher) für Strg+Z
+
+    def remember(start: float) -> None:
+        vocal = next((i for i, t in enumerate(roll.tracks) if t.get("key") == "vocals"), None)
+        note = next((list(n) for n in roll.notes if n[3] == vocal and abs(n[0] - start) < 1e-3), None)
+        undo_steps.append((dict(settings.melody_edits), dict(settings.melody_lengths), note))
+        del undo_steps[:-50]
+
+    def undo() -> None:
+        """Strg+Z: die letzte Änderung an einem Ton zurücknehmen."""
+        if not undo_steps:
+            ui.notify("Keine Änderung an den Noten zum Zurücknehmen.")
+            return
+        edits, lengths, note = undo_steps.pop()
+        settings.melody_edits, settings.melody_lengths = edits, lengths
+        if note:
+            roll.move(note[0], note[2])
+            roll.resize(note[0], note[1])
+        show_edits()
+
     def on_edit(e) -> None:
         result = state["result"]
         if result is None:
             return
         start, pitch = float(e.args["start"]), int(e.args["pitch"])
-        settings.melody_edits = {**settings.melody_edits, edit_key(start * result.settings.bpm / 60): pitch}
+        remember(start)
+        key = meter.get(result.settings.meter).edit_key(start * result.settings.bpm / 60)
+        settings.melody_edits = {**settings.melody_edits, key: pitch}
         roll.move(start, pitch)
         show_edits()
 
@@ -523,8 +601,10 @@ def build() -> None:
         if result is None:
             return
         start, end = float(e.args["start"]), float(e.args["end"])
-        beats = (end - start) * result.settings.bpm / 60
-        settings.melody_lengths = {**settings.melody_lengths, edit_key(start * result.settings.bpm / 60): beats}
+        remember(start)
+        bar, per_second = meter.get(result.settings.meter), result.settings.bpm / 60
+        beats = bar.edit_length(start * per_second, end * per_second)
+        settings.melody_lengths = {**settings.melody_lengths, bar.edit_key(start * per_second): beats}
         roll.resize(start, end)
         show_edits()
 
@@ -597,6 +677,7 @@ def build() -> None:
         show_edits()
 
     async def drop_edits() -> None:
+        undo_steps.clear()
         settings.melody_edits = {}
         settings.melody_lengths = {}
         settings.phrase_fixes = {}
@@ -610,6 +691,22 @@ def build() -> None:
     roll.on("edit", on_edit)
     roll.on("resize", on_resize)
     roll.on("phrase", on_phrase)
+
+    # ── Tastenkürzel (v6 Nr. 19) ──────────────────────────────────────────────────
+    async def on_key(e) -> None:
+        """Leertaste spielt oder hält an, Strg+Enter erzeugt den Song, Strg+Z nimmt die letzte Notenänderung
+        zurück. Nicht beim Schreiben in einem Feld (ui.keyboard übergeht Eingaben, Listen und Knöpfe)."""
+        if not settings.shortcuts or not e.action.keydown or e.action.repeat:
+            return
+        ctrl = e.modifiers.ctrl or e.modifiers.meta
+        if e.key.code == "Space" and not ctrl:
+            player.toggle()
+        elif ctrl and e.key.name == "Enter":
+            await generate()
+        elif ctrl and e.key.code == "KeyZ" and not e.modifiers.shift:
+            undo()
+
+    ui.keyboard(on_key=on_key).mark("shortcuts")
 
     # ── Lyric-Video und Vergleich ─────────────────────────────────────────────────
     async def make_video() -> None:
@@ -705,6 +802,7 @@ def build() -> None:
         data = await run.io_bound(media.piano_roll, result)
         if data is None:        # die App wird gerade beendet
             return
+        undo_steps.clear()
         roll.show(data)
         show_edits()
         legend.clear()
@@ -778,7 +876,7 @@ def build() -> None:
         if not busy:
             cancel.reset()
         for button in (generate_button, draft_button, full_button, album_button, zip_button, notes_button, video_button,
-                       youtube_button, hooks_button, cast_button, *reroll_buttons.values()):
+                       youtube_button, hooks_button, cast_button, remix_button, *reroll_buttons.values()):
             button.set_enabled(not busy)
         resing_button.set_enabled(not busy and _edited(settings) > 0)
         preview_button.set_enabled(not busy and _edited(settings) > 0)
@@ -787,7 +885,8 @@ def build() -> None:
     def show_steps() -> None:
         progress.set_value(job.fraction)
         if job.running:
-            step_label.set_text(f"{job.message} ({job.elapsed:.0f} s)")
+            left = job.remaining
+            step_label.set_text(f"{job.message} ({job.elapsed:.0f} s{', ' + left if left else ''})")
         elif job.steps:
             done = "Abgebrochen" if job.message == CANCELLED else "Fertig"
             step_label.set_text(f"{done} nach {job.elapsed:.0f} s")
@@ -814,6 +913,7 @@ def build() -> None:
             log.warning("Einstellungen nicht gespeichert: %s", e)
 
     def show_status() -> None:
+        import band_library
         import sample_library
         import sound_library
         from renderer import engine_name
@@ -824,6 +924,7 @@ def build() -> None:
             ui.label(f"Instrumente mit {engine_name()}").classes("text-caption")
             ui.label(sound_library.status()).classes("text-caption").mark("sound-library")
             ui.label(sample_library.status()).classes("text-caption").mark("sample-library")
+            ui.label(band_library.status()).classes("text-caption").mark("band-library")
             ui.label(rating.status()).classes("text-caption").mark("rating-status")
             ui.label(polish.status(settings)).classes("text-caption").mark("polish-status")
         singer_select.set_options(sorted(set(_singers(settings)) | {settings.singer}), value=settings.singer)
@@ -877,6 +978,11 @@ def build() -> None:
                         ui.button(icon="settings_backup_restore", on_click=lambda _, e=entry: restore(e)) \
                             .props("flat round dense").tooltip("Einstellungen dieses Songs übernehmen") \
                             .mark("history-restore")
+                        if project.available(entry.audio):
+                            ui.button(icon="folder_open", on_click=lambda _, e=entry: reopen(e)) \
+                                .props("flat round dense").mark("history-reopen") \
+                                .tooltip("Wieder öffnen: der Gesang bleibt, Band und Mix entstehen neu; danach "
+                                         "lässt sich der Song weiter bearbeiten")
                         ui.button(icon="delete", on_click=lambda _, e=entry: remove(e)) \
                             .props("flat round dense color=grey").mark("history-delete")
 
@@ -888,6 +994,16 @@ def build() -> None:
         assign(settings, entry.restore(settings))
         ui.notify("Einstellungen samt Seed übernommen: „Song erzeugen“ macht diesen Song noch einmal",
                   type="positive")
+
+    async def reopen(entry) -> None:
+        if job.running:
+            return
+        restored = entry.restore(settings)
+        ok, message = await run.io_bound(project.unpack, entry.audio, restored.with_updates(reuse_steps=True),
+                                         restored.output_dir())
+        ui.notify(message, type="positive" if ok else "warning")
+        assign(settings, restored)
+        await generate(n=1, reopened=entry)
 
     def edit(entry) -> None:
         def save() -> None:

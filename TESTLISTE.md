@@ -1,11 +1,12 @@
-# Testliste für Vloid Songs 1.1.0
+# Testliste für Vloid Songs 1.2.0
 
-Etwa 40 Minuten auf deinem PC, davon viel Warten. Hak ab, was klappt, und schreib zu allem anderen eine Zeile, was
+Etwa eine Stunde auf deinem PC, davon viel Warten. 1.1.0 ist noch nicht getestet, deshalb stehen ihre Punkte
+(A bis H) weiter hier; neu in 1.2 ist Teil I. Wenig Zeit: A, B, C und I. Hak ab, was klappt, und schreib zu allem anderen eine Zeile, was
 passiert ist. Am Ende **Hilfe › Fehlerbericht speichern** und das ZIP zusammen mit der Liste zurückschicken.
 
 ## A. Installieren (5 Minuten)
 
-- [ ] `VloidSongs-Setup-1.1.0.exe` starten, durchklicken. Am Ende startet die App von selbst.
+- [ ] `VloidSongs-Setup-1.2.0.exe` starten, durchklicken. Am Ende startet die App von selbst.
 - [ ] Im Startmenü gibt es „Vloid Songs“, und es startet die App.
 - [ ] `Dokumente\Vloid Songs` gibt es, mit `Songs` und `Einstellungen.json`.
 - [ ] Hattest du vorher den entpackten Ordner: In Einrichten unter „Deine Daten“ den alten Ordner wählen,
@@ -52,7 +53,7 @@ passiert ist. Am Ende **Hilfe › Fehlerbericht speichern** und das ZIP zusammen
 ## G. Hilfe-Menü (1 Minute)
 
 - [ ] Hilfe › Erste Schritte, Fehlerbehebung, Was ist neu und Credits gehen auf.
-- [ ] Hilfe › Nach Update suchen meldet „Deine Version 1.1.0 ist die neueste.“ (oder zeigt eine neuere).
+- [ ] Hilfe › Nach Update suchen meldet „Deine Version 1.2.0 ist die neueste.“ (oder zeigt eine neuere).
 
 ## H. Gesang 1.1 (10 Minuten)
 
@@ -70,6 +71,33 @@ passiert ist. Am Ende **Hilfe › Fehlerbericht speichern** und das ZIP zusammen
 - [ ] Über den Noten „Noten für Tuning-Tools“. Im ZIP liegen MusicXML, UST, MIDI und eine Anleitung.
 - [ ] Stil Lo-Fi, „Song erzeugen“. Im Protokoll steht „Gesang swingt mit“; sitzt der Gesang im Groove?
 - [ ] Gesamteindruck in einem Satz: Klingt der Gesang besser als in 1.0.2?
+
+## I. Neu in 1.2 (15 Minuten)
+
+- [ ] Einrichten: „Flügel, Bass und Gitarre aus Aufnahmen“ laden. Darunter unter „Speicherplatz“ stehen Songs,
+      Projekte und Zwischenspeicher mit ihrer Größe, und neben jedem eingerichteten Baustein, wie viel er belegt.
+- [ ] Tab Song › Song-Rezepte: „Hologram Star (wie Idol)“ laden, „Song erzeugen“. Im Tab Text steht der Beispieltext.
+      Während der Song entsteht, steht beim Schritt „noch etwa … Min.“ (ab dem zweiten Song dieser Art).
+- [ ] In ein anderes Fenster wechseln, bis der Song fertig ist: Windows meldet sich unten rechts.
+- [ ] Im Refrain rufen mehrere Stimmen „はい！はい！“, davor „ふっふー“. Läuft VOICEVOX, spricht im Rap-Teil eine
+      Sprechstimme im Takt; ohne VOICEVOX singt NEUTRINO ihn. Passt das, oder stört es?
+- [ ] Rezept „Walzer im Mondlicht (3/4)“: Klingt es nach Walzer (Bum-Tschak-Tschak)? Wird es am Ende langsamer, und
+      klingt der letzte Akkord aus?
+- [ ] Tab Song › Takt 6/8, Stil Ballade, Tempo 60. Wiegt der Song in Dreiergruppen?
+- [ ] Rezept „Sky Drop (Future Bass)“: Im Drop spielen Schnipsel der Stimme einen Riff (Vocal Chops).
+- [ ] Unter dem Player „Remix als“ Rock, „Remix“: dieselbe Melodie und derselbe Text mit Rock-Band. Den alten Stil
+      wählen bringt den alten Song zurück.
+- [ ] Tab Text: eine sehr lange Zeile schreiben. Darunter steht sie rot („zu viele für ihre Phrase“). `[Verse 2]` mit
+      eigenem Text dazuschreiben, Song erzeugen: Singt die zweite Strophe den neuen Text?
+- [ ] Tab Verlauf: bei einem älteren Song „Wieder öffnen“. Er ist schneller fertig als neu, weil NEUTRINO nicht noch
+      einmal singt.
+- [ ] Im Songs-Ordner liegen `final_song_offvocal.mp3` (ohne Gesang) und `final_song_acappella.mp3` (nur Gesang). Die
+      MP3 auf dem Handy oder im Explorer zeigt Titel und Titelbild.
+- [ ] „Lyric-Video (MP4)“: 1920×1080 im Farbverlauf des Stils, der Text in der Farbe des Stils. Danach unter Pfade ein
+      eigenes Hintergrundbild wählen und noch einmal: Liegt der Text gut lesbar auf dem Bild?
+- [ ] Tastenkürzel: Leertaste spielt und hält an. Einen Ton in den Noten verschieben, Strg+Z: Er springt zurück.
+      Strg+Enter erzeugt einen Song.
+- [ ] Einrichten › „Aufräumen“: Es meldet, wie viel frei wurde.
 
 ## Wenn du mehr Zeit hast
 
@@ -95,4 +123,5 @@ passiert ist. Am Ende **Hilfe › Fehlerbericht speichern** und das ZIP zusammen
 
 1. Hilfe › Fehlerbericht speichern (das ZIP liegt in `Dokumente\Vloid Songs\Fehlerberichte`).
 2. Diese Liste mit deinen Haken und Notizen, oder einfach die Punkte, die nicht geklappt haben.
-3. Ein Satz zum Klang: Schlagzeug, Gesang und, wenn ausprobiert, DiffSinger, KI-Begleitung und Mix pro Instrument.
+3. Ein Satz zum Klang: Schlagzeug, Gesang, Idol-Rufe und Rap-Teil und, wenn ausprobiert, DiffSinger, KI-Begleitung und
+   Mix pro Instrument.

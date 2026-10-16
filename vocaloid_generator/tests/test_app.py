@@ -13,6 +13,7 @@ from nicegui.testing.user_simulation import user_simulation
 
 import history
 import karaoke
+import laufzeit
 import pipeline
 import vorlagen
 from gui import media, page
@@ -58,7 +59,7 @@ def fake_generation(monkeypatch):
     """Ersetzt das echte Erzeugen: jeder Aufruf merkt sich seine Einstellungen und legt einen Song ab."""
     calls = []
 
-    def fake_song(settings, progress=None, seed=None):
+    def fake_song(settings, progress=None, seed=None, keep_history=True):
         seed = settings.seed if settings.seed is not None else 1000 + len(calls)
         settings = settings.with_updates(seed=seed)
         calls.append(settings)
@@ -79,7 +80,7 @@ def sung_generation(fake_generation, monkeypatch):
     """Wie fake_generation, aber der Song hat Gesang: eine Gesangsmelodie und den Text zum Mitlesen."""
     fake_song = pipeline.generate_song
 
-    def sung_song(settings, progress=None, seed=None):
+    def sung_song(settings, progress=None, seed=None, keep_history=True):
         result = fake_song(settings, progress, seed)
         midi = pretty_midi.PrettyMIDI()
         inst = pretty_midi.Instrument(0)
@@ -377,7 +378,7 @@ async def test_paths_tab_tells_whether_the_extra_soundfonts_are_there(user):
 async def test_the_polished_version_can_be_played_and_tuned(user, fake_generation, monkeypatch):
     fake_song = pipeline.generate_song
 
-    def polished_song(settings, progress=None, seed=None):
+    def polished_song(settings, progress=None, seed=None, keep_history=True):
         result = fake_song(settings, progress, seed)
         result.polished_wav = os.path.join(result.output_dir, "final_mix_veredelt.wav")
         shutil.copy(result.mix_wav, result.polished_wav)
@@ -534,6 +535,30 @@ async def test_hooks_that_cannot_be_made_explain_why(user, monkeypatch):
     await user.open("/")
     user.find(marker="hooks").click()
     await user.should_see("eigene MIDI-Melodie", retries=50)
+
+
+async def test_a_finished_song_is_announced_and_remembered_for_the_estimate(user, fake_generation, monkeypatch):
+    told = []
+    monkeypatch.setattr(laufzeit, "notify", lambda title, message, elapsed: told.append(message))
+    await user.open("/")
+    user.find(marker="generate").click()
+    await user.should_see("Seed 1000", retries=50)
+    assert told == ["Song fertig: J-Pop Energy, Seed 1000"]
+    assert len(laufzeit.past(laufzeit.kind(SongSettings(), 1))) == 1
+
+
+async def test_a_remix_plays_the_same_song_in_another_style(user, fake_generation):
+    await user.open("/")
+    user.find(marker="remix").click()
+    await user.should_see("Erst einen Song erzeugen", retries=20)
+    user.find(marker="generate").click()
+    await user.should_see("Seed 1000", retries=50)
+    user.find(marker="remix-style").elements.pop().set_value("Rock")
+    user.find(marker="remix").click()
+    await until(lambda: len(fake_generation) == 2)
+    remixed = fake_generation[-1]
+    assert (remixed.seed, remixed.style, remixed.remix_from, remixed.remix_bpm) == (1000, "Rock", "J-Pop Energy", 160)
+    await user.should_see("Remix als Rock", retries=20)
 
 
 async def test_own_chords_and_melody_are_saved(user):
@@ -719,7 +744,7 @@ async def test_stop_cancels_a_running_song(user, monkeypatch):
     import cancel
     started = []
 
-    def slow_song(settings, progress=None, seed=None):
+    def slow_song(settings, progress=None, seed=None, keep_history=True):
         started.append(settings)
         progress(0.3, "Rendere Instrumente...")
         for _ in range(400):
@@ -823,3 +848,98 @@ async def test_update_button_appears_when_there_is_a_new_version(user, monkeypat
     user.find(marker="update-available").click()
     await user.should_see("Neue Version v9.9.9", retries=50)
     await user.should_see(marker="update-get")
+
+
+async def test_the_text_helper_shows_room_rhymes_and_missing_readings(user):
+    await user.open("/")
+    user.find(marker="tab-Text").click()
+    long = "あさまでずっとはしりつづけるよもうとまらないこころのなかでさけぶこえがきこえるからいまはただまえへ"
+    user.find(marker="lyrics").elements.pop().set_value(f"[Verse]\nよるのまちをあるく\n{long}\n[Chorus]\n夜の街")
+    await user.should_see("9 Silben (Platz für etwa")
+    await user.should_see("zu viele für ihre Phrase")
+    await user.should_see("よ る の ま ち")
+    user.find(marker="switch-lyric_hints").click()
+    await user.should_not_see("Platz für etwa")
+    await user.should_see("So wird gesungen: 63 Silben")
+
+
+async def test_a_recipe_brings_style_tempo_and_its_own_text(user):
+    await user.open("/")
+    user.find(marker="recipe").elements.pop().set_value("Walzer im Mondlicht (3/4)")
+    await user.should_see("Ein Walzer im 3/4-Takt")
+    user.find(marker="load-recipe").click()
+    await user.should_see("Rezept „Walzer im Mondlicht (3/4)“ geladen")
+    await until(lambda: SongSettings.load().meter == "3/4")
+    s = SongSettings.load()
+    assert (s.style, s.bpm, s.lyrics.splitlines()[1]) == ("Ballade", 108, "つきのひかりの したでおどる")
+
+
+def key(user, name: str, code: str, ctrl: bool = False) -> None:
+    user.find(marker="shortcuts").trigger("key", {"action": "keydown", "repeat": False, "altKey": False,
+                                                  "ctrlKey": ctrl, "metaKey": False, "shiftKey": False,
+                                                  "key": name, "code": code, "location": 0})
+
+
+async def test_shortcuts_generate_play_and_undo_a_note(user, sung_generation, monkeypatch):
+    toggled = []
+    monkeypatch.setattr(WavePlayer, "toggle", lambda self: toggled.append(self.url))
+    await user.open("/")
+    key(user, "Enter", "Enter", ctrl=True)
+    await user.should_see("Seed 1000", retries=50)
+    [player] = user.find(WavePlayer).elements
+    await until(lambda: player.url)
+    key(user, " ", "Space")
+    await until(lambda: toggled == [player.url])
+
+    [roll] = user.find(PianoRoll).elements
+    await until(lambda: roll.tracks)
+    user.find(marker="edit-melody").click()
+    user.find(PianoRoll).trigger("edit", {"start": 0.5, "pitch": 67})
+    user.find(PianoRoll).trigger("resize", {"start": 1.0, "end": 1.45})
+    await user.should_see("2 Töne geändert")
+    key(user, "z", "KeyZ", ctrl=True)
+    await user.should_see("1 Ton geändert")
+    await until(lambda: [n[1] for n in roll.notes if n[3] == 0] == [0.4, 0.9, 1.4, 1.9])
+    key(user, "z", "KeyZ", ctrl=True)
+    await until(lambda: [n[2] for n in roll.notes if n[3] == 0] == [64, 65, 66, 67])
+    await until(lambda: SongSettings.load().melody_edits == {} and SongSettings.load().melody_lengths == {})
+
+    user.find(marker="tab-Pfade").click()
+    user.find(marker="switch-shortcuts").click()
+    await until(lambda: SongSettings.load().shortcuts is False)
+    key(user, "Enter", "Enter", ctrl=True)
+    key(user, " ", "Space")
+    await asyncio.sleep(0.3)
+    assert len(sung_generation) == 1 and len(toggled) == 1
+
+
+async def test_the_setup_wizard_shows_and_frees_space(user, monkeypatch, tmp_path):
+    import einrichten
+    import speicher
+    monkeypatch.setattr(einrichten, "COMPONENTS", ())
+    einrichten.register(einrichten.Component("grooves", "Grooves", "echte Schlagzeuger", "20 MB", "setup_grooves.py",
+                                             lambda: True))
+    folder = tmp_path / "tools" / "grooves"
+    folder.mkdir(parents=True)
+    (folder / "g.mid").write_bytes(b"x" * 3_000_000)
+    monkeypatch.setattr(speicher, "_folders", lambda: {"grooves": str(folder)})
+    monkeypatch.setattr(speicher, "remove", lambda key: shutil.rmtree(folder) or 3_000_000)
+    monkeypatch.setattr(speicher, "songs", lambda out: (400_000_000, 120_000_000, 3))
+    dropped = []
+    monkeypatch.setattr(speicher, "drop_projects", lambda out: dropped.append(out) or 120_000_000)
+    SongSettings.load().with_updates(setup_wizard=True).save()
+    await user.open("/")
+    await user.should_see("Grooves · 3,0 MB belegt", retries=50)
+    await user.should_see("Songs: 400 MB, davon 3 aufgehobene Projekte: 120 MB")
+    user.find(marker="wizard-remove-grooves").click()
+    await user.should_see(marker="confirm-yes")
+    user.find(marker="confirm-yes").click()
+    await user.should_see("Grooves entfernt: 3,0 MB frei", retries=50)
+    assert not folder.exists()
+    user.find(marker="wizard-drop-projects").click()
+    await user.should_see(marker="confirm-yes")
+    user.find(marker="confirm-yes").click()
+    await user.should_see("Projekte gelöscht: 120 MB frei", retries=50)
+    assert dropped == [SongSettings.load().output_dir()]
+    user.find(marker="wizard-clear").click()
+    await user.should_see("Aufgeräumt:", retries=50)

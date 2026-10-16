@@ -11,7 +11,7 @@ import numpy as np
 import pretty_midi
 import soundfile as sf
 
-from settings import edit_key
+import meter
 
 log = logging.getLogger(__name__)
 
@@ -30,15 +30,16 @@ def edited_melody(result, edits: dict, lengths: dict) -> tuple:
         log.warning("Vorschau: keine Gesangsmelodie (%s)", e)
         return [], []
     spb = 60.0 / result.settings.bpm
+    bar = meter.get(result.settings.meter)
     changed = []
     for i, n in enumerate(notes):
-        key = edit_key(n.start / spb)
+        key = bar.edit_key(n.start / spb)
         if key not in edits and key not in lengths:
             continue
         n.pitch = edits.get(key, n.pitch)
         if key in lengths:
             limit = notes[i + 1].start if i + 1 < len(notes) else float("inf")
-            n.end = min(n.start + lengths[key] * spb, limit)
+            n.end = min(bar.edited_end(n.start / spb, lengths[key]) * spb, limit)
         changed.append(n)
     return notes, changed
 

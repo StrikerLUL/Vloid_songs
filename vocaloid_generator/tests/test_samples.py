@@ -8,7 +8,7 @@ import pytest
 import soundfile as sf
 
 import config
-import pipeline
+import rendering
 import sample_library
 import sfz
 from mixer import midi_zu_wav
@@ -208,13 +208,13 @@ def test_mixer_takes_the_recordings_and_the_switch_turns_them_off(tmp_path):
 
 def test_pipeline_switch_and_own_soundfont(tmp_path):
     settings = SongSettings()
-    assert pipeline._render_job(settings, str(tmp_path), "strings")["samples"] is True
-    assert pipeline._render_job(settings.with_updates(samples=False), str(tmp_path), "strings")["samples"] is False
+    assert rendering._render_job(settings, str(tmp_path), "strings")["samples"] is True
+    assert rendering._render_job(settings.with_updates(samples=False), str(tmp_path), "strings")["samples"] is False
     own = tmp_path / "eigener.sf2"
     own.write_bytes(b"RIFF" + bytes(64))
-    job = pipeline._render_job(settings.with_updates(soundfont_pfad=str(own)), str(tmp_path), "strings")
+    job = rendering._render_job(settings.with_updates(soundfont_pfad=str(own)), str(tmp_path), "strings")
     assert job["samples"] is False and job["library"] is False          # ein eigener SoundFont spielt alles
-    assert "sfz.py" in pipeline.RENDER_CODE and "sample_library.py" in pipeline.RENDER_CODE
+    assert "sfz.py" in rendering.RENDER_CODE and "sample_library.py" in rendering.RENDER_CODE
 
 
 def test_old_settings_pointing_at_the_bundled_soundfont_keep_the_better_sounds(tmp_path):
@@ -226,7 +226,7 @@ def test_old_settings_pointing_at_the_bundled_soundfont_keep_the_better_sounds(t
     for path in (str(elsewhere), config.SOUNDFONT_PFAD, "C:/gibt/es/nicht/soundfont.sf2", ""):
         settings = SongSettings(soundfont_pfad=path)
         assert not settings.own_soundfont()
-        job = pipeline._render_job(settings, str(tmp_path), "strings")
+        job = rendering._render_job(settings, str(tmp_path), "strings")
         assert job["samples"] is True and job["library"] is True
 
 

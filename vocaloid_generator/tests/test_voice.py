@@ -14,6 +14,9 @@ import soundfile as sf
 import main
 import mixer
 import pipeline
+import song_plan
+import singing
+import mixdown
 import vocal_synthesizer
 import voice_fx
 import voicevox
@@ -111,10 +114,10 @@ def test_breaths_can_be_switched_off(tmp_path, monkeypatch):
     tracks, _ = pipeline.compose(s, seed=2)
     called = []
     monkeypatch.setattr(voice_fx, "add_breaths", lambda *a, **k: called.append(a) or 0)
-    monkeypatch.setattr(pipeline, "_sing_preview", lambda s_, t_, wav: write(wav, np.zeros(RATE)) and True)
-    pipeline._synthesize_vocals(s, tracks, str(tmp_path))
+    monkeypatch.setattr(singing, "_sing_preview", lambda s_, t_, wav: write(wav, np.zeros(RATE)) and True)
+    singing._synthesize_vocals(s, tracks, str(tmp_path))
     assert not called
-    pipeline._synthesize_vocals(s.with_updates(breaths=True), tracks, str(tmp_path))
+    singing._synthesize_vocals(s.with_updates(breaths=True), tracks, str(tmp_path))
     assert called
 
 
@@ -246,7 +249,7 @@ def test_the_take_on_pitch_wins(tmp_path, monkeypatch):
     monkeypatch.setattr(vocal_synthesizer, "neutrino_synthese", sing)
     s = SongSettings(vocal_takes=3, bpm=120, even_takes=False)
     wav = str(tmp_path / "vocals.wav")
-    pipeline._neutrino_lead(s, data, "vocals.xml", wav, str(tmp_path), "MERROW")
+    singing._neutrino_lead(s, data, "vocals.xml", wav, str(tmp_path), "MERROW")
     assert sung_with == [0, 1, -1]
     assert sorted(os.listdir(tmp_path)) == ["vocals.wav"]
     f0, t = measured_pitch(sf.read(wav)[0], RATE)
@@ -301,10 +304,10 @@ def test_neutrino_choir_sings_with_the_other_voices(tmp_path, fake_neutrino):
                      neutrino_pfad=str(root), singer="MERROW", harmonies=False)
     tracks, _ = pipeline.compose(s, seed=3)
     out = s.output_dir()
-    pipeline._synthesize_vocals(s, tracks, out)
+    singing._synthesize_vocals(s, tracks, out)
     choir_calls = [c for c in calls if c[0].startswith("vocals_chor")]
     assert sorted(c[1] for c in choir_calls) == ["KIRITAN", "REINA"]
-    start, _ = pipeline._final_chorus(tracks["plan"])
+    start, _ = song_plan.final_chorus(tracks["plan"])
     choir, rate = sf.read(os.path.join(out, "vocals_chor.wav"))
     first = np.argmax(np.abs(choir).max(axis=1) > 1e-3) / rate
     assert first == pytest.approx(start * 60 / s.bpm, abs=0.02)
@@ -318,7 +321,7 @@ def test_without_other_voices_the_choir_is_the_same_voice_brighter_and_darker(tm
     s = SongSettings(active_sections=["Chorus"], output_ordner=str(tmp_path / "out"), neutrino_pfad=str(root),
                      harmonies=False, style_shift=1)
     tracks, _ = pipeline.compose(s, seed=3)
-    pipeline._synthesize_vocals(s, tracks, s.output_dir())
+    singing._synthesize_vocals(s, tracks, s.output_dir())
     # der Chor singt wie der Refrain (StyleShift 1 + 1), eine Stimme dunkler, eine heller
     assert [(c[1], c[2]) for c in calls if c[0].startswith("vocals_chor")] == [("MERROW", 0), ("MERROW", 4)]
 
@@ -329,11 +332,11 @@ def test_choir_and_echo_can_be_switched_off(tmp_path, fake_neutrino):
                      neutrino_pfad=str(root), harmonies=False, final_choir=False, echo_throws=False,
                      section_style=False, sung_pads=False, adlibs=False)
     tracks, _ = pipeline.compose(s, seed=3)
-    pipeline._synthesize_vocals(s, tracks, s.output_dir())
+    singing._synthesize_vocals(s, tracks, s.output_dir())
     assert [c[0] for c in calls] == ["vocals.xml"]
     assert not os.path.exists(os.path.join(s.output_dir(), "vocals_chor.wav"))
-    assert pipeline._throw_windows(s, tracks) == []
-    assert pipeline._throw_windows(s.with_updates(echo_throws=True), tracks)
+    assert mixdown._throw_windows(s, tracks) == []
+    assert mixdown._throw_windows(s.with_updates(echo_throws=True), tracks)
 
 
 def test_muting_the_vocals_mutes_every_vocal_layer(tmp_path):
@@ -469,15 +472,15 @@ def test_without_neutrino_voicevox_sings_lead_harmony_and_choir(tmp_path, fake_v
     s = SongSettings(active_sections=["Verse", "Chorus"], output_ordner=str(tmp_path / "out"),
                      neutrino_pfad=str(tmp_path / "kein-neutrino"), voicevox_url=fake_voicevox, voicevox_singer=3002)
     tracks, _ = pipeline.compose(s, seed=4)
-    vocals = pipeline._synthesize_vocals(s, tracks, s.output_dir())
+    vocals = singing._synthesize_vocals(s, tracks, s.output_dir())
     assert vocals and os.path.exists(vocals)
     out = s.output_dir()
     assert os.path.exists(os.path.join(out, "vocals_harmony.wav"))
     synth = [r[1] for r in FakeVoicevox.requests if r[0] == "/frame_synthesis"]
     assert synth[:2] == [3002, 3002] and sorted(synth[2:]) == [3001, 6000]
     choir, rate = sf.read(os.path.join(out, "vocals_chor.wav"))
-    data, _ = voice_fx.excerpt(tracks["melody_data"], tracks["silben"], *pipeline._final_chorus(tracks["plan"]))
-    first = pipeline._final_chorus(tracks["plan"])[0] + (data[0][1] if data[0][0] is None else 0.0)
+    data, _ = voice_fx.excerpt(tracks["melody_data"], tracks["silben"], *song_plan.final_chorus(tracks["plan"]))
+    first = song_plan.final_chorus(tracks["plan"])[0] + (data[0][1] if data[0][0] is None else 0.0)
     assert np.argmax(np.abs(choir).max(axis=1) > 1e-3) / rate == pytest.approx(first * 60 / s.bpm, abs=0.03)
 
 
@@ -487,7 +490,7 @@ def test_voicevox_gets_the_vibrato_and_glide_settings(tmp_path, fake_voicevox, m
     tracks, _ = pipeline.compose(s, seed=4)
     shaped = []
     monkeypatch.setattr(voice_fx, "shape_pitch", lambda f0, frame, notes, v, g, offset: shaped.append((v, g)) or f0)
-    pipeline._synthesize_vocals(s, tracks, s.output_dir())
+    singing._synthesize_vocals(s, tracks, s.output_dir())
     assert shaped == [(0.0, 2.0)]
 
 
@@ -496,6 +499,6 @@ def test_missing_voicevox_falls_back_to_the_preview_voice(tmp_path, monkeypatch)
                      neutrino_pfad=str(tmp_path / "kein-neutrino"), final_choir=False, breaths=False)
     tracks, _ = pipeline.compose(s, seed=4)
     previews = []
-    monkeypatch.setattr(pipeline, "_sing_preview", lambda s_, t_, wav: previews.append(wav) or write(wav, np.zeros(RATE)))
-    assert pipeline._synthesize_vocals(s, tracks, s.output_dir())
+    monkeypatch.setattr(singing, "_sing_preview", lambda s_, t_, wav: previews.append(wav) or write(wav, np.zeros(RATE)))
+    assert singing._synthesize_vocals(s, tracks, s.output_dir())
     assert len(previews) == 1

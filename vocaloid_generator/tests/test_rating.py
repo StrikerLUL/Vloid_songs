@@ -95,7 +95,7 @@ def rated_variants(tmp_path, monkeypatch):
     out = str(tmp_path / "out")
     made = []
 
-    def fake_song(settings, progress=None, seed=None):
+    def fake_song(settings, progress=None, seed=None, keep_history=True):
         made.append(settings)
         seconds = [2, 5, 3][(len(made) - 1) % 3]
         os.makedirs(out, exist_ok=True)

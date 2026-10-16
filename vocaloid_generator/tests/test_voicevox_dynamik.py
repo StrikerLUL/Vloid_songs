@@ -4,6 +4,7 @@ import pytest
 
 import main
 import pipeline
+import singing
 import voice_fx
 import voicevox
 from settings import SongSettings
@@ -43,10 +44,10 @@ def test_with_voicevox_the_dynamics_are_sung_not_turned_afterwards(tmp_path, fak
     s = SongSettings(active_sections=["Verse", "Chorus"], output_ordner=str(tmp_path / "out"),
                      vocal_engine="VOICEVOX", voicevox_url=fake_voicevox, harmonies=False, final_choir=False)
     tracks, _ = pipeline.compose(s, seed=4)
-    pipeline._synthesize_vocals(s, tracks, s.output_dir())
+    singing._synthesize_vocals(s, tracks, s.output_dir())
     sung = np.asarray(synthesis_volume()[0])
     assert after == [] and np.ptp(sung[sung > 0]) > 0.05
     FakeVoicevox.requests.clear()
-    pipeline._synthesize_vocals(s.with_updates(voicevox_dynamics=False), tracks, s.output_dir())
+    singing._synthesize_vocals(s.with_updates(voicevox_dynamics=False), tracks, s.output_dir())
     assert after == ["silbe", "phrase"] and set(synthesis_volume()[0]) == {0.5}
     assert main.parse_args(["--ohne-voicevox-dynamik"]).ohne_voicevox_dynamik

@@ -2,7 +2,8 @@
 #
 # Die Verzerrungs-Klänge eines SoundFonts sind Ton für Ton verzerrt aufgenommen; mehrere zusammen klingen dann
 # kratzig. Hier spielt der SoundFont die Gitarre sauber, und erst die ganze Spur geht durch Verzerrer und Box,
-# wie bei einer echten Gitarre. Die Box ist eingebaut (Filter wie ein Gitarrenlautsprecher) oder die
+# wie bei einer echten Gitarre (mit den Band-Aufnahmen die direkt eingespielte Emily-Gitarre, band_library). Die Box
+# ist eingebaut (Filter wie ein Gitarrenlautsprecher) oder die
 # Impulsantwort einer echten Box (eine WAV-Datei, kostenlose gibt es viele im Netz).
 import copy
 import logging
@@ -53,9 +54,11 @@ def cabinet(audio: np.ndarray, ir: str = "") -> np.ndarray:
     return sosfilt(sos, shaped, axis=-1).astype(np.float32)
 
 
-def play(inst: pretty_midi.Instrument, soundfont_path: str, library: bool = True, ir: str = "") -> Optional[np.ndarray]:
+def play(inst: pretty_midi.Instrument, soundfont_path: str, library: bool = True, ir: str = "",
+         band: bool = False) -> Optional[np.ndarray]:
     """
     Eine verzerrte Gitarren-Spur: sauber gerendert, durch Verstärker und Box, dann an ihren Platz im Panorama.
+    band: die saubere Gitarre aus den Aufnahmen (band_library), soweit vorhanden.
     Rückgabe (2, Samples), None wenn der SoundFont nichts spielt (dann rendert sie wie bisher).
     """
     from renderer import _mono_pan, render_midi
@@ -64,8 +67,12 @@ def play(inst: pretty_midi.Instrument, soundfont_path: str, library: bool = True
     clean.control_changes = [cc for cc in inst.control_changes if cc.number != 10]
     pm = pretty_midi.PrettyMIDI()
     pm.instruments = [clean]
+    audio = None
+    if band:
+        import band_library
+        audio = band_library.render(clean, SAMPLE_RATE) if band_library.covers(clean) else None
     try:
-        audio = render_midi(pm, soundfont_path, library=library)
+        audio = render_midi(pm, soundfont_path, library=library) if audio is None else audio
     except Exception as e:      # FluidSynth und tinysoundfont werfen sehr verschiedene Fehler
         log.warning("Gitarre für den Verstärker nicht gerendert (%s)", e)
         return None

@@ -5,7 +5,7 @@ import pytest
 
 import main
 import mixer
-import pipeline
+import mixdown
 import separation
 import vocal_check
 import vocal_tone
@@ -44,9 +44,9 @@ def test_a_bright_voice_gets_less_presence_than_a_deep_one():
 def test_the_pipeline_picks_the_tone_from_who_sang(tmp_path):
     s = SongSettings(style="Rock", singer="NAKUMO")
     vocal_check.record(str(tmp_path), s, "NEUTRINO", "NAKUMO")
-    tone = pipeline._vocal_tone(s, str(tmp_path))
+    tone = mixdown._vocal_tone(s, str(tmp_path))
     assert tone == vocal_tone.for_song("NAKUMO", "Rock")
     vocal_check.record(str(tmp_path), s, "VOICEVOX", "四国めたん")
-    assert pipeline._vocal_tone(s, str(tmp_path)) == vocal_tone.for_song(None, "Rock")
-    assert pipeline._vocal_tone(s.with_updates(vocal_tone=False), str(tmp_path)) is None
+    assert mixdown._vocal_tone(s, str(tmp_path)) == vocal_tone.for_song(None, "Rock")
+    assert mixdown._vocal_tone(s.with_updates(vocal_tone=False), str(tmp_path)) is None
     assert main.parse_args(["--ohne-stimmkette"]).ohne_stimmkette

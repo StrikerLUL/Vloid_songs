@@ -2,6 +2,58 @@
 
 Jede Version hat hier einen Abschnitt. Die App zeigt ihn einmal nach einem Update (Hilfe › Was ist neu).
 
+## 1.2.0
+
+Diese Version bringt neue Arten von Songs, mehr Ausgaben und mehr Hilfe beim Schreiben. Jede Neuerung hat einen
+Schalter und eine Option auf der Kommandozeile; ausgeschaltet klingt alles wie in 1.1.
+
+**Neue Songs**
+
+- **3/4- und 6/8-Takt** (Tab Song › Takt, `--takt`): Walzer mit Bum-Tschak-Tschak oder wiegender 6/8-Takt. Im
+  6/8-Takt zählt das Tempo die punktierten Viertel.
+- **Rap-Teil** (Sektion „Rap“, `[Rap]` im Text): ein dichter Rhythmus fast auf einem Ton, gesprochen von einer
+  VOICEVOX-Sprechstimme (Tab Gesang › Rap-Teil). Ohne VOICEVOX singt die Gesangsstimme ihn.
+- **Eigener Text für Wiederholungen:** `[Verse 2]` oder `[Chorus 3]` geben diesem Vorkommen seinen eigenen Text auf
+  dieselbe Melodie.
+- **Idol-Rufe:** „はい！はい！“ (bei Rock „おい！“) in den Pausen der Hauptstimme und „ふっふー“ vor dem Refrain,
+  von mehreren Stimmen gerufen.
+- **Vocal Chops:** Schnipsel der Hauptstimme spielen im Drop einen Riff (Future Bass auch im Intro).
+- **Ritardando:** Eine Ballade mit Outro wird zum Schluss langsamer, der letzte Akkord klingt aus.
+- **Remix** (Knopf am fertigen Song, `--remix STIL`): derselbe Song mit Band, Tempo und Klang eines anderen Stils.
+- **Song-Rezepte** (Tab Song, `--rezept`): neun fertige Ausgangspunkte mit eigenem Beispieltext, z. B. „Hologram
+  Star (wie Idol)“ mit Rap-Teil und Rufen oder „Walzer im Mondlicht (3/4)“.
+
+**Besserer Klang**
+
+- **Flügel, E-Bass und E-Gitarre aus echten Aufnahmen** (Einrichten › „Flügel, Bass und Gitarre aus Aufnahmen“,
+  etwa 550 MB).
+- **Echte Grooves** spielen auch beim leichten Grund-Swing (bis 0,2).
+- **Off-Vocal und A-cappella** als eigene MP3, so laut wie im Song.
+- **True Peak:** Der Limiter hält auch die Spitzen zwischen den Samples unter -1 dBTP.
+
+**Ausgaben**
+
+- **MP3-Tags:** Titel, Stimme, Stil, Tempo, Tonart, Liedtext und ein Titelbild in jeder MP3.
+- **Lyric-Video in 1080p** im Farbverlauf des Stils, Text und Wellenform in seinen Farben; oder ein eigenes
+  Hintergrundbild (Tab Pfade, `--video-hintergrund`).
+- **Projekte:** Der Gesang jedes Songs bleibt im Verlauf liegen. „Wieder öffnen“ baut Band und Mix neu, ohne dass
+  NEUTRINO noch einmal singt.
+
+**Bedienung**
+
+- **Text-Helfer** im Tab Text: pro Zeile die Silben gegen den Platz in ihrer Phrase (rot = zu viele), der Endvokal
+  als Reimbuchstabe und wie Kanji gelesen werden.
+- **Restzeit** aus früheren Läufen derselben Art und eine **Windows-Meldung**, wenn ein längerer Lauf fertig ist.
+- **Tastenkürzel:** Leertaste spielt, Strg+Enter erzeugt, Strg+Z nimmt die letzte Änderung an den Noten zurück.
+- **Speicherplatz** im Einrichten-Assistenten: wie viel jeder Baustein, die Songs und die Projekte belegen, mit
+  „Entfernen“, „Projekte löschen (Songs bleiben)“ und „Aufräumen“.
+
+**Unter der Haube**
+
+- Ein Test prüft für jeden Schalter, dass er wirklich etwas ändert. Gefunden: Hauchigkeit und Schimmer der
+  Vorschau-Stimme sangen nicht neu.
+- pipeline.py ist in Gesang, Spuren und Mix aufgeteilt.
+
 ## 1.1.0
 
 Diese Version macht den Gesang besser. Jede Neuerung hat einen Schalter im Tab Gesang (oder bei den Vorbildern) und

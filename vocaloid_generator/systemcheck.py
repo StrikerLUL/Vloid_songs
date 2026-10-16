@@ -150,6 +150,23 @@ def check_samples(settings, folder: str) -> tuple:
     return (have == total), f"{have} von {total} Instrumenten da, die Geige spielt"
 
 
+def check_band(settings, folder: str) -> tuple:
+    import pretty_midi
+
+    import band_library
+    have = band_library.installed()
+    if not have:
+        return None, "Flügel, Bass und Gitarre aus Aufnahmen nicht geladen"
+    for name in have:
+        program = next(p for p, f in band_library.PROGRAMS.items() if f == name)
+        inst = pretty_midi.Instrument(program=program, name=name)
+        inst.notes.append(pretty_midi.Note(90, 45 if name == band_library.BASS else 60, 0.0, 1.0))
+        audio = band_library.render(inst)
+        if audio is None or float(np.max(np.abs(audio))) < 1e-3:
+            return False, f"{band_library.NAMES[name]} aus den Aufnahmen blieb still"
+    return len(have) == len(band_library.files()), band_library.status()
+
+
 def check_drums(settings, folder: str) -> tuple:
     import pretty_midi
 
@@ -251,6 +268,7 @@ CHECKS = (
     ("instruments", "Instrumente", check_instruments, False),
     ("soundfonts", "Bessere Klänge", check_soundfonts, False),
     ("samples", "Orchester-Aufnahmen", check_samples, False),
+    ("band", "Flügel, Bass und Gitarre", check_band, False),
     ("drums", "Echtes Schlagzeug", check_drums, False),
     ("grooves", "Echte Grooves", check_grooves, False),
     ("mp3", "MP3-Export", check_mp3, False),

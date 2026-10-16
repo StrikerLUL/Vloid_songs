@@ -102,9 +102,12 @@ def key_scale(plan) -> str:
     return f"{NOTE_NAMES[plan.tonic % 12]} {'minor' if is_minor(plan.mode) else 'major'}"
 
 
+def model_folder() -> str:
+    return os.path.join(FOLDER, "huggingface")
+
+
 def environment() -> dict:
-    root = source()
-    return {**os.environ, "ACESTEP_PROJECT_ROOT": root, "HF_HOME": os.path.join(FOLDER, "huggingface"),
+    return {**os.environ, "ACESTEP_PROJECT_ROOT": source(), **config.hf_environment(model_folder()),
             "PYTHONIOENCODING": "utf-8"}
 
 
@@ -116,6 +119,7 @@ def run(job: dict, folder: str) -> Optional[dict]:
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)       # unter Windows ohne schwarzes Fenster
     os.makedirs(FOLDER, exist_ok=True)
     log_path = os.path.join(FOLDER, LOG_FILE)
+    config.hf_without_links(model_folder())                 # 1.2.1 und älter legten Verknüpfungen an
     try:
         # Die Ausgabe geht in eine Datei, nicht in Pipes: Pipes liest Windows erst zu Ende, wenn jeder Prozess fertig
         # ist, der sie geerbt hat. -P: der Ordner des Workers (die App) gehört nicht auf den Suchpfad von ACE-Step.

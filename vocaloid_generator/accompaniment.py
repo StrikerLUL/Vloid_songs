@@ -52,9 +52,13 @@ def status() -> str:
     return "KI-Begleitung ist eingerichtet"
 
 
+def model_folder() -> str:
+    return os.path.join(FOLDER, "hf")
+
+
 def environment() -> dict:
     """Das Modell liegt mit in tools/begleitung, nicht irgendwo im Profil."""
-    return {**os.environ, "HF_HOME": os.path.join(FOLDER, "hf"), "PYTHONIOENCODING": "utf-8"}
+    return {**os.environ, **config.hf_environment(model_folder()), "PYTHONIOENCODING": "utf-8"}
 
 
 def channel_for(program: int) -> Optional[str]:
@@ -96,6 +100,7 @@ def run(job: dict, folder: str) -> Optional[dict]:
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     os.makedirs(FOLDER, exist_ok=True)
     log_path = os.path.join(FOLDER, LOG_FILE)
+    config.hf_without_links(model_folder())                 # 1.2.1 und älter legten Verknüpfungen an
     try:
         # Ausgabe in eine Datei statt in Pipes (wie beim Klang-Veredler); -P: die App gehört nicht auf den Suchpfad
         with open(log_path, "w", encoding="utf-8") as output:

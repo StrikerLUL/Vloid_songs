@@ -2,6 +2,15 @@
 
 Jede Version hat hier einen Abschnitt. Die App zeigt ihn einmal nach einem Update (Hilfe › Was ist neu).
 
+## 1.2.2
+
+Fehler aus dem Test von 1.2.1 behoben.
+
+- **Automatische Bewertung lief immer noch nicht** („[Errno 22] Invalid argument“ bei `config.json`): Das Modell lag
+  als Verknüpfungen im Ordner, und manche Windows-PCs öffnen solche Verknüpfungen nicht (wie damals bei uv). Jetzt
+  liegen echte Dateien dort; was schon geladen war, wird beim nächsten Bewerten umgestellt, ohne es neu zu laden.
+  Dasselbe gilt für die KI-Begleitung und den Klang-Veredler.
+
 ## 1.2.1
 
 Fehler aus dem ersten Test von 1.2.0 behoben.

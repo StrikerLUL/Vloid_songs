@@ -106,6 +106,67 @@ def test_a_missing_package_is_named_and_offered_again(tmp_path, fake_model):
     assert rating.problem() == "Die Bewertung lief nicht (Protokoll ansehen)"
 
 
+def hf_cache_with_links(home):
+    """
+    So legte huggingface_hub das Modell bis 1.2.1 an: jede Datei eine Verknüpfung in den Speicher daneben, große über
+    einen zweiten Verweis in den gemeinsamen Speicher hub/blobs. Zwei Fassungen teilen sich config.json.
+    """
+    repo = os.path.join(home, "hub", "models--facebook--audiobox-aesthetics")
+    for folder in ("blobs", os.path.join("snapshots", "alt"), os.path.join("snapshots", "neu")):
+        os.makedirs(os.path.join(repo, folder))
+    os.makedirs(os.path.join(home, "hub", "blobs", "ab"))
+    with open(os.path.join(repo, "blobs", "c0f1"), "w", encoding="utf-8") as f:
+        f.write('{"output_dim": 4}')
+    with open(os.path.join(home, "hub", "blobs", "ab", "abcd"), "wb") as f:
+        f.write(b"gewichte")
+    try:
+        os.symlink(os.path.join("..", "..", "blobs", "ab", "abcd"), os.path.join(repo, "blobs", "e5"))
+        for rev in ("alt", "neu"):
+            os.symlink(os.path.join("..", "..", "blobs", "c0f1"), os.path.join(repo, "snapshots", rev, "config.json"))
+        os.symlink(os.path.join("..", "..", "blobs", "e5"), os.path.join(repo, "snapshots", "neu", "model.safetensors"))
+    except OSError:
+        pytest.skip("hier lassen sich keine Verknüpfungen anlegen")
+    return repo
+
+
+def test_links_from_older_versions_become_real_files(tmp_path, fake_model):
+    """Manche Windows-PCs öffnen die Verknüpfungen nicht: „[Errno 22] Invalid argument“ bei config.json."""
+    repo = hf_cache_with_links(rating.model_folder())
+    assert rating.rate([wav(tmp_path / "a.wav", 1)])[0] is not None
+    for rev, name in (("alt", "config.json"), ("neu", "config.json"), ("neu", "model.safetensors")):
+        path = os.path.join(repo, "snapshots", rev, name)
+        assert os.path.isfile(path) and not os.path.islink(path)
+    with open(os.path.join(repo, "snapshots", "alt", "config.json"), encoding="utf-8") as f:
+        assert f.read() == '{"output_dim": 4}'
+    with open(os.path.join(repo, "snapshots", "neu", "model.safetensors"), "rb") as f:
+        assert f.read() == b"gewichte"
+    # verschoben, nicht kopiert: die Gewichte liegen nur einmal da, und kein Verweis zeigt mehr ins Leere
+    assert not os.path.exists(os.path.join(rating.model_folder(), "hub", "blobs", "ab", "abcd"))
+    assert not os.path.lexists(os.path.join(repo, "blobs", "e5"))
+    assert config.hf_without_links(rating.model_folder()) == 0             # danach ist nichts mehr zu tun
+
+
+def test_the_model_is_loaded_as_real_files(tmp_path, fake_model):
+    fake_model.write_text(FAKE_WORKER.replace('"CU": 5.0', '"CU": float(os.environ["HF_HUB_DISABLE_SYMLINKS"])'),
+                          encoding="utf-8")
+    assert rating.rate([wav(tmp_path / "a.wav", 1)])[0].usefulness == 1.0
+    assert config.hf_without_links(str(tmp_path / "gibt-es-nicht")) == 0
+
+
+@pytest.mark.parametrize("worker", ["rating_worker", "accompaniment_worker", "polish_worker"])
+def test_workers_switch_links_off_in_older_huggingface_hub(worker, monkeypatch):
+    """huggingface_hub vor 2.0 kennt HF_HUB_DISABLE_SYMLINKS nicht; dort schalten die Worker es selbst ab."""
+    import importlib
+    import types
+    package, download = types.ModuleType("huggingface_hub"), types.ModuleType("huggingface_hub.file_download")
+    download.are_symlinks_supported = lambda cache_dir=None: True
+    package.file_download = download
+    monkeypatch.setitem(sys.modules, "huggingface_hub", package)
+    monkeypatch.setitem(sys.modules, "huggingface_hub.file_download", download)
+    importlib.import_module(worker).without_links()
+    assert download.are_symlinks_supported("tools") is False
+
+
 def test_without_setup_nothing_is_rated(tmp_path):
     assert not rating.available()
     assert rating.rate([wav(tmp_path / "a.wav", 1)]) == [None]

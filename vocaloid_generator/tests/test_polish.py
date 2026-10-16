@@ -129,6 +129,15 @@ def test_polish_runs_ace_step_in_its_own_folder(fake_ace_step):
     assert "CUDA out of memory" in open(log_file, encoding="utf-8").read()
 
 
+def test_the_model_folder_holds_real_files(fake_ace_step, monkeypatch):
+    """Verknüpfungen öffnen manche Windows-PCs nicht (wie bei der Bewertung, test_rating)."""
+    repaired = []
+    monkeypatch.setattr(polish.config, "hf_without_links", repaired.append)
+    assert polish.run({"probe": True}, str(fake_ace_step)) is not None
+    assert repaired == [polish.model_folder()]
+    assert polish.environment()["HF_HUB_DISABLE_SYMLINKS"] == "1"
+
+
 def test_the_mixer_swaps_the_band_and_keeps_the_voice(tmp_path):
     t = np.arange(4 * RATE) / RATE
 

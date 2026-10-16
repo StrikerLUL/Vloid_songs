@@ -18,6 +18,18 @@ CHUNK = 30.0
 HISTORY = 5.0
 
 
+def without_links() -> None:
+    """
+    Echte Modelldateien statt Verknüpfungen (Symlinks), auch mit huggingface_hub vor 2.0, das HF_HUB_DISABLE_SYMLINKS
+    nicht kennt: manche Windows-PCs öffnen die Verknüpfungen nicht („[Errno 22] Invalid argument“ bei config.json).
+    """
+    try:
+        import huggingface_hub.file_download as download
+    except ImportError:
+        return
+    download.are_symlinks_supported = lambda *args, **kwargs: False
+
+
 def tokens(notes: list, base: float, control: bool) -> list:
     """Töne ab base als Tokens (Zeit, Dauer, Note) des Modells, Zeit relativ zu base."""
     from anticipation.config import MAX_DUR, TIME_RESOLUTION
@@ -67,6 +79,7 @@ def main(args: list) -> int:
     device = "cuda" if torch.cuda.is_available() else "cpu"
     name = job.get("model") or MODELS[device]
     torch.manual_seed(int(job.get("seed", 0)))
+    without_links()
     model = AutoModelForCausalLM.from_pretrained(name).to(device)
     model.eval()
     written = accompany(model, job["notes"], float(job["seconds"]), float(job.get("top_p", 0.95)))

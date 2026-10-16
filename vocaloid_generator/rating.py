@@ -8,6 +8,7 @@
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 from dataclasses import asdict, dataclass
@@ -24,6 +25,9 @@ log = logging.getLogger(__name__)
 FOLDER = os.path.join(config.REPO_ROOT, "tools", "bewertung")
 WORKER = os.path.join(config.BASE_DIR, "rating_worker.py")
 MARKER = "BEWERTUNG "
+# Fehlt der Umgebung ein Paket, steht sein Name hier; „Einrichten“ bietet die Bewertung dann wieder an, und
+# setup_bewertung.py lädt nur das Fehlende nach (z. B. requests, das Audiobox braucht, aber nicht mitbringt)
+INCOMPLETE = "unvollstaendig.txt"
 EXCERPT_SECONDS = 30.0
 TIMEOUT = 1800          # Sekunden; beim ersten Mal lädt das Modell noch seine Gewichte herunter
 
@@ -69,9 +73,59 @@ def available() -> bool:
     return os.path.isfile(python())
 
 
+def _incomplete() -> str:
+    return os.path.join(FOLDER, INCOMPLETE)
+
+
+def missing_package() -> Optional[str]:
+    """Das Paket, das der Umgebung beim letzten Bewerten fehlte; None, wenn nichts fehlte."""
+    try:
+        with open(_incomplete(), encoding="utf-8") as f:
+            return f.read().strip() or None
+    except OSError:
+        return None
+
+
+def complete() -> bool:
+    """Eingerichtet und ohne fehlendes Paket (für den Einrichten-Assistenten)."""
+    return available() and missing_package() is None
+
+
+def mark_complete() -> None:
+    try:
+        os.remove(_incomplete())
+    except OSError:
+        pass
+
+
+def _note_missing(output: str) -> Optional[str]:
+    """Steht in output „No module named 'x'“, merkt sich x als fehlendes Paket."""
+    found = re.search(r"No module named '([\w.]+)'", output)
+    if not found:
+        return None
+    package = found.group(1).split(".")[0]
+    try:
+        with open(_incomplete(), "w", encoding="utf-8") as f:
+            f.write(package)
+    except OSError:
+        pass
+    return package
+
+
+def problem() -> str:
+    """Warum die Bewertung nicht lief, in einem Satz für Systemcheck und Oberfläche."""
+    package = missing_package()
+    if package:
+        return (f"In der Umgebung der Bewertung fehlt das Paket „{package}“: unter Hilfe › Einrichten „Automatische "
+                "Bewertung“ noch einmal einrichten, das lädt nur das Fehlende nach")
+    return "Die Bewertung lief nicht (Protokoll ansehen)"
+
+
 def status() -> str:
     if not available():
         return "Automatische Bewertung fehlt: einmal uv run setup_bewertung.py ausführen"
+    if missing_package():
+        return problem()
     return "Automatische Bewertung (Audiobox Aesthetics) ist eingerichtet"
 
 
@@ -106,8 +160,12 @@ def rate(paths: list) -> list:
         return [None] * len(paths)
     line = next((ln for ln in reversed(done.stdout.splitlines()) if ln.startswith(MARKER)), None)
     if done.returncode != 0 or line is None:
-        log.warning("Bewertung fehlgeschlagen: %s", (done.stderr or done.stdout).strip()[-800:])
+        output = (done.stderr or done.stdout).strip()
+        log.warning("Bewertung fehlgeschlagen: %s", output[-800:])
+        if _note_missing(output):
+            log.warning("%s", problem())
         return [None] * len(paths)
+    mark_complete()
     try:
         found = json.loads(line[len(MARKER):])
     except ValueError:

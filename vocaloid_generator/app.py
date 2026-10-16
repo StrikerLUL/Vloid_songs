@@ -13,6 +13,13 @@ if APP_DIR not in sys.path:
     sys.path.insert(0, APP_DIR)
 
 WINDOW_SIZE = (1500, 940)
+FAVICON = os.path.join(APP_DIR, "gui", "vloid.png")
+# Das eigene Fenster setzt sein Symbol unter Windows nur aus einer .ico-Datei (sonst „Could not set native window icon“)
+WINDOW_ICON = os.path.join(os.path.dirname(APP_DIR), "installer", "vloid.ico")
+
+
+def icon(native: bool) -> str:
+    return WINDOW_ICON if native and os.path.isfile(WINDOW_ICON) else FAVICON
 
 
 def parse_args(argv=None):
@@ -44,7 +51,7 @@ def main(argv=None) -> None:
     ui.run(
         build,
         title="Vloid Songs",
-        favicon=os.path.join(APP_DIR, "gui", "vloid.png"),
+        favicon=icon(native),
         language="de",
         dark=True,
         reload=False,

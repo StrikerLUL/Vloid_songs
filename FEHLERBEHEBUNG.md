@@ -60,6 +60,8 @@ und Systeminfo (keine Songs) und landet in `Dokumente\Vloid Songs\Fehlerberichte
 - **Ein Modell (Bewertung, Demucs, KI-Begleitung, Veredler) startet nicht.** Beim ersten Mal lädt es noch Dateien
   nach; ein zweiter Versuch hilft oft. Die ganze Ausgabe steht bei der KI-Begleitung in
   `tools\begleitung\letzter_lauf.log` und beim Veredler in `tools\ace-step\letzter_lauf.log` im Programmordner.
+- **System prüfen: „In der Umgebung der Bewertung fehlt das Paket …“.** Unter Hilfe › Einrichten ist die
+  automatische Bewertung dann wieder angehakt; „Ausgewählte einrichten“ lädt nur das fehlende Paket nach.
 - **Das Update geht nicht.** Die App braucht dafür Internet. Sonst die neue Setup.exe von
   https://github.com/StrikerLUL/Vloid_songs/releases laden und starten; deine Daten bleiben.
 - **Meine alten Songs fehlen.** Sie liegen noch im alten Ordner. In Einrichten den alten Ordner wählen und

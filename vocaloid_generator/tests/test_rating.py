@@ -81,6 +81,31 @@ def test_a_broken_or_missing_model_rates_nothing(tmp_path, fake_model):
     assert rating.rate([wav(tmp_path / "a.wav", 1)]) == [None]
 
 
+MISSING_REQUESTS = """import sys
+print('Traceback (most recent call last):', file=sys.stderr)
+print('  File "audiobox_aesthetics/utils.py", line 12, in <module>', file=sys.stderr)
+print("ModuleNotFoundError: No module named 'requests'", file=sys.stderr)
+sys.exit(1)
+"""
+
+
+def test_a_missing_package_is_named_and_offered_again(tmp_path, fake_model):
+    """Audiobox braucht requests, gibt es aber nicht an (seit huggingface_hub 1.0 kommt es nicht mehr mit)."""
+    import einrichten
+    os.makedirs(rating.FOLDER)
+    fake_model.write_text(MISSING_REQUESTS, encoding="utf-8")
+    assert rating.rate([wav(tmp_path / "a.wav", 1)]) == [None]
+    assert rating.missing_package() == "requests" and not rating.complete()
+    assert "„requests“" in rating.problem() and "Einrichten" in rating.problem()
+    assert rating.status() == rating.problem()
+    assert not einrichten.is_installed(einrichten.find("rating"))        # der Assistent bietet sie wieder an
+    fake_model.write_text(FAKE_WORKER, encoding="utf-8")                 # neu eingerichtet: läuft wieder
+    assert rating.rate([wav(tmp_path / "a.wav", 1)])[0] is not None
+    assert rating.missing_package() is None and rating.complete()
+    assert einrichten.is_installed(einrichten.find("rating"))
+    assert rating.problem() == "Die Bewertung lief nicht (Protokoll ansehen)"
+
+
 def test_without_setup_nothing_is_rated(tmp_path):
     assert not rating.available()
     assert rating.rate([wav(tmp_path / "a.wav", 1)]) == [None]
@@ -154,6 +179,7 @@ def test_setup_builds_its_own_environment(monkeypatch):
     assert venv[:3] == ["/bin/uv", "venv", os.path.join(rating.FOLDER, "venv")]
     assert install[install.index("--python") + 1] == rating.python()
     assert install[install.index("--torch-backend") + 1] == "auto" and "audiobox_aesthetics==0.0.4" in install
+    assert "requests" in install                    # Audiobox importiert es, gibt es aber nicht als Abhängigkeit an
     commands.clear()
     assert setup_bewertung.setup(cpu=True)
     assert commands[-1][commands[-1].index("--torch-backend") + 1] == "cpu"
@@ -184,3 +210,33 @@ def test_setup_needs_uv_and_a_working_model(monkeypatch):
     monkeypatch.setattr(setup_bewertung.subprocess, "run", lambda cmd, **kw: type("Done", (), {"returncode": 0})())
     monkeypatch.setattr(rating, "rate", lambda paths: [None])
     assert not setup_bewertung.setup()
+
+
+def test_an_update_tops_up_an_existing_environment(monkeypatch, tmp_path):
+    """Die Setup.exe ruft nach jedem Update setup_bewertung.py --ergaenzen: Neue Pakete kommen dazu, ohne Modell-Probe."""
+    commands = []
+    monkeypatch.setattr(setup_bewertung.shutil, "which", lambda name: "/bin/uv")
+    monkeypatch.setattr(setup_bewertung.subprocess, "run",
+                        lambda cmd, **kw: commands.append(cmd) or type("Done", (), {"returncode": 0})())
+    monkeypatch.setattr(rating, "rate", lambda paths: pytest.fail("ergänzen lädt das Modell nicht"))
+    assert setup_bewertung.ergaenzen() and commands == []                    # nicht eingerichtet: nichts zu tun
+    python = tmp_path / "venv-python"
+    python.write_text("")
+    monkeypatch.setattr(rating, "python", lambda: str(python))
+    os.makedirs(rating.FOLDER)
+    with open(os.path.join(rating.FOLDER, rating.INCOMPLETE), "w") as f:
+        f.write("requests")
+    assert setup_bewertung.ergaenzen()
+    [install] = commands
+    assert install[1:3] == ["pip", "install"] and install[install.index("--python") + 1] == str(python)
+    assert set(setup_bewertung.PAKETE) <= set(install) and "requests" in install
+    assert rating.complete()
+    monkeypatch.setattr(setup_bewertung.subprocess, "run", lambda cmd, **kw: type("Done", (), {"returncode": 1})())
+    assert not setup_bewertung.ergaenzen()
+
+
+def test_the_setup_exe_tops_up_the_rating():
+    starter = open(os.path.join(config.REPO_ROOT, "Vloid Songs starten.bat"), encoding="utf-8").read()
+    einrichten = starter[starter.index('if "%~1"=="--einrichten"'):starter.index("app.py")]
+    assert "setup_bewertung.py --ergaenzen" in einrichten
+    assert einrichten.index("sync --frozen") < einrichten.index("--ergaenzen") < einrichten.index("exit /b 0")

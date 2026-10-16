@@ -2,6 +2,19 @@
 
 Jede Version hat hier einen Abschnitt. Die App zeigt ihn einmal nach einem Update (Hilfe › Was ist neu).
 
+## 1.2.1
+
+Fehler aus dem ersten Test von 1.2.0 behoben.
+
+- **Automatische Bewertung lief nicht** („No module named 'requests'“): Audiobox braucht das Paket requests, bringt
+  es aber nicht mit. Die Setup.exe lädt es jetzt in eine schon eingerichtete Bewertung nach, du musst nichts tun.
+  Fehlt der Bewertung einmal ein Paket, sagt System prüfen welches, und Hilfe › Einrichten bietet sie wieder an
+  (lädt nur das Fehlende).
+- **System prüfen lief doppelt:** „Prüfen“ in einem zweiten Fenster „System prüfen“ startete eine zweite Prüfung
+  daneben. Beide sangen den Probesong in denselben Ordner und löschten sich gegenseitig die Gesangsdateien, daher die
+  Fehler bei Chor, Flächen und „Ganzer Song“. Jetzt läuft immer nur eine; jedes Fenster zeigt sie an.
+- Das eigene Fenster hat wieder sein Symbol, und die SyntaxWarnings von pydub im schwarzen Fenster sind weg.
+
 ## 1.2.0
 
 Diese Version bringt neue Arten von Songs, mehr Ausgaben und mehr Hilfe beim Schreiben. Jede Neuerung hat einen

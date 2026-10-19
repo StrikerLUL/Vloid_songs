@@ -2,6 +2,7 @@
 import functools
 import logging
 import os
+from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
@@ -522,10 +523,10 @@ def mische_spuren(
     vocal_tone=None,
     airwindows: bool = False,
     true_peak: bool = False,
-    level_of: Optional[float] = None,
+    level_of: Optional["Level"] = None,
     tame: bool = False,
     punch: bool = False,
-) -> Optional[float]:
+) -> Optional["Level"]:
     """
     Mischt die Spuren zu einem Stereo-Master:
     jede Spur auf ihre Ziel-Lautheit (levels, LUFS) bringen, Fader/Panorama/Mute/Solo aus der App anwenden,
@@ -559,9 +560,10 @@ def mische_spuren(
     Frequenzen gerade herausstechen.
     punch: Druck (I10): Parallelkompression aufs Schlagzeug, Bus-Kompressor über die Band, Mehrband-Kompressor im
     Master.
-    level_of: die Lautheit des ganzen Songs vor dem Master (der Rückgabewert seines Mixes); dann ist dieser Mix ein
-    Teil davon (Off-Vocal, A-cappella) und bleibt so laut, wie er im Song klingt, statt auf target_lufs zu kommen.
-    Rückgabe: die Lautheit dieses Mixes vor dem Master (LUFS), None ohne Mix.
+    level_of: der Pegel des ganzen Songs (der Rückgabewert seines Mixes); dann ist dieser Mix ein Teil davon
+    (Off-Vocal, A-cappella) und geht mit derselben Verstärkung durch den Master, so klingt er so laut wie im Song,
+    statt auf target_lufs zu kommen.
+    Rückgabe: der Pegel dieses Mixes (Level), None ohne Mix.
     """
     from settings import DEFAULT_VOLUMES
 
@@ -706,15 +708,27 @@ def mische_spuren(
     master_volume = min(max(volumes.get("master", 1.0), 0.05), 1.0)
     target_lufs += 20 * np.log10(master_volume)
     premaster = _loudness(mix)
-    if level_of is not None and premaster != float("-inf"):
-        target_lufs += premaster - level_of           # ein Teil des Songs: so viel leiser wie vor dem Master
+    if level_of is not None and level_of.gain_db is None:
+        if premaster != float("-inf"):                     # der Song nach Vorbild gemastert: so viel leiser wie davor
+            target_lufs += premaster - level_of.premaster
+        level_of = None
     if reference and _master_like(mix, reference, output_pfad, target_lufs, limiter_threshold, true_peak):
-        return premaster
-    mix = master(mix, compressor_threshold, compressor_ratio, limiter_threshold, target_lufs=target_lufs,
-                 true_peak=true_peak, punch=punch)
+        return Level(premaster)
+    mix, gain_db, scale = _master(mix, compressor_threshold, compressor_ratio, limiter_threshold, target_lufs,
+                                  true_peak, punch, level_of)
     sf.write(output_pfad, mix.T, SAMPLE_RATE, subtype="PCM_24")
     log.info("Mix fertig: %s (%.1f LUFS)", output_pfad, _loudness(mix))
-    return premaster
+    return Level(premaster, gain_db, scale)
+
+
+@dataclass(frozen=True)
+class Level:
+    """Wie laut ein Mix vor dem Master war und mit welcher Verstärkung der Master ihn auf die Ziel-Lautheit brachte.
+    Ein Teil des Songs (Off-Vocal, A-cappella) geht mit genau diesen Werten durch den Master: dann drücken die
+    Kompressoren die Band dort so zusammen wie im Song, und sie ist so laut wie dort."""
+    premaster: float
+    gain_db: Optional[float] = None     # vor dem Limiter; None nach dem Mastering nach Vorbild
+    scale: float = 1.0                  # nach dem Limiter, damit keine Spitze über die Grenze kommt
 
 
 def _airwindows(tone, vocal_chain: bool) -> tuple:
@@ -1037,10 +1051,17 @@ def master(mix: np.ndarray, compressor_threshold: float = -20.0, compressor_rati
            limiter_threshold: float = -0.3, target_lufs: float = MASTER_LUFS, true_peak: bool = False,
            punch: bool = False) -> np.ndarray:
     """Master-Kompressor, EQ und Limiter auf target_lufs; punch: davor der Mehrband-Kompressor (I10)."""
+    return _master(mix, compressor_threshold, compressor_ratio, limiter_threshold, target_lufs, true_peak, punch)[0]
+
+
+def _master(mix: np.ndarray, compressor_threshold: float, compressor_ratio: float, limiter_threshold: float,
+            target_lufs: float, true_peak: bool, punch: bool, like: Optional[Level] = None) -> tuple:
+    """master(); like: der Pegel des ganzen Songs, dann mit dessen Verstärkungen statt auf target_lufs.
+    Rückgabe: (Mix, Verstärkung vor dem Limiter in dB, Faktor danach)."""
     loud = _loudness(mix)
     if loud == float("-inf"):
-        return mix
-    mix = mix * 10 ** ((MIX_REFERENCE_LUFS - loud) / 20)
+        return mix, None, 1.0
+    mix = mix * 10 ** ((MIX_REFERENCE_LUFS - (loud if like is None else like.premaster)) / 20)
     chain = Pedalboard([
         HighpassFilter(25),
         Compressor(threshold_db=compressor_threshold, ratio=compressor_ratio, attack_ms=30, release_ms=150),
@@ -1051,29 +1072,43 @@ def master(mix: np.ndarray, compressor_threshold: float = -20.0, compressor_rati
     out = chain(mix, SAMPLE_RATE)
     if punch:
         out = multiband(out)
-    return _limit_to(out, target_lufs, limiter_threshold, true_peak)
+    return _limit(out, target_lufs, limiter_threshold, true_peak, like)
 
 
 def _limit_to(mix: np.ndarray, target_lufs: float, limiter_threshold: float, true_peak: bool = False) -> np.ndarray:
     """Auf target_lufs bringen, ohne über limiter_threshold zu kommen; mit true_peak auch zwischen den Samples
     nicht über TRUE_PEAK_DB."""
+    return _limit(mix, target_lufs, limiter_threshold, true_peak)[0]
+
+
+def _limit(mix: np.ndarray, target_lufs: float, limiter_threshold: float, true_peak: bool = False,
+           like: Optional[Level] = None) -> tuple:
+    """_limit_to(); like: mit den Verstärkungen des ganzen Songs. Rückgabe: (Mix, Verstärkung vor dem Limiter in
+    dB, Faktor danach)."""
     loud = _loudness(mix)
     if loud == float("-inf"):
-        return mix
+        return mix, None, 1.0
     if true_peak:
         limiter_threshold = min(limiter_threshold, TRUE_PEAK_DB)
     # Der Limiter verändert die Lautheit selbst, deshalb die Vorverstärkung ein paar Mal nachregeln
     limiter = Limiter(threshold_db=limiter_threshold, release_ms=80)
-    gain_db = target_lufs - loud
-    limited = mix
-    for _ in range(4):
-        limited = limiter(mix * 10 ** (gain_db / 20), SAMPLE_RATE)
-        error = target_lufs - _loudness(limited)
-        if abs(error) < 0.3:
-            break
-        gain_db += error
+    if like is not None:
+        gain_db = like.gain_db
+        limited = limiter(mix * 10 ** (gain_db / 20), SAMPLE_RATE) * np.float32(like.scale)
+    else:
+        gain_db = target_lufs - loud
+        limited = mix
+        for _ in range(4):
+            limited = limiter(mix * 10 ** (gain_db / 20), SAMPLE_RATE)
+            error = target_lufs - _loudness(limited)
+            if abs(error) < 0.3:
+                break
+            gain_db += error
     mix = limited
+    before = float(np.max(np.abs(mix)))
     ceiling = 10 ** (limiter_threshold / 20)
+    if like is not None:
+        mix = _catch_peaks(mix, ceiling)        # ein Teil des Songs behält dessen Pegel, nur die Spitzen werden leiser
     peak = float(np.max(np.abs(mix)))
     if peak > ceiling:
         mix *= ceiling / peak
@@ -1081,7 +1116,21 @@ def _limit_to(mix: np.ndarray, target_lufs: float, limiter_threshold: float, tru
         over = true_peak_db(mix) - TRUE_PEAK_DB
         if over > 0:                    # Spitzen zwischen den Samples: der Limiter sieht nur die Samples
             mix *= 10 ** (-over / 20)
-    return mix.astype(np.float32)
+    after = float(np.max(np.abs(mix)))
+    scale = (like.scale if like is not None else 1.0) * (after / before if before > 0 else 1.0)
+    return mix.astype(np.float32), gain_db, scale
+
+
+def _catch_peaks(mix: np.ndarray, ceiling: float, ms: float = 5.0) -> np.ndarray:
+    """Nur Spitzen über ceiling leiser, weich über ein paar Millisekunden davor und danach: ein Limiter, der das ganze
+    Signal kennt. Der Mittelwert über die Minima aus einem gleich breiten Fenster liegt nie über der nötigen Dämpfung."""
+    from scipy.ndimage import minimum_filter1d, uniform_filter1d
+    size = 2 * int(ms / 1000 * SAMPLE_RATE) + 1
+    need = np.minimum(1.0, ceiling / np.maximum(np.max(np.abs(mix), axis=0), 1e-12).astype(np.float64))
+    if need.min() >= 1.0:
+        return mix
+    gain = uniform_filter1d(minimum_filter1d(need, size, mode="nearest"), size, mode="nearest")
+    return (mix * gain[None, :]).astype(np.float32)
 
 
 def true_peak_db(mix: np.ndarray, chunk: int = 10 * SAMPLE_RATE) -> float:

@@ -312,7 +312,7 @@ VERSIONS = {"offvocal": ("final_offvocal.wav", "final_song_offvocal.mp3", "Off V
             "acappella": ("final_acappella.wav", "final_song_acappella.mp3", "A Cappella")}
 
 
-def _mix_versions(settings: SongSettings, result: SongResult, stems: list, mix_args: dict, level: Optional[float],
+def _mix_versions(settings: SongSettings, result: SongResult, stems: list, mix_args: dict, level,
                   report: ProgressFn) -> None:
     """Die Band ohne Gesang (Off-Vocal, zum Mitsingen und für Cover) und der Gesang allein (A-cappella), jeweils so
     laut, wie sie im Song klingen: mit denselben Einstellungen gemischt, nur stumm geschaltet (mixer: level_of)."""

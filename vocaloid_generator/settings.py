@@ -158,6 +158,9 @@ class SongSettings(BaseModel):
     # Melodie 1.3.0, jedes mit Schalter
     best_melody: bool = True           # M1: jede Sektion vielfach schreiben, die Fassung mit den meisten Punkten singt
     melody_pickups: bool = True        # M2: Auftakte vor dem Takt und vorgezogene Töne über den Taktstrich (nur 4/4)
+    melody_tensions: bool = True       # M3: Vorhalte und lange Refrain-Töne auf None oder großer Septime
+    melody_climax: bool = True         # M4: der höchste Ton des Songs kommt einmal, am Ende des letzten Refrains
+    chord_spice: float = 0.5           # M6: Akkord-Würze 0 bis 1 (Zwischendominanten, Leihakkorde, sus4, laufender Bass)
 
     active_sections: list[str] = Field(default_factory=lambda: [
         "Intro", "Verse", "PreChorus", "Chorus", "Verse", "PreChorus", "Chorus", "Bridge", "Chorus", "Outro"

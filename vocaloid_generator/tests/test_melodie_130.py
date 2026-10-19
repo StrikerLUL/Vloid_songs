@@ -48,13 +48,15 @@ def test_the_best_of_many_melodies_sings(new_composition, tmp_path, monkeypatch)
     words = _default_lyrics()["Chorus"]
     picked = []
     real_pick = melody_score.pick
-    monkeypatch.setattr(melody_score, "pick", lambda c, *a: picked.append((c, a, real_pick(c, *a))) or picked[-1][2])
+    # die Punkte im Moment der Wahl (danach rücken Höhepunkt und Akkord-Netz noch einzelne Töne)
+    monkeypatch.setattr(melody_score, "pick", lambda c, *a: picked.append(
+        (c, a, real_pick(c, *a), [melody_score.score(x, *a) for x in c])) or picked[-1][2])
     s = SongSettings(output_ordner=str(tmp_path), seed=11)
     on, _ = pipeline.compose(s)
-    assert [a[0] for _, a, _ in picked] == ["Verse", "PreChorus", "Chorus", "Bridge"]
-    assert all(len(c) == melody_score.CANDIDATES for c, _, _ in picked)
-    candidates, args, (best, points, mean) = picked[2]
-    assert points == max(melody_score.score(c, *args) for c in candidates) >= mean
+    assert [a[0] for _, a, _, _ in picked] == ["Verse", "PreChorus", "Chorus", "Bridge"]
+    assert all(len(c) == melody_score.CANDIDATES for c, _, _, _ in picked)
+    candidates, args, (best, points, mean), scores = picked[2]
+    assert points == max(scores) >= mean
     assert args[1], "der Refrain kennt die Strophe"
     off, _ = pipeline.compose(s.with_updates(best_melody=False))
     assert on["melody_data"] != off["melody_data"]
@@ -105,3 +107,69 @@ def test_phrases_start_before_the_bar_and_downbeats_are_pushed(new_composition, 
     # im 3/4-Takt bleibt alles im Takt
     _song(tmp_path, meter="3/4")
     assert not any(n.pushed for n in written[-1])
+
+
+def test_leaning_tones_resolve_and_long_chorus_tones_take_colors(new_composition, tmp_path, written):
+    tracks = _song(tmp_path)
+    notes, plan = written[-1], tracks["plan"]
+    ordered = sorted(notes, key=lambda n: n.start)
+    leaning = [(a, b) for a, b in zip(ordered, ordered[1:]) if a.tension and getattr(b.syllable, "melisma", False)
+               and abs(b.start - a.start - a.dur) < 1e-6 and 1 <= a.pitch - b.pitch <= 2]
+    assert leaning, "Vorhalte, die einen Schritt hinunter auf denselben Vokal gehen"
+    for a, b in leaning:
+        chord = plan.chord_at(a.start + (0.25 if a.pushed else 0))
+        assert a.pitch % 12 not in chord.pcs and b.pitch % 12 in chord.pcs
+    colors = [n for n in ordered if n.tension and n.dur >= 1.5]
+    assert colors, "lange Töne auf der None oder großen Septime"
+    for n in colors:
+        chord = plan.chord_at(n.start + (0.25 if n.pushed else 0))
+        assert (n.pitch - chord.root) % 12 in (2, 11)
+    _song(tmp_path, melody_tensions=False)
+    assert not any(n.tension for n in written[-1])
+
+
+def test_the_last_chorus_ends_on_the_highest_note_of_the_song(new_composition, tmp_path, written):
+    tracks = _song(tmp_path, melody_tensions=False)
+    notes, plan = written[-1], tracks["plan"]
+    sung = [n for n in notes if not getattr(n.syllable, "melisma", False)]
+    top = max(n.pitch for n in sung)
+    assert [n for n in sung if n.pitch == top] == [max(sung, key=lambda n: n.start)], "einmal, ganz am Ende"
+    last = [sec for sec in plan.sections if sec.kind == "Chorus"][-1]
+    assert last.start <= max(sung, key=lambda n: n.start).start < last.end
+    first = next(sec for sec in plan.sections if sec.kind == "Chorus")
+    hook = max(n.pitch for n in sung if first.start <= n.start < first.end)
+    assert all(n.pitch < hook for n in sung if plan.section_at(n.start).kind in ("Verse", "PreChorus", "Bridge"))
+    _song(tmp_path, melody_tensions=False, melody_climax=False)
+    off = [n for n in written[-1] if not getattr(n.syllable, "melisma", False)]
+    assert max(n.pitch for n in off) < top or len([n for n in off if n.pitch == max(m.pitch for m in off)]) > 1
+
+
+def test_chord_spice_adds_dominants_borrowed_chords_and_a_walking_bass():
+    import chord_spice
+    bars = [["I"], ["vi"], ["IV"], ["V"], ["I"], ["iii"], ["vi"], ["IV"], ["I"], ["IV", "V"], ["I"]]
+    seen = set()
+    for seed in range(40):
+        spiced, done = chord_spice.season(bars, "Chorus", "major", 1.0, random.Random(seed))
+        assert len(spiced) == len(bars)
+        seen.update(d.split(" vor ")[0] if " vor " in d else d for d in done)
+        for bar in spiced:            # jede Stufe lässt sich lesen
+            for symbol in bar:
+                from theory import parse_roman
+                parse_roman(symbol, 0)
+    assert {"III7", "laufender Bass", "sus4", "iv", "bVI bVII", "I7"} <= seen, seen
+    assert chord_spice.season(bars, "Chorus", "major", 0.0, random.Random(1)) == (bars, [])
+
+
+def test_the_song_gets_spicier_chords_only_with_the_slider(new_composition, tmp_path):
+    def chords(**updates):
+        plan = _song(tmp_path, **updates)["plan"]
+        return [(slot.start, slot.chord) for sec in plan.sections for slot in sec.chords]
+    spicy = chords(chord_spice=1.0)
+    plain = chords(chord_spice=0)
+    assert spicy != plain
+    assert chords(chord_spice=0) == plain
+    # die Würze ist für jede Wiederholung gleich: beide Refrains spielen dieselben Akkorde
+    plan = _song(tmp_path, chord_spice=1.0)["plan"]
+    refrains = [[(s.start - sec.start, s.chord.transposed(-sec.tonic)) for s in sec.chords]
+                for sec in plan.sections if sec.kind == "Chorus"]
+    assert all(r == refrains[0] for r in refrains)

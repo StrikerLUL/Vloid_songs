@@ -121,7 +121,8 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
                           imported_bars(imported_melody.get(kind, []), steps / 4))
                 for kind in set(structure) if section_config.get(kind, {}).get("has_vocals", True)}
     plan = build_plan(profile, melody_bpm or bpm, structure, key, mode, section_config, dice.part("chords"), min_bars,
-                      custom_chords=custom_chords, rerolls=dice.rerolled_kinds("chords"), meter=m.name)
+                      custom_chords=custom_chords, rerolls=dice.rerolled_kinds("chords"), meter=m.name,
+                      spice=float(extras.get("chord_spice", 0.0)), spice_seed=dice.label("chords") + ":spice")
     if vocal_range:
         plan.vocal_range = tuple(vocal_range)
     real = m.plan(plan)          # Sektionen und Akkorde an ihren Plätzen im Takt

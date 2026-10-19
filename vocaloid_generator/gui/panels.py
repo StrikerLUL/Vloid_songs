@@ -67,6 +67,7 @@ def song_panel(s: SongSettings, pick: PickFn, apply_template: Callable[[SongSett
     section_title("Melodie und Akkorde")
     for attr, text, tip in MELODY_SWITCHES:
         ui.switch(text).bind_value(s, attr).props("dense").tooltip(tip).mark(f"switch-{attr}")
+    sliders(s, MELODY_SLIDERS)
 
     section_title("Eigene Akkorde")
     chords_editor(s)
@@ -96,9 +97,6 @@ VOICE_SWITCHES = (
 
 # Band 1.3.0, jede Neuerung mit Schalter
 BAND_SWITCHES = (
-    ("intro_riff", "Eigenes Intro-Riff", "Die Lead-Stimme spielt im Intro eine eigene Figur aus zwei Takten statt der "
-                                         "Refrain-Melodie; sie kommt in einem Zwischenspiel nach dem ersten Refrain "
-                                         "und im Outro wieder und läuft im letzten Refrain leise mit"),
     ("kime", "Kime, Stopps und Fills", "Vor manchen Refrains und am Ende spielt die ganze Band dieselben Akzente mit "
                                        "Becken, in Strophen setzt sie manchmal zwei Schläge aus (nur der Gesang), und "
                                        "am Ende von Vier-Takt-Phrasen spielt ein Instrument einen kleinen Lauf. Nur im "
@@ -113,9 +111,34 @@ MELODY_SWITCHES = (
     ("melody_pickups", "Auftakte und Synkopen", "Manche Phrasen beginnen ein bis drei Silben vor dem Takt, und Töne auf "
                                                 "der Eins kommen manchmal eine Sechzehntel früher, wie im J-Pop. Nur im "
                                                 "4/4-Takt"),
+    ("melody_tensions", "Spannungstöne", "Ab und zu liegt auf der betonten Zeit ein Ton über dem Akkordton, der sich "
+                                         "auf demselben Vokal auflöst (Vorhalt), und lange Refrain-Töne landen auf "
+                                         "der None oder der großen Septime"),
+    ("melody_climax", "Höhepunkt im letzten Refrain", "Strophen bleiben unter dem Spitzenton des Refrains, und die "
+                                                      "Schlusszeile des letzten Refrains endet oben, auf dem höchsten "
+                                                      "Ton des ganzen Songs"),
+    ("intro_riff", "Eigenes Intro-Riff", "Die Lead-Stimme spielt im Intro eine eigene Figur aus zwei Takten statt der "
+                                         "Refrain-Melodie; sie kommt in einem Zwischenspiel nach dem ersten Refrain "
+                                         "und im Outro wieder und läuft im letzten Refrain leise mit"),
+)
+# (Einstellung, Text, von, bis, Schritt, Erklärung): Regler der Neuerungen aus 1.3.0, 0 = aus
+MELODY_SLIDERS = (
+    ("chord_spice", "Akkord-Würze", 0.0, 1.0, 0.05,
+     "Wie oft die Akkordfolge gewürzt wird: Zwischendominanten (III7 vor vi), Leihakkorde (iv, bVI bVII), "
+     "verminderte Durchgänge, sus4 vor der Dominante, laufender Bass und im Refrain die Marusa-Folge. 0 = nur die "
+     "Folgen des Stils"),
 )
 
 BAR_CHOICES = (2, 4, 8, 12, 16, 24, 32)
+
+
+def sliders(s: SongSettings, rows: tuple) -> None:
+    """Regler der Neuerungen aus 1.3.0 (0 = aus, 1 = 100 %)."""
+    for attr, text, lo, hi, step, tip in rows:
+        with ui.row().classes("w-full items-center gap-4"):
+            ui.label(text).classes("w-28").tooltip(tip)
+            ui.slider(min=lo, max=hi, step=step).bind_value(s, attr).props("label").classes("col") \
+                .tooltip(tip).mark(f"slider-{attr}")
 
 
 def structure_editor(s: SongSettings) -> None:

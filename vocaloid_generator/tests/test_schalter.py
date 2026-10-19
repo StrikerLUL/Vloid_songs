@@ -53,6 +53,8 @@ ELSEWHERE = {
     "vocal_swing": "test_gesang_swing.py::test_the_vocal_swings_only_when_the_band_swings_enough",
     "romaji": "test_gesang.py::test_romaji_can_be_switched_off",
     "smart_readings": "test_gesang_130.py::test_particles_and_number_words_are_sung_like_spoken",
+    "melody_tensions": "test_melodie_130.py::test_leaning_tones_resolve_and_long_chorus_tones_take_colors",
+    "melody_climax": "test_melodie_130.py::test_the_last_chorus_ends_on_the_highest_note_of_the_song",
     "english_kana": "test_gesang.py::test_romaji_lyrics_reach_the_song",
     "section_style": "test_sektions_stil.py::test_section_style_can_be_switched_off",
     "even_takes": "test_sektions_stil.py::test_takes_keep_the_style_shift_unless_neutrino_sings_the_same_every_time",

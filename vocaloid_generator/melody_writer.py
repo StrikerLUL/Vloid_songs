@@ -111,6 +111,16 @@ PICKUP_SIZES = ((1, 0.45), (2, 0.4), (3, 0.15))
 PICKUP_SHARE = {"Chorus": 0.6, "PreChorus": 0.6, "Verse": 0.5, "Bridge": 0.5}
 PUSH_SHARE = {"Chorus": 0.3, "PreChorus": 0.3, "Verse": 0.2, "Bridge": 0.2}
 PUSH_STEPS = 1          # so viele Sechzehntel früher
+# M3: Vorhalte (ein Ton über dem Akkordton auf der betonten Zeit, der sich auf demselben Vokal löst) und lange
+# Refrain-Töne auf der None oder der großen Septime
+APPOGGIATURA_SHARE = {"Chorus": 0.15, "PreChorus": 0.12, "Verse": 0.1, "Bridge": 0.15}
+APPOGGIATURA_MIN_BEATS = 1.0
+COLOR_SHARE = {"Chorus": 0.35, "Bridge": 0.2}
+COLOR_MIN_BEATS = 1.5
+MAJOR_QUALITIES = ("maj", "maj7", "add9", "maj9", "6")
+# M4: der höchste Ton des Songs kommt einmal, am Ende des letzten Refrains; so viele Halbtöne darf er über der
+# geschriebenen Stimmlage liegen
+CLIMAX_ABOVE = 2
 
 
 @dataclass
@@ -194,6 +204,7 @@ class SectionMelodyWriter:
         self.gestures = {}
         self.melisma = {}
         self.pushes = {}
+        self.tensions = {}
         # Sechzehntel pro Takt: 16, im 3/4-Takt 12 (dort schreibt der Writer im fertigen Takt, meter.py)
         self.bar_steps = int(round(section.bar_beats * STEPS_PER_BEAT))
         self.waltz = self.bar_steps == 12
@@ -466,8 +477,11 @@ class SectionMelodyWriter:
                               pitch=pitch, syllable=syl, strong=slot.strong)
                       for slot, pitch, syl in zip(slots, pitches, chunk)]
             self._push(slots, phrase, role)
-            for slot, note in zip(slots, phrase):
-                notes += self._melisma(note, role) if slot.last and slot.dur >= MELISMA_MIN_STEPS else [note]
+            for slot, group in zip(slots, self._tension(slots, phrase, role)):
+                if len(group) > 1:
+                    notes += group
+                else:
+                    notes += self._melisma(group[0], role) if slot.last and slot.dur >= MELISMA_MIN_STEPS else group
             prev = pitches[-1] if pitches else prev
         return notes
 
@@ -512,6 +526,61 @@ class SectionMelodyWriter:
                 note.dur += early
                 note.pushed = True
                 prev.dur -= early
+
+    # ── Vorhalte und Spannungstöne (M3) ──────────────────────────────────────────
+    def _tension(self, slots: list, phrase: list, role: str) -> list:
+        """[[Töne] je Einsatz]: ein Ton allein oder ein Vorhalt mit seiner Auflösung. Gleiche Stellen gleicher Phrasen
+        entscheiden gleich, damit die Hook gleich bleibt."""
+        if "melody_tensions" not in self.extras or self.kind == "Rap":
+            return [[n] for n in phrase]
+        out = []
+        for i, (slot, note) in enumerate(zip(slots, phrase)):
+            key = (role.rstrip("2"), slot.step)
+            if key not in self.tensions:
+                roll = self.rng.random()
+                if roll < APPOGGIATURA_SHARE.get(self.kind, 0.0):
+                    self.tensions[key] = "lean"
+                elif roll < APPOGGIATURA_SHARE.get(self.kind, 0.0) + COLOR_SHARE.get(self.kind, 0.0):
+                    self.tensions[key] = "color"
+                else:
+                    self.tensions[key] = ""
+            choice = self.tensions[key]
+            final = slot.last and role in ("END", "C")
+            if choice == "lean" and i > 0 and slot.strong:
+                out.append(self._lean(note))
+            elif choice == "color" and not final and note.dur >= COLOR_MIN_BEATS:
+                self._color(note)
+                out.append([note])
+            else:
+                out.append([note])
+        return out
+
+    def _lean(self, note: MelNote) -> list:
+        """Vorhalt: die erste Hälfte einen Schritt über dem Akkordton, dann auf demselben Vokal hinunter."""
+        sung = vowel(note.syllable or "")
+        if note.dur < APPOGGIATURA_MIN_BEATS or sung is None or str(note.syllable) in SPECIAL_MORAE:
+            return [note]
+        chord = self.sec.chord_at(heard_at(note))
+        scale = _local_scale(self.sec.tonic, self.sec.mode, chord)
+        upper = next((p for p in (note.pitch + 1, note.pitch + 2) if p % 12 in scale), None)
+        if upper is None or upper % 12 in chord.pcs or upper > self.hi or note.pitch % 12 not in chord.pcs:
+            return [note]
+        first = max(0.5, math.floor(note.dur) / 2)
+        return [replace(note, dur=first, pitch=upper, tension=True),
+                MelNote(note.start + first, note.dur - first, note.pitch, Mora(sung, melisma=True), False)]
+
+    def _color(self, note: MelNote) -> None:
+        """Ein langer Ton rückt auf die None oder (in Dur-Akkorden) die große Septime, wenn sie nah liegt."""
+        chord = self.sec.chord_at(heard_at(note))
+        scale = _local_scale(self.sec.tonic, self.sec.mode, chord)
+        colors = {(chord.root + 2) % 12}
+        if chord.quality in MAJOR_QUALITIES:
+            colors.add((chord.root + 11) % 12)
+        near = [p for p in range(note.pitch - 2, note.pitch + 3)
+                if p % 12 in colors and p % 12 in scale and self.lo <= p <= self.hi and p != note.pitch]
+        if near:
+            note.pitch = min(near, key=lambda p: (abs(p - note.pitch), p))
+            note.tension = True
 
     def _melisma(self, note: MelNote, role: str) -> list:
         """Der lange Schlusston gleitet auf den nächsten Akkordton darunter (oder darüber), auf demselben Vokal."""
@@ -630,6 +699,8 @@ def write_vocal_melody(plan: SongPlan, lyrics: dict, rng: random.Random, rerolls
                 log.info("%s %d singt seinen eigenen Text (%d Silben)", sec.kind, sec.occurrence, len(own))
         notes.extend(sec_notes)
     composed = [n for n in notes if not imported.get(plan.section_at(n.start).kind)]
+    if "melody_climax" in extras:
+        _plan_climax(plan, notes, composed)
     _fit_to_chords(plan, composed)
     if singable:
         make_singable(plan, composed)
@@ -646,6 +717,52 @@ def _best_of(plan: SongPlan, sec: Section, rng: random.Random, motifs, words: li
     best, points, mean = melody_score.pick(candidates, sec.kind, before, plan.vocal_range[1], sec.bar_beats)
     log.info("Beste Melodie: %s aus %d Fassungen, %.1f Punkte (Schnitt %.1f)", sec.kind, len(candidates), points, mean)
     return candidates[best]
+
+
+def _plan_climax(plan: SongPlan, notes: list, composed: list) -> None:
+    """M4: die Schlusszeile des letzten Refrains endet oben, auf dem höchsten Ton des ganzen Songs, und nur dort
+    (ein Akkordton; reicht die Stimmlage nicht darüber, rücken die anderen Töne so hoch einen Schritt tiefer).
+    Strophe, Pre-Chorus und Bridge bleiben unter dem Spitzenton der Refrain-Hook."""
+    choruses = [sec for sec in plan.sections if sec.kind == "Chorus" and sec.has_vocals]
+    mine = set(id(n) for n in composed)
+    if not choruses:
+        return
+    first, last = choruses[0], choruses[-1]
+    ending = sorted((n for n in notes if last.start <= n.start < last.end and id(n) in mine), key=lambda n: n.start)
+    if not ending:
+        return
+    held = [n for n in ending if not _held(n)]
+    final = held[-1] if held else ending[-1]
+    tail = [n for n in ending if n.start >= final.start]
+    rest = [n for n in notes if n.start < final.start or n.start >= last.end]
+    top = max((n.pitch for n in rest), default=final.pitch)
+    chord = plan.chord_at(heard_at(final))
+    hi = plan.vocal_range[1] + CLIMAX_ABOVE
+    climax = next((p for p in range(top + 1, top + 6) if p % 12 in chord.pcs and p <= hi), None) or \
+        next((p for p in range(min(top, hi), top - 5, -1) if p % 12 in chord.pcs), None)
+    if climax is None or climax < final.pitch:
+        log.info("Höhepunkt: kein Akkordton nahe %d, der Schluss bleibt", top)
+        return
+    for n in tail:
+        n.pitch = climax
+    lowered = sum(_below(plan, n, climax) for n in rest if n.pitch >= climax and id(n) in mine)
+    hook = [n.pitch for n in notes if first.start <= n.start < first.end and n.start < final.start]
+    peak = max(hook) if hook else climax
+    lowered += sum(_below(plan, n, peak) for n in notes if id(n) in mine and n.pitch >= peak
+                   and plan.section_at(n.start).kind in ("Verse", "PreChorus", "Bridge"))
+    log.info("Höhepunkt: der letzte Refrain endet auf %d (sonst höchstens %d), %d Töne tiefer", climax,
+             max((n.pitch for n in rest), default=climax), lowered)
+
+
+def _below(plan: SongPlan, n: MelNote, ceiling: int) -> int:
+    """Der Ton rückt unter ceiling, auf den nächsten Akkordton (lang oder betont) oder Ton der Tonleiter. 1 = gerückt."""
+    scale, chord = _scale_at(plan, n)
+    pcs = chord.pcs if n.strong or n.dur >= 1 else scale
+    below = [p for p in range(ceiling - 7, ceiling) if p % 12 in pcs]
+    if not below:
+        return 0
+    n.pitch = max(below)
+    return 1
 
 
 RAP_RANGE = 2           # Halbtöne um die Mitte: ein Rap ohne Sprechstimme klingt wie ein Sprechgesang

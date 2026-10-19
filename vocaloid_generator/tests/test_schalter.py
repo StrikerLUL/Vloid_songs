@@ -81,6 +81,7 @@ ELSEWHERE = {
     # 1.3.0
     "best_melody": "test_melodie_130.py::test_the_best_of_many_melodies_sings",
     "melody_pickups": "test_melodie_130.py::test_phrases_start_before_the_bar_and_downbeats_are_pushed",
+    "kime": "test_band_130.py::test_the_band_plays_kime_stops_and_fills",
 }
 # Bedienung der App, ändert den Song nicht
 APP = ("show_karaoke", "reuse_steps", "log_file", "update_check", "setup_wizard", "done_notice", "lyric_hints",

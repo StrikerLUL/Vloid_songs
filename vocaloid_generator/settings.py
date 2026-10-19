@@ -252,6 +252,8 @@ class SongSettings(BaseModel):
     real_grooves: bool = True          # Grooves und Fills echter Schlagzeuger (setup_grooves.py), wenn vorhanden
     lively_bass: bool = True           # Ghost-Notes und Slides im Bass
     guitar_strums: bool = True         # Gitarre schlägt je nach Energie andere Muster an, mit Abdämpfern
+    # Band 1.3.0, jedes mit Schalter
+    kime: bool = True                  # I2: gemeinsame Akzente (Kime), kurze Stopps und Läufe am Phrasenende (nur 4/4)
     draft: bool = False                # nur für einen Lauf (pipeline.draft_settings): schneller Entwurf
     auto_rating: bool = True           # mehrere Fassungen automatisch bewerten (setup_bewertung.py), wenn eingerichtet
     guitar_amp: bool = True            # verzerrte E-Gitarren über Verstärker und Box statt verzerrter Samples

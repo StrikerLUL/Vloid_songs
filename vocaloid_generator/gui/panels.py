@@ -87,6 +87,14 @@ def song_panel(s: SongSettings, pick: PickFn, apply_template: Callable[[SongSett
     templates_editor(s, apply_template)
 
 
+# Band 1.3.0, jede Neuerung mit Schalter
+BAND_SWITCHES = (
+    ("kime", "Kime, Stopps und Fills", "Vor manchen Refrains und am Ende spielt die ganze Band dieselben Akzente mit "
+                                       "Becken, in Strophen setzt sie manchmal zwei Schläge aus (nur der Gesang), und "
+                                       "am Ende von Vier-Takt-Phrasen spielt ein Instrument einen kleinen Lauf. Nur im "
+                                       "4/4-Takt"),
+)
+
 # Melodie 1.3.0, jede Neuerung mit Schalter
 MELODY_SWITCHES = (
     ("best_melody", "Beste Melodie suchen", "Jede Sektion wird 30-mal geschrieben; es singt die Fassung mit den meisten "
@@ -547,6 +555,8 @@ def band_panel(s: SongSettings) -> None:
         .mark("switch-guitar_strums") \
         .tooltip("Ruhige Teile in Vierteln, Refrains in Sechzehnteln mit abgedämpften Anschlägen; runter klingen die "
                  "tiefen Saiten, hoch die hohen (Spielweise geschlagen)")
+    for attr, text, tip in BAND_SWITCHES:
+        ui.switch(text).bind_value(s, attr).tooltip(tip).mark(f"switch-{attr}")
     ui.switch("Vocal Chops im Drop").bind_value(s, "vocal_chops").mark("switch-vocal_chops") \
         .tooltip("Kurze Schnipsel der Hauptstimme, umgestimmt auf die Akkorde, spielen im Drop einen Riff (im Future "
                  "Bass auch im Intro). Nur in Stilen mit Drop, nicht in Ballade, Rock, City Pop und Lo-Fi")

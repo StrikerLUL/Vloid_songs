@@ -39,7 +39,8 @@ ProgressFn = Callable[[float, str], None]
 
 # Neuerungen aus 1.3.0, die die Noten ändern: orchestrate_song bekommt die eingeschalteten als extras
 NEW_COMPOSITION = ("best_melody", "melody_pickups", "intro_riff", "kime", "melody_tensions", "melody_climax",
-                   "chord_spice", "melody_triplets")
+                   "chord_spice", "melody_triplets", "band_groove", "bass_runs", "band_runs", "anison_grooves",
+                   "section_buildup")
 COMPOSITION_EXTRAS = NEW_COMPOSITION     # die Tests schalten sie hier ab (conftest.py)
 
 

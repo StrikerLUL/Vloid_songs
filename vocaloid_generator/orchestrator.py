@@ -8,6 +8,7 @@ import pretty_midi
 
 import grooves
 import meter as meters
+import anison
 import riff as riffs
 import ritardando as rits
 from drums import CRASH, GROOVES, KICK, OPEN_HAT, HAT, PEDAL_HAT, RIDE, TAMBOURINE, TOMS, drum_section, lead_in
@@ -42,7 +43,8 @@ SWING_MAX = 1 / 6                       # Swing 0.5 schiebt die zweite Sechzehnt
 GROOVE_SWING_UNTIL = 0.2
 SLIDE_SECONDS, SLIDE_STEPS = 0.08, 8     # so lange gleitet ein Bass-Slide, in so vielen Schritten
 # Neuerungen aus 1.3.0, die nur im 4/4-Takt spielen (Synkopen und Triolen im Sechzehntel-Raster)
-FOUR_FOUR_ONLY = ("melody_pickups", "kime", "melody_triplets")
+FOUR_FOUR_ONLY = ("melody_pickups", "kime", "melody_triplets", "band_groove", "bass_runs", "band_runs",
+                  "anison_grooves")
 # Teile mit eigenem Zufall (wie settings.REROLLABLE): Akkorde und Ablauf, Gesangsmelodie, jedes Instrument
 REROLLABLE = ("chords",) + INSTRUMENTS
 
@@ -171,17 +173,41 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
                 drops.append((piece.start, piece.end, m.drop))
             else:
                 groove = "halftime" if piece.feel == "halftime" else profile.groove(sec.kind)
+                if "anison_grooves" in extras:
+                    groove = anison.groove_for(piece, profile.name, bpm, groove, dice.label("drums"))
                 events["drums"] += drum_section(piece, groove, rngs["drums"], drummer)
                 drops.append((piece.start, piece.end, meters.drum_drop(GROOVES.get(groove, {})) if m.native else None))
 
+    if "anison_grooves" in extras:
+        done = anison.apply(plan, events, profile.name, bpm, dice.label("drums"))
+        log.info("Anison: %d Wirbel in den Refrain, %d Becken-Stopps", len(done["rolls"]), len(done["stops"]))
+    if "bass_runs" in extras:
+        import bass_runs
+        done = bass_runs.apply(plan, events, dice.label("bass"), profile.name)
+        log.info("Bass: %d Läufe, %d Fills, %d Oktaven, %d Funk-Oktaven", done["runs"], done["fills"],
+                 done["octaves"], done["funk"])
+    if "section_buildup" in extras:
+        import buildup
+        done = buildup.apply(plan, events)
+        log.info("Aufbau: Strophe beginnt allein: %s, Schicht mehr in %d Refrains", done["verse"] is not None,
+                 len(done["choruses"]))
     if "kime" in extras:
         import kime
         done = kime.apply(plan, events, dice.label("drums"), profile.name)
         log.info("Kime in %d Takten, %d Stopps, %d Läufe am Phrasenende", len(done["kime"]), len(done["stops"]),
                  len(done["fills"]))
     _breaks_before_chorus(plan, events)
+    if "band_runs" in extras:
+        import band_runs
+        done = band_runs.apply(plan, events, vocal_notes, dice.label("piano"))
+        log.info("Läufe: %d Klavierläufe, %d Glissandi, %d Streicherläufe, %d Refrains mit Klavier-Hook",
+                 done["runs"], done["glissandi"], done["strings"], done["hooks"])
     _final_chord(plan, events)
     _spread_stereo(plan, profile, events, instrument_styles)
+    if "band_groove" in extras:
+        import groove_feel
+        moved = groove_feel.apply(events, plan.total_beats - BEATS_PER_BAR)
+        log.info("Band im Groove: %d Töne mit dem Schlagzeuger verschoben", sum(moved.values()))
     events = _into_meter(m, events, drops)
     rit = rits.window(real, profile.name) if ritardando else None
     if rit:

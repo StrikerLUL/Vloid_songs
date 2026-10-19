@@ -87,6 +87,11 @@ ELSEWHERE = {
     "melody_pickups": "test_melodie_130.py::test_phrases_start_before_the_bar_and_downbeats_are_pushed",
     "kime": "test_band_130.py::test_the_band_plays_kime_stops_and_fills",
     "intro_riff": "test_band_130.py::test_the_song_has_its_own_riff_and_an_interlude",
+    "band_groove": "test_band_130.py::test_the_band_plays_in_the_pocket_of_the_drummer",
+    "bass_runs": "test_band_130.py::test_the_bass_runs_fills_jumps_octaves_and_plays_funk",
+    "band_runs": "test_band_130.py::test_piano_and_strings_run_glide_and_play_the_hook",
+    "anison_grooves": "test_band_130.py::test_fast_anime_songs_get_anison_grooves_rolls_and_stops",
+    "section_buildup": "test_band_130.py::test_the_first_verse_starts_alone_and_choruses_grow",
 }
 # Bedienung der App, ändert den Song nicht
 APP = ("show_karaoke", "reuse_steps", "log_file", "update_check", "setup_wizard", "done_notice", "lyric_hints",

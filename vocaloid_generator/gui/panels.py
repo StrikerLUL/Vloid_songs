@@ -101,6 +101,21 @@ BAND_SWITCHES = (
                                        "Becken, in Strophen setzt sie manchmal zwei Schläge aus (nur der Gesang), und "
                                        "am Ende von Vier-Takt-Phrasen spielt ein Instrument einen kleinen Lauf. Nur im "
                                        "4/4-Takt"),
+    ("band_groove", "Band im Groove", "Bass, Gitarre und Klavier übernehmen die Verschiebungen und Betonungen des "
+                                      "Schlagzeugers, wie eine Band, die zusammen spielt (am deutlichsten mit den "
+                                      "Grooves echter Schlagzeuger). Nur im 4/4-Takt"),
+    ("bass_runs", "Bass-Läufe", "Der Bass läuft zum nächsten Akkord, spielt am Ende jeder Vier-Takt-Phrase einen Fill, "
+                                "springt im Refrain in die Oktave und spielt im City Pop funkige Oktaven mit "
+                                "abgedämpften Tönen. Nur im 4/4-Takt"),
+    ("band_runs", "Läufe", "Klavierläufe in Sechzehnteln, ein Glissando vor dem Refrain, Streicher, die nach oben in "
+                           "den Refrain laufen, und im Refrain die Hook vom Klavier in Oktaven. Nur im 4/4-Takt"),
+    ("anison_grooves", "Anison-Grooves", "In schnellen Songs (ab 140 BPM: J-Pop Energy, Rock, Idol-Pop, Dark "
+                                         "Vocaloid, Kawaii) 2-Beat im Refrain, Disco-Hi-Hats im Pre-Chorus, "
+                                         "Tom-Groove in der ersten Strophe, Snare-Wirbel als Anlauf und Becken-Stopps. "
+                                         "Nur im 4/4-Takt"),
+    ("section_buildup", "Aufbau in der Sektion", "Die erste Strophe beginnt nur mit Klavier oder Gitarre und Gesang, "
+                                                 "nach vier Takten kommen Bass und Schlagzeug dazu; die zweite Hälfte "
+                                                 "jedes Refrains bekommt eine Schicht mehr"),
 )
 
 # Melodie 1.3.0, jede Neuerung mit Schalter

@@ -261,6 +261,11 @@ class SongSettings(BaseModel):
     # Band 1.3.0, jedes mit Schalter
     intro_riff: bool = True            # I1: eigenes Riff in Intro, Zwischenspiel (nach dem ersten Refrain) und Outro
     kime: bool = True                  # I2: gemeinsame Akzente (Kime), kurze Stopps und Läufe am Phrasenende (nur 4/4)
+    band_groove: bool = True           # I3: Bass, Gitarre und Klavier spielen im Timing des Schlagzeugers (nur 4/4)
+    bass_runs: bool = True             # I4: Bass-Läufe, Fills am Phrasenende, Oktaven im Refrain, City-Pop-Funk
+    band_runs: bool = True             # I5: Klavierläufe, Glissando und Streicherlauf in den Refrain, Klavier-Hook
+    anison_grooves: bool = True        # I6: 2-Beat, Disco-Hi-Hat, Tom-Groove, Wirbel und Becken-Stopps (schnelle Stile)
+    section_buildup: bool = True       # I7: erste Strophe beginnt nur mit Klavier/Gitarre, Refrain mit Schicht mehr
     draft: bool = False                # nur für einen Lauf (pipeline.draft_settings): schneller Entwurf
     auto_rating: bool = True           # mehrere Fassungen automatisch bewerten (setup_bewertung.py), wenn eingerichtet
     guitar_amp: bool = True            # verzerrte E-Gitarren über Verstärker und Box statt verzerrter Samples

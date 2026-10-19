@@ -59,6 +59,13 @@ GROOVES = {
     "lofi_light":  {KICK: [(0, 0.8), (10, 0.6)], RIM: [(4, 0.6), (12, 0.6)], HAT: _eighths(0.4, 0.28)},
     "idol_verse":  {KICK: [(0, 1.0), (8, 0.9), (10, 0.7)], SNARE: [(4, 1.0), (12, 1.0)], HAT: _sixteenths(0.7, 0.5, 0.3),
                     TAMBOURINE: [(4, 0.55), (12, 0.55)]},
+    # Anison-Grooves (1.3.0, anison.py): 2-Beat, Disco-Hi-Hat und Tom-Groove statt Hi-Hats
+    "two_beat":    {KICK: [(s, 1.0 if s % 8 == 0 else 0.9) for s in range(0, 16, 4)],
+                    SNARE: [(s, 0.95) for s in range(2, 16, 4)], RIDE: [(s, 0.7) for s in range(0, 16, 2)]},
+    "disco":       {KICK: [(s, 1.0) for s in range(0, 16, 4)], SNARE: [(4, 1.0), (12, 1.0)],
+                    HAT: [(s, 0.6) for s in range(0, 16, 4)], OPEN_HAT: [(s, 0.75) for s in range(2, 16, 4)]},
+    "tom_verse":   {KICK: [(0, 1.0), (8, 0.9), (10, 0.7)], SNARE: [(4, 0.95), (12, 0.95)],
+                    TOMS[-1]: [(s, 0.7 if s % 4 == 0 else 0.55) for s in range(0, 16, 2)]},
 }
 
 

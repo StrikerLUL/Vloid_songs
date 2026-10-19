@@ -128,6 +128,53 @@ nichts geändert (z. B. nur der Mix), singt NEUTRINO nicht noch einmal.
 **Updates.** Einmal am Tag sieht die App nach, ob es eine neue Version gibt; dann steht oben „Update da“. „Update
 holen“ lädt die neue Setup.exe und startet sie, deine Daten bleiben. Danach zeigt „Was ist neu“, was sich geändert hat.
 
+## Neu in 1.3
+
+1.3 macht Gesang, Melodie und Band besser. Alles ist ab Werk an (außer der KI-Melodie) und hat einen eigenen
+Schalter; ausgeschaltet klingt es wie in 1.2.
+
+**Gesang** (Tab Gesang). „Tonhöhe glätten“ zieht schiefe Töne sanft zur Note, „Härte zähmen“ nimmt schrille Stellen
+auf hohen, lauten Tönen heraus, „Verzierungen“ singt dezent Shakuri (von unten in den Ton), Fall am Phrasenende und
+Kobushi. „Gesang im Groove“ legt die Stimme je Stil etwas hinter den Schlag (Ballade, City Pop, Lo-Fi) oder davor
+(Rock, Drum and Bass). Mit DiffSinger singt die Stimme in der Strophe hauchiger und im Refrain mit mehr Spannung.
+
+**Gruppe.** Tab Gesang › Gruppe: drei oder vier deiner NEUTRINO-Stimmen singen den Refrain zusammen, links, Mitte und
+rechts verteilt; jede Strophe und die Bridge singt reihum eine von ihnen allein. Dafür müssen so viele Stimmen in
+NEUTRINO installiert sein.
+
+**Sprechen.** Im Ablauf die Sektion „Sprechen“ anhängen und im Text `[Sprechen]` über die Zeile schreiben. VOICEVOX
+spricht sie frei, wie man einen Satz sagt, mit Hall, wie am Telefon oder trocken (Tab Gesang › Sprechen klingt); die
+Band spielt darunter leise, das Schlagzeug schweigt. Ohne VOICEVOX fällt die Zeile weg.
+
+**Richtig lesen.** Tab Text › Partikel erkennen: は, へ und を werden auch in reinen Kana richtig gesungen (きみは →
+きみわ), Zahlwörter wie 一回 als „いっかい“. Eigene Lesungen schreibst du in `Lesungen.txt` im Datenordner, eine pro
+Zeile als `Wort=Lesung`.
+
+**Melodie** (Tab Song). Jede Sektion wird 30-mal geschrieben, und die eingängigste singt („Beste Melodie suchen“).
+Phrasen beginnen auch vor dem Takt, lange Töne dürfen Spannungstöne sein, der letzte Refrain endet auf dem höchsten
+Ton des Songs, und es gibt Triolen. „Akkord-Würze“ (Regler) bringt Zwischendominanten, Leihakkorde und die
+Marusa-Folge in die Akkorde. „Eigenes Intro-Riff“ gibt Intro, Zwischenspiel und Outro ein eigenes Riff.
+
+**KI-Melodie (Versuch).** Tab Pfade, unter der KI-Begleitung: das Modell schlägt vier Refrain-Melodien vor; singt eine
+besser als die komponierte (nach denselben Punkten wie „Beste Melodie suchen“), singen alle Refrains sie. Ab Werk aus,
+braucht die eingerichtete KI-Begleitung.
+
+**Band** (Tab Band). Die Band spielt gemeinsame Akzente und Stopps (Kime), kleine Fills am Phrasenende und im Timing
+des Schlagzeugers. Der Bass läuft zum nächsten Akkord und spielt im City Pop Funk, das Klavier spielt Läufe und vor dem
+Refrain ein Glissando, schnelle Songs bekommen 2-Beat und Snare-Wirbel, und die erste Strophe beginnt klein.
+
+**Surge-Klänge.** Hilfe › Einrichten › Surge XT (etwa 50 MB) lädt den kostenlosen Synthesizer Surge XT und fünf seiner
+Klänge. Dann spielen Supersaw, Pluck, Chip-Lead, Future-Bass-Akkorde und Reese-Bass daraus statt aus den eigenen
+Synths, gleich laut (Schalter Tab Band › Surge-Klänge).
+
+**Verstärker.** Hilfe › Einrichten › Gitarren-Verstärker (etwa 1 MB) lädt zwei Modelle echter Verstärker für den
+Neural Amp Modeler: einen Marshall JCM2000 für Overdrive- und einen Peavey 6505+ für Distortion-Gitarren. Verzerrte
+Gitarren klingen damit wie über einen echten Verstärker; das Rendern dauert dann etwas länger (Schalter Tab Band ›
+Verstärker, nur mit „Verzerrte E-Gitarren über Verstärker und Box“).
+
+**Druck im Mix** (Tab Mix › Druck): Parallelkompression auf dem Schlagzeug, ein Bus-Kompressor für die Band und ein
+Mehrband-Kompressor im Master.
+
 ## Neu in 1.2
 
 **3/4- und 6/8-Takt.** Tab Song › Takt. Im 3/4-Takt spielt die Band Bum-Tschak-Tschak wie ein Walzer, im 6/8-Takt
@@ -197,6 +244,12 @@ löscht ihn (neu einrichten geht jederzeit). Darunter: wie groß Songs und aufge
 | Off-Vocal und A-cappella, True Peak, MP3-Tags | Tab Mix |
 | Flügel, Bass und Gitarre aus Aufnahmen, Lyric-Video in den Farben des Stils | Tab Pfade |
 | Wiederverwenden, Protokoll, Update-Suche, Assistent beim Start, Meldung wenn fertig, Tastenkürzel, Projekte aufheben, Größe des Verlaufs, Datenordner | Pfade › App |
+| Tonhöhe glätten, Härte zähmen, Verzierungen, Gesang im Groove, DiffSinger-Ausdruck, Gruppe, Klang von „Sprechen“ (1.3) | Tab Gesang |
+| Partikel erkennen (1.3) | Tab Text |
+| Beste Melodie, Auftakte, Spannungstöne, Höhepunkt, Triolen, Akkord-Würze, Intro-Riff (1.3) | Tab Song |
+| Kime, Band im Groove, Bass-Läufe, Läufe, Anison-Grooves, Aufbau, Surge-Klänge, Verstärker (1.3) | Tab Band |
+| Druck (1.3) | Tab Mix |
+| KI-Melodie (1.3, Versuch) | Tab Pfade |
 
 ## Wo was liegt
 
@@ -594,6 +647,12 @@ uv run vocaloid_generator\main.py --style Rock --bpm 140 --key E --scale minor -
 | `--ohne-true-peak`, `--ohne-offvocal`, `--ohne-tags` | Limiter nur auf die Samples, keine MP3s ohne Gesang und nur mit Gesang, MP3 ohne Tags |
 | `--ohne-band-samples` | Flügel, Bass und Gitarre aus dem SoundFont statt aus den Aufnahmen |
 | `--video-hintergrund BILD`, `--ohne-stilfarben` | eigenes Hintergrundbild fürs Lyric-Video, oder dunkel mit pinkem Text wie bis 1.1 |
+| `--ohne-tonhoehe-glaetten`, `--ohne-haerte-zaehmen`, `--ohne-verzierungen`, `--ohne-gesang-im-groove`, `--ohne-diffsinger-ausdruck`, `--ohne-partikel` | Gesang 1.3 einzeln abschalten: schiefe Töne bleiben, keine Zähmung schriller Stellen, keine Verzierungen, Gesang genau auf dem Schlag, DiffSinger wie das Varianz-Modell, は/へ/を wie geschrieben |
+| `--gruppe 3\|4`, `--sprechen-klang Hall\|Telefon\|trocken` | drei oder vier NEUTRINO-Stimmen singen als Gruppe (0 = aus); wie die Sektion „Sprechen“ klingt |
+| `--ohne-beste-melodie`, `--ohne-auftakte`, `--ohne-spannungstoene`, `--ohne-hoehepunkt`, `--ohne-triolen`, `--ohne-akkord-wuerze`, `--ohne-intro-riff` | Melodie 1.3 einzeln abschalten |
+| `--ki-melodie`, `--ohne-ki-melodie` | das Modell der KI-Begleitung schlägt Refrain-Melodien vor (Versuch), oder nicht |
+| `--ohne-kime`, `--ohne-band-groove`, `--ohne-bass-laeufe`, `--ohne-laeufe`, `--ohne-anison-grooves`, `--ohne-aufbau` | Band 1.3 einzeln abschalten |
+| `--ohne-surge-klaenge`, `--ohne-verstaerker-modelle`, `--ohne-druck` | eigene Synths statt Surge XT, eingebauter Verzerrer statt Verstärker-Modell, Mix ohne Parallel-, Bus- und Mehrband-Kompression |
 | `-v` | alle Details ausgeben |
 
 Die fertigen Dateien landen in `Songs` im Datenordner (oder im Ordner aus den Einstellungen): `final_song.mp3`, `final_mix.wav`, `final_song_offvocal.mp3` (ohne Gesang), `final_song_acappella.mp3` (nur Gesang), die einzelnen Spuren als WAV und MIDI, `vocals.xml` für NEUTRINO, die `.ust`-Dateien für OpenUtau und `liedtext.json` mit der Zeit jeder Silbe (für das Mitlesen und das Lyric-Video).

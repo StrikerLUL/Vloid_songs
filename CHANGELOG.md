@@ -2,6 +2,75 @@
 
 Jede Version hat hier einen Abschnitt. Die App zeigt ihn einmal nach einem Update (Hilfe › Was ist neu).
 
+## 1.3.0
+
+Diese Version macht Gesang, Melodie und Band besser. Jede Neuerung hat einen Schalter (oder Regler) und eine Option
+auf der Kommandozeile; ausgeschaltet klingt alles wie in 1.2.
+
+**Gesang** (Tab Gesang)
+
+- **Tonhöhe glätten** (Regler, `--ohne-tonhoehe-glaetten`): schiefe Töne werden sanft zur Note gezogen, Vibrato und
+  Übergänge bleiben.
+- **Härte zähmen** (`--ohne-haerte-zaehmen`): wie das Plugin soothe2 werden nur die Frequenzen leiser, die bei hohen,
+  lauten Tönen gerade schrill herausstechen.
+- **Verzierungen** (Regler, `--ohne-verzierungen`): dezent wie in J-Pop und Vocaloid: Shakuri (von unten in den Ton),
+  Fall am Phrasenende und Kobushi (ein kleiner Schlenker in langen Tönen). Am deutlichsten in der Ballade, im Kawaii
+  Chiptune gar nicht.
+- **Gesang im Groove** (`--ohne-gesang-im-groove`): je Stil singt die Stimme ein paar Millisekunden hinter dem Schlag
+  (Ballade, City Pop, Lo-Fi) oder davor (Rock, Drum and Bass).
+- **Gruppe** (Auswahl Gruppe, `--gruppe 3` oder `4`): drei oder vier deiner NEUTRINO-Stimmen singen den Refrain
+  zusammen, im Panorama verteilt; jede Strophe und die Bridge singt reihum eine von ihnen allein.
+- **Partikel erkennen** (Tab Text, `--ohne-partikel`): は, へ und を werden auch in reinen Kana richtig gesungen,
+  Zahlwörter wie 一回 als „いっかい“; eigene Lesungen in `Lesungen.txt` im Datenordner („Wort=Lesung“).
+- **Sektion „Sprechen“** (`[Sprechen]` im Text): eine Zeile wird frei gesprochen, nicht im Takt, mit Hall, wie am
+  Telefon oder trocken (Auswahl „Sprechen klingt“, `--sprechen-klang`). Braucht VOICEVOX.
+- **DiffSinger-Ausdruck** (`--ohne-diffsinger-ausdruck`): hauchiger in der Strophe, mehr Spannung im Refrain und auf
+  hohen Tönen, lange Töne werden zum Ende hin hauchiger.
+
+**Melodie** (Tab Song)
+
+- **Beste Melodie suchen** (`--ohne-beste-melodie`): jede Sektion wird 30-mal geschrieben, es singt die Fassung mit
+  den meisten Punkten (klarer Höhepunkt, Schritte und Sprünge gemischt, wiederkehrende Motive).
+- **Auftakte und Synkopen** (`--ohne-auftakte`): Phrasen beginnen vor dem Takt, betonte Töne kommen eine Achtel früher.
+- **Spannungstöne** (`--ohne-spannungstoene`): Vorhalte, die sich auflösen, und lange Refrain-Töne auf None und Sexte.
+- **Höhepunkt im letzten Refrain** (`--ohne-hoehepunkt`): der letzte Refrain endet auf dem höchsten Ton des Songs.
+- **Triolen** (`--ohne-triolen`): Achteltriolen und punktierte Achtel, als echte Triolen für NEUTRINO.
+- **Akkord-Würze** (Regler, `--ohne-akkord-wuerze`): Zwischendominanten, Leihakkorde, verminderte Durchgänge, sus4 und
+  die Marusa-Folge im Refrain.
+- **KI-Melodie (Versuch, ab Werk aus)** (Tab Pfade, `--ki-melodie`): das Modell der KI-Begleitung schlägt vier
+  Refrain-Melodien vor; singt eine besser als die komponierte, singen alle Refrains sie. Braucht die eingerichtete
+  KI-Begleitung.
+
+**Band** (Tab Band)
+
+- **Eigenes Intro-Riff** (Tab Song, `--ohne-intro-riff`): Intro, Zwischenspiel nach dem ersten Refrain und Outro
+  bekommen ein eigenes Riff statt der Refrain-Melodie.
+- **Kime, Stopps und Fills** (`--ohne-kime`): die ganze Band spielt dieselben Akzente, setzt kurz aus und spielt am
+  Ende der Phrasen kleine Läufe.
+- **Band im Groove** (`--ohne-band-groove`): Bass, Gitarre und Klavier spielen im Timing des Schlagzeugers.
+- **Bass-Läufe** (`--ohne-bass-laeufe`): Läufe zum nächsten Akkord, Fills, Oktaven im Refrain, im City Pop Funk mit
+  abgedämpften Tönen.
+- **Läufe** (`--ohne-laeufe`): Klavierläufe, ein Glissando vor dem Refrain, Streicher, die in den Refrain laufen, die
+  Hook vom Klavier in Oktaven.
+- **Anison-Grooves** (`--ohne-anison-grooves`): in schnellen Songs 2-Beat im Refrain, Disco-Hi-Hats, Tom-Groove,
+  Snare-Wirbel und Becken-Stopps.
+- **Aufbau in der Sektion** (`--ohne-aufbau`): die erste Strophe beginnt nur mit Klavier oder Gitarre, jeder Refrain
+  bekommt in der zweiten Hälfte eine Schicht mehr.
+- **Surge-Klänge** (Einrichten › Surge XT, etwa 50 MB; `--ohne-surge-klaenge`): Supersaw, Pluck, Chip-Lead,
+  Future-Bass-Akkorde und Reese-Bass spielen Werks-Klänge des kostenlosen Synthesizers Surge XT.
+- **Verstärker** (Einrichten › Gitarren-Verstärker, etwa 1 MB; `--ohne-verstaerker-modelle`): verzerrte E-Gitarren
+  spielen über Modelle echter Verstärker (Neural Amp Modeler): Marshall JCM2000 für Overdrive, Peavey 6505+ für
+  Distortion. Das Rendern dauert damit etwas länger.
+
+**Mix** (Tab Mix)
+
+- **Druck** (`--ohne-druck`): Parallelkompression auf dem Schlagzeug, ein Bus-Kompressor, der die Band zusammenhält,
+  und ein Mehrband-Kompressor im Master.
+
+**Behoben**
+
+- Ein unter „Klänge aus dem VST-Instrument“ gespeicherter Klang verlor die Töne ganz am Anfang der Spur.
+
 ## 1.2.2
 
 Fehler aus dem Test von 1.2.1 behoben.

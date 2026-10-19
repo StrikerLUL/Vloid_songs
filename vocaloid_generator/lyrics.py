@@ -8,6 +8,8 @@
 # Schrift steht. Englische Wörter (love, baby) werden zu Katakana, so wie man sie in J-Pop singt (ラブ, ベイビー):
 # erst eine kleine Liste typischer Song-Wörter, dann das Wörterbuch von alkana, dann das Modell von e2k. NEUTRINO kann
 # kein Englisch singen. Ohne diesen Schalter bleiben sie, wie sie sind.
+# Mit „Partikel erkennen“ (1.3.0, G6) werden は, へ und を auch in reinen Kana wie Partikel gesungen (わ, え, お), und
+# Zahlwörter wie 一回 klingen richtig (readings.py); eigene Lesungen aus Lesungen.txt gelten immer.
 import functools
 import logging
 import re
@@ -106,16 +108,27 @@ def shared_only(lyrics: dict) -> dict:
     return {key: value for key, value in lyrics.items() if OCCURRENCE not in key}
 
 
-def parse_lyrics(text: str, romaji: bool = True, english: bool = False) -> dict:
+def options(settings) -> dict:
+    """Wie der Text der Einstellungen gelesen wird, als Schlüsselwörter für parse_lyrics, section_lines und syllables."""
+    import readings
+    return {"romaji": settings.romaji, "english": settings.english_kana,
+            "smart": settings.smart_readings and readings.ACTIVE, "own": readings.own_readings()}
+
+
+def parse_lyrics(text: str, romaji: bool = True, english: bool = False, smart: bool = False,
+                 own: dict = None) -> dict:
     """
     Zerlegt den Lyrics-Text der App in {Sektion: [Silben]}.
     Format: eine Überschrift wie [Verse] pro Sektion, darunter Silben mit Leerzeichen getrennt.
-    Text vor der ersten Überschrift wird ignoriert. english: englische Wörter als Katakana singen.
+    Text vor der ersten Überschrift wird ignoriert. english: englische Wörter als Katakana singen. smart: Partikel und
+    Zahlwörter erkennen, own: eigene Lesungen {Wort: Lesung} (readings.py).
     """
-    return {name: [s for line in lines for s in line] for name, lines in section_lines(text, romaji, english).items()}
+    return {name: [s for line in lines for s in line]
+            for name, lines in section_lines(text, romaji, english, smart, own).items()}
 
 
-def section_lines(text: str, romaji: bool = True, english: bool = False) -> dict:
+def section_lines(text: str, romaji: bool = True, english: bool = False, smart: bool = False,
+                  own: dict = None) -> dict:
     """{Sektion: [[Silben einer Zeile], ...]}: wie parse_lyrics, aber Zeile für Zeile (für den Text zum Mitlesen)."""
     sections = {}
     current = None
@@ -126,35 +139,60 @@ def section_lines(text: str, romaji: bool = True, english: bool = False) -> dict
             current = normalize_section(header.group(1))
             sections.setdefault(current, [])
         elif current and line:
-            sung = syllables(line, romaji, english)
+            sung = syllables(line, romaji, english, smart, own)
             if sung:
                 sections[current].append(sung)
     return {name: lines for name, lines in sections.items() if lines}
 
 
-def syllables(line: str, romaji: bool = True, english: bool = False) -> list:
+def syllables(line: str, romaji: bool = True, english: bool = False, smart: bool = False,
+              own: dict = None) -> list:
     """
     Eine Textzeile als Silben zum Singen. Japanisch wird in Moren zerlegt, ob mit Leerzeichen oder ohne,
     Kanji werden vorher gelesen. romaji: Romaji wird vorher japanisch (romaji_to_kana). english: übrige Wörter in
-    lateinischer Schrift werden zu Katakana (english_to_kana); ohne bleiben sie ganz (wie bisher).
+    lateinischer Schrift werden zu Katakana (english_to_kana); ohne bleiben sie ganz (wie bisher). smart: Partikel
+    auch in reinen Kana und Zahlwörter erkennen; own: eigene Lesungen {Wort: Lesung}.
     """
-    if romaji or english:
-        line = latin_to_kana(line, romaji, english)
+    line = _respelled(line, romaji, english, smart, own)
     tokens = line.split()
     if len(tokens) > 1 and all(_JAPANESE.search(t) and not _KANJI.search(t) for t in tokens):
         # Kana mit Leerzeichen zwischen den Silben (よ る の ま ち): als ganzen Satz lesen, damit die Wörter
-        # und ihr Akzent erkannt werden; die Silben bleiben genau so, wie sie dastehen
+        # und ihr Akzent erkannt werden; die Silben bleiben genau so, wie sie dastehen (bis auf die Partikel)
         spaced = [m for t in tokens for m in morae(to_kana(t))]
-        whole = accented_morae("".join(tokens))
-        if [str(m) for m in whole] == spaced:
+        whole = accented_morae("".join(tokens), smart)
+        if len(whole) == len(spaced) and all(str(a) == b or (smart and _PARTICLES.get(b) == str(a))
+                                             for a, b in zip(whole, spaced)):
             return whole
     out = []
     for token in tokens:
         if _JAPANESE.search(token):
-            out += accented_morae(token)
+            out += accented_morae(token, smart)
         else:
             out.append(token)
     return out
+
+
+def _respelled(line: str, romaji: bool, english: bool, smart: bool, own: dict, found: list = None) -> str:
+    """Die Zeile vor dem Lesen: eigene Lesungen, Romaji und Englisch, dann (smart) Zahlwörter in Kana."""
+    import readings
+    if own:
+        line = readings.respell(_FURIGANA.sub(lambda m: m.group(2), line), False, own, found)
+    if romaji or english:
+        line = latin_to_kana(line, romaji, english)
+    if smart:
+        line = readings.respell(_FURIGANA.sub(lambda m: m.group(2), line), True, None, found)
+    return line
+
+
+def changes(line: str, romaji: bool = True, english: bool = False, smart: bool = False, own: dict = None) -> list:
+    """[(geschrieben, gesungen)]: was eigene Lesungen und „Partikel erkennen“ an der Zeile ändern (für den Text-Helfer)."""
+    found = []
+    line = _respelled(line, romaji, english, smart, own, found)
+    if smart:
+        written, sung = syllables(line, False, False), syllables(line, False, False, True)
+        if len(written) == len(sung):
+            found += [(str(a), str(b)) for a, b in zip(written, sung) if _PARTICLES.get(str(a)) == str(b)]
+    return list(dict.fromkeys(found))
 
 
 def romaji_to_kana(line: str) -> str:
@@ -263,13 +301,14 @@ def _romaji_kana(token: str) -> str:
     return kana if kana and all("\u3041" <= c <= "\u309f" or c == "ー" for c in kana) else ""
 
 
-def accented_morae(text: str) -> list:
+def accented_morae(text: str, smart: bool = False) -> list:
     """
     Moren mit Tonhöhenakzent: 君の声 → き(L) み(H) の(H) こ(H) え(L). Wörter beginnen mit word_start,
-    Partikel bleiben auf der Höhe, die das Wort davor ihnen lässt. Ohne Wörterbuch nur die Moren.
+    Partikel bleiben auf der Höhe, die das Wort davor ihnen lässt. Ohne Wörterbuch nur die Moren. smart: Partikel
+    auch in reinen Kana erkennen.
     """
     out, flat_before = [], False
-    for reading, pos1, accent in _words(text):
+    for reading, pos1, accent in _words(text, smart):
         ms = morae(reading)
         if not ms:
             continue
@@ -329,24 +368,38 @@ def to_kana(text: str) -> str:
     return "".join(reading for reading, _, _ in _words(text))
 
 
-def _words(text: str) -> list:
-    """[(Lesung in Hiragana, Wortart, Akzentkern oder None)] eines japanischen Texts."""
+def _words(text: str, smart: bool = False) -> list:
+    """[(Lesung in Hiragana, Wortart, Akzentkern oder None)] eines japanischen Texts. Reine Kana werden gesungen, wie
+    sie dastehen; mit smart auch dort die Partikel は, へ, を wie gesprochen."""
     text = _FURIGANA.sub(lambda m: m.group(2), text)
     tagger = _tagger()
     if tagger is None:
         return [(_hiragana(_KANJI.sub("", text)), "", None)]
     as_written = not _KANJI.search(text)        # reine Kana: so singen, wie geschrieben
-    out = []
+    out, pos = [], 0
     for word in tagger(text):
+        at = text.find(word.surface, pos)
+        pos = at + len(word.surface) if at >= 0 else pos
         reading = getattr(word.feature, "kana", None)
         if as_written or not reading or reading == "*":
             reading = word.surface if _JAPANESE.search(word.surface) else ""
         reading = _hiragana(reading)
         pos1 = getattr(word.feature, "pos1", "")
-        if pos1 == "助詞" and reading in _PARTICLES and not as_written:
+        if pos1 == "助詞" and reading in _PARTICLES and (not as_written or smart and _particle_at(text, at)):
             reading = _PARTICLES[reading]
         out.append((reading, pos1, _accent(getattr(word.feature, "aType", None))))
     return out
+
+
+def _particle_at(text: str, at: int) -> bool:
+    """In reinen Kana: ist は oder へ an dieser Stelle wirklich die Partikel? Nur wenn der Rest ab hier auch mit ihr
+    beginnt (in „はしりだせ“ gehört は zum Verb). を ist immer die Partikel."""
+    if at < 0:
+        return False
+    if text[at] == "を":
+        return True
+    first = next(iter(_tagger()(text[at:])), None)
+    return first is not None and first.surface == text[at] and getattr(first.feature, "pos1", "") == "助詞"
 
 
 def _accent(value):

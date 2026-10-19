@@ -63,3 +63,65 @@ def test_the_mix_tames_the_voice_only_with_the_switch(tamer, tmp_path, monkeypat
     mixer.mische_spuren([str(path)], output_pfad=str(tmp_path / "mix.wav"), tame=True)
     mixer.mische_spuren([str(path)], output_pfad=str(tmp_path / "mix2.wav"), tame=False)
     assert len(calls) == 1
+
+
+# ── G6: Wörter richtig lesen ────────────────────────────────────────────────────
+@pytest.fixture
+def smart(monkeypatch):
+    import readings
+    monkeypatch.setattr(readings, "ACTIVE", True)
+
+
+def test_particles_and_number_words_are_sung_like_spoken(smart):
+    import pipeline
+    text = "[Verse]\nきみは そらへ\nわたしははしる\n[Chorus]\nもう一回 三本の花\n明日も一歩ずつ\nゆめをみた"
+    sung = pipeline.sung_lyrics(SongSettings(lyrics=text))
+    assert "".join(sung["Verse"]) == "きみわそらえわたしわはしる"     # は in はしる gehört zum Verb
+    assert "".join(sung["Chorus"]) == "もういっかいさんぼんのはなあしたもいっぽずつゆめおみた"
+    written = pipeline.sung_lyrics(SongSettings(lyrics=text, smart_readings=False))
+    assert "".join(written["Verse"]) == "きみはそらへわたしははしる"
+    assert "".join(written["Chorus"]).startswith("もういちかい")
+
+
+def test_spaced_kana_keep_their_syllables_and_only_true_particles_change(smart):
+    from lyrics import syllables
+    assert syllables("な に か が は じ ま る", smart=True) == list("なにかがはじまる")
+    assert syllables("ふ り む か な い で は し り だ せ", smart=True) == list("ふりむかないではしりだせ")
+    assert syllables("き み は そ ら へ", smart=True) == list("きみわそらえ")
+
+
+def test_numbers_and_counters_follow_the_sound_changes():
+    from readings import respell
+    pairs = {"十回": "じゅっかい", "三十分": "さんじゅっぷん", "十分": "じゅうぶん", "六本": "ろっぽん", "何匹": "なんびき",
+             "三階": "さんがい", "四分": "よんぷん", "三百回": "さんびゃっかい", "一ヶ月": "いっかげつ",
+             "精一杯": "精一杯", "唯一本気": "唯一本気", "一回り": "ひとまわり", "千本桜": "せんぼんざくら"}
+    assert {word: respell(word) for word in pairs} == pairs
+
+
+def test_own_readings_from_the_file_always_apply(tmp_path):
+    import config
+    import pipeline
+    import readings
+    text = "[Verse]\n星空の下 Tokyo"
+    assert readings.own_readings() == {}
+    readings.ensure_file()
+    assert readings.own_readings() == {}          # die Anleitung allein ändert nichts
+    with open(readings.path(), "a", encoding="utf-8") as f:
+        f.write("星空=ほしぞら\nTokyo = トウキョウ\nkaputt\n")
+    assert readings.path().startswith(config.DATA_DIR)
+    assert readings.own_readings() == {"星空": "ほしぞら", "Tokyo": "とうきょう"}
+    sung = pipeline.sung_lyrics(SongSettings(lyrics=text, smart_readings=False))
+    assert "".join(sung["Verse"]) == "ほしぞらのしたとうきょう"
+
+
+def test_the_text_helper_shows_what_was_read_differently(smart, tmp_path):
+    import lyric_helper
+    import readings
+    with open(readings.ensure_file(), "a", encoding="utf-8") as f:
+        f.write("星空=ほしぞら\n")
+    s = SongSettings(lyrics="[Verse]\nきみは 星空へ\nもう一回だけ\nよるのまち")
+    lines = lyric_helper.check(s)[0].lines
+    assert [line.changes for line in lines] == [[("星空", "ほしぞら"), ("は", "わ"), ("へ", "え")],
+                                                [("一回", "いっかい")], []]
+    off = lyric_helper.check(s.with_updates(smart_readings=False))[0].lines
+    assert [line.changes for line in off] == [[("星空", "ほしぞら")], [], []]

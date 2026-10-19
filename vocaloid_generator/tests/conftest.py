@@ -240,3 +240,11 @@ def without_resonance_tamer(monkeypatch):
     """Härte zähmen (1.3.0, G2) ändert die Mixe der Tests nicht; test_gesang_130.py holt es sich zurück."""
     import resonance
     monkeypatch.setattr(resonance, "MAX_CUT_DB", 0.0)
+
+
+@pytest.fixture(autouse=True)
+def without_smart_readings(monkeypatch):
+    """„Partikel erkennen“ (1.3.0, G6) ändert die Silben der Tests nicht (を bleibt を); test_gesang_130.py holt es sich
+    zurück."""
+    import readings
+    monkeypatch.setattr(readings, "ACTIVE", False)

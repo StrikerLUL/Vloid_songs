@@ -7,7 +7,7 @@ from nicegui import run, ui
 
 import vorlagen
 from gui import labels
-from lyrics import _HEADER, syllables
+from lyrics import _HEADER, options as lyric_options, syllables
 from settings import KEYS, MASTER_TARGETS, STYLE_OPTIONS, SongSettings
 from styles import STYLES
 
@@ -461,6 +461,18 @@ def text_panel(s: SongSettings) -> Callable[[], None]:
         .tooltip("Eine Zeile ganz in Romaji wird japanisch gesungen; ist ein englisches Wort darin (love, baby), bleibt "
                  "die Zeile, wie sie ist. Neben japanischer Schrift wird jedes Romaji-Wort umgewandelt.")
 
+    ui.switch("Partikel erkennen (きみは → きみわ, 一回 → いっかい)").bind_value(s, "smart_readings") \
+        .props("dense").mark("switch-smart_readings").on_value_change(lambda: preview.refresh()) \
+        .tooltip("は, へ und を werden auch in reinen Kana wie Partikel gesungen (わ, え, お), Zahl und Zählwort wie "
+                 "gesprochen (一回 いっかい, 三本 さんぼん). Eigene Lesungen gehören in Lesungen.txt im Datenordner, "
+                 "eine pro Zeile wie „明日=あした“; eine leere Datei ändert nichts.")
+    def open_readings() -> None:
+        import readings
+        from gui import media
+        media.open_folder(readings.ensure_file())
+
+    ui.button("Eigene Lesungen (Lesungen.txt)", icon="edit_note", on_click=open_readings) \
+        .props("flat dense no-caps").mark("open-readings")
     ui.switch("Text-Helfer: Silben gegen Platz, Reime und Lesungen pro Zeile").bind_value(s, "lyric_hints") \
         .props("dense").mark("switch-lyric_hints").on_value_change(lambda: preview.refresh()) \
         .tooltip("Neben jeder Zeile: wie viele Silben sie hat und wie viele bequem in ihre Phrase passen (rot = zu "
@@ -479,7 +491,7 @@ def text_panel(s: SongSettings) -> Callable[[], None]:
             if header:
                 rows.append(("header", header.group(1)))
             elif line:
-                sylls = syllables(line, s.romaji, s.english_kana)
+                sylls = syllables(line, **lyric_options(s))
                 count += len(sylls)
                 rows.append(("line", " ".join(sylls)))
         ui.label(f"So wird gesungen: {count} Silben").classes("text-subtitle2").mark("syllables")
@@ -509,6 +521,9 @@ def text_panel(s: SongSettings) -> Callable[[], None]:
                         ui.label(" ".join(str(x) for x in line.sung)).classes("text-body2 col")
                     color = {"zu viel": "text-red-5", "schnell": "text-orange-5"}.get(line.status, "text-grey-5")
                     ui.label(line.describe()).classes(f"text-caption q-ml-lg {color}").mark("line-hint")
+                    if line.changes:
+                        ui.label("gelesen: " + ", ".join(f"{a} → {b}" for a, b in line.changes)) \
+                            .classes("text-caption q-ml-lg text-teal-4").mark("line-reading")
                     if line.unread:
                         ui.label("Kanji ohne Lesung: schreib sie in Kana oder mit Lesung wie 君[きみ]") \
                             .classes("text-caption q-ml-lg text-red-5").mark("line-unread")

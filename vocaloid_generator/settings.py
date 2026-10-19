@@ -200,6 +200,7 @@ class SongSettings(BaseModel):
     formant_fx: bool = True            # Formanten verschoben: kindlicher (Kawaii, Idol) oder dunkler
     vocal_swing: bool = True           # der Gesang swingt mit der Band, wenn der Song swingt (Lo-Fi)
     romaji: bool = True                # Liedtext in lateinischen Buchstaben (Romaji) japanisch singen
+    smart_readings: bool = True        # Partikel は/へ/を auch in reinen Kana, Zahlwörter wie 一回 richtig (1.3.0)
     # Gesang 1.1, jedes mit Schalter. Noten, die NEUTRINO gut singen kann (neutrino_score.py):
     long_vowel_mark: bool = True       # lang gezogene Vokale und Melisma als ー statt als neue Silbe
     breath_marks: bool = True          # Atemzeichen in langen Phrasen (NEUTRINO trennt dort, braucht weniger Speicher)

@@ -23,6 +23,7 @@ OFF_130 = (
     ("intro_riff", "--ohne-intro-riff", "Intro und Outro spielen die Refrain-Melodie nach, kein Zwischenspiel"),
     ("kime", "--ohne-kime", "keine gemeinsamen Akzente, Stopps und Läufe der Band"),
     ("resonance_tamer", "--ohne-haerte-zaehmen", "keine Zähmung schriller Stellen im Gesang (nur der feste EQ)"),
+    ("smart_readings", "--ohne-partikel", "は/へ/を in reinen Kana und Zahlwörter wie 一回 so singen, wie geschrieben"),
 )
 
 

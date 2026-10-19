@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import config
-from lyrics import _HEADER, _KANJI, kind_of, normalize_section, syllables, vowel
+from lyrics import _HEADER, _KANJI, changes, kind_of, normalize_section, options, syllables, vowel
 from melody_writer import SINGING_SHARE, SYLLABLES_PER_SECOND, max_syllables, phrase_bars_for
 from song_plan import SLOW_BPM
 
@@ -27,6 +27,7 @@ class Line:
     letter: str = ""                # Reimschema in der Sektion
     reading: str = ""               # Lesung, wenn Kanji darin sind
     unread: bool = False            # Kanji, die nicht gelesen werden konnten
+    changes: list = field(default_factory=list)     # [(geschrieben, gesungen)]: Partikel, Zahlwörter, Lesungen.txt
 
     @property
     def count(self) -> int:
@@ -98,6 +99,7 @@ def check(settings, text: Optional[str] = None) -> list:
     """[Section] mit ihren Zeilen; text: der Liedtext, sonst settings.lyrics."""
     from lyrics import _tagger
     text = settings.lyrics if text is None else text
+    reading = options(settings)
     out, current = [], None
     for raw in (text or "").splitlines():
         line = raw.strip()
@@ -113,11 +115,12 @@ def check(settings, text: Optional[str] = None) -> list:
         if current is None:
             current = Section("", "")
             out.append(current)
-        sung = syllables(line, settings.romaji, settings.english_kana)
+        sung = syllables(line, **reading)
         last = next((str(s) for s in reversed(sung) if not getattr(s, "melisma", False)), "")
         has_kanji = bool(_KANJI.search(line))
         current.lines.append(Line(line, sung, rhyme=vowel(last) or "",
                                   reading="".join(str(s) for s in sung) if has_kanji else "",
+                                  changes=changes(line, **reading),
                                   unread=has_kanji and _tagger() is None and bool(_KANJI.search(_bare(line)))))
     for sec in out:
         comfortable, most, sec.phrases = room(sec.kind, sec.bars, settings.bpm, settings.meter)

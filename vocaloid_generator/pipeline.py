@@ -15,7 +15,7 @@ import mixdown
 import rendering
 import singing
 from config import remove_file
-from lyrics import parse_lyrics, shared_only
+from lyrics import options as lyric_options, parse_lyrics, shared_only
 from orchestrator import orchestrate_song
 from settings import DEFAULT_JITTER, INSTRUMENTS, SongSettings
 
@@ -82,7 +82,7 @@ def seed_everything(seed: int) -> None:
 
 def sung_lyrics(settings: SongSettings) -> dict:
     """Die Silben je Sektion; mit numbered_lyrics auch die eigenen Texte einzelner Vorkommen („[Verse 2]“)."""
-    lyrics = parse_lyrics(settings.lyrics, settings.romaji, settings.english_kana)
+    lyrics = parse_lyrics(settings.lyrics, **lyric_options(settings))
     return lyrics if settings.numbered_lyrics else shared_only(lyrics)
 
 
@@ -571,7 +571,7 @@ def _write_karaoke(settings: SongSettings, tracks: dict, out: str) -> None:
     import karaoke
     from lyrics import section_lines
     from settings import DEFAULT_LYRICS, DEFAULT_RAP_LYRICS
-    own = section_lines(settings.lyrics, settings.romaji, settings.english_kana)
+    own = section_lines(settings.lyrics, **lyric_options(settings))
     lengths = {kind: [len(line) for line in text_lines]
                for kind, text_lines in {**section_lines(DEFAULT_LYRICS + DEFAULT_RAP_LYRICS),
                                         **(own if settings.numbered_lyrics else shared_only(own))}.items()}

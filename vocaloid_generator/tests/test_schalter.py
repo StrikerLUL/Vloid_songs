@@ -52,6 +52,7 @@ ELSEWHERE = {
     "vocal_comping": "test_gesang.py::test_two_takes_are_comped_and_double_the_chorus",
     "vocal_swing": "test_gesang_swing.py::test_the_vocal_swings_only_when_the_band_swings_enough",
     "romaji": "test_gesang.py::test_romaji_can_be_switched_off",
+    "smart_readings": "test_gesang_130.py::test_particles_and_number_words_are_sung_like_spoken",
     "english_kana": "test_gesang.py::test_romaji_lyrics_reach_the_song",
     "section_style": "test_sektions_stil.py::test_section_style_can_be_switched_off",
     "even_takes": "test_sektions_stil.py::test_takes_keep_the_style_shift_unless_neutrino_sings_the_same_every_time",

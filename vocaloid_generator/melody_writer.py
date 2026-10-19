@@ -126,7 +126,7 @@ class MelNote:
 
 def heard_at(note: MelNote) -> float:
     """Der Schlag, dessen Akkord ein Ton meint: bei einem vorgezogenen Ton der nach dem Taktstrich."""
-    return note.start + PUSH_STEPS / STEPS_PER_BEAT if note.pushed else note.start
+    return note.start + PUSH_STEPS / STEPS_PER_BEAT if getattr(note, "pushed", False) else note.start
 
 
 @dataclass

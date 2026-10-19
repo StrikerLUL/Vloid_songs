@@ -92,6 +92,7 @@ ELSEWHERE = {
     "band_runs": "test_band_130.py::test_piano_and_strings_run_glide_and_play_the_hook",
     "anison_grooves": "test_band_130.py::test_fast_anime_songs_get_anison_grooves_rolls_and_stops",
     "section_buildup": "test_band_130.py::test_the_first_verse_starts_alone_and_choruses_grow",
+    "surge_sounds": "test_instrumente_130.py::test_surge_plays_the_own_synths_when_it_is_set_up_and_switched_on",
     "vocal_pocket": "test_gesang_130.py::test_the_voice_sits_behind_or_ahead_of_the_beat_by_style",
     "diffsinger_expression": "test_gesang_130.py::test_diffsinger_breathes_in_the_verse_and_pushes_in_the_chorus",
     "ai_melody": "test_melodie_130.py::test_the_ai_suggests_chorus_melodies_and_the_better_one_sings",

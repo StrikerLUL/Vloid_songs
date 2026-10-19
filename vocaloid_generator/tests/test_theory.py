@@ -101,6 +101,10 @@ def test_every_style_arranges_every_section():
                 assert style.part(kind, "bass") == style.part("Verse", "bass"), style.name
                 assert style.groove(kind) == style.groove("Verse"), style.name
                 continue
+            if kind == "Spoken":    # unter dem Sprechen (1.3.0, G7) spielt die Band wie im Breakdown, ohne Schlagzeug
+                assert style.part(kind, "bass") == style.part("Verse", "bass", feel="breakdown"), style.name
+                assert style.groove(kind) == "", style.name
+                continue
             assert style.parts.get(kind), (style.name, kind)
             assert kind in style.grooves, (style.name, kind)
 

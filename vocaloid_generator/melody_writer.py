@@ -95,7 +95,7 @@ GESTURE_WEIGHTS = {
 }
 GESTURE_DEPTH = {"Chorus": 1.0, "Verse": 0.7, "PreChorus": 0.8, "Bridge": 0.8, "Rap": 0.2}
 # Singbare Silben pro Sekunde, an denen sich die Dichte orientiert
-SYLLABLES_PER_SECOND = {"Verse": 3.3, "PreChorus": 3.5, "Chorus": 3.6, "Bridge": 3.0, "Rap": 5.0}
+SYLLABLES_PER_SECOND = {"Verse": 3.3, "PreChorus": 3.5, "Chorus": 3.6, "Bridge": 3.0, "Rap": 5.0, "Spoken": 5.0}
 SINGING_SHARE = 0.75
 # Steigt der Akzent im Wort (tief → hoch), soll die Melodie nicht fallen, und umgekehrt
 ACCENT_COST = 1.5
@@ -200,7 +200,8 @@ class SectionMelodyWriter:
         self.rng = rng
         self.extra = motifs
         self.extras = extras
-        self.kind = section.kind if section.kind in ROLE_SEQUENCES else "Verse"
+        # die Sektion „Sprechen“ bekommt den Rhythmus des Raps (gesprochen wird sie frei, spoken.py)
+        self.kind = "Rap" if section.kind == "Spoken" else section.kind if section.kind in ROLE_SEQUENCES else "Verse"
         lo, hi = plan.vocal_range
         center = plan.style.vocal_center + KIND_OFFSET.get(self.kind, 0)
         self.center = max(lo + 7, min(hi - 8, center))
@@ -725,12 +726,12 @@ def write_vocal_melody(plan: SongPlan, lyrics: dict, rng: random.Random, rerolls
             else:
                 kind_rng = rerolls.get(sec.kind) or random.Random(f"{seed}:{sec.kind}")
                 words = lyrics.get(sec.kind, [])
-                if "best_melody" in extras and sec.kind != "Rap":
+                if "best_melody" in extras and sec.kind not in ("Rap", "Spoken"):
                     before = [n for kind, (_, ns) in written.items() if kind in ("Verse", "PreChorus") for n in ns]
                     sec_notes = _best_of(plan, sec, kind_rng, motifs, words, extras, before)
                 else:
                     sec_notes = SectionMelodyWriter(plan, sec, kind_rng, motifs, extras).write(words)
-                if sec.kind == "Rap":
+                if sec.kind in ("Rap", "Spoken"):
                     _chant(sec_notes)
             written[sec.kind] = (sec, sec_notes)
         else:
@@ -1075,6 +1076,45 @@ def split_for_duet(plan: SongPlan, data: list, syllables: list) -> tuple:
                 d.append((None, dur))
         t += dur
     return tuple((_merge_rests(d), s) for d, s in parts)
+
+
+def group_turns(plan: SongPlan, count: int) -> dict:
+    """G5: wer in einer Gruppe singt, je Sektion (Nummer der Sektion → Stimme, None = alle). Die Refrains singen alle
+    zusammen, jede Strophe, Bridge und jeder Rap kommt reihum an die nächste Stimme, der Pre-Chorus bleibt bei der
+    Stimme der Strophe davor."""
+    out, turn = {}, -1
+    for sec in plan.sections:
+        if not sec.has_vocals:
+            continue
+        if sec.kind == "Chorus":
+            out[sec.index] = None
+            continue
+        if sec.kind != "PreChorus" or turn < 0:
+            turn += 1
+        out[sec.index] = turn % count
+    return out
+
+
+def split_for_group(plan: SongPlan, data: list, syllables: list, count: int) -> list:
+    """Melodie (wie melody_data) in die Teile der Stimmen einer Gruppe (group_turns): was die anderen allein singen,
+    wird Pause. Rückgabe: [(Daten, Silben)] je Stimme."""
+    turns = group_turns(plan, count)
+    parts = [([], []) for _ in range(count)]
+    t, i = 0.0, 0
+    for pitch, dur in data:
+        if pitch is not None:
+            who = turns.get(plan.section_at(t + 1e-6).index)
+            for k, (d, s) in enumerate(parts):
+                mine = who is None or who == k
+                d.append((pitch, dur) if mine else (None, dur))
+                if mine:
+                    s.append(syllables[i] if i < len(syllables) else "ら")
+            i += 1
+        else:
+            for d, _ in parts:
+                d.append((None, dur))
+        t += dur
+    return [(_merge_rests(d), s) for d, s in parts]
 
 
 def _merge_rests(data: list) -> list:

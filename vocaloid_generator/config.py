@@ -12,6 +12,7 @@ SECTION_CONFIG = {
     "Chorus":    {"bars": 16, "has_vocals": True},
     "Bridge":    {"bars": 8,  "has_vocals": True},
     "Rap":       {"bars": 8,  "has_vocals": True},    # gesprochen von der VOICEVOX-Sprechstimme (rap.py)
+    "Spoken":    {"bars": 4,  "has_vocals": True},    # „Sprechen“: eine Zeile frei gesprochen (spoken.py, 1.3.0 G7)
     "Drop":      {"bars": 2,  "has_vocals": False},
     "Solo":      {"bars": 8,  "has_vocals": False},   # Instrumental-Solo der Lead-Stimme über den Refrain-Akkorden
     "Outro":     {"bars": 8,  "has_vocals": False},

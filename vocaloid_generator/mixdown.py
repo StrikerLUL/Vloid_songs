@@ -45,6 +45,7 @@ def mix_arguments(settings: SongSettings, tracks: dict, out: str, has_vocals: bo
         airwindows=settings.airwindows,
         true_peak=settings.true_peak,
         tame=settings.resonance_tamer,
+        punch=settings.mix_punch,
         sung_pads=chorus_windows(plan) if has_vocals and os.path.exists(
             os.path.join(out, "vocals_flaechen.wav")) else None,
         vocal_space=sections_in_seconds(plan) if plan is not None else None,

@@ -1,9 +1,10 @@
 # voice_fx.py – Gesang lebendiger machen: Atmer vor den Phrasen, Echo auf dem letzten Wort, Vibrato und Übergänge
-# zwischen den Tönen, jede Phrase aus der saubersten von mehreren Fassungen (Comping), Ausdruck pro Phrase und ein
-# Chor im letzten Refrain.
+# zwischen den Tönen, sanft korrigierte Tonhöhe und Verzierungen, jede Phrase aus der saubersten von mehreren Fassungen
+# (Comping), Ausdruck pro Phrase und ein Chor im letzten Refrain.
 # Alles arbeitet auf fertig gesungenen Spuren und kennt dazu die Noten (in Sekunden ab Songanfang).
 import logging
 import os
+import random
 from typing import Callable
 from dataclasses import dataclass
 
@@ -257,12 +258,13 @@ def throw_windows(notes: list, bpm: float, sections: list = (), room: float = 1.
 
 # ── Vibrato und Übergänge ──────────────────────────────────────────────────────
 def shape_pitch(f0: np.ndarray, frame: float, notes: list, vibrato: float = 1.0, glide: float = 1.0,
-                offset: float = 0.0) -> np.ndarray:
+                offset: float = 0.0, intonation: float = 0.0, ornaments: float = 0.0, seed: int = 0) -> np.ndarray:
     """
     Vibrato und Übergänge einer gesungenen Tonhöhenkurve ändern (Hz je Rahmen, 0 = stimmlos).
     vibrato: 0 = gerade Töne, 1 = wie gesungen, 2 = doppelt so tief; lange Töne ohne eigenes Vibrato bekommen
     über 1 eines dazu. glide: 0 = die Töne springen, 1 = wie gesungen, 2 = doppelt so lange Übergänge.
-    offset: Zeit des ersten Rahmens ab Songanfang.
+    offset: Zeit des ersten Rahmens ab Songanfang. intonation: wie stark der ruhige Teil schiefer Töne zur Note gezogen
+    wird (G1, 0 bis 1). ornaments: Stärke der Verzierungen (G3, ornament_curve), seed: wo sie sitzen.
     """
     f0 = np.asarray(f0, dtype=np.float64)
     voiced = f0 > 0
@@ -273,10 +275,124 @@ def shape_pitch(f0: np.ndarray, frame: float, notes: list, vibrato: float = 1.0,
     midi = np.interp(idx, idx[voiced], 69 + 12 * np.log2(f0[voiced] / 440.0))
     vib, natural = _vibrato(midi, t, notes, frame)
     base = midi - vib
+    if intonation > 0:
+        base = _intonation(base, t, notes, intonation)
     if abs(glide - 1.0) > 1e-3:
         base = _glides(base, t, notes, glide)
     out = base + _new_vibrato(vib, natural, t, notes, vibrato)
+    if ornaments > 0:
+        out = out + ornament_curve(t, notes, ornaments, seed)
     return np.where(voiced, 440.0 * 2 ** ((out - 69) / 12), 0.0)
+
+
+# ── Tonhöhe sanft korrigieren (1.3.0, G1) ──────────────────────────────────────
+INTONATION_CENTS = 20.0      # so weit darf der ruhige Teil eines Tons danebenliegen, ohne dass korrigiert wird
+INTONATION_MAX = 250.0       # weiter weg: ein anderer Ton (oder ein Schleifer), kein schiefer
+INTONATION_MIN = 0.08        # Sekunden: kürzere ruhige Teile bleiben, wie sie sind
+INTONATION_FADE = 0.04       # Sekunden, in denen die Korrektur ein- und ausblendet
+
+
+def _intonation(base: np.ndarray, t: np.ndarray, notes: list, strength: float) -> np.ndarray:
+    """Den ruhigen Teil (ohne Übergänge, ohne Vibrato: base) zu weit danebenliegender Töne zur Note ziehen, um
+    strength (0 bis 1) der Abweichung. Übergänge an den Rändern und das Vibrato bleiben, wie gesungen."""
+    out = base.copy()
+    frame = float(t[1] - t[0]) if len(t) > 1 else FRAME
+    for n in notes:
+        i, j = _interior(t, n)
+        if (j - i) * frame < INTONATION_MIN:
+            continue
+        off = float(np.median(base[i:j])) - n.pitch
+        if not INTONATION_CENTS <= abs(off) * 100 <= INTONATION_MAX:
+            continue
+        env = np.ones(j - i)
+        fade = min((j - i) // 3, max(1, int(INTONATION_FADE / frame)))
+        env[:fade] = np.linspace(0.0, 1.0, fade)
+        env[-fade:] = np.linspace(1.0, 0.0, fade)
+        out[i:j] -= off * min(strength, 1.0) * env
+    return out
+
+
+def intonation_error(f0: np.ndarray, frame: float, notes: list, offset: float = 0.0) -> list:
+    """Cent, um die der ruhige Teil jedes Tons danebenliegt (ohne Vibrato); None für zu kurze Töne."""
+    f0 = np.asarray(f0, dtype=np.float64)
+    voiced = f0 > 0
+    if not voiced.any():
+        return [None] * len(notes)
+    idx = np.arange(len(f0))
+    t = offset + idx * frame
+    midi = np.interp(idx, idx[voiced], 69 + 12 * np.log2(f0[voiced] / 440.0))
+    vib, _ = _vibrato(midi, t, notes, frame)
+    out = []
+    for n in notes:
+        i, j = _interior(t, n)
+        out.append(None if (j - i) * frame < INTONATION_MIN else (float(np.median((midi - vib)[i:j])) - n.pitch) * 100)
+    return out
+
+
+# ── Verzierungen (1.3.0, G3) ────────────────────────────────────────────────────
+# Shakuri: von unten in den Ton schleifen (nach einem Sprung nach oben oder am Phrasenanfang), Fall: der letzte Ton
+# einer Phrase fällt am Ende ab, Kobushi: ein kleiner Schnörkel nach oben und zurück auf einem langen Ton.
+# (Dauer in Sekunden, Tiefe in Halbtönen bei voller Stärke, ab dieser Tonlänge in Sekunden, wie oft)
+SHAKURI = (0.11, 1.4, 0.25, 0.6)
+FALL = (0.18, 3.0, 0.4, 0.5)
+KOBUSHI = (0.15, 1.0, 0.6, 0.4)
+SHAKURI_LEAP = 3             # Halbtöne aufwärts, ab denen der Ton von unten kommt
+# Wie stark je Stil: Ballade mehr, Chiptune gar nicht (die Stimme klingt dort wie ein Instrument)
+STYLE_ORNAMENTS = {"Ballade": 1.6, "City Pop": 1.2, "Lo-Fi": 1.1, "Rock": 0.9, "Dark Vocaloid": 0.8,
+                   "J-Pop Energy": 0.8, "Idol-Pop": 0.6, "Future Bass": 0.6, "Drum and Bass": 0.5,
+                   "Kawaii Chiptune": 0.0}
+
+
+def ornament_amount(strength: float, style: str) -> float:
+    """Stärke der Verzierungen für einen Stil (0 bis 1); strength: der Regler (dezent etwa 0,35)."""
+    return float(np.clip(strength * STYLE_ORNAMENTS.get(style, 1.0), 0.0, 1.0))
+
+
+def ornaments(notes: list, amount: float, seed: int = 0) -> list:
+    """[(Art, Ton)] der Verzierungen: welche Töne Shakuri, Fall oder Kobushi bekommen. Gleiche Töne an gleicher Stelle
+    bekommen bei gleichem seed dieselben."""
+    if amount <= 0:
+        return []
+    out = []
+    often = 0.5 + 0.5 * min(amount, 1.0)          # dezent seltener, deutlich öfter
+    for group in phrases(notes):
+        for k, n in enumerate(group):
+            dur = n.end - n.start
+            rng = random.Random(f"{seed}:{round(n.start, 2)}:{n.pitch}")
+            prev = group[k - 1] if k else None
+            if dur >= SHAKURI[2] and (prev is None or n.pitch - prev.pitch >= SHAKURI_LEAP) and \
+                    rng.random() < SHAKURI[3] * often:
+                out.append(("shakuri", n))
+            if k == len(group) - 1 and k and dur >= FALL[2] and rng.random() < FALL[3] * often:
+                out.append(("fall", n))
+            elif dur >= KOBUSHI[2] and k < len(group) - 1 and rng.random() < KOBUSHI[3] * often:
+                out.append(("kobushi", n))
+    return out
+
+
+def ornament_curve(t: np.ndarray, notes: list, amount: float, seed: int = 0) -> np.ndarray:
+    """Halbtöne zum Aufaddieren auf eine Tonhöhenkurve zu den Zeiten t (Sekunden ab Songanfang)."""
+    t = np.asarray(t, dtype=np.float64)
+    out = np.zeros_like(t)
+    for kind, n in ornaments(notes, amount, seed):
+        dur = n.end - n.start
+        if kind == "shakuri":
+            length = min(SHAKURI[0], 0.4 * dur)
+            sel = (t >= n.start) & (t < n.start + length)
+            u = (t[sel] - n.start) / length
+            out[sel] -= SHAKURI[1] * amount * (1 - u) ** 2
+        elif kind == "fall":
+            length = min(FALL[0], 0.4 * dur)
+            sel = (t >= n.end - length) & (t < n.end)
+            u = (t[sel] - (n.end - length)) / length
+            out[sel] -= FALL[1] * amount * u ** 2
+        else:
+            length = KOBUSHI[0]
+            at = n.start + 0.3 * dur
+            sel = (t >= at) & (t < at + length)
+            u = (t[sel] - at) / length
+            out[sel] += KOBUSHI[1] * amount * np.sin(np.pi * u) * (1 - 1.6 * u)   # hoch, knapp darunter, zurück
+    return out
 
 
 def _interior(t: np.ndarray, n: SungNote) -> tuple:
@@ -338,19 +454,22 @@ def _glides(base: np.ndarray, t: np.ndarray, notes: list, amount: float) -> np.n
     return out
 
 
-def reshape(path: str, notes: list, vibrato: float = 1.0, glide: float = 1.0, psola: bool = True) -> bool:
-    """Vibrato und Übergänge einer gesungenen Spur ändern. Gerechnet wird Phrase für Phrase, die Pausen bleiben
+def reshape(path: str, notes: list, vibrato: float = 1.0, glide: float = 1.0, psola: bool = True,
+            intonation: float = 0.0, ornaments: float = 0.0, seed: int = 0) -> bool:
+    """Vibrato und Übergänge einer gesungenen Spur ändern, schiefe Töne sanft korrigieren und Verzierungen singen
+    (shape_pitch). Gerechnet wird Phrase für Phrase; Phrasen, an denen sich nichts ändert, und die Pausen bleiben
     unberührt. psola: mit Praat-PSOLA (parselmouth), das nur die Tonhöhe verschiebt und den Klang der Stimme lässt;
     ohne, oder wenn parselmouth fehlt, baut der WORLD-Vocoder die Phrase neu (klingt eine Spur rauer).
     False, wenn nichts zu tun war."""
-    if abs(vibrato - 1.0) < 1e-3 and abs(glide - 1.0) < 1e-3:
+    if abs(vibrato - 1.0) < 1e-3 and abs(glide - 1.0) < 1e-3 and intonation <= 0 and ornaments <= 0:
         return False
 
     def curve(f0: np.ndarray, frame: float, phrase: list, offset: float) -> np.ndarray:
-        return shape_pitch(f0, frame, phrase, vibrato, glide, offset=offset)
-    repitch(path, notes, curve, psola)
-    log.info("Vibrato %.1f, Übergänge %.1f (%s)", vibrato, glide, "PSOLA" if psola and psola_available() else "WORLD")
-    return True
+        return shape_pitch(f0, frame, phrase, vibrato, glide, offset, intonation, ornaments, seed)
+    changed = repitch(path, notes, curve, psola)
+    log.info("Vibrato %.1f, Übergänge %.1f, Tonhöhe geglättet %.0f %%, Verzierungen %.0f %% (%s)", vibrato, glide,
+             intonation * 100, ornaments * 100, "PSOLA" if psola and psola_available() else "WORLD")
+    return changed
 
 
 def repitch(path: str, notes: list, curve: Callable, psola: bool = True) -> bool:
@@ -378,7 +497,8 @@ def repitch(path: str, notes: list, curve: Callable, psola: bool = True) -> bool
         y[-fade:] = y[-fade:] * ramp[::-1] + x[-fade:] * (1 - ramp[::-1])
         out[a:b] = y
         changed = True
-    sf.write(path, np.repeat(out[:, None], audio.shape[1], axis=1).astype(np.float32), rate, subtype="FLOAT")
+    if changed:
+        sf.write(path, np.repeat(out[:, None], audio.shape[1], axis=1).astype(np.float32), rate, subtype="FLOAT")
     return changed
 
 
@@ -397,15 +517,25 @@ def _f0(x: np.ndarray, rate: int) -> tuple:
     return pw.stonemask(x, f0, times, rate), times
 
 
+def _same(new: np.ndarray, f0: np.ndarray) -> bool:
+    """Ändert die neue Kurve nichts Hörbares (unter einem Cent)? Dann bleibt die Phrase, wie sie gesungen ist."""
+    voiced = (f0 > 0) & (new > 0)
+    return bool(np.array_equal(new > 0, f0 > 0) and
+                (not voiced.any() or np.max(np.abs(np.log2(new[voiced] / f0[voiced]))) * 1200 < 1.0))
+
+
 def _world(x: np.ndarray, rate: int, curve: Callable, offset: float):
     """curve(f0, FRAME, Zeit des ersten Rahmens) → neue Tonhöhe; WORLD baut die Phrase damit neu."""
     import pyworld as pw
     f0, times = _f0(x, rate)
     if not np.any(f0 > 0):
         return None
+    new = curve(f0, FRAME, offset)
+    if _same(new, f0):
+        return None
     sp = pw.cheaptrick(x, f0, times, rate)
     ap = pw.d4c(x, f0, times, rate)
-    return pw.synthesize(curve(f0, FRAME, offset), sp, ap, rate, frame_period=FRAME * 1000)
+    return pw.synthesize(new, sp, ap, rate, frame_period=FRAME * 1000)
 
 
 def _psola(x: np.ndarray, rate: int, curve: Callable, offset: float):
@@ -417,6 +547,8 @@ def _psola(x: np.ndarray, rate: int, curve: Callable, offset: float):
     if not np.any(f0 > 0):
         return None
     new = curve(f0, FRAME, offset)
+    if _same(new, f0):
+        return None
     sound = parselmouth.Sound(x, sampling_frequency=rate)
     manipulation = call(sound, "To Manipulation", 0.01, 70.0, 1100.0)
     tier = call("Create PitchTier", "neu", sound.xmin, sound.xmax)

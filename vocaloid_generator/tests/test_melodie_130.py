@@ -209,3 +209,64 @@ def test_triplets_and_dotted_rhythms_reach_neutrino_as_real_tuplets(new_composit
     assert re.search("actual-notes", open(vocal_synthesizer.erstelle_musicxml(
         [(64, 1.0), (None, 0.5), (65, 0.5)], ["ら", "ら"], 100, str(tmp_path / "gerade.musicxml")),
         encoding="utf-8").read()) is None
+
+
+def test_the_ai_suggests_chorus_melodies_and_the_better_one_sings(tmp_path, monkeypatch):
+    import json
+
+    import accompaniment
+    import ai_melody
+    s = SongSettings(output_ordner=str(tmp_path / "out"), seed=4, bpm=120,
+                     structure=["Intro", "Verse", "Chorus", "Verse", "Chorus", "Outro"])
+    plain, _ = pipeline.compose(s)
+    plan = plain["plan"]
+    chorus = next(sec for sec in plan.sections if sec.kind == "Chorus")
+    spb = plan.seconds_per_beat
+    given, seconds = ai_melody.given_notes(plain)
+    assert seconds == pytest.approx(chorus.beats * spb)
+    assert {i for *_, i in given} == {ai_melody.CHORD_PROGRAM, accompaniment.BASS, accompaniment.DRUMS}
+    assert all(0 <= a < seconds for a, *_ in given), "nur der erste Refrain, ab seinem Anfang"
+    # eine Fassung mit Flötenmelodie in Achteln über Akkorden auf dem Klavier, eine mit zu wenigen Tönen
+    scale = [60, 62, 64, 65, 67, 69, 67, 65]
+    flute = [[k * 0.5 * spb, (k + 1) * 0.5 * spb, scale[k % 8], 73] for k in range(int(chorus.beats * 2))]
+    chords = [[b * spb, (b + 4) * spb, p, 0] for b in range(0, int(chorus.beats), 4) for p in (48, 52, 55, 60)]
+    takes = [flute + chords, [[0.0, 0.5, 70, 80], [1.0, 1.5, 72, 80]]]
+    assert ai_melody.line(flute + chords, spb)[:3] == [(0.0, 0.5, 60), (0.5, 0.5, 62), (1.0, 0.5, 64)]
+    asked = []
+
+    def run(job, folder):
+        asked.append(job)
+        with open(job["output"], "w", encoding="utf-8") as f:
+            json.dump({"takes": takes}, f)
+        return {"model": "Attrappe", "device": "cpu"}
+    monkeypatch.setattr(accompaniment, "available", lambda: True)
+    monkeypatch.setattr(accompaniment, "run", run)
+    real = melody_score.score
+    monkeypatch.setattr(melody_score, "score", lambda notes, *a, **k: 100.0 if notes and all(
+        abs(n.dur - 0.5) < 1e-6 for n in notes) else real(notes, *a, **k))
+    tracks, _ = pipeline.compose(s.with_updates(ai_melody=True))
+    assert asked and asked[0]["mode"] == "melody" and asked[0]["takes"] == ai_melody.TAKES
+    for sec in (x for x in tracks["plan"].sections if x.kind == "Chorus"):
+        sung = [n for n in tracks["vocal_melody"] if sec.start <= n.start / spb < sec.end - 0.01]
+        assert sung and all(abs((n.end - n.start) / spb - 0.5) < 0.02 for n in sung), "alle Refrains singen sie"
+        assert all(sec.start <= n.start / spb for n in sung)
+    verse = next(sec for sec in plan.sections if sec.kind == "Verse")
+    in_verse = lambda t: [(round(n.start, 4), n.pitch) for n in t["vocal_melody"]        # noqa: E731
+                          if verse.start <= n.start / spb < verse.end]
+    assert in_verse(tracks) == in_verse(plain), "die Strophe bleibt"
+    assert [n.pitch for n in tracks["bass"]] == [n.pitch for n in plain["bass"]], "die Band bleibt"
+    # gleiche Vorgabe: das Modell wird nicht noch einmal gefragt
+    pipeline.compose(s.with_updates(ai_melody=True))
+    assert len(asked) == 1
+    # keine Fassung singt besser, Schalter aus, Entwurf oder ohne Modell: die komponierte Melodie
+    monkeypatch.setattr(melody_score, "score", real)
+    assert ai_melody.choose(plain, [takes[1]]) is None
+    monkeypatch.setattr(accompaniment, "available", lambda: False)
+    for other in (s.with_updates(ai_melody=False), s.with_updates(ai_melody=True, draft=True),
+                  s.with_updates(ai_melody=True, reuse_steps=False)):
+        again, _ = pipeline.compose(other)
+        assert [(n.start, n.pitch) for n in again["vocal_melody"]] == [(n.start, n.pitch) for n in plain["vocal_melody"]]
+    assert len(asked) == 1
+    import main
+    args = main.parse_args(["--ki-melodie"])
+    assert args.ki_melodie and not main.parse_args(["--ohne-ki-melodie"]).ki_melodie

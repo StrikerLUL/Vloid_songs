@@ -110,7 +110,7 @@ def test_the_pipeline_applies_the_effects_of_the_style(tmp_path, styles, monkeyp
 def test_apply_runs_on_a_real_track(tmp_path, styles):
     notes = [SungNote(0.5, 1.5, 64), SungNote(1.5, 2.0, 67), SungNote(4.0, 5.0, 69)]
     path = str(tmp_path / "v.wav")
-    sf.write(path, voice(notes, 6.0), RATE, subtype="FLOAT")
+    sf.write(path, voice(notes, 6.0, vibrato=0.3), RATE, subtype="FLOAT")     # sonst gäbe es nichts einzurasten
     done = style_fx.apply(path, notes, [(0.0, 3.0, "Verse"), (3.0, 6.0, "Chorus")], 120,
                           {"telephone": True, "stutter": True, "hard_tune": True, "formant": 1.05})
     assert done == ["harter Tune im Refrain", "Telefon in der ersten Zeile", "Stutter vor 1 Refrain",

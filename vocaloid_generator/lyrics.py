@@ -33,6 +33,9 @@ _SECTION_ALIASES = {
     "drop": "Drop",
     "rap": "Rap",
     "sprechteil": "Rap",
+    "sprechen": "Spoken",
+    "gesprochen": "Spoken",
+    "spoken": "Spoken",
 }
 
 _HEADER = re.compile(r"^\[(.+)\]$")

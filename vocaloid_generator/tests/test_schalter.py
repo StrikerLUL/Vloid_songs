@@ -29,7 +29,7 @@ NOTES = ("more_motifs", "numbered_lyrics", "harmony_variety", "sung_pads", "adli
 # Ändert die Einstellungen des Mixes (mixdown.mix_arguments); in Klammern der Stil, in dem er wirkt
 MIX = {"echo_throws": None, "vocal_chain": None, "vocal_tone": None, "vocal_unmask": None, "vocal_ride": None,
        "convolution_reverb": None, "ducked_delay": None, "mix_movement": None, "airwindows": None,
-       "lofi_texture": "Lo-Fi", "true_peak": None, "resonance_tamer": None}
+       "lofi_texture": "Lo-Fi", "true_peak": None, "resonance_tamer": None, "mix_punch": None}
 # Ändert, womit eine Spur klingt (rendering._render_job)
 RENDER = ("sound_library", "guitar_amp", "real_drums", "band_samples")
 # Ändert, was auf der fertigen Gesangsspur passiert (singing._liven)
@@ -92,6 +92,9 @@ ELSEWHERE = {
     "band_runs": "test_band_130.py::test_piano_and_strings_run_glide_and_play_the_hook",
     "anison_grooves": "test_band_130.py::test_fast_anime_songs_get_anison_grooves_rolls_and_stops",
     "section_buildup": "test_band_130.py::test_the_first_verse_starts_alone_and_choruses_grow",
+    "vocal_pocket": "test_gesang_130.py::test_the_voice_sits_behind_or_ahead_of_the_beat_by_style",
+    "diffsinger_expression": "test_gesang_130.py::test_diffsinger_breathes_in_the_verse_and_pushes_in_the_chorus",
+    "ai_melody": "test_melodie_130.py::test_the_ai_suggests_chorus_melodies_and_the_better_one_sings",
 }
 # Bedienung der App, ändert den Song nicht
 APP = ("show_karaoke", "reuse_steps", "log_file", "update_check", "setup_wizard", "done_notice", "lyric_hints",

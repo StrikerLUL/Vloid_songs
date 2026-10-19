@@ -29,6 +29,12 @@ VIBRATO = (5.5, 0.3, 0.3, 0.25)      # Hz, Halbtöne, Einsatz nach Sekunden, Ein
 VOWELS = set("aiueoAIUEO") | {"N", "SP", "AP", "cl"}
 VARIANCES = ("energy", "breathiness", "voicing", "tension")
 LIMITS = {"energy": (-96.0, 0.0), "breathiness": (-96.0, 0.0), "voicing": (-96.0, 0.0), "tension": (-10.0, 10.0)}
+# G8 (1.3.0): Ausdruck pro Sektion und Ton aus dem Varianz-Modell: (Hauch in dB, Spannung, Energie in dB) dazu. Die
+# Strophe singt hauchig, der Refrain kräftig; lange Töne werden zum Ende hauchiger, hohe Töne einer Phrase gespannter.
+EXPRESSION = {"Verse": (6.0, -1.5, -1.5), "PreChorus": (3.0, 0.0, 0.0), "Chorus": (-3.0, 2.5, 1.5),
+              "Bridge": (5.0, -1.0, -1.0), "Intro": (3.0, 0.0, 0.0), "Outro": (4.0, -1.0, -1.0)}
+TAIL_BREATH = (0.5, 6.0)             # Töne ab so vielen Sekunden: zum Ende so viel dB hauchiger
+HIGH_TENSION = 0.3                   # Spannung je Halbton über der Mitte der Phrase
 
 
 def available() -> bool:
@@ -298,8 +304,10 @@ def frames(phones: list, frame: float) -> list:
     return [HEAD_FRAMES] + lengths + [TAIL_FRAMES]
 
 
-def pitch_curve(phrase: list, times: np.ndarray, vibrato: float = 1.0, glide: float = 1.0) -> np.ndarray:
-    """Tonhöhe (MIDI, mit Kommastellen) zu den Zeiten: Töne mit weichen Übergängen und Vibrato auf langen Tönen."""
+def pitch_curve(phrase: list, times: np.ndarray, vibrato: float = 1.0, glide: float = 1.0, ornaments: float = 0.0,
+                seed: int = 0) -> np.ndarray:
+    """Tonhöhe (MIDI, mit Kommastellen) zu den Zeiten: Töne mit weichen Übergängen und Vibrato auf langen Tönen,
+    dazu die Verzierungen (G3, voice_fx.ornament_curve)."""
     starts = np.array([n[0] for n in phrase])
     pitches = np.array([n[2] for n in phrase], dtype=np.float64)
     index = np.clip(np.searchsorted(starts, times, side="right") - 1, 0, len(phrase) - 1)
@@ -320,7 +328,31 @@ def pitch_curve(phrase: list, times: np.ndarray, vibrato: float = 1.0, glide: fl
             t = times[on] - start - delay
             amount = np.minimum(1.0, t / fade) * np.minimum(1.0, (end - times[on]) / 0.1)
             curve[on] += depth * vibrato * amount * np.sin(2 * np.pi * rate * t)
+    if ornaments > 0:
+        import voice_fx
+        notes = [voice_fx.SungNote(start, end, pitch) for start, end, pitch, _ in phrase]
+        curve += voice_fx.ornament_curve(times, notes, ornaments, seed)
     return curve
+
+
+def expression(phrase: list, times: np.ndarray, sections: list) -> dict:
+    """G8: was zu Hauch (dB), Spannung und Energie (dB) je Rahmen dazukommt. sections: [(Start, Ende in Sekunden,
+    Art)]."""
+    breath, tension, energy = np.zeros_like(times), np.zeros_like(times), np.zeros_like(times)
+    for start, end, kind in sections:
+        b, t, e = EXPRESSION.get(kind, (0.0, 0.0, 0.0))
+        inside = (times >= start) & (times < end)
+        breath[inside] += b
+        tension[inside] += t
+        energy[inside] += e
+    middle = float(np.median([n[2] for n in phrase]))
+    for start, end, pitch, _ in phrase:
+        inside = (times >= start) & (times < end)
+        tension[inside] += HIGH_TENSION * max(0.0, pitch - middle)
+        if end - start >= TAIL_BREATH[0]:
+            tail = inside & (times >= start + (end - start) * 0.5)
+            breath[tail] += TAIL_BREATH[1] * (times[tail] - start - (end - start) * 0.5) / ((end - start) * 0.5)
+    return {"breathiness": breath, "tension": tension, "energy": energy}
 
 
 # ── Rechnen ───────────────────────────────────────────────────────────────────
@@ -381,8 +413,10 @@ def _variances(bank: Voicebank, symbols: list, durations: list, midi: np.ndarray
     return {v: np.clip(out[f"{v}_pred"].reshape(-1)[:total], *LIMITS[v]) for v in predicted if f"{v}_pred" in out}
 
 
-def render_phrase(bank: Voicebank, phrase: list, vibrato: float = 1.0, glide: float = 1.0) -> tuple:
-    """(Audio, Startzeit in Sekunden) einer Phrase."""
+def render_phrase(bank: Voicebank, phrase: list, vibrato: float = 1.0, glide: float = 1.0, ornaments: float = 0.0,
+                  seed: int = 0, sections: Optional[list] = None) -> tuple:
+    """(Audio, Startzeit in Sekunden) einer Phrase. sections: Ausdruck pro Sektion und Ton (G8), None = wie das
+    Varianz-Modell ihn vorhersagt."""
     model = bank.acoustic
     frame = model.frame
     phones = layout(bank, phrase)
@@ -391,7 +425,7 @@ def render_phrase(bank: Voicebank, phrase: list, vibrato: float = 1.0, glide: fl
     total = int(sum(durations))
     start = phones[0].start - HEAD_FRAMES * frame
     times = start + np.arange(total) * frame
-    midi = pitch_curve(phrase, times, vibrato, glide)
+    midi = pitch_curve(phrase, times, vibrato, glide, ornaments, seed)
     f0 = (440.0 * 2 ** ((midi - 69) / 12)).astype(np.float32)[None]
     inputs = {"tokens": np.array([[model.token(p) for p in symbols]], dtype=np.int64),
               "durations": np.array([durations], dtype=np.int64), "f0": f0, **_speedup_inputs(model.config)}
@@ -405,7 +439,10 @@ def render_phrase(bank: Voicebank, phrase: list, vibrato: float = 1.0, glide: fl
     if model.config.get("use_speed_embed"):
         inputs["velocity"] = np.ones((1, total), dtype=np.float32)
     if bank.variance is not None:
+        extra = expression(phrase, times, sections) if sections is not None else {}
         for name, curve in _variances(bank, symbols, durations, midi).items():
+            if name in extra:
+                curve = np.clip(curve + extra[name][:len(curve)], *LIMITS[name])
             if model.config.get(f"use_{name}_embed"):
                 inputs[name] = curve[None].astype(np.float32)
     mel = _run(model.session, inputs)[0]
@@ -417,14 +454,18 @@ def render_phrase(bank: Voicebank, phrase: list, vibrato: float = 1.0, glide: fl
 
 
 def sing(melody_data: list, silben: list, bpm: float, wav: str, voicebank: str, transpose: int = 0,
-         vibrato: float = 1.0, glide: float = 1.0) -> str:
-    """Singt die Melodie mit der DiffSinger-Stimme im Ordner voicebank in die Datei wav (Beginn = Songanfang)."""
+         vibrato: float = 1.0, glide: float = 1.0, ornaments: float = 0.0, seed: int = 0,
+         expression: Optional[list] = None) -> str:
+    """Singt die Melodie mit der DiffSinger-Stimme im Ordner voicebank in die Datei wav (Beginn = Songanfang).
+    expression: [(Start, Ende in Sekunden, Sektionsart)] für den Ausdruck pro Sektion und Ton (G8)."""
     bank = load(voicebank)
     rate = int(bank.vocoder_config.get("sample_rate", bank.acoustic.config.get("sample_rate", 44100)))
     parts = phrases([(None if p is None else p + transpose, d) for p, d in melody_data], silben, bpm)
     if not parts:
         raise ValueError("keine Töne zum Singen")
-    rendered = [render_phrase(bank, phrase, vibrato, glide) for phrase in parts]
+    rendered = [render_phrase(bank, phrase, vibrato, glide, ornaments, seed, expression) for phrase in parts]
+    if expression is not None and bank.variance is not None:
+        log.info("DiffSinger-Ausdruck: Strophe hauchig, Refrain kräftig, hohe Töne gespannter")
     length = max(int(max(0.0, s) * rate) + len(a) for a, s in rendered)
     out = np.zeros(length, dtype=np.float32)
     for audio, start in rendered:

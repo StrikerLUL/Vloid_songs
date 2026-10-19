@@ -98,10 +98,24 @@ def compose(settings: SongSettings, seed: Optional[int] = None):
     if seed is None:
         seed = settings.seed if settings.seed is not None else new_seed()
     seed_everything(seed)
-    import motifs
     from vocal_synthesizer import stimmlage
     lo, hi, _ = stimmlage(settings.singer)
-    tracks = orchestrate_song(
+    own = _own_melody(settings)
+    tracks = _orchestrate(settings, own, lo, hi)
+    if settings.ai_melody and not settings.draft and "Chorus" not in own:
+        import ai_melody
+        melody = ai_melody.for_song(tracks, seed, settings.output_dir(), settings.reuse_steps)
+        if melody:
+            seed_everything(seed)              # derselbe Song, nur der Refrain singt die Melodie des Modells
+            tracks = _orchestrate(settings, {**own, "Chorus": melody}, lo, hi)
+    import backing_vocals
+    backing_vocals.add(tracks, settings)
+    return tracks, seed
+
+
+def _orchestrate(settings: SongSettings, imported: dict, lo: int, hi: int) -> dict:
+    import motifs
+    return orchestrate_song(
         genre=genre_for_style(settings.style),
         bpm=settings.bpm,
         structure=list(settings.active_sections),
@@ -119,7 +133,7 @@ def compose(settings: SongSettings, seed: Optional[int] = None):
         vocal_range=(lo, hi),
         variations=settings.variations,
         custom_chords=settings.custom_chords,
-        imported_melody=_own_melody(settings),
+        imported_melody=imported,
         melody_edits=settings.melody_edits,
         melody_lengths=settings.melody_lengths,
         motifs=motifs.for_settings(settings),
@@ -131,9 +145,6 @@ def compose(settings: SongSettings, seed: Optional[int] = None):
         ritardando=settings.ritardando,
         extras=composition_extras(settings),
     )
-    import backing_vocals
-    backing_vocals.add(tracks, settings)
-    return tracks, seed
 
 
 def remix(settings: SongSettings, style: str) -> SongSettings:

@@ -93,7 +93,23 @@ VOICE_SWITCHES = (
     ("resonance_tamer", "Härte zähmen", "Wie das Plugin soothe2: wenn hohe, laute Töne schrill werden, werden nur die "
                                         "Frequenzen leiser, die gerade herausstechen, und nur so lange. Die Stimme "
                                         "bleibt hell und nah"),
+    ("vocal_pocket", "Gesang im Groove", "Im City Pop, Lo-Fi und in der Ballade liegt der Gesang leicht hinter dem "
+                                         "Schlag (etwa 20 ms), im Rock und Drum and Bass leicht davor"),
+    ("diffsinger_expression", "DiffSinger-Ausdruck", "DiffSinger-Stimmen mit Varianz-Modell singen die Strophe "
+                                                     "hauchig und den Refrain kräftig, lange Töne werden zum Ende "
+                                                     "hauchiger, hohe Töne gespannter"),
 )
+# (Einstellung, Text, von, bis, Schritt, Erklärung), 0 = aus
+VOICE_SLIDERS = (
+    ("intonation", "Tonhöhe glätten", 0.0, 1.0, 0.05,
+     "Zieht den ruhigen Teil zu weit danebenliegender Töne zur Note, wie eine sanfte Tonhöhenkorrektur; Vibrato und "
+     "Übergänge bleiben, wie gesungen. 0 = aus, 1 = genau auf die Note"),
+    ("ornaments", "Verzierungen", 0.0, 1.0, 0.05,
+     "Shakuri (von unten in den Ton), Fall am Phrasenende und Kobushi (kleiner Schnörkel) auf langen Tönen, je Stil "
+     "dosiert: Ballade mehr, Chiptune gar nicht. 0,35 = dezent"),
+)
+GROUP_CHOICES = {0: "aus", 3: "3 Stimmen", 4: "4 Stimmen"}
+SPOKEN_SOUNDS = {"Hall": "mit Hall", "Telefon": "wie am Telefon", "trocken": "trocken"}
 
 # Band 1.3.0, jede Neuerung mit Schalter
 BAND_SWITCHES = (
@@ -767,6 +783,9 @@ def voice_panel(s: SongSettings, singers: list, pick: PickFn | None = None) -> t
         .bind_value(s, "support_singer").classes("w-full").mark("support")
     hint("Eine zweite Stimme läuft als Support-Modell mit und gibt der Hauptstimme eine andere Färbung, z. B. MERROW "
          "mit SOMA. NEUTRINO nennt das selbst experimentell; braucht Run_support_model.bat (ab NEUTRINO 3).")
+    ui.select(GROUP_CHOICES, label="Gruppe").bind_value(s, "group_vocals").classes("w-full").mark("group-vocals")
+    hint("Drei oder vier installierte NEUTRINO-Stimmen singen den Refrain zusammen (links, Mitte, rechts) und die "
+         "Strophen reihum, wie eine Idol-Gruppe. Mit weniger als drei Stimmen singt die gewählte allein.")
     ui.switch("Zweite Stimme im Refrain").bind_value(s, "harmonies")
     ui.switch("Lieblingsstimme je Stil").bind_value(s, "style_singer").props("dense").mark("switch-style_singer") \
         .tooltip("Beim Wechsel des Stils wählt die App die Stimme, die du im Stimmen-Casting für ihn gemerkt hast")
@@ -830,11 +849,12 @@ def voice_panel(s: SongSettings, singers: list, pick: PickFn | None = None) -> t
         .mark("switch-voicevox_dynamics") \
         .tooltip("Betonte Silben und der Weg zum Höhepunkt einer Zeile gehen als Lautstärke in den Gesang ein, statt "
                  "danach lauter und leiser gedreht zu werden. Leiser klingt dann auch weicher.")
-    section_title("Rap-Teil")
+    section_title("Rap und Sprechen")
     rap_editor(s)
     section_title("Gesang wie produziert")
     for attr, text, tip in VOICE_SWITCHES:
         ui.switch(text).bind_value(s, attr).props("dense").tooltip(tip).mark(f"switch-{attr}")
+    sliders(s, VOICE_SLIDERS)
     section_title("Lebendiger Gesang")
     for attr, text, tip in LIVELY_SWITCHES:
         ui.switch(text).bind_value(s, attr).props("dense").tooltip(tip).mark(f"switch-{attr}")
@@ -876,6 +896,10 @@ def rap_editor(s: SongSettings) -> None:
     hint("Eine Sektion „Rap“ (Ablauf und [Rap] im Liedtext) spricht VOICEVOX im Takt, wie der Rap in „Idol“; NEUTRINO "
          "kann nicht rappen. Dafür muss die VOICEVOX-App laufen, auch wenn NEUTRINO singt. Ohne VOICEVOX oder mit dem "
          "Schalter aus singt die Gesangsstimme den Rap fast auf einem Ton.")
+    ui.select(SPOKEN_SOUNDS, label="Sprechen klingt").bind_value(s, "spoken_sound").classes("w-full") \
+        .mark("spoken-sound")
+    hint("Eine Sektion „Sprechen“ (Ablauf und [Sprechen] im Liedtext) spricht dieselbe Stimme frei, nicht im Takt, "
+         "während die Band leise spielt. Ohne VOICEVOX fällt die Zeile weg.")
 
     async def load() -> None:
         found = await run.io_bound(voicevox.talkers, s.voicevox_url or voicevox.URL)
@@ -943,6 +967,11 @@ def mix_panel(s: SongSettings) -> None:
     hint("Die Lautheit gilt immer, auch beim Mastering nach Vorbild-Songs; der Limiter hält die Spitzen unten.")
     ui.switch("Bewegung im Mix").bind_value(s, "mix_movement").mark("switch-mix_movement") \
         .tooltip("Anlauf mit Filter vor jedem Refrain, Hall je nach Sektion, breitere Refrains")
+    ui.switch("Druck (Parallel-, Bus- und Mehrband-Kompression)").bind_value(s, "mix_punch") \
+        .mark("switch-mix_punch") \
+        .tooltip("Eine stark komprimierte Kopie des Schlagzeugs läuft leise mit, ein Bus-Kompressor hält die Band "
+                 "zusammen, und im Master werden Bässe, Mitten und Höhen einzeln verdichtet: der Song klingt dichter "
+                 "und druckvoller, ohne lauter zu werden")
     ui.switch("Spitzen auch zwischen den Samples begrenzen (-1 dBTP)").bind_value(s, "true_peak") \
         .mark("switch-true_peak") \
         .tooltip("MP3 und Streaming heben Spitzen zwischen den Samples sonst über 0 dB; das kann knacksen. "
@@ -1026,6 +1055,11 @@ def paths_panel(s: SongSettings, pick: PickFn, status: Callable[[], None]) -> No
         .bind_value(s, "ai_accompaniment").mark("accompaniment-switch") \
         .tooltip("Der Anticipatory Music Transformer schreibt Klavier, Gitarre, Streicher, Synths und Bläser passend zu "
                  "Melodie, Bass und Schlagzeug; ohne NVIDIA-Grafikkarte dauert ein Song lange")
+    ui.switch("KI-Melodie im Refrain vorschlagen lassen (setup_begleitung.py, Versuch)") \
+        .bind_value(s, "ai_melody").mark("switch-ai_melody") \
+        .tooltip("Dasselbe Modell schreibt zu Akkorden, Bass und Schlagzeug vier Refrain-Melodien; die App passt sie an "
+                 "Silben und Stimmlage an und bewertet sie wie „Beste Melodie suchen“. Singt eine besser als die "
+                 "komponierte, singen alle Refrains sie. Braucht die eingerichtete KI-Begleitung")
     app_settings(s)
 
 

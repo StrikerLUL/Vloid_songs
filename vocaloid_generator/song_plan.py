@@ -13,7 +13,7 @@ BEATS_PER_BAR = 4            # beim Komponieren; im 3/4-Takt rückt meter.py die
 SLOW_BPM = 100
 VOCAL_RANGE = (57, 79)       # A3 bis G5: Lage, in der die Melodie geschrieben wird
 SHARED_PROGRESSION = {"Intro": "Chorus", "Outro": "Chorus", "Drop": "Chorus", "Solo": "Chorus", "Build-up": "PreChorus",
-                      "Rap": "Verse", "Interlude": "Chorus"}
+                      "Rap": "Verse", "Interlude": "Chorus", "Spoken": "Verse"}
 
 
 @dataclass

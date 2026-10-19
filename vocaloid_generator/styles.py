@@ -101,6 +101,7 @@ CADENCES = {
 SECTION_ENERGY = {
     "Intro": 0.75, "Build-up": 0.6, "Verse": 0.45, "PreChorus": 0.65,
     "Chorus": 0.9, "Bridge": 0.4, "Drop": 0.7, "Solo": 0.85, "Outro": 0.6, "Rap": 0.6, "Interlude": 0.75,
+    "Spoken": 0.3,
 }
 
 # Klänge für neue Instrumente, falls ein Stil keine eigenen nennt (General MIDI)
@@ -136,8 +137,8 @@ class StyleProfile:
         Spielweise in einer Sektion. "Verse:2" ergänzt ab dem zweiten Vorkommen, "Chorus:last" im
         letzten Vorkommen; None nimmt ein Instrument dort heraus. Im Breakdown spielt nur "breakdown".
         """
-        if feel == "breakdown":
-            return self.parts.get("breakdown", {}).get(instrument)
+        if feel == "breakdown" or section == "Spoken":
+            return self.parts.get("breakdown", {}).get(instrument)     # unter dem Sprechen spielt die Band leise
         if section == "Interlude" and section not in self.parts:
             section = "Intro"                 # Zwischenspiel: die Band spielt wie im Intro
         if section == "Solo" and "Solo" not in self.parts:
@@ -155,6 +156,8 @@ class StyleProfile:
         return self.programs.get(instrument, DEFAULT_PROGRAMS.get(instrument, 0))
 
     def groove(self, section: str) -> str:
+        if section == "Spoken":
+            return ""                     # das Schlagzeug schweigt, während gesprochen wird
         if section == "Solo" and section not in self.grooves:
             section = "Chorus"
         if section == "Interlude" and section not in self.grooves:

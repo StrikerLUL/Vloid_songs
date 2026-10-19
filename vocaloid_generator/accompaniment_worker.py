@@ -9,6 +9,8 @@
 # wie im Modell: GM-Programm, 128 = Schlagzeug), die Länge, den Seed und wohin das Ergebnis soll. Das Modell kennt nur
 # 100 Sekunden; deshalb schreibt es in Stücken von CHUNK Sekunden, jedes mit den letzten HISTORY Sekunden davor als
 # Anfang. Die letzte Zeile der Ausgabe ist "BEGLEITET " und JSON mit Gerät, Modell und Zahl der Töne.
+# Mit "mode": "melody" (1.3.0, M7) schreibt es zu den vorgegebenen Tönen eines Refrains "takes" Fassungen, jede mit
+# eigenem Seed; die App sucht sich daraus die Melodie (ai_melody.py).
 import json
 import sys
 
@@ -82,6 +84,16 @@ def main(args: list) -> int:
     without_links()
     model = AutoModelForCausalLM.from_pretrained(name).to(device)
     model.eval()
+    if job.get("mode") == "melody":
+        takes = []
+        for k in range(int(job.get("takes", 1))):
+            torch.manual_seed(int(job.get("seed", 0)) + k)
+            takes.append(accompany(model, job["notes"], float(job["seconds"]), float(job.get("top_p", 0.95))))
+            print(f"Melodie {k + 1} von {job.get('takes', 1)} geschrieben", flush=True)
+        with open(job["output"], "w", encoding="utf-8") as f:
+            json.dump({"takes": takes, "model": name}, f)
+        print(MARKER + json.dumps({"device": device, "model": name, "notes": sum(len(t) for t in takes)}), flush=True)
+        return 0
     written = accompany(model, job["notes"], float(job["seconds"]), float(job.get("top_p", 0.95)))
     with open(job["output"], "w", encoding="utf-8") as f:
         json.dump({"notes": written, "model": name}, f)

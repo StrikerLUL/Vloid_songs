@@ -87,6 +87,13 @@ def song_panel(s: SongSettings, pick: PickFn, apply_template: Callable[[SongSett
     templates_editor(s, apply_template)
 
 
+# Gesang 1.3.0, jede Neuerung mit Schalter
+VOICE_SWITCHES = (
+    ("resonance_tamer", "Härte zähmen", "Wie das Plugin soothe2: wenn hohe, laute Töne schrill werden, werden nur die "
+                                        "Frequenzen leiser, die gerade herausstechen, und nur so lange. Die Stimme "
+                                        "bleibt hell und nah"),
+)
+
 # Band 1.3.0, jede Neuerung mit Schalter
 BAND_SWITCHES = (
     ("intro_riff", "Eigenes Intro-Riff", "Die Lead-Stimme spielt im Intro eine eigene Figur aus zwei Takten statt der "
@@ -769,6 +776,9 @@ def voice_panel(s: SongSettings, singers: list, pick: PickFn | None = None) -> t
                  "danach lauter und leiser gedreht zu werden. Leiser klingt dann auch weicher.")
     section_title("Rap-Teil")
     rap_editor(s)
+    section_title("Gesang wie produziert")
+    for attr, text, tip in VOICE_SWITCHES:
+        ui.switch(text).bind_value(s, attr).props("dense").tooltip(tip).mark(f"switch-{attr}")
     section_title("Lebendiger Gesang")
     for attr, text, tip in LIVELY_SWITCHES:
         ui.switch(text).bind_value(s, attr).props("dense").tooltip(tip).mark(f"switch-{attr}")

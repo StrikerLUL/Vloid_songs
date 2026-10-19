@@ -22,6 +22,7 @@ OFF_130 = (
     ("melody_pickups", "--ohne-auftakte", "Phrasen beginnen auf der Eins, keine vorgezogenen Töne"),
     ("intro_riff", "--ohne-intro-riff", "Intro und Outro spielen die Refrain-Melodie nach, kein Zwischenspiel"),
     ("kime", "--ohne-kime", "keine gemeinsamen Akzente, Stopps und Läufe der Band"),
+    ("resonance_tamer", "--ohne-haerte-zaehmen", "keine Zähmung schriller Stellen im Gesang (nur der feste EQ)"),
 )
 
 

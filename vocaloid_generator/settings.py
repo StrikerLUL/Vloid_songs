@@ -216,6 +216,7 @@ class SongSettings(BaseModel):
     vocal_ride: bool = True            # der Gesang wird nachgeführt, damit er gleich weit über der Band steht
     convolution_reverb: bool = True    # Gesangsplatte aus einer Impulsantwort, Pre-Delay im Tempo
     ducked_delay: bool = True          # das Gesangs-Delay ist leiser, solange gesungen wird
+    resonance_tamer: bool = True       # G2 (1.3.0): Härte zähmen, nur gerade herausstechende Frequenzen leiser
     # Begleitstimmen wie in Produktionen (backing_vocals.py), von NEUTRINO gesungen
     harmony_variety: bool = True       # Harmonie je Refrain anders (Phrasenenden, Terz darunter, darüber, Oktave)
     harmony_double: bool = True        # jede Harmonie zweimal gesungen, links und rechts

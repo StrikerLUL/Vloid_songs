@@ -38,6 +38,7 @@ REAL_DOUBLE_DB, REAL_DOUBLE_DELAY = -8.0, 0.012
 # Gesangsspuren: Hauptstimme, zweite Stimme, der Chor im letzten Refrain („gang“) und die Doppelung; sie hören auf
 # den Kanal Gesang
 VOCAL_KEYS = ("vocals", "harmony", "gang", "double")
+TAMED = ("vocals", "double", "harmony")      # diese Stimmen zähmt resonance.py (1.3.0, G2)
 # Studio-Gesangskette: Sättigung (Drive in dB, Anteil) und je Sektion eigener Hall und Delay (Anteil des Sends)
 SATURATION_DB, SATURATION_MIX = 6.0, 0.3
 VOCAL_SPACE = {"Intro": (0.22, 0.15), "Verse": (0.10, 0.08), "PreChorus": (0.14, 0.12), "Chorus": (0.20, 0.16),
@@ -503,6 +504,7 @@ def mische_spuren(
     airwindows: bool = False,
     true_peak: bool = False,
     level_of: Optional[float] = None,
+    tame: bool = False,
 ) -> Optional[float]:
     """
     Mischt die Spuren zu einem Stereo-Master:
@@ -533,6 +535,8 @@ def mische_spuren(
     airwindows: mit Airwindows Consolidated (setup_airwindows.py), wenn es da ist: Bandsättigung ToTape9 statt der
     eigenen auf dem Gesang, Console7 auf jeder Spur und der Summe.
     true_peak: auch zwischen den Samples höchstens TRUE_PEAK_DB (gemessen mit vierfacher Überabtastung).
+    tame: Härte zähmen (resonance.py): Hauptstimme, Doppelung und zweite Stimme werden nur dort leiser, wo einzelne
+    Frequenzen gerade herausstechen.
     level_of: die Lautheit des ganzen Songs vor dem Master (der Rückgabewert seines Mixes); dann ist dieser Mix ein
     Teil davon (Off-Vocal, A-cappella) und bleibt so laut, wie er im Song klingt, statt auf target_lufs zu kommen.
     Rückgabe: die Lautheit dieses Mixes vor dem Master (LUFS), None ohne Mix.
@@ -570,6 +574,9 @@ def mische_spuren(
             audio *= 1.0 - _window_mask(length, sung_pads)
         if key in VOCAL_KEYS:
             audio = _deess(audio)
+        if tame and key in TAMED:
+            import resonance
+            audio = resonance.tame(audio, SAMPLE_RATE)
         if key in ("vocals", "double") and vocal_chain:
             if tape is not None:
                 audio = _keep_level(tape(audio, SAMPLE_RATE), audio)

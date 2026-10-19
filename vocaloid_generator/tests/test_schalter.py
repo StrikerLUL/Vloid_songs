@@ -29,7 +29,7 @@ NOTES = ("more_motifs", "numbered_lyrics", "harmony_variety", "sung_pads", "adli
 # Ändert die Einstellungen des Mixes (mixdown.mix_arguments); in Klammern der Stil, in dem er wirkt
 MIX = {"echo_throws": None, "vocal_chain": None, "vocal_tone": None, "vocal_unmask": None, "vocal_ride": None,
        "convolution_reverb": None, "ducked_delay": None, "mix_movement": None, "airwindows": None,
-       "lofi_texture": "Lo-Fi", "true_peak": None}
+       "lofi_texture": "Lo-Fi", "true_peak": None, "resonance_tamer": None}
 # Ändert, womit eine Spur klingt (rendering._render_job)
 RENDER = ("sound_library", "guitar_amp", "real_drums", "band_samples")
 # Ändert, was auf der fertigen Gesangsspur passiert (singing._liven)

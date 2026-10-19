@@ -117,6 +117,9 @@ MELODY_SWITCHES = (
     ("melody_climax", "Höhepunkt im letzten Refrain", "Strophen bleiben unter dem Spitzenton des Refrains, und die "
                                                       "Schlusszeile des letzten Refrains endet oben, auf dem höchsten "
                                                       "Ton des ganzen Songs"),
+    ("melody_triplets", "Triolen", "Drei Silben in einem Schlag werden manchmal zur Achteltriole, zwei Achtel zu "
+                                   "punktierter Achtel und Sechzehntel; im City Pop, in der Ballade und im Lo-Fi "
+                                   "öfter. NEUTRINO bekommt echte Triolen in den Noten. Nur im 4/4-Takt"),
     ("intro_riff", "Eigenes Intro-Riff", "Die Lead-Stimme spielt im Intro eine eigene Figur aus zwei Takten statt der "
                                          "Refrain-Melodie; sie kommt in einem Zwischenspiel nach dem ersten Refrain "
                                          "und im Outro wieder und läuft im letzten Refrain leise mit"),

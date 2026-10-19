@@ -25,6 +25,7 @@ OFF_130 = (
     ("resonance_tamer", "--ohne-haerte-zaehmen", "keine Zähmung schriller Stellen im Gesang (nur der feste EQ)"),
     ("melody_tensions", "--ohne-spannungstoene", "keine Vorhalte, lange Töne nur auf Akkordtönen"),
     ("melody_climax", "--ohne-hoehepunkt", "der letzte Refrain endet wie die anderen, die Strophen dürfen höher"),
+    ("melody_triplets", "--ohne-triolen", "die Melodie bleibt im Sechzehntel-Raster, ohne Triolen und Punktierungen"),
     ("chord_spice", "--ohne-akkord-wuerze", "nur die Akkordfolgen des Stils, ohne Zwischendominanten und Leihakkorde"),
     ("smart_readings", "--ohne-partikel", "は/へ/を in reinen Kana und Zahlwörter wie 一回 so singen, wie geschrieben"),
 )

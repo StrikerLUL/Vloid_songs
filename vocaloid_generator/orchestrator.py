@@ -42,7 +42,7 @@ SWING_MAX = 1 / 6                       # Swing 0.5 schiebt die zweite Sechzehnt
 GROOVE_SWING_UNTIL = 0.2
 SLIDE_SECONDS, SLIDE_STEPS = 0.08, 8     # so lange gleitet ein Bass-Slide, in so vielen Schritten
 # Neuerungen aus 1.3.0, die nur im 4/4-Takt spielen (Synkopen und Triolen im Sechzehntel-Raster)
-FOUR_FOUR_ONLY = ("melody_pickups", "kime")
+FOUR_FOUR_ONLY = ("melody_pickups", "kime", "melody_triplets")
 # Teile mit eigenem Zufall (wie settings.REROLLABLE): Akkorde und Ablauf, Gesangsmelodie, jedes Instrument
 REROLLABLE = ("chords",) + INSTRUMENTS
 

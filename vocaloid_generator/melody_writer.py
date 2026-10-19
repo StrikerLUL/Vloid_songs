@@ -9,6 +9,7 @@ import logging
 import math
 import random
 from dataclasses import dataclass, replace
+from fractions import Fraction
 from typing import Optional
 
 from lyrics import Mora, for_occurrence, vowel
@@ -118,6 +119,11 @@ APPOGGIATURA_MIN_BEATS = 1.0
 COLOR_SHARE = {"Chorus": 0.35, "Bridge": 0.2}
 COLOR_MIN_BEATS = 1.5
 MAJOR_QUALITIES = ("maj", "maj7", "add9", "maj9", "6")
+# M5: drei Silben in einem Schlag als Achteltriole, zwei Achtel als punktierte Achtel und Sechzehntel; so oft je
+# Schlag, der dafür passt (City Pop, Ballade und Lo-Fi mehr)
+TRIPLET_SHARE = {"City Pop": 0.3, "Ballade": 0.3, "Lo-Fi": 0.25}
+DOTTED_SHARE = {"City Pop": 0.25, "Ballade": 0.25, "Lo-Fi": 0.2}
+FIGURE_SHARE = 0.1
 # M4: der höchste Ton des Songs kommt einmal, am Ende des letzten Refrains; so viele Halbtöne darf er über der
 # geschriebenen Stimmlage liegen
 CLIMAX_ABOVE = 2
@@ -205,6 +211,7 @@ class SectionMelodyWriter:
         self.melisma = {}
         self.pushes = {}
         self.tensions = {}
+        self.figures = {}
         # Sechzehntel pro Takt: 16, im 3/4-Takt 12 (dort schreibt der Writer im fertigen Takt, meter.py)
         self.bar_steps = int(round(section.bar_beats * STEPS_PER_BEAT))
         self.waltz = self.bar_steps == 12
@@ -462,6 +469,7 @@ class SectionMelodyWriter:
         for ph, (chunk, role) in enumerate(zip(chunks, roles)):
             phrase_start = self.sec.start + ph * pb * self.sec.bar_beats
             slots = self.phrase_rhythm(len(chunk), pb, role, self._pickup(ph, role, len(chunk), notes, phrase_start))
+            slots = self._figures(slots, role)
             base_role = role.rstrip("2")
             reference = written.get(base_role)
             same_rhythm = reference and [s.step for s, _ in reference] == [s.step for s in slots]
@@ -473,8 +481,8 @@ class SectionMelodyWriter:
                 if role == "H":
                     pitches = self.sequence_bars(slots, pitches, phrase_start)
             written.setdefault(role, list(zip(slots, pitches)))
-            phrase = [MelNote(start=phrase_start + slot.step / STEPS_PER_BEAT, dur=slot.dur / STEPS_PER_BEAT,
-                              pitch=pitch, syllable=syl, strong=slot.strong)
+            phrase = [MelNote(start=phrase_start + float(slot.step) / STEPS_PER_BEAT,
+                              dur=float(slot.dur) / STEPS_PER_BEAT, pitch=pitch, syllable=syl, strong=slot.strong)
                       for slot, pitch, syl in zip(slots, pitches, chunk)]
             self._push(slots, phrase, role)
             for slot, group in zip(slots, self._tension(slots, phrase, role)):
@@ -526,6 +534,42 @@ class SectionMelodyWriter:
                 note.dur += early
                 note.pushed = True
                 prev.dur -= early
+
+    # ── Triolen und punktierte Rhythmen (M5) ─────────────────────────────────────
+    def _figures(self, slots: list, role: str) -> list:
+        """Schläge mit drei Einsätzen werden zur Achteltriole, Schläge mit zwei Achteln punktiert. Gleiche Stellen
+        gleicher Phrasen entscheiden gleich (die Hook bleibt), nur im 4/4-Takt."""
+        if "melody_triplets" not in self.extras or self.waltz or self.kind == "Rap" or not slots:
+            return slots
+        style = self.plan.style.name
+        out = list(slots)
+        beats = int(max(s.step + s.dur for s in slots) // STEPS_PER_BEAT)
+        for b in range(beats):
+            begin, end = b * STEPS_PER_BEAT, (b + 1) * STEPS_PER_BEAT
+            idx = [i for i, s in enumerate(out) if begin <= s.step < end]
+            if not idx or out[idx[0]].step != begin:
+                continue
+            last = out[idx[-1]]
+            reach = last.step + last.dur
+            if len(idx) == 3 and reach >= end:
+                key, share = (role.rstrip("2"), b, 3), TRIPLET_SHARE.get(style, FIGURE_SHARE)
+                third = Fraction(STEPS_PER_BEAT, 3)
+                if self._figure(key, share):
+                    for k, i in enumerate(idx):
+                        start = begin + k * third
+                        out[i] = _Slot(start, third if k < 2 else reach - start, out[i].strong, out[i].last)
+            elif len(idx) == 2 and out[idx[1]].step == begin + 2 and out[idx[0]].dur == 2 and reach >= end:
+                key, share = (role.rstrip("2"), b, 2), DOTTED_SHARE.get(style, FIGURE_SHARE)
+                if self._figure(key, share):
+                    first, second = out[idx[0]], out[idx[1]]
+                    out[idx[0]] = _Slot(first.step, 3, first.strong, first.last)
+                    out[idx[1]] = _Slot(begin + 3, reach - begin - 3, second.strong, second.last)
+        return out
+
+    def _figure(self, key: tuple, share: float) -> bool:
+        if key not in self.figures:
+            self.figures[key] = self.rng.random() < share
+        return self.figures[key]
 
     # ── Vorhalte und Spannungstöne (M3) ──────────────────────────────────────────
     def _tension(self, slots: list, phrase: list, role: str) -> list:

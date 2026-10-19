@@ -173,3 +173,39 @@ def test_the_song_gets_spicier_chords_only_with_the_slider(new_composition, tmp_
     refrains = [[(s.start - sec.start, s.chord.transposed(-sec.tonic)) for s in sec.chords]
                 for sec in plan.sections if sec.kind == "Chorus"]
     assert all(r == refrains[0] for r in refrains)
+
+
+def _thirds(notes) -> list:
+    return [n for n in notes if abs(n.start * 3 - round(n.start * 3)) < 1e-6 and abs(n.start * 4 - round(n.start * 4)) > 1e-6]
+
+
+def test_triplets_and_dotted_rhythms_reach_neutrino_as_real_tuplets(new_composition, tmp_path, written):
+    import re
+
+    import vocal_synthesizer
+    from melody_writer import melody_data
+    tracks = _song(tmp_path, style="City Pop", bpm=100, melody_tensions=False)
+    notes = sorted(written[-1], key=lambda n: n.start)
+    thirds = _thirds(notes)
+    assert thirds, "Achteltriolen"
+    for n in thirds:          # jede Triole füllt ihren Schlag: der Ton davor beginnt eine Triolen-Achtel früher
+        before = max((m for m in notes if m.start < n.start - 1e-6), key=lambda m: m.start)
+        assert abs(n.start - before.start - 1 / 3) < 1e-6
+    dotted = [n for n in notes if abs(n.start % 1 - 0.75) < 1e-6 and not n.pushed
+              and any(abs(m.start - (n.start - 0.75)) < 1e-6 and abs(m.dur - 0.75) < 1e-6 for m in notes)]
+    assert dotted, "punktierte Achtel mit Sechzehntel"
+    data, syllables = melody_data(notes)
+    xml = vocal_synthesizer.erstelle_musicxml(data, syllables, 100, str(tmp_path / "triolen.musicxml"))
+    text = open(xml, encoding="utf-8").read()
+    assert "<time-modification>" in text and "<actual-notes>3</actual-notes>" in text
+    import music21
+    lead_in = vocal_synthesizer._vorlauf_aus_musicxml(xml)
+    assert abs(float(music21.converter.parse(xml).highestTime) - lead_in - sum(d for _, d in data)) < 0.01
+    # aus und im 3/4-Takt: alles im Sechzehntel-Raster
+    _song(tmp_path, style="City Pop", bpm=100, melody_tensions=False, melody_triplets=False)
+    assert not _thirds(written[-1])
+    _song(tmp_path, style="City Pop", bpm=100, meter="3/4")
+    assert not _thirds(written[-1])
+    assert re.search("actual-notes", open(vocal_synthesizer.erstelle_musicxml(
+        [(64, 1.0), (None, 0.5), (65, 0.5)], ["ら", "ら"], 100, str(tmp_path / "gerade.musicxml")),
+        encoding="utf-8").read()) is None

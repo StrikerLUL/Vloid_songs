@@ -2,6 +2,7 @@
 import logging
 import os
 import subprocess
+from fractions import Fraction
 
 import soundfile as sf
 
@@ -221,18 +222,31 @@ def installed_singers(neutrino_pfad: str) -> list:
     return sorted(found) or sorted(STIMMEN)
 
 
-def _quantisiere_dauer(d: float) -> float:
-    """Auf Zweiunddreißigstel runden, ohne die Länge zu verfälschen (Taktgrenzen bindet music21 selbst über)."""
-    return max(0.125, round(float(d) * 8) / 8)
+TRIOLEN_TOLERANZ = 2e-3     # so nah an einer Triolen-Länge (Vielfache einer Zwölftel-Viertel) ist eine Triole
+
+
+def _quantisiere_dauer(d: float):
+    """Auf Zweiunddreißigstel runden, ohne die Länge zu verfälschen (Taktgrenzen bindet music21 selbst über).
+    Triolen (1.3.0, M5) bleiben Triolen: eine Länge auf dem Zwölftel-Raster wird ein Bruch, den music21 als echte
+    Triole schreibt."""
+    d = float(d)
+    zweiunddreissigstel = round(d * 8) / 8
+    triole = Fraction(round(d * 12), 12)
+    if abs(d - float(triole)) < TRIOLEN_TOLERANZ < abs(d - zweiunddreissigstel) and triole > 0:
+        return triole
+    return max(0.125, zweiunddreissigstel)
 
 
 def _pausen(dauer: float) -> list:
-    """Lange Pausen in notierbare Stücke teilen, damit Gesang und Band synchron bleiben."""
-    rest, teile = _quantisiere_dauer(dauer), []
+    """Lange Pausen in notierbare Stücke teilen, damit Gesang und Band synchron bleiben; ein Rest auf dem
+    Triolen-Raster wird das letzte Stück."""
+    rest, teile = Fraction(_quantisiere_dauer(dauer)), []
     for wert in _REST_WERTE:
-        while rest >= wert - 1e-9:
+        while rest >= Fraction(wert) - Fraction(1, 10 ** 9):
             teile.append(wert)
-            rest -= wert
+            rest -= Fraction(wert)
+    if rest > 0:
+        teile.append(rest)
     return teile
 
 

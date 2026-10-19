@@ -92,6 +92,9 @@ MELODY_SWITCHES = (
     ("best_melody", "Beste Melodie suchen", "Jede Sektion wird 30-mal geschrieben; es singt die Fassung mit den meisten "
                                             "Punkten: klarer Höhepunkt, Schritte und Sprünge gemischt, wenige "
                                             "Tonwiederholungen, Motive, die wiederkommen, ein Refrain über der Strophe"),
+    ("melody_pickups", "Auftakte und Synkopen", "Manche Phrasen beginnen ein bis drei Silben vor dem Takt, und Töne auf "
+                                                "der Eins kommen manchmal eine Sechzehntel früher, wie im J-Pop. Nur im "
+                                                "4/4-Takt"),
 )
 
 BAR_CHOICES = (2, 4, 8, 12, 16, 24, 32)

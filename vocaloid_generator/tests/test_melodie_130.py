@@ -2,6 +2,8 @@
 # Triolen (M5)
 import random
 
+import pytest
+
 import config
 import melody_score
 import pipeline
@@ -61,3 +63,45 @@ def test_the_best_of_many_melodies_sings(new_composition, tmp_path, monkeypatch)
     pipeline.compose(s.with_updates(best_melody=False))
     assert picked == []
     assert SectionMelodyWriter(plan, chorus, random.Random(1)).write(words)
+
+
+def _song(tmp_path, **updates):
+    s = SongSettings(output_ordner=str(tmp_path), seed=11).with_updates(**updates)
+    tracks, _ = pipeline.compose(s)
+    return tracks
+
+
+@pytest.fixture
+def written(monkeypatch):
+    """Die Gesangsmelodie, wie melody_writer sie geschrieben hat (MelNotes mit ihren Merkmalen)."""
+    import orchestrator
+    seen = []
+    real = orchestrator.write_vocal_melody
+    monkeypatch.setattr(orchestrator, "write_vocal_melody", lambda *a, **k: seen.append(real(*a, **k)) or seen[-1])
+    return seen
+
+
+def _entries_before_the_bar(notes) -> list:
+    """Töne nach einer Pause im letzten Schlag eines Takts: so beginnt eine Phrase mit Auftakt."""
+    ordered = sorted(notes, key=lambda n: n.start)
+    return [n for a, n in zip(ordered, ordered[1:]) if n.start - a.start - a.dur >= 0.25 - 1e-6
+            and n.start % 4 >= 3 - 1e-6 and not n.pushed]
+
+
+def test_phrases_start_before_the_bar_and_downbeats_are_pushed(new_composition, tmp_path, written):
+    tracks = _song(tmp_path)
+    notes, plan = written[-1], tracks["plan"]
+    pushed = [n for n in notes if n.pushed]
+    assert pushed and all(abs((n.start + 0.25) % 4) < 1e-6 for n in pushed)
+    assert all(n.pitch % 12 in plan.chord_at(n.start + 0.25).pcs or not n.strong for n in pushed), "Akkord danach"
+    assert len(_entries_before_the_bar(notes)) >= 2
+    ordered = sorted(notes, key=lambda n: n.start)
+    assert all(a.start + a.dur <= b.start + 1e-6 for a, b in zip(ordered, ordered[1:])), "nichts überlappt"
+    for sec in plan.sections:            # alles bleibt in seiner Sektion
+        assert all(n.start + n.dur <= sec.end + 1e-6 for n in notes if sec.start - 1e-6 <= n.start < sec.end)
+    # aus: alle Phrasen beginnen im Takt und nichts ist vorgezogen
+    _song(tmp_path, melody_pickups=False)
+    assert not any(n.pushed for n in written[-1]) and not _entries_before_the_bar(written[-1])
+    # im 3/4-Takt bleibt alles im Takt
+    _song(tmp_path, meter="3/4")
+    assert not any(n.pushed for n in written[-1])

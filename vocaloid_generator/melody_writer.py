@@ -8,7 +8,7 @@
 import logging
 import math
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Optional
 
 from lyrics import Mora, for_occurrence, vowel
@@ -104,6 +104,13 @@ SPECIAL_MORAE = ("ん", "っ")
 MELISMA_SHARE = {"Chorus": 0.35, "Verse": 0.2, "PreChorus": 0.25, "Bridge": 0.45, "Rap": 0.0}
 MELISMA_MIN_STEPS = 6
 LEARNED_SHARE = 0.5     # so oft singt ein Takt einen aus MIDI-Dateien gelernten Rhythmus (motifs.py), wenn es einen gibt
+# M2 (1.3.0): Auftakte und vorgezogene Töne. Eine Phrase beginnt mit 1 bis 3 Silben vor dem Taktstrich (Sechzehntel
+# vor der Eins), und ein Ton auf der Eins kommt manchmal eine Sechzehntel früher, über den Taktstrich gebunden.
+PICKUPS = {1: [(-2,), (-1,)], 2: [(-2, -1), (-3, -2)], 3: [(-3, -2, -1)]}
+PICKUP_SIZES = ((1, 0.45), (2, 0.4), (3, 0.15))
+PICKUP_SHARE = {"Chorus": 0.6, "PreChorus": 0.6, "Verse": 0.5, "Bridge": 0.5}
+PUSH_SHARE = {"Chorus": 0.3, "PreChorus": 0.3, "Verse": 0.2, "Bridge": 0.2}
+PUSH_STEPS = 1          # so viele Sechzehntel früher
 
 
 @dataclass
@@ -113,6 +120,13 @@ class MelNote:
     pitch: int
     syllable: Optional[str] = None
     strong: bool = False
+    pushed: bool = False          # M2: kommt eine Sechzehntel vor dem Takt, gemeint ist der Akkord danach
+    tension: bool = False         # M3: ein gewollter Spannungston (Vorhalt, None), kein Fehler im Akkord
+
+
+def heard_at(note: MelNote) -> float:
+    """Der Schlag, dessen Akkord ein Ton meint: bei einem vorgezogenen Ton der nach dem Taktstrich."""
+    return note.start + PUSH_STEPS / STEPS_PER_BEAT if note.pushed else note.start
 
 
 @dataclass
@@ -179,6 +193,7 @@ class SectionMelodyWriter:
         self.motifs = {}
         self.gestures = {}
         self.melisma = {}
+        self.pushes = {}
         # Sechzehntel pro Takt: 16, im 3/4-Takt 12 (dort schreibt der Writer im fertigen Takt, meter.py)
         self.bar_steps = int(round(section.bar_beats * STEPS_PER_BEAT))
         self.waltz = self.bar_steps == 12
@@ -249,8 +264,10 @@ class SectionMelodyWriter:
             self.motifs[key] = self.rng.choice(options) if count <= 6 else self._motif(count)
         return self.motifs[key]
 
-    def phrase_rhythm(self, n: int, phrase_bars: int, role: str) -> list:
-        """Einsätze und Längen (in Sechzehnteln) für n Silben in einer Phrase."""
+    def phrase_rhythm(self, n: int, phrase_bars: int, role: str, pickup: tuple = ()) -> list:
+        """Einsätze und Längen (in Sechzehnteln) für n Silben in einer Phrase. pickup: Einsätze vor der Eins (negativ,
+        M2) für die ersten Silben."""
+        n -= len(pickup)
         if phrase_bars == 1:
             counts, end = [], n
         else:
@@ -271,6 +288,7 @@ class SectionMelodyWriter:
             onsets.extend(b * self.bar_steps + s for s in self._motif(c, variant))
         last_bar = len(counts) * self.bar_steps
         onsets.extend(last_bar + s for s in self._end_rhythm(end, role))
+        onsets = list(pickup) + onsets
         phrase_end = last_bar + self.release
         if onsets and onsets[-1] >= phrase_end - 1:
             phrase_end = min(last_bar + self.bar_steps, onsets[-1] + 2)
@@ -432,7 +450,7 @@ class SectionMelodyWriter:
         written = {}
         for ph, (chunk, role) in enumerate(zip(chunks, roles)):
             phrase_start = self.sec.start + ph * pb * self.sec.bar_beats
-            slots = self.phrase_rhythm(len(chunk), pb, role)
+            slots = self.phrase_rhythm(len(chunk), pb, role, self._pickup(ph, role, len(chunk), notes, phrase_start))
             base_role = role.rstrip("2")
             reference = written.get(base_role)
             same_rhythm = reference and [s.step for s, _ in reference] == [s.step for s in slots]
@@ -444,12 +462,56 @@ class SectionMelodyWriter:
                 if role == "H":
                     pitches = self.sequence_bars(slots, pitches, phrase_start)
             written.setdefault(role, list(zip(slots, pitches)))
-            for slot, pitch, syl in zip(slots, pitches, chunk):
-                note = MelNote(start=phrase_start + slot.step / STEPS_PER_BEAT, dur=slot.dur / STEPS_PER_BEAT,
-                               pitch=pitch, syllable=syl, strong=slot.strong)
+            phrase = [MelNote(start=phrase_start + slot.step / STEPS_PER_BEAT, dur=slot.dur / STEPS_PER_BEAT,
+                              pitch=pitch, syllable=syl, strong=slot.strong)
+                      for slot, pitch, syl in zip(slots, pitches, chunk)]
+            self._push(slots, phrase, role)
+            for slot, note in zip(slots, phrase):
                 notes += self._melisma(note, role) if slot.last and slot.dur >= MELISMA_MIN_STEPS else [note]
             prev = pitches[-1] if pitches else prev
         return notes
+
+    # ── Auftakte und vorgezogene Töne (M2) ───────────────────────────────────────
+    def _grooves(self) -> bool:
+        return "melody_pickups" in self.extras and not self.waltz and self.kind != "Rap"
+
+    def _pickup(self, ph: int, role: str, n: int, notes: list, phrase_start: float) -> tuple:
+        """Einsätze vor der Eins für die ersten Silben der Phrase, oder (). Nie in der ersten Phrase der Sektion und
+        nie in Phrasen, die wörtlich wiederkehren (H, A, P), damit die Hook gleich bleibt."""
+        if not self._grooves() or ph == 0 or role in ("H", "A", "P") or not notes:
+            return ()
+        if self.rng.random() >= PICKUP_SHARE.get(self.kind, 0.3):
+            return ()
+        room = (phrase_start - notes[-1].start - notes[-1].dur) * STEPS_PER_BEAT - 1   # eine Sechzehntel zum Atmen
+        sizes, weights = zip(*PICKUP_SIZES)
+        k = min(self.rng.choices(sizes, weights)[0], n - 2)
+        while k > 0:
+            options = [p for p in PICKUPS[k] if -p[0] <= room]
+            if options:
+                return self.rng.choice(options)
+            k -= 1
+        return ()
+
+    def _push(self, slots: list, phrase: list, role: str) -> None:
+        """Töne auf der Eins kommen eine Sechzehntel früher, der Ton davor wird so viel kürzer (Synkope über den
+        Taktstrich). Gleiche Stellen gleicher Phrasen werden gleich vorgezogen."""
+        if not self._grooves():
+            return
+        share = PUSH_SHARE.get(self.kind, 0.2)
+        early = PUSH_STEPS / STEPS_PER_BEAT
+        for i in range(1, len(slots)):
+            slot, before = slots[i], slots[i - 1]
+            if slot.step <= 0 or slot.step % self.bar_steps or before.step + before.dur != slot.step or before.dur < 2:
+                continue
+            key = (role.rstrip("2"), slot.step)
+            if key not in self.pushes:
+                self.pushes[key] = self.rng.random() < share
+            if self.pushes[key]:
+                note, prev = phrase[i], phrase[i - 1]
+                note.start -= early
+                note.dur += early
+                note.pushed = True
+                prev.dur -= early
 
     def _melisma(self, note: MelNote, role: str) -> list:
         """Der lange Schlusston gleitet auf den nächsten Akkordton darunter (oder darüber), auf demselben Vokal."""
@@ -467,7 +529,7 @@ class SectionMelodyWriter:
         target = max(below) if below else min(above) if above else None
         if target is None:
             return [note]
-        return [MelNote(note.start, first, note.pitch, note.syllable, note.strong),
+        return [replace(note, dur=first),
                 MelNote(second_start, note.dur - first, target, Mora(sung, melisma=True), False)]
 
 
@@ -561,8 +623,7 @@ def write_vocal_melody(plan: SongPlan, lyrics: dict, rng: random.Random, rerolls
         else:
             first, first_notes = written[sec.kind]
             shift = (sec.tonic - first.tonic + 6) % 12 - 6
-            sec_notes = [MelNote(n.start - first.start + sec.start, n.dur, n.pitch + shift, n.syllable, n.strong)
-                         for n in first_notes]
+            sec_notes = [replace(n, start=n.start - first.start + sec.start, pitch=n.pitch + shift) for n in first_notes]
             own = for_occurrence(lyrics, sec.kind, sec.occurrence)
             if own:
                 sec_notes = fit_text(sec_notes, own)
@@ -616,7 +677,7 @@ def fit_text(notes: list, syllables: list) -> list:
     dieses Vorkommens verschoben), syllables: der neue Text. Ist er viel kürzer als der alte, wird er wie beim ersten
     Vorkommen wiederholt. Rückgabe: neue Töne mit den neuen Silben; Tonhöhen und Phrasen bleiben.
     """
-    out = [[MelNote(n.start, n.dur, n.pitch, n.syllable, n.strong), not _held(n)] for n in sorted(notes, key=lambda n: n.start)]
+    out = [[replace(n), not _held(n)] for n in sorted(notes, key=lambda n: n.start)]
     words = [w for w in syllables if w]
     if not out or not words:
         return [n for n, _ in out]
@@ -702,7 +763,7 @@ def make_singable(plan: SongPlan, notes: list) -> dict:
 
 def _scale_at(plan: SongPlan, n: MelNote) -> tuple:
     sec = plan.section_at(n.start)
-    chord = plan.chord_at(n.start)
+    chord = plan.chord_at(heard_at(n))
     return _local_scale(sec.tonic, sec.mode, chord), chord
 
 
@@ -774,9 +835,10 @@ def _breathe(plan: SongPlan, ordered: list) -> int:
 def _fit_to_chords(plan: SongPlan, notes: list) -> None:
     """Sicherheitsnetz: lange oder betonte Töne, die nicht zum Akkord passen (z. B. vor dem Tonartwechsel), rücken auf den nächsten Akkordton."""
     for n in notes:
-        chord = plan.chord_at(n.start)
+        chord = plan.chord_at(heard_at(n))
         sec = plan.section_at(n.start)
-        if n.pitch % 12 in _local_scale(sec.tonic, sec.mode, chord) and not (n.strong and n.dur >= 1 and n.pitch % 12 not in chord.pcs):
+        if n.tension or n.pitch % 12 in _local_scale(sec.tonic, sec.mode, chord) and \
+                not (n.strong and n.dur >= 1 and n.pitch % 12 not in chord.pcs):
             continue
         lo, hi = plan.vocal_range
         candidates = [p for p in range(n.pitch - 3, n.pitch + 4) if p % 12 in chord.pcs and lo <= p <= hi + 1]
@@ -809,7 +871,7 @@ def harmony_line(plan: SongPlan, notes: list, kinds: tuple = ("Chorus",), modes:
         mode = (modes or {}).get(sec.start, "above")
         if mode == "ends" and id(n) not in ends:
             continue
-        chord = sec.chord_at(n.start)
+        chord = sec.chord_at(heard_at(n))
         scale = sorted(set(scale_pcs(sec.tonic, sec.mode)) | set(chord.pcs))
         ladder = [p for p in range(n.pitch - 12, n.pitch + 13) if p % 12 in scale]
         i = ladder.index(n.pitch) if n.pitch in ladder else min(range(len(ladder)), key=lambda j: abs(ladder[j] - n.pitch))

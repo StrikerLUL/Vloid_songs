@@ -80,6 +80,7 @@ ELSEWHERE = {
     "video_colors": "test_video.py::test_the_video_takes_the_colors_of_the_style_only_with_the_switch",
     # 1.3.0
     "best_melody": "test_melodie_130.py::test_the_best_of_many_melodies_sings",
+    "melody_pickups": "test_melodie_130.py::test_phrases_start_before_the_bar_and_downbeats_are_pushed",
 }
 # Bedienung der App, ändert den Song nicht
 APP = ("show_karaoke", "reuse_steps", "log_file", "update_check", "setup_wizard", "done_notice", "lyric_hints",

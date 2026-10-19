@@ -38,7 +38,7 @@ STYLE_TO_GENRE = {
 ProgressFn = Callable[[float, str], None]
 
 # Neuerungen aus 1.3.0, die die Noten ändern: orchestrate_song bekommt die eingeschalteten als extras
-NEW_COMPOSITION = ("best_melody",)
+NEW_COMPOSITION = ("best_melody", "melody_pickups")
 COMPOSITION_EXTRAS = NEW_COMPOSITION     # die Tests schalten sie hier ab (conftest.py)
 
 

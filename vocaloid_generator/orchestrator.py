@@ -40,6 +40,8 @@ SWING_MAX = 1 / 6                       # Swing 0.5 schiebt die zweite Sechzehnt
 # Stile, die wirklich swingen (Lo-Fi), spielen die eingebauten Grooves. Sein eigenes Timing ersetzt dann den Swing.
 GROOVE_SWING_UNTIL = 0.2
 SLIDE_SECONDS, SLIDE_STEPS = 0.08, 8     # so lange gleitet ein Bass-Slide, in so vielen Schritten
+# Neuerungen aus 1.3.0, die nur im 4/4-Takt spielen (Synkopen und Triolen im Sechzehntel-Raster)
+FOUR_FOUR_ONLY = ("melody_pickups",)
 # Teile mit eigenem Zufall (wie settings.REROLLABLE): Akkorde und Ablauf, Gesangsmelodie, jedes Instrument
 REROLLABLE = ("chords",) + INSTRUMENTS
 
@@ -91,6 +93,9 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
     band = get_style(band_style) if band_style else profile
     m = meters.get(meter)
     extras = dict(extras or {})
+    if m.name != "4/4":
+        for name in FOUR_FOUR_ONLY:
+            extras.pop(name, None)
     dice = Dice(random.getrandbits(32), variations or {})
     swing = min(1.0, band.swing + (swing or 0.0))        # Stile mit eigenem Swing (Lo-Fi) legen ihn dazu
     if m.compound:

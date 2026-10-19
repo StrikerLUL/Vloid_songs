@@ -157,6 +157,7 @@ class SongSettings(BaseModel):
     motif_folder: str = ""             # Ordner mit MIDI-Melodien (leer = Motive im Datenordner)
     # Melodie 1.3.0, jedes mit Schalter
     best_melody: bool = True           # M1: jede Sektion vielfach schreiben, die Fassung mit den meisten Punkten singt
+    melody_pickups: bool = True        # M2: Auftakte vor dem Takt und vorgezogene Töne über den Taktstrich (nur 4/4)
 
     active_sections: list[str] = Field(default_factory=lambda: [
         "Intro", "Verse", "PreChorus", "Chorus", "Verse", "PreChorus", "Chorus", "Bridge", "Chorus", "Outro"

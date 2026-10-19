@@ -19,6 +19,7 @@ log = logging.getLogger("vocaloid")
 # Neuerungen aus 1.3.0: jede lässt sich abschalten (Schalter, Option, Hilfe)
 OFF_130 = (
     ("best_melody", "--ohne-beste-melodie", "jede Sektion nur einmal schreiben, statt die beste von vielen zu nehmen"),
+    ("melody_pickups", "--ohne-auftakte", "Phrasen beginnen auf der Eins, keine vorgezogenen Töne"),
 )
 
 

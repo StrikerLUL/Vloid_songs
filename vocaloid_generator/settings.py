@@ -273,6 +273,7 @@ class SongSettings(BaseModel):
     band_runs: bool = True             # I5: Klavierläufe, Glissando und Streicherlauf in den Refrain, Klavier-Hook
     anison_grooves: bool = True        # I6: 2-Beat, Disco-Hi-Hat, Tom-Groove, Wirbel und Becken-Stopps (schnelle Stile)
     section_buildup: bool = True       # I7: erste Strophe beginnt nur mit Klavier/Gitarre, Refrain mit Schicht mehr
+    surge_sounds: bool = True          # I8: Supersaw, Pluck, Chip, Future-Bass, Reese aus Surge XT (setup_surge.py)
     draft: bool = False                # nur für einen Lauf (pipeline.draft_settings): schneller Entwurf
     auto_rating: bool = True           # mehrere Fassungen automatisch bewerten (setup_bewertung.py), wenn eingerichtet
     guitar_amp: bool = True            # verzerrte E-Gitarren über Verstärker und Box statt verzerrter Samples

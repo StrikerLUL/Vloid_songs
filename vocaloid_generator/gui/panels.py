@@ -132,6 +132,9 @@ BAND_SWITCHES = (
     ("section_buildup", "Aufbau in der Sektion", "Die erste Strophe beginnt nur mit Klavier oder Gitarre und Gesang, "
                                                  "nach vier Takten kommen Bass und Schlagzeug dazu; die zweite Hälfte "
                                                  "jedes Refrains bekommt eine Schicht mehr"),
+    ("surge_sounds", "Surge-Klänge", "Supersaw, Pluck, Chip-Lead, Future-Bass-Akkorde und Reese-Bass spielen Werks-"
+                                     "Klänge des kostenlosen Synthesizers Surge XT statt der eigenen Synths, gleich "
+                                     "laut. Erst nach Einrichten › Surge XT"),
 )
 
 # Melodie 1.3.0, jede Neuerung mit Schalter

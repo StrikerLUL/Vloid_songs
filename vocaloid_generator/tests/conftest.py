@@ -141,10 +141,12 @@ def jpop_song(tmp_path_factory):
 
 
 @pytest.fixture(autouse=True)
-def without_surge(monkeypatch):
-    """Ein installiertes Surge XT taucht in den Tests nicht auf."""
+def without_surge(tmp_path, monkeypatch):
+    """Ein installiertes oder eingerichtetes Surge XT (setup_surge.py) taucht in den Tests nicht auf."""
+    import surge_sounds
     import vst_sounds
     monkeypatch.setattr(vst_sounds, "_surge_candidates", lambda: ())
+    monkeypatch.setattr(surge_sounds, "FOLDER", str(tmp_path / "surge"))
 
 
 @pytest.fixture(autouse=True)

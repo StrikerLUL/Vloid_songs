@@ -65,7 +65,8 @@ VINYL_LUFS, VINYL_CLICKS_PER_SECOND = -40.0, 7.0
 def midi_zu_wav(midi_pfad: str, wav_pfad: str, is_drum: bool = False, instrument_type: str = "piano",
                 vst_pfad: str = None, soundfont_pfad: str = None, voices: dict = None,
                 library: bool = True, drum_machine: str = None, amp: bool = False, cabinet_ir: str = "",
-                vst_state: str = "", samples: bool = False, real_drums: bool = False, band: bool = False) -> None:
+                vst_state: str = "", samples: bool = False, real_drums: bool = False, band: bool = False,
+                surge: bool = False) -> None:
     """
     MIDI → Stereo-WAV. Reihenfolge: eigenes VST3-Instrument (wenn angegeben), SoundFont über
     FluidSynth oder tinysoundfont, zuletzt eine einfache eingebaute Klangerzeugung. Die Spur wird nicht normalisiert,
@@ -79,6 +80,7 @@ def midi_zu_wav(midi_pfad: str, wav_pfad: str, is_drum: bool = False, instrument
     samples: Orchester-Instrumente spielen aus echten Aufnahmen (sample_library), soweit vorhanden.
     real_drums: akustische Schlagzeuge spielen aus dem DRS Kit (drum_kit), soweit vorhanden.
     band: Flügel, E-Bass und E-Gitarre spielen aus echten Aufnahmen (band_library), soweit vorhanden.
+    surge: die eigenen Synths spielen Werks-Klänge von Surge XT (surge_sounds), soweit es einen passenden gibt.
     """
     soundfont_pfad = soundfont_pfad or SOUNDFONT_PFAD
     midi = pretty_midi.PrettyMIDI(midi_pfad)
@@ -106,7 +108,13 @@ def midi_zu_wav(midi_pfad: str, wav_pfad: str, is_drum: bool = False, instrument
     if voices and not vst_pfad:
         from synth_engine import render_notes
         own = [i for i in midi.instruments if not i.is_drum and _layer(i.name) in voices]
-        synths += [render_notes(i.notes, voices[_layer(i.name)]) for i in own if i.notes]
+        for i in [i for i in own if i.notes]:
+            voice = voices[_layer(i.name)]
+            audio = None
+            if surge:
+                import surge_sounds
+                audio = surge_sounds.render(i.notes, voice, SAMPLE_RATE)
+            synths.append(audio if audio is not None else render_notes(i.notes, voice))
         midi.instruments = [i for i in midi.instruments if i not in own]
     if samples and not vst_pfad:
         import sample_library
@@ -172,8 +180,10 @@ def _render_vst(midi: pretty_midi.PrettyMIDI, vst_pfad, state: str = ""):
             log.warning("%s ist kein Instrument, sondern ein Effekt", os.path.basename(vst_pfad))
             return None
         if state:
+            import surge_sounds
             import vst_sounds
             vst_sounds.apply(plugin, state)
+            surge_sounds.warm(plugin, SAMPLE_RATE)   # sonst gehen die Töne im ersten Block verloren
         messages = []                       # pedalboard erwartet die Zeiten in Sekunden ab Songbeginn
         for inst in midi.instruments:
             ch = 9 if inst.is_drum else 0

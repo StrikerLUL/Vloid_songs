@@ -37,6 +37,10 @@ STYLE_TO_GENRE = {
 
 ProgressFn = Callable[[float, str], None]
 
+# Neuerungen aus 1.3.0, die die Noten ändern: orchestrate_song bekommt die eingeschalteten als extras
+NEW_COMPOSITION = ("best_melody",)
+COMPOSITION_EXTRAS = NEW_COMPOSITION     # die Tests schalten sie hier ab (conftest.py)
+
 
 @dataclass
 class SongResult:
@@ -82,6 +86,11 @@ def sung_lyrics(settings: SongSettings) -> dict:
     return lyrics if settings.numbered_lyrics else shared_only(lyrics)
 
 
+def composition_extras(settings: SongSettings) -> dict:
+    """{Schalter: Wert} der eingeschalteten Neuerungen aus 1.3.0, die die Noten ändern (0 und aus fehlen)."""
+    return {name: getattr(settings, name) for name in COMPOSITION_EXTRAS if getattr(settings, name)}
+
+
 def compose(settings: SongSettings, seed: Optional[int] = None):
     """Erzeugt alle MIDI-Spuren. Gleicher Seed + gleiche Einstellungen = gleicher Song."""
     if seed is None:
@@ -118,6 +127,7 @@ def compose(settings: SongSettings, seed: Optional[int] = None):
         singable=settings.singable_melody,
         meter=settings.meter,
         ritardando=settings.ritardando,
+        extras=composition_extras(settings),
     )
     import backing_vocals
     backing_vocals.add(tracks, settings)

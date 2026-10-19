@@ -218,3 +218,18 @@ def without_ritardando(monkeypatch):
     zurück."""
     import ritardando
     monkeypatch.setattr(ritardando, "STYLES", {})
+
+
+@pytest.fixture(autouse=True)
+def without_new_composition(monkeypatch):
+    """Die Neuerungen aus 1.3.0 in den Noten (pipeline.COMPOSITION_EXTRAS) sind aus: die Songs der Tests bleiben wie in
+    1.2; die Tests der Neuerungen holen sie sich mit dem Fixture new_composition zurück."""
+    import pipeline
+    monkeypatch.setattr(pipeline, "COMPOSITION_EXTRAS", ())
+
+
+@pytest.fixture
+def new_composition(monkeypatch):
+    """Alle Neuerungen aus 1.3.0 in den Noten wieder an."""
+    import pipeline
+    monkeypatch.setattr(pipeline, "COMPOSITION_EXTRAS", pipeline.NEW_COMPOSITION)

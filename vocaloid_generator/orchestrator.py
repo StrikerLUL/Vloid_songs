@@ -56,7 +56,8 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
                      imported_melody: dict = None, melody_edits: dict = None, motifs=None,
                      melody_lengths: dict = None, real_grooves: bool = False, lively_bass: bool = False,
                      guitar_strums: bool = False, singable: bool = False, meter: str = "4/4",
-                     band_style: str = None, melody_bpm: float = None, ritardando: bool = False) -> dict:
+                     band_style: str = None, melody_bpm: float = None, ritardando: bool = False,
+                     extras: dict = None) -> dict:
     """
     Komponiert den kompletten Song und schreibt eine MIDI-Datei pro Instrument nach output_dir.
 
@@ -81,12 +82,15 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
     band_style, melody_bpm: Remix (v6 Nr. 8): Akkorde und Gesangsmelodie entstehen wie im Stil style bei melody_bpm,
     die Band spielt wie im Stil band_style bei bpm.
     ritardando: eine Ballade wird vor dem Schlussakkord langsamer, der Akkord klingt länger aus (ritardando.py).
+    extras: {Schalter: Wert} der eingeschalteten Neuerungen aus 1.3.0 (pipeline.composition_extras); fehlt einer,
+    bleibt es wie in 1.2.
     Rückgabe: {Instrument: [pretty_midi.Note]}, dazu "melody_data", "silben", "vocal_melody", die zweite
     Stimme für den Refrain ("harmony_data", "harmony_silben") und "plan".
     """
     profile = get_style(style or genre)
     band = get_style(band_style) if band_style else profile
     m = meters.get(meter)
+    extras = dict(extras or {})
     dice = Dice(random.getrandbits(32), variations or {})
     swing = min(1.0, band.swing + (swing or 0.0))        # Stile mit eigenem Swing (Lo-Fi) legen ihn dazu
     if m.compound:
@@ -112,7 +116,7 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
     real = m.plan(plan)          # Sektionen und Akkorde an ihren Plätzen im Takt
     melody = write_vocal_melody(real if m.native else plan, sung, dice.part("melody"),
                                 rerolls=dice.rerolled_kinds("melody"), imported=imported_melody, motifs=motifs,
-                                singable=singable)
+                                singable=singable, extras=extras)
     _apply_edits(melody, melody_edits or {}, melody_lengths or {})
     for done in {id(plan): plan, id(real): real}.values():   # ab hier spielt die Band (im Remix ein anderer Stil)
         done.style, done.bpm = band, bpm

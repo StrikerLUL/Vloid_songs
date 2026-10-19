@@ -16,6 +16,16 @@ from styles import STYLES
 
 log = logging.getLogger("vocaloid")
 
+# Neuerungen aus 1.3.0: jede lässt sich abschalten (Schalter, Option, Hilfe)
+OFF_130 = (
+    ("best_melody", "--ohne-beste-melodie", "jede Sektion nur einmal schreiben, statt die beste von vielen zu nehmen"),
+)
+
+
+def _off(name: str):
+    """Der Wert, mit dem eine Neuerung aus ist: False für Schalter, 0 für Stärken."""
+    return False if isinstance(SongSettings.model_fields[name].default, bool) else 0
+
 
 def _rerollable(text: str) -> str:
     if not is_rerollable(text):
@@ -244,6 +254,8 @@ def parse_args(argv=None):
                    help="Protokolle, Einstellungen und Systeminfo als ZIP speichern (ohne Songs) und beenden")
     p.add_argument("--einrichten", metavar="TEILE",
                    help="Klänge und Modelle laden: 'alles' (was noch fehlt) oder z. B. 'soundfonts,samples'")
+    for name, flag, text in OFF_130:
+        p.add_argument(flag, action="store_true", dest=f"off_{name}", help=text)
     p.add_argument("-v", "--verbose", action="store_true", help="alle Details ausgeben")
     return p.parse_args(argv)
 
@@ -349,6 +361,7 @@ def main(argv=None) -> int:
                  "video_colors": False if args.ohne_stilfarben else None,
                  "more_motifs": False if args.ohne_motive else None,
                  "learned_motifs": False if args.ohne_motive else None}
+    overrides.update({name: _off(name) if getattr(args, f"off_{name}") else None for name, _, _ in OFF_130})
     if args.akkorde:
         overrides["custom_chords"] = {**settings.custom_chords, **dict(args.akkorde)}
     if args.takte:

@@ -162,12 +162,14 @@ def _local_scale(tonic: int, mode: str, chord: Chord) -> set:
 
 
 class SectionMelodyWriter:
-    def __init__(self, plan: SongPlan, section: Section, rng: random.Random, motifs=None):
-        """motifs: zusätzliche Rhythmen und Gesten (motifs.Motifs); None = nur die eingebauten."""
+    def __init__(self, plan: SongPlan, section: Section, rng: random.Random, motifs=None, extras=()):
+        """motifs: zusätzliche Rhythmen und Gesten (motifs.Motifs); None = nur die eingebauten.
+        extras: eingeschaltete Neuerungen aus 1.3.0 (pipeline.COMPOSITION_EXTRAS), z. B. "melody_pickups"."""
         self.plan = plan
         self.sec = section
         self.rng = rng
         self.extra = motifs
+        self.extras = extras
         self.kind = section.kind if section.kind in ROLE_SEQUENCES else "Verse"
         lo, hi = plan.vocal_range
         center = plan.style.vocal_center + KIND_OFFSET.get(self.kind, 0)
@@ -522,7 +524,7 @@ def _scale_shift(scale: list, pitch: int, steps: int) -> Optional[int]:
 
 # ── Ganzer Song ──────────────────────────────────────────────────────────────────
 def write_vocal_melody(plan: SongPlan, lyrics: dict, rng: random.Random, rerolls: Optional[dict] = None,
-                       imported: Optional[dict] = None, motifs=None, singable: bool = False) -> list:
+                       imported: Optional[dict] = None, motifs=None, singable: bool = False, extras=()) -> list:
     """
     Melodie für alle Sektionen mit Gesang. Jede Sektionsart wird einmal komponiert; spätere Vorkommen
     singen dieselbe Melodie (im Schlussrefrain höher, wenn der Song die Tonart wechselt). Hat ein späteres Vorkommen
@@ -531,6 +533,8 @@ def write_vocal_melody(plan: SongPlan, lyrics: dict, rng: random.Random, rerolls
     imported {Sektionsart: Melodie aus melody_import.load}: dort singt die eigene Melodie, Ton für Ton.
     motifs: zusätzliche Rhythmen und Gesten (motifs.Motifs), None = nur die eingebauten.
     singable: die komponierten Töne danach auf Singbarkeit prüfen (make_singable).
+    extras: eingeschaltete Neuerungen aus 1.3.0; "best_melody" schreibt jede Sektionsart mehrmals und nimmt die
+    Fassung mit den meisten Punkten (melody_score.py).
     """
     seed = rng.getrandbits(64)
     rerolls, imported = rerolls or {}, imported or {}
@@ -545,7 +549,12 @@ def write_vocal_melody(plan: SongPlan, lyrics: dict, rng: random.Random, rerolls
                 sec_notes = fit(imported[sec.kind], plan, sec, lyrics.get(sec.kind, []))
             else:
                 kind_rng = rerolls.get(sec.kind) or random.Random(f"{seed}:{sec.kind}")
-                sec_notes = SectionMelodyWriter(plan, sec, kind_rng, motifs).write(lyrics.get(sec.kind, []))
+                words = lyrics.get(sec.kind, [])
+                if "best_melody" in extras and sec.kind != "Rap":
+                    before = [n for kind, (_, ns) in written.items() if kind in ("Verse", "PreChorus") for n in ns]
+                    sec_notes = _best_of(plan, sec, kind_rng, motifs, words, extras, before)
+                else:
+                    sec_notes = SectionMelodyWriter(plan, sec, kind_rng, motifs, extras).write(words)
                 if sec.kind == "Rap":
                     _chant(sec_notes)
             written[sec.kind] = (sec, sec_notes)
@@ -564,6 +573,18 @@ def write_vocal_melody(plan: SongPlan, lyrics: dict, rng: random.Random, rerolls
     if singable:
         make_singable(plan, composed)
     return notes
+
+
+def _best_of(plan: SongPlan, sec: Section, rng: random.Random, motifs, words: list, extras, before: list) -> list:
+    """M1: die Sektion melody_score.CANDIDATES-mal schreiben, die Fassung mit den meisten Punkten gewinnt.
+    before: Töne der Strophe und des Pre-Chorus, über die der Refrain hinausgehen soll."""
+    import melody_score
+    base = rng.getrandbits(64)
+    candidates = [SectionMelodyWriter(plan, sec, random.Random(f"{base}:{i}"), motifs, extras).write(words)
+                  for i in range(melody_score.CANDIDATES)]
+    best, points, mean = melody_score.pick(candidates, sec.kind, before, plan.vocal_range[1], sec.bar_beats)
+    log.info("Beste Melodie: %s aus %d Fassungen, %.1f Punkte (Schnitt %.1f)", sec.kind, len(candidates), points, mean)
+    return candidates[best]
 
 
 RAP_RANGE = 2           # Halbtöne um die Mitte: ein Rap ohne Sprechstimme klingt wie ein Sprechgesang

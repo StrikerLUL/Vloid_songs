@@ -64,6 +64,10 @@ def song_panel(s: SongSettings, pick: PickFn, apply_template: Callable[[SongSett
     section_title("Ablauf")
     structure_editor(s)
 
+    section_title("Melodie und Akkorde")
+    for attr, text, tip in MELODY_SWITCHES:
+        ui.switch(text).bind_value(s, attr).props("dense").tooltip(tip).mark(f"switch-{attr}")
+
     section_title("Eigene Akkorde")
     chords_editor(s)
 
@@ -82,6 +86,13 @@ def song_panel(s: SongSettings, pick: PickFn, apply_template: Callable[[SongSett
     section_title("Vorlagen")
     templates_editor(s, apply_template)
 
+
+# Melodie 1.3.0, jede Neuerung mit Schalter
+MELODY_SWITCHES = (
+    ("best_melody", "Beste Melodie suchen", "Jede Sektion wird 30-mal geschrieben; es singt die Fassung mit den meisten "
+                                            "Punkten: klarer Höhepunkt, Schritte und Sprünge gemischt, wenige "
+                                            "Tonwiederholungen, Motive, die wiederkommen, ein Refrain über der Strophe"),
+)
 
 BAR_CHOICES = (2, 4, 8, 12, 16, 24, 32)
 

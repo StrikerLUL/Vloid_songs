@@ -155,6 +155,8 @@ class SongSettings(BaseModel):
     more_motifs: bool = True           # mehr eingebaute Rhythmen und Gesten für die Gesangsmelodie (motifs.py)
     learned_motifs: bool = True        # Rhythmen und Gesten aus den MIDI-Dateien in motif_folder lernen
     motif_folder: str = ""             # Ordner mit MIDI-Melodien (leer = Motive im Datenordner)
+    # Melodie 1.3.0, jedes mit Schalter
+    best_melody: bool = True           # M1: jede Sektion vielfach schreiben, die Fassung mit den meisten Punkten singt
 
     active_sections: list[str] = Field(default_factory=lambda: [
         "Intro", "Verse", "PreChorus", "Chorus", "Verse", "PreChorus", "Chorus", "Bridge", "Chorus", "Outro"

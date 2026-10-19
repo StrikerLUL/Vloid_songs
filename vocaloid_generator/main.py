@@ -28,6 +28,8 @@ OFF_130 = (
     ("anison_grooves", "--ohne-anison-grooves", "nur die Grooves des Stils, ohne 2-Beat, Wirbel und Becken-Stopps"),
     ("section_buildup", "--ohne-aufbau", "jede Sektion spielt vom ersten Takt an mit voller Band"),
     ("surge_sounds", "--ohne-surge-klaenge", "die eigenen Synths statt der Werks-Klänge von Surge XT"),
+    ("amp_models", "--ohne-verstaerker-modelle", "verzerrte Gitarren über den eingebauten Verzerrer statt über "
+                                                 "Modelle echter Verstärker"),
     ("resonance_tamer", "--ohne-haerte-zaehmen", "keine Zähmung schriller Stellen im Gesang (nur der feste EQ)"),
     ("mix_punch", "--ohne-druck", "keine Parallelkompression, kein Bus-Kompressor, kein Mehrband-Kompressor"),
     ("intonation", "--ohne-tonhoehe-glaetten", "schiefe Töne bleiben, wie die Engine sie singt"),

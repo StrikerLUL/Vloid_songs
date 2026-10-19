@@ -106,7 +106,8 @@ def _render_instruments(settings: SongSettings, tracks: dict, out: str, report: 
 
 # Der Code, der Klang macht: ändert er sich (neue Version der App), wird alles neu gerendert
 RENDER_CODE = ("renderer.py", "mixer.py", "synth_engine.py", "drum_machine.py", "guitar_amp.py", "sound_library.py",
-               "styles.py", "sfz.py", "sample_library.py", "drum_kit.py", "band_library.py", "surge_sounds.py")
+               "styles.py", "sfz.py", "sample_library.py", "drum_kit.py", "band_library.py", "surge_sounds.py",
+               "amp_models.py")
 
 
 def _render_key(job: dict, library: list) -> str:
@@ -168,6 +169,7 @@ def _render_job(settings: SongSettings, out: str, inst: str) -> dict:
         real_drums=settings.real_drums and not settings.own_soundfont() and inst == "drums",
         band=_band(settings),
         surge=_surge(settings, profile.voices.get(inst)),
+        amp_models=_amp_models(settings),
     )
 
 
@@ -178,6 +180,14 @@ def _surge(settings: SongSettings, voices: Optional[dict]) -> bool:
         return False
     import surge_sounds
     return any(surge_sounds.covers(v) for v in voices.values())
+
+
+def _amp_models(settings: SongSettings) -> bool:
+    """Verzerrte Gitarren über Modelle echter Verstärker (1.3.0, I9): eingeschaltet, eingerichtet, kein Entwurf."""
+    if not settings.amp_models or not settings.guitar_amp or settings.draft:
+        return False
+    import amp_models
+    return any(amp_models.covers(p) for p in amp_models.AMPS)
 
 
 def _samples(settings: SongSettings) -> bool:

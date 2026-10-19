@@ -150,6 +150,13 @@ def without_surge(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def without_amp_models(tmp_path, monkeypatch):
+    """Eingerichtete Verstärker-Modelle (setup_nam.py) färben die Gitarren der Tests nicht."""
+    import amp_models
+    monkeypatch.setattr(amp_models, "FOLDER", str(tmp_path / "nam"))
+
+
+@pytest.fixture(autouse=True)
 def not_cancelled():
     """Ein Abbruch in einem Test bricht den nächsten nicht ab."""
     import cancel

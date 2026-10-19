@@ -2,8 +2,9 @@
 #
 # Die Verzerrungs-Klänge eines SoundFonts sind Ton für Ton verzerrt aufgenommen; mehrere zusammen klingen dann
 # kratzig. Hier spielt der SoundFont die Gitarre sauber, und erst die ganze Spur geht durch Verzerrer und Box,
-# wie bei einer echten Gitarre (mit den Band-Aufnahmen die direkt eingespielte Emily-Gitarre, band_library). Die Box
-# ist eingebaut (Filter wie ein Gitarrenlautsprecher) oder die
+# wie bei einer echten Gitarre (mit den Band-Aufnahmen die direkt eingespielte Emily-Gitarre, band_library). Der
+# Verzerrer ist eingebaut oder (1.3.0, I9) das Modell eines echten Verstärkers (amp_models, Neural Amp Modeler). Die
+# Box ist eingebaut (Filter wie ein Gitarrenlautsprecher) oder die
 # Impulsantwort einer echten Box (eine WAV-Datei, kostenlose gibt es viele im Netz).
 import copy
 import logging
@@ -55,10 +56,11 @@ def cabinet(audio: np.ndarray, ir: str = "") -> np.ndarray:
 
 
 def play(inst: pretty_midi.Instrument, soundfont_path: str, library: bool = True, ir: str = "",
-         band: bool = False) -> Optional[np.ndarray]:
+         band: bool = False, models: bool = False) -> Optional[np.ndarray]:
     """
     Eine verzerrte Gitarren-Spur: sauber gerendert, durch Verstärker und Box, dann an ihren Platz im Panorama.
     band: die saubere Gitarre aus den Aufnahmen (band_library), soweit vorhanden.
+    models: der Verstärker aus einem NAM-Modell (amp_models), so laut wie der eingebaute; ohne Modell der eingebaute.
     Rückgabe (2, Samples), None wenn der SoundFont nichts spielt (dann rendert sie wie bisher).
     """
     from renderer import _mono_pan, render_midi
@@ -81,5 +83,12 @@ def play(inst: pretty_midi.Instrument, soundfont_path: str, library: bool = True
     mono = audio.mean(axis=0, keepdims=True)
     mono *= INPUT_PEAK / np.max(np.abs(mono))
     wet = cabinet(amp(mono, DRIVE_DB[inst.program]), ir)
+    if models:
+        import amp_models
+        modeled = amp_models.play(mono, inst.program, SAMPLE_RATE)
+        boxed = cabinet(modeled, ir) if modeled is not None else None
+        level = float(np.sqrt(np.mean(boxed ** 2))) if boxed is not None else 0.0
+        if level > 1e-6:                    # so laut wie mit dem eingebauten Verzerrer: der Mix bleibt, wie er war
+            wet = boxed * (float(np.sqrt(np.mean(wet ** 2))) / level)
     pan = next((cc.value for cc in inst.control_changes if cc.number == 10), 64)
     return _mono_pan(wet, pan) * OUTPUT_GAIN

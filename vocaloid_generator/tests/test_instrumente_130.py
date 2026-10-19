@@ -2,6 +2,7 @@
 import hashlib
 import importlib.util
 import io
+import json
 import os
 import struct
 import tarfile
@@ -12,8 +13,10 @@ import pretty_midi
 import pytest
 import soundfile as sf
 
+import amp_models
 import config
 import einrichten
+import guitar_amp
 import main
 import mixdown
 import mixer
@@ -24,6 +27,7 @@ from settings import SongSettings
 
 SR = mixer.SAMPLE_RATE
 REAL_SURGE = os.path.join(config.REPO_ROOT, "tools", "surge")
+REAL_NAM = os.path.join(config.REPO_ROOT, "tools", "nam")
 
 
 def _module(name):
@@ -152,6 +156,129 @@ def test_the_real_surge_plays_every_sound_as_loud_as_the_own_synth(monkeypatch):
     heard = [f for f in (261.6, 329.6, 392.0) if spectrum[(freqs > f * 0.98) & (freqs < f * 1.02)].max() >
              0.1 * spectrum.max()]
     assert len(heard) == 3, "der Chip-Lead spielt Akkorde"
+
+
+# ── I9: Verstärker-Modelle (NAM) ────────────────────────────────────────────────
+def _small_nam(seed=0, gated=False):
+    """Ein kleines WaveNet wie in einer .nam-Datei: zwei Stapel, Gewichte in der Reihenfolge von NAM."""
+    layers = [dict(input_size=1, condition_size=1, head_size=2, channels=3, kernel_size=3, dilations=[1, 2, 4],
+                   activation="Tanh", gated=gated, head_bias=False),
+              dict(input_size=3, condition_size=1, head_size=1, channels=2, kernel_size=3, dilations=[1, 2],
+                   activation="Tanh", gated=gated, head_bias=True)]
+    count = 0
+    for spec in layers:
+        ch, k, mid = spec["channels"], spec["kernel_size"], spec["channels"] * (2 if gated else 1)
+        count += ch * spec["input_size"] + len(spec["dilations"]) * (mid * ch * k + mid + mid + ch * ch + ch)
+        count += spec["head_size"] * ch + (spec["head_size"] if spec["head_bias"] else 0)
+    weights = np.random.default_rng(seed).standard_normal(count + 1) * 0.5
+    weights[-1] = 0.5                                                   # head_scale
+    return {"version": "0.5.0", "architecture": "WaveNet", "weights": weights.tolist(),
+            "config": {"layers": layers, "head": None, "head_scale": 0.5}}
+
+
+def _slow_nam(data, x):
+    """Wie PyTorch rechnet: Conv1d ohne Polsterung, Ausrichtung am Ende, vorne Stille so lang wie der Vorlauf."""
+    w, pos = np.asarray(data["weights"]), [0]
+
+    def take(*shape):
+        n = int(np.prod(shape))
+        pos[0] += n
+        return w[pos[0] - n:pos[0]].reshape(shape)
+
+    def conv(x, weight, bias, d=1):
+        k = weight.shape[2]
+        n = x.shape[1] - (k - 1) * d
+        out = sum(weight[:, :, j] @ x[:, j * d:j * d + n] for j in range(k))
+        return out + (bias[:, None] if bias is not None else 0)
+    arrays = []
+    for spec in data["config"]["layers"]:
+        ch, k, mid = spec["channels"], spec["kernel_size"], spec["channels"] * (2 if spec["gated"] else 1)
+        rechannel = take(ch, spec["input_size"], 1)
+        layers = [(d, take(mid, ch, k), take(mid), take(mid, 1, 1), take(ch, ch, 1), take(ch)) for d in spec["dilations"]]
+        arrays.append((rechannel, layers, take(spec["head_size"], ch, 1),
+                       take(spec["head_size"]) if spec["head_bias"] else None, k, ch, spec["gated"]))
+    scale = w[pos[0]]
+    reach = sum((k - 1) * sum(layer[0] for layer in layers) for _, layers, _, _, k, _, _ in arrays)
+    x = np.concatenate([np.zeros(reach), x])[None, :]
+    y, head = x, None
+    for rechannel, layers, head_w, head_b, k, ch, gated in arrays:
+        length = y.shape[1] - (k - 1) * sum(layer[0] for layer in layers)
+        y = conv(y, rechannel, None)
+        for d, weight, bias, mixer_w, out_w, out_b in layers:
+            z = conv(y, weight, bias, d)
+            z = z + conv(x, mixer_w, None)[:, -z.shape[1]:]
+            act = np.tanh(z[:ch]) / (1 + np.exp(-z[ch:])) if gated else np.tanh(z)
+            y = y[:, -act.shape[1]:] + conv(act, out_w, out_b)
+            head = act[:, -length:] if head is None else head[:, -length:] + act[:, -length:]
+        head = conv(head, head_w, head_b)
+    return scale * head[0]
+
+
+def test_distorted_guitars_play_through_a_real_amp_model(tmp_path, monkeypatch):
+    x = (np.sin(np.arange(400) / 7.0) * 0.4).astype(np.float32)
+    x[150:300] = 0.0                                        # eine Pause: dort rechnet das Modell nicht, gleich bleibt es
+    for gated in (False, True):
+        data = _small_nam(seed=3, gated=gated)
+        net = amp_models.WaveNet(data)
+        assert net.reach == 2 * 7 + 2 * 3
+        monkeypatch.setattr(amp_models, "BLOCK", 64)        # über Blockgrenzen hinweg gleich
+        assert np.allclose(net(x), _slow_nam(data, x.astype(np.float64)), atol=1e-5)
+    with pytest.raises(ValueError):
+        amp_models.WaveNet({**_small_nam(), "architecture": "LSTM"})
+    with pytest.raises(ValueError):
+        amp_models.WaveNet({**_small_nam(), "weights": _small_nam()["weights"][:-5]})
+    # eingerichtet: die Modelle liegen in FOLDER, play rechnet in der Rate des Modells und gibt dieselbe Form zurück
+    monkeypatch.setattr(amp_models, "FOLDER", str(tmp_path))
+    for program, amp in amp_models.AMPS.items():
+        with open(tmp_path / amp.file, "w", encoding="utf-8") as f:
+            json.dump(_small_nam(seed=program), f)
+    assert amp_models.installed() and amp_models.play(x, 27, SR) is None
+    played = amp_models.play(x[None, :], 30, SR)
+    assert played.shape == (1, 400) and np.all(np.isfinite(played)) and np.abs(played).max() > 1e-3
+    # die Gitarre: mit Modell anders, aber so laut wie der eingebaute Verzerrer
+    inst = pretty_midi.Instrument(30, name="Guitar")
+    inst.notes = [pretty_midi.Note(100, p, 0.0, 1.5) for p in (40, 47, 52)]
+    calls = []
+    real = amp_models.play
+    monkeypatch.setattr(amp_models, "play", lambda audio, program, rate: calls.append(program) or real(audio, program, rate))
+    own = guitar_amp.play(inst, mixer.SOUNDFONT_PFAD)
+    modeled = guitar_amp.play(inst, mixer.SOUNDFONT_PFAD, models=True)
+    assert calls == [30] and own.shape == modeled.shape and not np.allclose(own, modeled)
+    assert np.sqrt(np.mean(modeled ** 2)) == pytest.approx(np.sqrt(np.mean(own ** 2)), rel=1e-3)
+    # in der App: Schalter, Verstärker und Box an, kein Entwurf
+    s = SongSettings(style="Rock", output_ordner=str(tmp_path))
+    assert s.amp_models and rendering._render_job(s, str(tmp_path), "guitar")["amp_models"] is True
+    for off in ({"amp_models": False}, {"guitar_amp": False}, {"draft": True}):
+        assert rendering._render_job(s.with_updates(**off), str(tmp_path), "guitar")["amp_models"] is False, off
+    assert main.parse_args(["--ohne-verstaerker-modelle"]).off_amp_models
+    assert einrichten.find("nam").script == "setup_nam.py"
+
+
+def test_setup_loads_the_amp_models_only_with_the_right_checksum(tmp_path, monkeypatch):
+    setup = _module("setup_nam")
+    amp = amp_models.Amp("Test Amp.nam", hashlib.sha256(b"richtig").hexdigest(), "Test", "Jemand")
+    urls = []
+    monkeypatch.setattr(setup, "_laden", lambda url: urls.append(url) or b"falsch")
+    assert not setup.hole(amp, str(tmp_path)) and not (tmp_path / "Test Amp.nam").exists()
+    assert len(urls) == setup.VERSUCHE and urls[0].endswith("Test%20Amp.nam") and setup.COMMIT in urls[0]
+    monkeypatch.setattr(setup, "_laden", lambda url: b"richtig")
+    assert setup.hole(amp, str(tmp_path)) and (tmp_path / "Test Amp.nam").read_bytes() == b"richtig"
+    monkeypatch.setattr(setup, "_laden", lambda url: pytest.fail("schon da, nicht noch einmal laden"))
+    assert setup.hole(amp, str(tmp_path))
+
+
+@pytest.mark.skipif(not os.path.isdir(REAL_NAM), reason="setup_nam.py nicht gelaufen")
+def test_the_real_amp_models_distort_a_clean_guitar(monkeypatch):
+    monkeypatch.setattr(amp_models, "FOLDER", REAL_NAM)
+    t = np.arange(SR) / SR
+    clean = (0.4 * np.sin(2 * np.pi * 110 * t)).astype(np.float32)
+    for program in amp_models.AMPS:
+        out = amp_models.play(clean, program, SR)
+        assert out is not None and out.shape == clean.shape and np.all(np.isfinite(out))
+        spectrum = np.abs(np.fft.rfft(out[SR // 4:]))
+        freqs = np.fft.rfftfreq(len(out[SR // 4:]), 1 / SR)
+        partial = lambda f: spectrum[(freqs > f - 3) & (freqs < f + 3)].max()      # noqa: E731
+        assert partial(330) > 0.05 * partial(110), "der Verstärker verzerrt: Obertöne"
 
 
 # ── I10: Druck im Mix ───────────────────────────────────────────────────────────

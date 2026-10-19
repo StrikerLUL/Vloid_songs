@@ -135,6 +135,10 @@ BAND_SWITCHES = (
     ("surge_sounds", "Surge-Klänge", "Supersaw, Pluck, Chip-Lead, Future-Bass-Akkorde und Reese-Bass spielen Werks-"
                                      "Klänge des kostenlosen Synthesizers Surge XT statt der eigenen Synths, gleich "
                                      "laut. Erst nach Einrichten › Surge XT"),
+    ("amp_models", "Verstärker", "Verzerrte E-Gitarren spielen über Modelle echter Verstärker (Neural Amp Modeler): "
+                                 "ein Marshall JCM2000 für Overdrive, ein Peavey 6505+ für Distortion, dahinter die "
+                                 "Box. Erst nach Einrichten › Gitarren-Verstärker, nur mit „Verzerrte E-Gitarren "
+                                 "über Verstärker und Box“"),
 )
 
 # Melodie 1.3.0, jede Neuerung mit Schalter

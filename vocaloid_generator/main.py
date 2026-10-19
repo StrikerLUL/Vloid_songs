@@ -20,6 +20,7 @@ log = logging.getLogger("vocaloid")
 OFF_130 = (
     ("best_melody", "--ohne-beste-melodie", "jede Sektion nur einmal schreiben, statt die beste von vielen zu nehmen"),
     ("melody_pickups", "--ohne-auftakte", "Phrasen beginnen auf der Eins, keine vorgezogenen Töne"),
+    ("intro_riff", "--ohne-intro-riff", "Intro und Outro spielen die Refrain-Melodie nach, kein Zwischenspiel"),
     ("kime", "--ohne-kime", "keine gemeinsamen Akzente, Stopps und Läufe der Band"),
 )
 

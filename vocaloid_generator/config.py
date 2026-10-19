@@ -15,6 +15,7 @@ SECTION_CONFIG = {
     "Drop":      {"bars": 2,  "has_vocals": False},
     "Solo":      {"bars": 8,  "has_vocals": False},   # Instrumental-Solo der Lead-Stimme über den Refrain-Akkorden
     "Outro":     {"bars": 8,  "has_vocals": False},
+    "Interlude": {"bars": 4,  "has_vocals": False},   # Zwischenspiel: die Band wie im Intro, mit dem Intro-Riff
 }
 
 # ── Dateipfade ────────────────────────────────────────────────────────────────

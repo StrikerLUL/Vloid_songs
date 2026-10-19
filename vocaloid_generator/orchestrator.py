@@ -8,6 +8,7 @@ import pretty_midi
 
 import grooves
 import meter as meters
+import riff as riffs
 import ritardando as rits
 from drums import CRASH, GROOVES, KICK, OPEN_HAT, HAT, PEDAL_HAT, RIDE, TAMBOURINE, TOMS, drum_section, lead_in
 from lyrics import kind_of, parse_lyrics
@@ -96,6 +97,11 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
     if m.name != "4/4":
         for name in FOUR_FOUR_ONLY:
             extras.pop(name, None)
+    if "intro_riff" in extras:
+        longer = riffs.with_interlude(structure)
+        if longer != list(structure):
+            log.info("Zwischenspiel nach dem ersten Refrain (Intro-Riff)")
+        structure = longer
     dice = Dice(random.getrandbits(32), variations or {})
     swing = min(1.0, band.swing + (swing or 0.0))        # Stile mit eigenem Swing (Lo-Fi) legen ihn dazu
     if m.compound:
@@ -138,6 +144,7 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
     contexts["bass"]["lively"] = lively_bass and dice.label("bass")      # eigener Zufall: aus = wie bisher
     contexts["guitar"]["strums"] = guitar_strums and dice.label("guitar")
     drummer = grooves.for_song(bpm, dice.label("drums")) if real_grooves and swing < GROOVE_SWING_UNTIL else None
+    riff = riffs.compose(plan, random.Random(dice.label("melody") + ":riff"), m.drop) if "intro_riff" in extras else None
     drops = []                   # 3/4: (Anfang, Ende, ausfallender Schlag) je Teil der Sektion, für das Schlagzeug
     seen = {}
     for sec in plan.sections:
@@ -150,10 +157,14 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
                     if single:
                         events[inst] += part(single, piece, plan, rngs[inst], contexts[inst])
             lead = _pattern(profile, piece, "melody")
-            if lead == "hook":
+            if lead == "hook" and riff is not None:
+                events["melody"] += riffs.play(riff, piece, final=piece.end >= plan.total_beats - 1e-6)
+            elif lead == "hook":
                 events["melody"] += lead_hook(piece, plan, vocal_notes)
             elif lead == "solo":
                 events["melody"] += lead_solo(piece, plan, vocal_notes, rngs["melody"])
+            if riff is not None and sec.kind == "Chorus" and sec.is_last_of_kind and piece.end >= sec.end - 1e-6:
+                events["melody"] += riffs.last_chorus(riff, sec)
             if piece.feel == "breakdown":
                 events["drums"] += lead_in(piece, rngs["drums"])
                 drops.append((piece.start, piece.end, m.drop))
@@ -281,7 +292,7 @@ def _default_output() -> str:
 
 
 # Sektionen, in denen ein Instrument mitspielt, das der Stil sonst gar nicht nutzt, wenn man ihm eine Spielweise gibt
-FULL_BAND = ("Intro", "PreChorus", "Chorus", "Outro")
+FULL_BAND = ("Intro", "Interlude", "PreChorus", "Chorus", "Outro")
 
 
 def _pattern(profile, sec, inst: str, overrides: dict = None):

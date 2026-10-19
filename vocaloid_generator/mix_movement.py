@@ -17,7 +17,7 @@ RISE_MIX = 0.75               # Anteil des gefilterten Klangs am Ende des Anlauf
 RISE_DIP_DB = -2.0            # so viel leiser ist die Band am Ende des Anlaufs
 RETURN_SECONDS = 0.01         # mit dem Refrain ist alles in so kurzer Zeit wieder da
 REVERB = {"Intro": 1.25, "Verse": 0.75, "PreChorus": 0.95, "Chorus": 1.1, "Bridge": 1.45, "Solo": 1.1,
-          "Outro": 1.35, "Drop": 0.9, "Build-up": 1.0, "Rap": 0.6}
+          "Outro": 1.35, "Drop": 0.9, "Build-up": 1.0, "Rap": 0.6, "Interlude": 1.2}
 CHORUS_WIDTH = 0.35           # Seitensignal der Band im Refrain so viel lauter (0,35 = +2,6 dB)
 RAMP_SECONDS = 0.3            # Übergänge zwischen den Sektionen
 

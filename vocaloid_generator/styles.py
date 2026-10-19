@@ -100,7 +100,7 @@ CADENCES = {
 # ── Energie pro Sektion (0 = still, 1 = volle Band) ──────────────────────────────
 SECTION_ENERGY = {
     "Intro": 0.75, "Build-up": 0.6, "Verse": 0.45, "PreChorus": 0.65,
-    "Chorus": 0.9, "Bridge": 0.4, "Drop": 0.7, "Solo": 0.85, "Outro": 0.6, "Rap": 0.6,
+    "Chorus": 0.9, "Bridge": 0.4, "Drop": 0.7, "Solo": 0.85, "Outro": 0.6, "Rap": 0.6, "Interlude": 0.75,
 }
 
 # Klänge für neue Instrumente, falls ein Stil keine eigenen nennt (General MIDI)
@@ -138,6 +138,8 @@ class StyleProfile:
         """
         if feel == "breakdown":
             return self.parts.get("breakdown", {}).get(instrument)
+        if section == "Interlude" and section not in self.parts:
+            section = "Intro"                 # Zwischenspiel: die Band spielt wie im Intro
         if section == "Solo" and "Solo" not in self.parts:
             # Solo: die Band spielt wie im Refrain, die Lead-Stimme improvisiert über die Hook
             parts = {**self.parts.get("Chorus", {}), "melody": "solo", "counter": None}
@@ -155,6 +157,8 @@ class StyleProfile:
     def groove(self, section: str) -> str:
         if section == "Solo" and section not in self.grooves:
             section = "Chorus"
+        if section == "Interlude" and section not in self.grooves:
+            section = "Intro"
         return self.grooves.get(section, self.grooves.get("Verse", "verse"))
 
 

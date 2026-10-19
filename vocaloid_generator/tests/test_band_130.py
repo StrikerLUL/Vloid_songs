@@ -70,3 +70,34 @@ def test_phrase_fills_run_to_the_next_chord(tmp_path, monkeypatch, new_compositi
     assert all(b >= bar + 3 - 0.05 for b, _ in run)
     pitches = [p for _, p in run]
     assert pitches == sorted(pitches) or pitches == sorted(pitches, reverse=True), "ein Lauf in eine Richtung"
+
+
+def test_the_song_has_its_own_riff_and_an_interlude(tmp_path, new_composition):
+    import riff
+    tracks = _song(tmp_path, ["intro_riff"])
+    plain = _song(tmp_path / "ohne")
+    plan = tracks["plan"]
+    kinds = [sec.kind for sec in plan.sections]
+    assert kinds == STRUCTURE[:4] + ["Interlude"] + STRUCTURE[4:]
+    intro, interlude, outro = (next(s for s in plan.sections if s.kind == k) for k in ("Intro", "Interlude", "Outro"))
+    lead = tracks["melody"]
+    in_intro = _beats(lead, intro.start, intro.end)
+    assert in_intro and in_intro != _beats(plain["melody"], intro.start, intro.end), "nicht die Refrain-Melodie"
+    figure = [(b - intro.start, p) for b, p in in_intro if b < intro.start + 8]
+    again = [(b - intro.start - 8, p) for b, p in in_intro if b >= intro.start + 8]
+    assert [b for b, _ in figure] == [b for b, _ in again][:len(figure)], "die Figur kehrt wieder"
+    assert _beats(lead, interlude.start, interlude.end) and _beats(lead, outro.start, outro.end)
+    for b, p in in_intro:                 # betonte Töne (auf 1 und 3) liegen im Akkord
+        if b % 2 == 0:
+            assert p % 12 in plan.chord_at(b).pcs
+    last = [s for s in plan.sections if s.kind == "Chorus"][-1]
+    quiet = [n.velocity for n in lead if last.start + last.beats / 2 <= n.start / SPB < last.end]
+    loud = sorted(n.velocity for n in lead if intro.start <= n.start / SPB < intro.end)
+    assert quiet and max(quiet) < loud[len(loud) // 2], "im letzten Refrain leise"
+    assert riff.with_interlude(["Intro", "Chorus", "Outro"]) == ["Intro", "Chorus", "Outro"]
+    # aus: Intro wie bisher, kein Zwischenspiel
+    s = SongSettings(output_ordner=str(tmp_path / "s"), seed=3)
+    on, _ = pipeline.compose(s)
+    off, _ = pipeline.compose(s.with_updates(intro_riff=False))
+    assert "Interlude" in [x.kind for x in on["plan"].sections]
+    assert "Interlude" not in [x.kind for x in off["plan"].sections]

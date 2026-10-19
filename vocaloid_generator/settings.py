@@ -253,6 +253,7 @@ class SongSettings(BaseModel):
     lively_bass: bool = True           # Ghost-Notes und Slides im Bass
     guitar_strums: bool = True         # Gitarre schlägt je nach Energie andere Muster an, mit Abdämpfern
     # Band 1.3.0, jedes mit Schalter
+    intro_riff: bool = True            # I1: eigenes Riff in Intro, Zwischenspiel (nach dem ersten Refrain) und Outro
     kime: bool = True                  # I2: gemeinsame Akzente (Kime), kurze Stopps und Läufe am Phrasenende (nur 4/4)
     draft: bool = False                # nur für einen Lauf (pipeline.draft_settings): schneller Entwurf
     auto_rating: bool = True           # mehrere Fassungen automatisch bewerten (setup_bewertung.py), wenn eingerichtet

@@ -89,6 +89,9 @@ def song_panel(s: SongSettings, pick: PickFn, apply_template: Callable[[SongSett
 
 # Band 1.3.0, jede Neuerung mit Schalter
 BAND_SWITCHES = (
+    ("intro_riff", "Eigenes Intro-Riff", "Die Lead-Stimme spielt im Intro eine eigene Figur aus zwei Takten statt der "
+                                         "Refrain-Melodie; sie kommt in einem Zwischenspiel nach dem ersten Refrain "
+                                         "und im Outro wieder und läuft im letzten Refrain leise mit"),
     ("kime", "Kime, Stopps und Fills", "Vor manchen Refrains und am Ende spielt die ganze Band dieselben Akzente mit "
                                        "Becken, in Strophen setzt sie manchmal zwei Schläge aus (nur der Gesang), und "
                                        "am Ende von Vier-Takt-Phrasen spielt ein Instrument einen kleinen Lauf. Nur im "

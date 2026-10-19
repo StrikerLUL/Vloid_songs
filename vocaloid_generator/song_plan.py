@@ -13,7 +13,7 @@ BEATS_PER_BAR = 4            # beim Komponieren; im 3/4-Takt rückt meter.py die
 SLOW_BPM = 100
 VOCAL_RANGE = (57, 79)       # A3 bis G5: Lage, in der die Melodie geschrieben wird
 SHARED_PROGRESSION = {"Intro": "Chorus", "Outro": "Chorus", "Drop": "Chorus", "Solo": "Chorus", "Build-up": "PreChorus",
-                      "Rap": "Verse"}
+                      "Rap": "Verse", "Interlude": "Chorus"}
 
 
 @dataclass
@@ -140,7 +140,7 @@ def _colorize(chord: Chord, symbol: str, color: str, kind: str) -> Chord:
         if degree.upper() == "V":
             return Chord(chord.root, "7", chord.bass)
         return Chord(chord.root, "maj7", chord.bass)
-    if color == "add9" and kind in ("Chorus", "Bridge", "Intro", "Outro"):
+    if color == "add9" and kind in ("Chorus", "Bridge", "Intro", "Interlude", "Outro"):
         return Chord(chord.root, "add9" if chord.quality == "maj" else "madd9", chord.bass)
     return chord
 

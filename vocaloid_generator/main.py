@@ -16,6 +16,38 @@ from styles import STYLES
 
 log = logging.getLogger("vocaloid")
 
+# Neuerungen aus 1.3.0: jede lässt sich abschalten (Schalter, Option, Hilfe)
+OFF_130 = (
+    ("best_melody", "--ohne-beste-melodie", "jede Sektion nur einmal schreiben, statt die beste von vielen zu nehmen"),
+    ("melody_pickups", "--ohne-auftakte", "Phrasen beginnen auf der Eins, keine vorgezogenen Töne"),
+    ("intro_riff", "--ohne-intro-riff", "Intro und Outro spielen die Refrain-Melodie nach, kein Zwischenspiel"),
+    ("kime", "--ohne-kime", "keine gemeinsamen Akzente, Stopps und Läufe der Band"),
+    ("band_groove", "--ohne-band-groove", "Bass, Gitarre und Klavier spielen im Raster statt im Timing des Schlagzeugers"),
+    ("bass_runs", "--ohne-bass-laeufe", "der Bass spielt sein Muster ohne Läufe, Fills und Oktavsprünge"),
+    ("band_runs", "--ohne-laeufe", "keine Klavierläufe, kein Glissando, kein Streicherlauf, keine Klavier-Hook"),
+    ("anison_grooves", "--ohne-anison-grooves", "nur die Grooves des Stils, ohne 2-Beat, Wirbel und Becken-Stopps"),
+    ("section_buildup", "--ohne-aufbau", "jede Sektion spielt vom ersten Takt an mit voller Band"),
+    ("surge_sounds", "--ohne-surge-klaenge", "die eigenen Synths statt der Werks-Klänge von Surge XT"),
+    ("amp_models", "--ohne-verstaerker-modelle", "verzerrte Gitarren über den eingebauten Verzerrer statt über "
+                                                 "Modelle echter Verstärker"),
+    ("resonance_tamer", "--ohne-haerte-zaehmen", "keine Zähmung schriller Stellen im Gesang (nur der feste EQ)"),
+    ("mix_punch", "--ohne-druck", "keine Parallelkompression, kein Bus-Kompressor, kein Mehrband-Kompressor"),
+    ("intonation", "--ohne-tonhoehe-glaetten", "schiefe Töne bleiben, wie die Engine sie singt"),
+    ("ornaments", "--ohne-verzierungen", "kein Shakuri, kein Fall am Phrasenende, kein Kobushi"),
+    ("vocal_pocket", "--ohne-gesang-im-groove", "der Gesang liegt in jedem Stil genau auf dem Schlag"),
+    ("diffsinger_expression", "--ohne-diffsinger-ausdruck", "DiffSinger singt Hauch und Spannung, wie das Varianz-Modell sie vorhersagt"),
+    ("melody_tensions", "--ohne-spannungstoene", "keine Vorhalte, lange Töne nur auf Akkordtönen"),
+    ("melody_climax", "--ohne-hoehepunkt", "der letzte Refrain endet wie die anderen, die Strophen dürfen höher"),
+    ("melody_triplets", "--ohne-triolen", "die Melodie bleibt im Sechzehntel-Raster, ohne Triolen und Punktierungen"),
+    ("chord_spice", "--ohne-akkord-wuerze", "nur die Akkordfolgen des Stils, ohne Zwischendominanten und Leihakkorde"),
+    ("smart_readings", "--ohne-partikel", "は/へ/を in reinen Kana und Zahlwörter wie 一回 so singen, wie geschrieben"),
+)
+
+
+def _off(name: str):
+    """Der Wert, mit dem eine Neuerung aus ist: False für Schalter, 0 für Stärken."""
+    return False if isinstance(SongSettings.model_fields[name].default, bool) else 0
+
 
 def _rerollable(text: str) -> str:
     if not is_rerollable(text):
@@ -71,6 +103,14 @@ def parse_args(argv=None):
     p.add_argument("--ohne-voicevox-dynamik", action="store_true", help="VOICEVOX singt gleich laut; Silben und Phrasen werden erst danach lauter und leiser")
     p.add_argument("--rap-stimme", type=int, metavar="ID", help="VOICEVOX-Sprechstimme für den Rap-Teil (Stil-ID)")
     p.add_argument("--ohne-rap-stimme", action="store_true", help="die Gesangsstimme singt den Rap-Teil, statt dass VOICEVOX ihn spricht")
+    p.add_argument("--sprechen-klang", choices=["Hall", "Telefon", "trocken"],
+                   help="Klang der Sektion „Sprechen“ ([Sprechen] im Liedtext), die VOICEVOX frei spricht")
+    p.add_argument("--gruppe", type=int, choices=[0, 3, 4], help="3 oder 4 installierte NEUTRINO-Stimmen singen den "
+                   "Refrain zusammen und die Strophen reihum (0 = aus)")
+    p.add_argument("--tonhoehe-glaetten", type=float, metavar="X", help="schiefe Töne sanft zur Note ziehen, 0 bis 1 "
+                   "(Standard 0,5)")
+    p.add_argument("--verzierungen", type=float, metavar="X", help="Shakuri, Fall und Kobushi, 0 bis 1 (0,35 = dezent, "
+                   "je Stil dosiert)")
     p.add_argument("--fassungen", type=int, choices=[1, 2, 3], help="NEUTRINO singt so oft, die sauberste zählt")
     p.add_argument("--album", type=int, metavar="N",
                    help="Album über Nacht: N Songs (bis 30) am Stück, nach Note sortiert in Alben\\<Datum> <Name>")
@@ -175,6 +215,10 @@ def parse_args(argv=None):
                    help="die Begleitstimmen schreibt der Anticipatory Music Transformer (setup_begleitung.py, Versuch)")
     p.add_argument("--ohne-ki-begleitung", action="store_true", help="die komponierte Begleitung, auch wenn die "
                    "KI-Begleitung in den Einstellungen an ist")
+    p.add_argument("--ki-melodie", action="store_true", help="das Modell der KI-Begleitung schlägt Refrain-Melodien "
+                   "vor; singt eine besser als die komponierte, singt sie (Versuch)")
+    p.add_argument("--ohne-ki-melodie", action="store_true", help="der Refrain singt die komponierte Melodie, auch "
+                   "wenn die KI-Melodie in den Einstellungen an ist")
     p.add_argument("--ohne-vorbild-gruppen", action="store_true",
                    help="Gesang, Schlagzeug, Bass und Rest nicht einzeln an die Vorbilder angleichen (Demucs)")
     p.add_argument("--ohne-vorbild-gesangsklang", action="store_true",
@@ -244,6 +288,8 @@ def parse_args(argv=None):
                    help="Protokolle, Einstellungen und Systeminfo als ZIP speichern (ohne Songs) und beenden")
     p.add_argument("--einrichten", metavar="TEILE",
                    help="Klänge und Modelle laden: 'alles' (was noch fehlt) oder z. B. 'soundfonts,samples'")
+    for name, flag, text in OFF_130:
+        p.add_argument(flag, action="store_true", dest=f"off_{name}", help=text)
     p.add_argument("-v", "--verbose", action="store_true", help="alle Details ausgeben")
     return p.parse_args(argv)
 
@@ -287,6 +333,8 @@ def main(argv=None) -> int:
                  "vocal_engine": args.engine, "voicevox_singer": args.voicevox_stimme,
                  "voicevox_dynamics": False if args.ohne_voicevox_dynamik else None,
                  "rap_speaker": args.rap_stimme, "rap_voice": False if args.ohne_rap_stimme else None,
+                 "spoken_sound": args.sprechen_klang, "group_vocals": args.gruppe,
+                 "intonation": args.tonhoehe_glaetten, "ornaments": args.verzierungen,
                  "diffsinger_voice": args.diffsinger_stimme, "vocal_takes": args.fassungen,
                  "vibrato": args.vibrato, "glide": args.uebergaenge,
                  "psola_reshape": False if args.ohne_psola else None,
@@ -341,6 +389,7 @@ def main(argv=None) -> int:
                  "ref_stems": False if args.ohne_vorbild_gruppen else None,
                  "ref_vocal_curve": False if args.ohne_vorbild_gesangsklang else None,
                  "ai_accompaniment": False if args.ohne_ki_begleitung else (True if args.ki_begleitung else None),
+                 "ai_melody": False if args.ohne_ki_melodie else (True if args.ki_melodie else None),
                  "polish": False if args.ohne_veredler else None, "polish_strength": args.veredler_staerke,
                  "polish_caption": args.veredler_klang,
                  "melody_midi": args.melodie_midi, "melody_midi_section": args.melodie_sektion,
@@ -349,6 +398,7 @@ def main(argv=None) -> int:
                  "video_colors": False if args.ohne_stilfarben else None,
                  "more_motifs": False if args.ohne_motive else None,
                  "learned_motifs": False if args.ohne_motive else None}
+    overrides.update({name: _off(name) for name, _, _ in OFF_130 if getattr(args, f"off_{name}")})
     if args.akkorde:
         overrides["custom_chords"] = {**settings.custom_chords, **dict(args.akkorde)}
     if args.takte:

@@ -1,8 +1,12 @@
-# Testliste für Vloid Songs 1.2.0
+# Testliste für Vloid Songs 1.3.0
 
-Etwa eine Stunde auf deinem PC, davon viel Warten. 1.1.0 ist noch nicht getestet, deshalb stehen ihre Punkte
-(A bis H) weiter hier; neu in 1.2 ist Teil I. Wenig Zeit: A, B, C und I. Hak ab, was klappt, und schreib zu allem anderen eine Zeile, was
-passiert ist. Am Ende **Hilfe › Fehlerbericht speichern** und das ZIP zusammen mit der Liste zurückschicken.
+Etwa anderthalb Stunden auf deinem PC, davon viel Warten. 1.1 und 1.2 sind noch nicht getestet, deshalb stehen ihre
+Punkte (A bis I) weiter hier; neu in 1.3 ist Teil J. Wenig Zeit: A, B, C und J. Hak ab, was klappt, und schreib zu
+allem anderen eine Zeile, was passiert ist. Am Ende **Hilfe › Fehlerbericht speichern** und das ZIP zusammen mit der
+Liste zurückschicken.
+
+**Vergleichen:** Bei Klangfragen im Tab Song „Seed festhalten“ anhaken, den Song einmal mit und einmal mit dem
+genannten Schalter aus erzeugen und im Tab Verlauf mit A und B hin- und herschalten.
 
 ## A. Installieren (5 Minuten)
 
@@ -99,6 +103,31 @@ passiert ist. Am Ende **Hilfe › Fehlerbericht speichern** und das ZIP zusammen
       Strg+Enter erzeugt einen Song.
 - [ ] Einrichten › „Aufräumen“: Es meldet, wie viel frei wurde.
 
+## J. Neu in 1.3 (25 Minuten)
+
+- [ ] Einrichten: „Surge XT“ und „Gitarren-Verstärker“ sind angehakt; „Ausgewählte einrichten“ lädt beide ohne Fehler.
+- [ ] Stil Ballade, Song erzeugen. Klingen die Töne gerader und die Übergänge natürlich? Hörst du dezente
+      Verzierungen (von unten in den Ton, kleiner Fall am Zeilenende)? Vergleich: Tab Gesang „Tonhöhe glätten“ und
+      „Verzierungen“ auf 0. Zu viel, zu wenig, oder passt es?
+- [ ] Tab Gesang › Gruppe: 3 Stimmen. Singen im Refrain drei Stimmen zusammen (links, Mitte, rechts) und in jeder
+      Strophe eine andere allein?
+- [ ] VOICEVOX starten. Im Ablauf „Sprechen“ vor den letzten Refrain setzen, im Text `[Sprechen]` und darunter eine
+      Zeile. Wird sie frei gesprochen, mit Hall, während die Band leise spielt? Danach „Sprechen klingt“ auf Telefon.
+- [ ] Tab Text: eine Zeile „きみは そらへ 一回だけ“ schreiben. Singt NEUTRINO „きみわ そらえ いっかい“?
+- [ ] Stil J-Pop Energy: Ist der Refrain eingängiger als in 1.2? Endet der letzte Refrain auf dem höchsten Ton? Hat
+      das Intro ein eigenes Riff, und kommt nach dem ersten Refrain ein kurzes Zwischenspiel?
+- [ ] Tab Song › Akkord-Würze auf 1: Klingen die Akkorde bunter (wie in Anime-Songs), oder zu schräg?
+- [ ] Stil Rock, Tempo 170: Hörst du im Refrain den schnellen 2-Beat, Snare-Wirbel vor dem Refrain und Stellen, an
+      denen die ganze Band gemeinsam akzentuiert oder kurz aussetzt? Läuft der Bass zum nächsten Akkord?
+- [ ] Rock: Im Protokoll steht „Gitarre über Marshall JCM2000“ bzw. „Peavey 6505+“. Klingen die verzerrten Gitarren
+      echter als mit Tab Band › Verstärker aus? Wie viel länger hat das Rendern gedauert?
+- [ ] Stil City Pop: Spielt der Bass funkige Oktaven mit abgedämpften Tönen? Beginnt die erste Strophe nur mit
+      Klavier oder Gitarre, bevor Bass und Schlagzeug dazukommen?
+- [ ] Stil Future Bass: Im Protokoll steht „Surge XT spielt pluck“ und „fb_chord“. Klingen Pluck und Akkorde voller
+      als mit Tab Band › Surge-Klänge aus? Kawaii Chiptune: Klingt der Chip-Lead nach Gameboy?
+- [ ] Tab Mix › Druck aus und an: Hat das Schlagzeug mehr Druck, klingt die Band mehr wie aus einem Guss, ohne dass es
+      pumpt?
+
 ## Wenn du mehr Zeit hast
 
 - [ ] **DiffSinger (Versuch):** eine freie DiffSinger-Stimme in OpenUtau installieren (oder in
@@ -118,10 +147,14 @@ passiert ist. Am Ende **Hilfe › Fehlerbericht speichern** und das ZIP zusammen
       einmal mit und einmal ohne KI-Begleitung erzeugen und im Verlauf mit A und B vergleichen. Welche Begleitung
       gefällt dir besser, und wie lange hat es gedauert?
 - [ ] **Klang-Veredler:** einschalten, Song erzeugen, im Player „Veredelt“ anhören.
+- [ ] **KI-Melodie (Versuch, 1.3):** mit eingerichteter KI-Begleitung unter Pfade „KI-Melodie“ einschalten. Im
+      Protokoll steht, wie viele Punkte jede KI-Fassung bekam und ob sie im Refrain singt. Gefällt dir ihr Refrain?
+- [ ] **DiffSinger-Ausdruck (1.3):** mit DiffSinger einen Song einmal mit und einmal ohne „DiffSinger-Ausdruck“ (Tab
+      Gesang): Klingt die Strophe hauchiger und der Refrain kräftiger?
 
 ## Zurückschicken
 
 1. Hilfe › Fehlerbericht speichern (das ZIP liegt in `Dokumente\Vloid Songs\Fehlerberichte`).
 2. Diese Liste mit deinen Haken und Notizen, oder einfach die Punkte, die nicht geklappt haben.
 3. Ein Satz zum Klang: Schlagzeug, Gesang, Idol-Rufe und Rap-Teil und, wenn ausprobiert, DiffSinger, KI-Begleitung und
-   Mix pro Instrument.
+   Mix pro Instrument. Für 1.3: Was klingt jetzt besser, und was stört dich beim Hören immer noch am meisten?

@@ -75,8 +75,8 @@ def _render_instruments(settings: SongSettings, tracks: dict, out: str, report: 
             remove_file(os.path.join(out, f"{inst}.wav.key"))
     if kept:
         log.info("Unverändert, nicht neu gerendert: %s", ", ".join(kept))
-    together = [inst for inst in active if inst not in kept and not jobs[inst]["vst_pfad"]]
-    alone = [inst for inst in active if inst not in kept and jobs[inst]["vst_pfad"]]
+    together = [inst for inst in active if inst not in kept and not jobs[inst]["vst_pfad"] and not jobs[inst]["surge"]]
+    alone = [inst for inst in active if inst not in kept and inst not in together]     # VST-Instrumente nacheinander
     done = len(kept)
 
     def finished(inst: str) -> None:
@@ -106,7 +106,8 @@ def _render_instruments(settings: SongSettings, tracks: dict, out: str, report: 
 
 # Der Code, der Klang macht: ändert er sich (neue Version der App), wird alles neu gerendert
 RENDER_CODE = ("renderer.py", "mixer.py", "synth_engine.py", "drum_machine.py", "guitar_amp.py", "sound_library.py",
-               "styles.py", "sfz.py", "sample_library.py", "drum_kit.py", "band_library.py")
+               "styles.py", "sfz.py", "sample_library.py", "drum_kit.py", "band_library.py", "surge_sounds.py",
+               "amp_models.py")
 
 
 def _render_key(job: dict, library: list) -> str:
@@ -167,7 +168,26 @@ def _render_job(settings: SongSettings, out: str, inst: str) -> dict:
         samples=_samples(settings),
         real_drums=settings.real_drums and not settings.own_soundfont() and inst == "drums",
         band=_band(settings),
+        surge=_surge(settings, profile.voices.get(inst)),
+        amp_models=_amp_models(settings),
     )
+
+
+def _surge(settings: SongSettings, voices: Optional[dict]) -> bool:
+    """Werks-Klänge von Surge XT statt eigener Synths (1.3.0, I8): eingeschaltet, eingerichtet, kein Entwurf und die
+    Spur hat eine eigene Stimme, für die es einen Klang gibt."""
+    if not settings.surge_sounds or settings.draft or not voices:
+        return False
+    import surge_sounds
+    return any(surge_sounds.covers(v) for v in voices.values())
+
+
+def _amp_models(settings: SongSettings) -> bool:
+    """Verzerrte Gitarren über Modelle echter Verstärker (1.3.0, I9): eingeschaltet, eingerichtet, kein Entwurf."""
+    if not settings.amp_models or not settings.guitar_amp or settings.draft:
+        return False
+    import amp_models
+    return any(amp_models.covers(p) for p in amp_models.AMPS)
 
 
 def _samples(settings: SongSettings) -> bool:

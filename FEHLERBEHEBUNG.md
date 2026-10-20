@@ -40,6 +40,10 @@ und Systeminfo (keine Songs) und landet in `Dokumente\Vloid Songs\Fehlerberichte
   Gesang den Ordner der Stimme wählen, in dem `dsconfig.yaml` liegt.
 - **Die Support-Stimme ändert nichts.** Sie braucht eine NEUTRINO-Ausgabe mit `Run_support_model.bat`; ohne singt die
   Hauptstimme allein, und das Protokoll sagt es.
+- **Die Gruppe singt allein.** Tab Gesang › Gruppe braucht so viele Stimmen in NEUTRINO, wie du gewählt hast (drei
+  oder vier); fehlen welche, singt die Hauptstimme, und das Protokoll nennt die gefundenen Stimmen.
+- **Die Sektion „Sprechen“ bleibt stumm.** Sie spricht mit VOICEVOX; läuft es nicht, fällt die Zeile weg. VOICEVOX
+  starten und System prüfen ansehen. Über der Zeile im Text muss `[Sprechen]` stehen.
 
 ## Klang, MP3 und Video
 
@@ -49,6 +53,11 @@ und Systeminfo (keine Songs) und landet in `Dokumente\Vloid Songs\Fehlerberichte
   Schalter dafür an sein, und das Feld SoundFont muss leer sein (ein eigener SoundFont schaltet sie ab).
 - **Das echte Schlagzeug spielt nicht.** Es gilt für akustische Kits; 808 und 909 (z. B. bei Future Bass) bleiben
   Drum-Machines. Sonst unter Pfade den Schalter prüfen und System prüfen ansehen.
+- **Surge-Klänge oder Verstärker klingen wie vorher.** Sie brauchen Surge XT und die Verstärker-Modelle aus
+  Einrichten. Fehlen sie oder lädt ein Modell nicht, spielt die App ihre eigenen Synths und Verzerrer, und das
+  Protokoll sagt warum. Einrichten noch einmal starten lädt nach, was fehlt.
+- **Ein Song mit E-Gitarren rendert länger.** Die Verstärker-Modelle rechnen jede verzerrte Gitarre einzeln durch.
+  Zum Ausprobieren „Entwurf“ nehmen (dort sind sie aus) oder im Tab Band „Verstärker“ ausschalten.
 - **Mix pro Instrument tut nichts.** Es braucht Demucs (Einrichten, „Mix wie die Vorbilder“) und mindestens ein
   angehaktes Vorbild. Das erste Mal zerlegt Demucs jedes Vorbild, danach geht es schnell. Im Protokoll steht eine Zeile
   „Mix wie die Vorbilder“ mit dem, was es geändert hat.

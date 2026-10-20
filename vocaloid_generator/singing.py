@@ -38,7 +38,7 @@ VOCAL_KEY = "vocals.key"
 NOTE_KEYS = ("melody_data", "silben", "harmony_data", "harmony_silben", "octave_data", "octave_silben", "pads",
              "adlib_data", "adlib_silben", "call_data", "call_silben")
 VOCAL_CODE = ("singing.py", "vocal_synthesizer.py", "voice_fx.py", "voicevox.py", "neutrino_score.py", "diffsinger.py",
-              "meter.py", "rap.py")
+              "meter.py", "rap.py", "spoken.py")
 VOCAL_FIELDS = ("bpm", "meter", "seed", "rap_voice", "rap_speaker", "singer", "vocal_engine", "harmonies", "duet_singer", "support_singer", "style_shift", "vocal_takes",
                 "vibrato", "glide", "breaths", "final_choir", "voicevox_url", "voicevox_singer", "voicevox_dynamics", "diffsinger_voice",
                 "neutrino_pfad",
@@ -46,7 +46,8 @@ VOCAL_FIELDS = ("bpm", "meter", "seed", "rap_voice", "rap_speaker", "singer", "v
                 "english_kana", "section_style", "verse_style_shift", "chorus_style_shift", "even_takes",
                 "harmony_variety", "harmony_double", "sung_pads", "adlibs", "idol_calls", "syllable_dynamics",
                 "recorded_breaths", "psola_reshape", "own_vocal", "own_vocal_align", "phrase_fixes", "style",
-                "telephone_fx", "stutter_fx", "hard_tune", "formant_fx", "vocal_swing", "breathiness", "shimmer")
+                "telephone_fx", "stutter_fx", "hard_tune", "formant_fx", "vocal_swing", "breathiness", "shimmer",
+                "intonation", "ornaments", "vocal_pocket", "group_vocals", "diffsinger_expression", "spoken_sound")
 
 
 def _vocal_key(settings: SongSettings, tracks: dict) -> str:
@@ -97,10 +98,11 @@ def _remember_vocals(out: str, key: str) -> None:
 def _synthesize_vocals(settings: SongSettings, tracks: dict, out: str) -> Optional[str]:
     vocals_wav = os.path.join(out, "vocals.wav")
     spans = _rap_spans(settings, tracks)
+    said = _spoken_spans(settings, tracks)
     whole = tracks
-    if spans:
+    if spans or said:
         import rap
-        tracks = rap.without(tracks, spans)       # die Engine singt den Rap nicht, VOICEVOX spricht ihn
+        tracks = rap.without(tracks, spans + said)    # die Engine singt Rap und Sprechen nicht, VOICEVOX spricht sie
     melody_data = tracks.get("melody_data", [])
     silben = tracks.get("silben", [])
     key = _vocal_key(settings, tracks) if settings.reuse_steps and settings.channels["vocals"].enabled else None
@@ -113,8 +115,8 @@ def _synthesize_vocals(settings: SongSettings, tracks: dict, out: str) -> Option
     if not settings.channels["vocals"].enabled:
         log.info("Gesang ist ausgeschaltet.")
         return None
-    if spans and not silben:
-        return _rap_only(settings, whole, out, vocals_wav, spans, key)
+    if (spans or said) and not silben:
+        return _rap_only(settings, whole, out, vocals_wav, spans, key, said)
     if not melody_data or not silben:
         log.warning("Keine Melodie oder keine Silben vorhanden, überspringe den Gesang.")
         return None
@@ -155,9 +157,12 @@ def _synthesize_vocals(settings: SongSettings, tracks: dict, out: str) -> Option
         vocal_check.record(out, settings, "Vorschau")
     if spans:
         _speak_rap(settings, whole, vocals_wav, spans)
+    if said:
+        _speak_lines(settings, whole, vocals_wav, said)
     _liven(settings, tracks, out, vocals_wav, sung_dynamics=engine == "VOICEVOX" and _voicevox_dynamics(settings))
     _style_effects(settings, tracks, vocals_wav)
     _vocal_swing(settings, tracks, out)
+    _vocal_pocket(settings, out)
     if sung and key:
         _remember_vocals(out, key)     # die Vorschau-Stimme nicht: fehlte NEUTRINO nur kurz, singt es beim nächsten Mal
     return vocals_wav
@@ -206,9 +211,51 @@ def _speak_rap(settings: SongSettings, tracks: dict, vocals_wav: str, spans: lis
     return True
 
 
+def _spoken_spans(settings: SongSettings, tracks: dict) -> list:
+    """G7: wo frei gesprochen wird (Schläge, spoken.windows). Diese Zeilen singt die Engine nie; mit eigener
+    Gesangsspur bleibt alles bei der Aufnahme."""
+    import own_vocal
+    import spoken
+    if own_vocal.available(settings.own_vocal):
+        return []
+    return spoken.windows(tracks.get("plan"))
+
+
+def _speak_lines(settings: SongSettings, tracks: dict, vocals_wav: str, spans: list) -> bool:
+    """G7: die Zeilen der Sektionen „Sprechen“ von der VOICEVOX-Sprechstimme in die Hauptstimme, mit Hall, Telefon
+    oder trocken; ohne VOICEVOX fallen sie weg."""
+    import soundfile as sf
+
+    import rap
+    import spoken
+    import voicevox
+    url = settings.voicevox_url or voicevox.URL
+    if not voicevox.running(url):
+        log.warning("Sprechen: VOICEVOX läuft nicht, die gesprochene Zeile fällt weg")
+        return False
+    try:
+        audio, rate = sf.read(vocals_wav, dtype="float32", always_2d=True)
+        speaker, name = voicevox.pick_talker(url, settings.rap_speaker)
+        lines = spoken.render(tracks["melody_data"], tracks["silben"], settings.bpm, spans, url, speaker, rate,
+                              len(audio), settings.spoken_sound, settings.seed or 0)
+    except Exception as e:  # noqa: BLE001 – ohne die gesprochene Zeile bleibt der übrige Gesang
+        log.warning("Sprechen übersprungen: %s", e)
+        return False
+    if lines is None:
+        return False
+    if len(lines) > len(audio):
+        audio = np.concatenate([audio, np.zeros((len(lines) - len(audio), audio.shape[1]), dtype=np.float32)])
+    if np.any(audio):
+        lines = rap.level_like(lines, audio.mean(axis=1), rate)
+    audio[:len(lines)] += lines[:, None]
+    sf.write(vocals_wav, audio if audio.shape[1] > 1 else audio[:, 0], rate, subtype="FLOAT")
+    log.info("Sprechen von der VOICEVOX-Sprechstimme %s (%s)", name, settings.spoken_sound)
+    return True
+
+
 def _rap_only(settings: SongSettings, tracks: dict, out: str, vocals_wav: str, spans: list,
-              key: Optional[str]) -> Optional[str]:
-    """Der ganze Gesang ist Rap: keine Engine singt, VOICEVOX spricht alles."""
+              key: Optional[str], said: list = ()) -> Optional[str]:
+    """Der ganze Gesang ist Rap (oder Sprechen): keine Engine singt, VOICEVOX spricht alles."""
     import soundfile as sf
 
     import vocal_check
@@ -217,7 +264,9 @@ def _rap_only(settings: SongSettings, tracks: dict, out: str, vocals_wav: str, s
     sf.write(vocals_wav, np.zeros(int((plan.total_beats * 60.0 / settings.bpm + 1.0) * rate), dtype=np.float32),
              rate, subtype="FLOAT")
     vocal_check.record(out, settings, "VOICEVOX", "nur Rap")
-    if not _speak_rap(settings, tracks, vocals_wav, spans):
+    rapped = bool(spans) and _speak_rap(settings, tracks, vocals_wav, spans)
+    told = bool(said) and _speak_lines(settings, tracks, vocals_wav, list(said))
+    if not rapped and not told:
         remove_file(vocals_wav)
         return None
     if key:
@@ -343,6 +392,37 @@ def _vocal_swing(settings: SongSettings, tracks: dict, out: str) -> None:
         log.info("Gesang swingt mit: %d Töne um %.0f ms später", moved, shift * 60000 / settings.bpm)
 
 
+# G4 (1.3.0): Millisekunden, die der Gesang je Stil hinter (plus) oder vor (minus) dem Schlag liegt
+VOCAL_POCKET_MS = {"City Pop": 18.0, "Lo-Fi": 24.0, "Ballade": 20.0, "Rock": -10.0, "Drum and Bass": -12.0}
+
+
+def vocal_pocket_ms(settings: SongSettings) -> float:
+    return VOCAL_POCKET_MS.get(settings.style, 0.0) if settings.vocal_pocket else 0.0
+
+
+def _vocal_pocket(settings: SongSettings, out: str) -> None:
+    """G4: alle Gesangsspuren gemeinsam leicht hinter oder vor den Schlag, wie ein Sänger im Groove des Stils."""
+    import soundfile as sf
+    ms = vocal_pocket_ms(settings)
+    if not ms:
+        return
+    moved = 0
+    for name in VOCAL_FILES:
+        path = os.path.join(out, name)
+        if not os.path.exists(path):
+            continue
+        audio, rate = sf.read(path, dtype="float32", always_2d=True)
+        n = int(round(abs(ms) / 1000 * rate))
+        if ms > 0:
+            audio = np.concatenate([np.zeros((n, audio.shape[1]), dtype=np.float32), audio])
+        else:
+            audio = np.concatenate([audio[n:], np.zeros((n, audio.shape[1]), dtype=np.float32)])
+        sf.write(path, audio if audio.shape[1] > 1 else audio[:, 0], rate, subtype="FLOAT")
+        moved += 1
+    if moved:
+        log.info("Gesang im Groove: %.0f ms %s dem Schlag (%s)", abs(ms), "hinter" if ms > 0 else "vor", settings.style)
+
+
 # ── NEUTRINO ────────────────────────────────────────────────────────────────────
 def _sing_neutrino(settings: SongSettings, tracks: dict, out: str, vocals_wav: str, xml: str, lead: bool = True) -> str:
     """Rückgabe: wer gesungen hat (die Stimme, im Duett beide). lead=False: nur die Begleitstimmen, die Hauptstimme
@@ -351,12 +431,15 @@ def _sing_neutrino(settings: SongSettings, tracks: dict, out: str, vocals_wav: s
     if not xml:
         raise RuntimeError("ohne music21 gibt es keine Noten für NEUTRINO")
     neutrino_dir = settings.neutrino_dir()
-    duet = _duet_partner(settings, neutrino_dir) if lead else None
-    voice = settings.singer + (f" und {duet}" if duet else "")
+    group = _group_members(settings, neutrino_dir) if lead else []
+    duet = _duet_partner(settings, neutrino_dir) if lead and not group else None
+    voice = ", ".join(group) if group else settings.singer + (f" und {duet}" if duet else "")
     log.info("%s; singe mit %s", neutrino_info(neutrino_dir), voice)
     if neutrino_hinweis(neutrino_dir):
         log.warning(neutrino_hinweis(neutrino_dir))
-    if duet:
+    if group:
+        _sing_group(settings, tracks, out, neutrino_dir, group, vocals_wav)
+    elif duet:
         _sing_duet(settings, tracks, out, neutrino_dir, duet, vocals_wav)
     elif lead:
         plan = tracks.get("plan")
@@ -416,8 +499,16 @@ def _neutrino_lead(settings: SongSettings, data: list, xml: str, wav: str, neutr
                 remove_file(part.xml)
     double = os.path.join(os.path.dirname(wav), "vocals_double.wav")
     if os.path.exists(double):
-        voice_fx.reshape(double, notes, settings.vibrato, settings.glide, settings.psola_reshape)
-    voice_fx.reshape(wav, notes, settings.vibrato, settings.glide, settings.psola_reshape)
+        voice_fx.reshape(double, notes, psola=settings.psola_reshape, **pitch_options(settings))
+    voice_fx.reshape(wav, notes, psola=settings.psola_reshape, **pitch_options(settings))
+
+
+def pitch_options(settings: SongSettings) -> dict:
+    """Wie die Tonhöhe der Hauptstimme nach dem Singen geformt wird: Vibrato, Übergänge, sanft korrigierte Töne (G1)
+    und Verzierungen nach Stil (G3)."""
+    import voice_fx
+    return {"vibrato": settings.vibrato, "glide": settings.glide, "intonation": settings.intonation,
+            "ornaments": voice_fx.ornament_amount(settings.ornaments, settings.style), "seed": settings.seed or 0}
 
 
 class _Part(NamedTuple):
@@ -754,9 +845,11 @@ def _sing_diffsinger(settings: SongSettings, tracks: dict, out: str, vocals_wav:
         raise FileNotFoundError("keine DiffSinger-Stimme gefunden (OpenUtau, Ordner Singers)")
     name = os.path.basename(os.path.normpath(folder))
     log.info("Singe mit DiffSinger: %s", name)
+    pitch = pitch_options(settings)
     if lead:
         diffsinger.sing(tracks["melody_data"], tracks["silben"], settings.bpm, vocals_wav, folder,
-                        vibrato=settings.vibrato, glide=settings.glide)
+                        vibrato=settings.vibrato, glide=settings.glide, ornaments=pitch["ornaments"],
+                        seed=pitch["seed"], expression=_diffsinger_expression(settings, tracks))
     if settings.harmonies and tracks.get("harmony_data"):
         try:
             diffsinger.sing(tracks["harmony_data"], tracks["harmony_silben"], settings.bpm,
@@ -766,6 +859,12 @@ def _sing_diffsinger(settings: SongSettings, tracks: dict, out: str, vocals_wav:
         except Exception as e:  # noqa: BLE001
             log.warning("Zweite Stimme fehlgeschlagen, der Song bekommt nur die Hauptstimme: %s", e)
     return name
+
+
+def _diffsinger_expression(settings: SongSettings, tracks: dict) -> Optional[list]:
+    """G8: die Sektionen in Sekunden für den Ausdruck pro Sektion und Ton, oder None (Schalter aus, kein Ablauf)."""
+    plan = tracks.get("plan")
+    return sections_in_seconds(plan) if settings.diffsinger_expression and plan is not None else None
 
 
 def _voicevox_dynamics(settings: SongSettings) -> bool:
@@ -797,9 +896,11 @@ def _sing_voicevox(settings: SongSettings, tracks: dict, out: str, vocals_wav: s
     log.info("Singe mit VOICEVOX: %s", name)
     notes = voice_fx.timeline(tracks["melody_data"], settings.bpm)
     shape = None
-    if abs(settings.vibrato - 1.0) > 1e-3 or abs(settings.glide - 1.0) > 1e-3:
+    pitch = pitch_options(settings)
+    if abs(settings.vibrato - 1.0) > 1e-3 or abs(settings.glide - 1.0) > 1e-3 or pitch["intonation"] > 0 or \
+            pitch["ornaments"] > 0:
         def shape(f0, frame, offset):
-            return voice_fx.shape_pitch(f0, frame, notes, settings.vibrato, settings.glide, offset)
+            return voice_fx.shape_pitch(f0, frame, notes, offset=offset, **pitch)
     if lead:
         voicevox.sing(tracks["melody_data"], tracks["silben"], settings.bpm, vocals_wav, url, singer, pitch=shape,
                       volume=_voicevox_volume(settings, tracks))
@@ -871,6 +972,80 @@ def _sing_duet(settings: SongSettings, tracks: dict, out: str, neutrino_dir: str
     mix = sum(np.pad(a, ((0, length - len(a)), (0, 0))) for a in audio)
     sf.write(vocals_wav, mix, rate, subtype="FLOAT")
     log.info("Duett: %s und %s", settings.singer, partner)
+
+
+# G5: wo die Stimmen einer Gruppe im Refrain stehen (die Hauptstimme in der Mitte); allein singen alle in der Mitte
+GROUP_PANS = (0.0, -0.55, 0.55, -0.25)
+GROUP_FADE = 0.05       # Sekunden, in denen eine Stimme von der Mitte an ihren Platz wandert
+
+
+def _group_members(settings: SongSettings, neutrino_dir: str) -> list:
+    """G5: die Stimmen der Gruppe, die Hauptstimme zuerst; leer, wenn die Gruppe aus ist oder keine drei Stimmen
+    installiert sind."""
+    if settings.group_vocals < 3:
+        return []
+    from vocal_synthesizer import installed_singers
+    others = [n for n in installed_singers(neutrino_dir) if n != settings.singer
+              and os.path.isdir(os.path.join(neutrino_dir, "model", n))]
+    others.sort(key=lambda n: n != settings.duet_singer)          # die Duett-Stimme zuerst, wenn eine gewählt ist
+    members = [settings.singer] + others[:settings.group_vocals - 1]
+    if len(members) < 3:
+        log.warning("Gruppe: nur %d NEUTRINO-Stimme(n) installiert, die Gruppe braucht drei; es singt %s",
+                    len(members), settings.singer if len(members) == 1 else "das Duett, falls gewählt")
+        return []
+    return members
+
+
+def group_mix(voices: list, rate: int, windows: list) -> np.ndarray:
+    """Die Stimmen einer Gruppe als Stereo: in den windows (Sekunden, alle singen) jede an ihrem Platz und leiser,
+    damit die Gruppe nicht lauter wird als eine Stimme; sonst singt jede allein in der Mitte."""
+    length = max(len(v) for v in voices)
+    together = np.zeros(length)
+    for start, end in windows:
+        together[int(start * rate):int(end * rate)] = 1.0
+    import voice_fx
+    together = voice_fx.smooth(together, max(1, int(GROUP_FADE * rate)))
+    gain = 1.0 + together * (1.0 / np.sqrt(len(voices)) - 1.0)
+    mix = np.zeros((length, 2), dtype=np.float32)
+    for k, mono in enumerate(voices):
+        angle = (together[:len(mono)] * GROUP_PANS[k % len(GROUP_PANS)] + 1) * np.pi / 4
+        g = gain[:len(mono)] * np.sqrt(2)
+        mix[:len(mono), 0] += mono * np.cos(angle) * g
+        mix[:len(mono), 1] += mono * np.sin(angle) * g
+    return mix
+
+
+def _sing_group(settings: SongSettings, tracks: dict, out: str, neutrino_dir: str, members: list,
+                vocals_wav: str) -> None:
+    """G5: drei oder vier Stimmen singen die Refrains zusammen (links, Mitte, rechts) und die Strophen reihum."""
+    import soundfile as sf
+    from melody_writer import group_turns, split_for_group
+    from vocal_synthesizer import erstelle_musicxml, stimmlage
+    plan = tracks["plan"]
+    parts = split_for_group(plan, tracks["melody_data"], tracks["silben"], len(members))
+    voices, rate = [], 48000
+    for k, (singer, (data, silben)) in enumerate(zip(members, parts)):
+        wav = os.path.join(out, f"vocals_gruppe_{k + 1}.wav")
+        xml = erstelle_musicxml(data, silben, settings.bpm, os.path.join(out, f"vocals_gruppe_{k + 1}.xml"),
+                                stimmlage(singer)[2], neutrino_score.options(settings))
+        try:
+            _neutrino_lead(settings, data, xml, wav, neutrino_dir, singer, (), silben, sections_in_seconds(plan))
+            audio, rate = sf.read(wav, dtype="float32", always_2d=True)
+            voices.append(audio.mean(axis=1))
+        finally:
+            remove_file(wav)
+            remove_file(xml)
+    turns = group_turns(plan, len(members))
+    spb = plan.seconds_per_beat
+    windows = [(sec.start * spb, sec.end * spb) for sec in plan.sections if sec.index in turns and
+               turns[sec.index] is None]
+    sf.write(vocals_wav, group_mix(voices, rate, windows), rate, subtype="FLOAT")
+    solo = {}
+    for sec in plan.sections:
+        if turns.get(sec.index) is not None and sec.kind != "PreChorus":
+            solo.setdefault(members[turns[sec.index]], []).append(f"{sec.kind} {sec.occurrence}")
+    log.info("Gruppe: %s singen die Refrains zusammen; allein: %s", ", ".join(members),
+             "; ".join(f"{name} {', '.join(parts)}" for name, parts in solo.items()))
 
 
 HARMONY_PAN = 0.6       # die gedoppelte Harmonie: eine Fassung links, eine rechts

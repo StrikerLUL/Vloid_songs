@@ -29,7 +29,7 @@ NOTES = ("more_motifs", "numbered_lyrics", "harmony_variety", "sung_pads", "adli
 # Ändert die Einstellungen des Mixes (mixdown.mix_arguments); in Klammern der Stil, in dem er wirkt
 MIX = {"echo_throws": None, "vocal_chain": None, "vocal_tone": None, "vocal_unmask": None, "vocal_ride": None,
        "convolution_reverb": None, "ducked_delay": None, "mix_movement": None, "airwindows": None,
-       "lofi_texture": "Lo-Fi", "true_peak": None}
+       "lofi_texture": "Lo-Fi", "true_peak": None, "resonance_tamer": None, "mix_punch": None}
 # Ändert, womit eine Spur klingt (rendering._render_job)
 RENDER = ("sound_library", "guitar_amp", "real_drums", "band_samples")
 # Ändert, was auf der fertigen Gesangsspur passiert (singing._liven)
@@ -52,6 +52,10 @@ ELSEWHERE = {
     "vocal_comping": "test_gesang.py::test_two_takes_are_comped_and_double_the_chorus",
     "vocal_swing": "test_gesang_swing.py::test_the_vocal_swings_only_when_the_band_swings_enough",
     "romaji": "test_gesang.py::test_romaji_can_be_switched_off",
+    "smart_readings": "test_gesang_130.py::test_particles_and_number_words_are_sung_like_spoken",
+    "melody_tensions": "test_melodie_130.py::test_leaning_tones_resolve_and_long_chorus_tones_take_colors",
+    "melody_climax": "test_melodie_130.py::test_the_last_chorus_ends_on_the_highest_note_of_the_song",
+    "melody_triplets": "test_melodie_130.py::test_triplets_and_dotted_rhythms_reach_neutrino_as_real_tuplets",
     "english_kana": "test_gesang.py::test_romaji_lyrics_reach_the_song",
     "section_style": "test_sektions_stil.py::test_section_style_can_be_switched_off",
     "even_takes": "test_sektions_stil.py::test_takes_keep_the_style_shift_unless_neutrino_sings_the_same_every_time",
@@ -78,6 +82,21 @@ ELSEWHERE = {
     "vocal_chops": "test_vocal_chops.py::test_the_song_mixes_the_chops_only_with_the_switch",
     "ritardando": "test_ritardando.py::test_a_ballad_slows_down_and_holds_the_last_chord",
     "video_colors": "test_video.py::test_the_video_takes_the_colors_of_the_style_only_with_the_switch",
+    # 1.3.0
+    "best_melody": "test_melodie_130.py::test_the_best_of_many_melodies_sings",
+    "melody_pickups": "test_melodie_130.py::test_phrases_start_before_the_bar_and_downbeats_are_pushed",
+    "kime": "test_band_130.py::test_the_band_plays_kime_stops_and_fills",
+    "intro_riff": "test_band_130.py::test_the_song_has_its_own_riff_and_an_interlude",
+    "band_groove": "test_band_130.py::test_the_band_plays_in_the_pocket_of_the_drummer",
+    "bass_runs": "test_band_130.py::test_the_bass_runs_fills_jumps_octaves_and_plays_funk",
+    "band_runs": "test_band_130.py::test_piano_and_strings_run_glide_and_play_the_hook",
+    "anison_grooves": "test_band_130.py::test_fast_anime_songs_get_anison_grooves_rolls_and_stops",
+    "section_buildup": "test_band_130.py::test_the_first_verse_starts_alone_and_choruses_grow",
+    "surge_sounds": "test_instrumente_130.py::test_surge_plays_the_own_synths_when_it_is_set_up_and_switched_on",
+    "amp_models": "test_instrumente_130.py::test_distorted_guitars_play_through_a_real_amp_model",
+    "vocal_pocket": "test_gesang_130.py::test_the_voice_sits_behind_or_ahead_of_the_beat_by_style",
+    "diffsinger_expression": "test_gesang_130.py::test_diffsinger_breathes_in_the_verse_and_pushes_in_the_chorus",
+    "ai_melody": "test_melodie_130.py::test_the_ai_suggests_chorus_melodies_and_the_better_one_sings",
 }
 # Bedienung der App, ändert den Song nicht
 APP = ("show_karaoke", "reuse_steps", "log_file", "update_check", "setup_wizard", "done_notice", "lyric_hints",

@@ -84,10 +84,13 @@ uv run pytest -m "not slow"   # ohne den Test, der echtes Audio rendert
 | `song_plan.py` | Bauplan: Sektionen, Tonarten, Akkorde und Energie |
 | `melody_writer.py` | Gesangsmelodie mit Motiven, Refrain-Hook, Wortakzent, Melisma und Duett-Aufteilung |
 | `melody_import.py` | eigene Melodie aus einer MIDI-Datei lesen und in eine Sektion legen |
+| `melody_score.py`, `chord_spice.py` | Punkte für eine Gesangsmelodie (die eingängigste von 30 singt); Zwischendominanten, Leihakkorde und Marusa-Folge |
 | `humming.py` | eine gesummte Melodie (Aufnahme) in eine MIDI-Datei verwandeln |
 | `preview.py` | geänderte Töne sofort anhören: Synth über der Band, nur um die Änderungen herum |
 | `parts.py`, `drums.py` | Begleitung, Gegenstimme, Solo, Percussion und Schlagzeug |
 | `orchestrator.py` | setzt alles zusammen und schreibt die MIDI-Spuren |
+| `riff.py`, `kime.py`, `buildup.py` | eigenes Riff für Intro, Zwischenspiel und Outro; Kime, Stopps und kleine Fills; Aufbau innerhalb der Sektion |
+| `bass_runs.py`, `band_runs.py`, `anison.py`, `groove_feel.py` | melodischer Anime-Bass; Läufe und Glissandi; Anison-Grooves; die Band im Timing des Schlagzeugers |
 | `renderer.py` | rendert MIDI mit dem SoundFont (FluidSynth oder tinysoundfont) |
 | `sound_library.py`, `setup_soundfonts.py` | welches Instrument aus welchem zusätzlichen SoundFont spielt, und deren Download |
 | `sfz.py`, `sample_library.py`, `setup_samples.py` | Sampler für SFZ-Instrumente, welches Instrument aus welchen Orchester-Aufnahmen spielt, und deren Download |
@@ -97,13 +100,16 @@ uv run pytest -m "not slow"   # ohne den Test, der echtes Audio rendert
 | `rating.py`, `rating_worker.py`, `setup_bewertung.py` | mehrere Fassungen benoten (Audiobox Aesthetics in eigener Umgebung) und diese einrichten |
 | `synth_engine.py` | eigene Synths: Supersaw, Pluck, Pad, Lead, Chiptune, Reese- und Sub-Bass, Future-Bass-Akkorde |
 | `drum_machine.py` | Schlagzeug wie aus der TR-808 und TR-909, ohne Samples |
+| `surge_sounds.py`, `setup_surge.py` | Werks-Klänge von Surge XT statt der eigenen Synths, und dessen Download |
 | `guitar_amp.py` | verzerrte E-Gitarren über Verstärker und Box (eingebaut oder Impulsantwort) |
 | `vst_sounds.py` | Surge XT finden, pro Spur einen Klang im Fenster des Instruments wählen und speichern |
+| `amp_models.py`, `setup_nam.py` | Modelle echter Verstärker (Neural Amp Modeler, in numpy gerechnet), und deren Download |
 | `fx.py` | Riser, Becken-Swell, Impact und Downlifter |
 | `vocal_synthesizer.py` | MusicXML, NEUTRINO und die lokale Vorschau-Stimme |
 | `voicevox.py` | Singen über die Schnittstelle von VOICEVOX |
 | `voice_fx.py` | Atmer, Echo auf dem letzten Wort, Vibrato und Übergänge (PSOLA), beste Fassung, Chor im letzten Refrain, Lautstärke pro Silbe, Gesangs-Swing |
 | `ust_export.py` | Gesangsnoten als UTAU-Projekt (.ust) für OpenUtau |
+| `resonance.py`, `spoken.py` | Härte zähmen (Resonanz-Filter auf dem Gesang); die Sektion „Sprechen“ mit VOICEVOX |
 | `neutrino_score.py` | Noten so schreiben, wie NEUTRINO sie gut singen kann: Haltezeichen, Atemzeichen, Doppelvokale, Englisch als Katakana |
 | `backing_vocals.py` | Begleitstimmen: Harmonie je Refrain, Doppelung, gesungene Flächen, Ad-libs |
 | `casting.py`, `vocal_check.py` | Stimmen-Casting und der Gesangs-Check unter dem Player |
@@ -118,12 +124,13 @@ uv run pytest -m "not slow"   # ohne den Test, der echtes Audio rendert
 | `project.py`, `tags.py` | den Gesang eines Songs aufheben und wieder öffnen; Titel, Liedtext und Titelbild in der MP3 |
 | `album.py` | Album über Nacht |
 | `youtube.py` | „Fertig für YouTube“: Ordner mit MP3, Video, Titelbild und Beschreibung |
-| `lyrics.py` | Liedtext in Silben: Kanji-Lesung, Romaji, Partikel |
+| `lyrics.py`, `readings.py` | Liedtext in Silben: Kanji-Lesung, Romaji, Partikel; Zahlwörter und は, へ, を auch in Kana richtig lesen |
 | `drum_kit.py`, `setup_drums.py` | echtes Schlagzeug aus dem DRS Kit, und dessen Download |
 | `band_library.py`, `setup_band.py` | Flügel, E-Bass und E-Gitarre aus Aufnahmen, und deren Download |
 | `grooves.py`, `setup_grooves.py` | Grooves und Fills aus dem Groove MIDI Dataset, und dessen Download |
 | `separation.py`, `separation_worker.py`, `setup_demucs.py` | Mix pro Instrument: Demucs zerlegt die Vorbilder (eigene Umgebung), und diese einrichten |
 | `accompaniment.py`, `accompaniment_worker.py`, `setup_begleitung.py` | KI-Begleitung: der Anticipatory Music Transformer (eigene Umgebung), und diese einrichten |
+| `ai_melody.py` | KI-Melodie (Versuch): das Modell der KI-Begleitung schlägt Refrain-Melodien vor |
 | `config.py`, `userdata.py` | wo Programm und Daten liegen, und der Umzug nach Dokumente |
 | `einrichten.py`, `systemcheck.py`, `fehlerbericht.py`, `updates.py` | Einrichten, System prüfen, Fehlerbericht und Updates (Hilfe-Menü, `gui/dialogs.py`) |
 | `cancel.py`, `resume.py`, `applog.py` | Abbrechen, Weitermachen nach einem Absturz, Protokolldatei |

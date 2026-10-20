@@ -7,7 +7,7 @@ from nicegui import run, ui
 
 import vorlagen
 from gui import labels
-from lyrics import _HEADER, syllables
+from lyrics import _HEADER, options as lyric_options, syllables
 from settings import KEYS, MASTER_TARGETS, STYLE_OPTIONS, SongSettings
 from styles import STYLES
 
@@ -64,6 +64,11 @@ def song_panel(s: SongSettings, pick: PickFn, apply_template: Callable[[SongSett
     section_title("Ablauf")
     structure_editor(s)
 
+    section_title("Melodie und Akkorde")
+    for attr, text, tip in MELODY_SWITCHES:
+        ui.switch(text).bind_value(s, attr).props("dense").tooltip(tip).mark(f"switch-{attr}")
+    sliders(s, MELODY_SLIDERS)
+
     section_title("Eigene Akkorde")
     chords_editor(s)
 
@@ -83,7 +88,98 @@ def song_panel(s: SongSettings, pick: PickFn, apply_template: Callable[[SongSett
     templates_editor(s, apply_template)
 
 
+# Gesang 1.3.0, jede Neuerung mit Schalter
+VOICE_SWITCHES = (
+    ("resonance_tamer", "Härte zähmen", "Wie das Plugin soothe2: wenn hohe, laute Töne schrill werden, werden nur die "
+                                        "Frequenzen leiser, die gerade herausstechen, und nur so lange. Die Stimme "
+                                        "bleibt hell und nah"),
+    ("vocal_pocket", "Gesang im Groove", "Im City Pop, Lo-Fi und in der Ballade liegt der Gesang leicht hinter dem "
+                                         "Schlag (etwa 20 ms), im Rock und Drum and Bass leicht davor"),
+    ("diffsinger_expression", "DiffSinger-Ausdruck", "DiffSinger-Stimmen mit Varianz-Modell singen die Strophe "
+                                                     "hauchig und den Refrain kräftig, lange Töne werden zum Ende "
+                                                     "hauchiger, hohe Töne gespannter"),
+)
+# (Einstellung, Text, von, bis, Schritt, Erklärung), 0 = aus
+VOICE_SLIDERS = (
+    ("intonation", "Tonhöhe glätten", 0.0, 1.0, 0.05,
+     "Zieht den ruhigen Teil zu weit danebenliegender Töne zur Note, wie eine sanfte Tonhöhenkorrektur; Vibrato und "
+     "Übergänge bleiben, wie gesungen. 0 = aus, 1 = genau auf die Note"),
+    ("ornaments", "Verzierungen", 0.0, 1.0, 0.05,
+     "Shakuri (von unten in den Ton), Fall am Phrasenende und Kobushi (kleiner Schnörkel) auf langen Tönen, je Stil "
+     "dosiert: Ballade mehr, Chiptune gar nicht. 0,35 = dezent"),
+)
+GROUP_CHOICES = {0: "aus", 3: "3 Stimmen", 4: "4 Stimmen"}
+SPOKEN_SOUNDS = {"Hall": "mit Hall", "Telefon": "wie am Telefon", "trocken": "trocken"}
+
+# Band 1.3.0, jede Neuerung mit Schalter
+BAND_SWITCHES = (
+    ("kime", "Kime, Stopps und Fills", "Vor manchen Refrains und am Ende spielt die ganze Band dieselben Akzente mit "
+                                       "Becken, in Strophen setzt sie manchmal zwei Schläge aus (nur der Gesang), und "
+                                       "am Ende von Vier-Takt-Phrasen spielt ein Instrument einen kleinen Lauf. Nur im "
+                                       "4/4-Takt"),
+    ("band_groove", "Band im Groove", "Bass, Gitarre und Klavier übernehmen die Verschiebungen und Betonungen des "
+                                      "Schlagzeugers, wie eine Band, die zusammen spielt (am deutlichsten mit den "
+                                      "Grooves echter Schlagzeuger). Nur im 4/4-Takt"),
+    ("bass_runs", "Bass-Läufe", "Der Bass läuft zum nächsten Akkord, spielt am Ende jeder Vier-Takt-Phrase einen Fill, "
+                                "springt im Refrain in die Oktave und spielt im City Pop funkige Oktaven mit "
+                                "abgedämpften Tönen. Nur im 4/4-Takt"),
+    ("band_runs", "Läufe", "Klavierläufe in Sechzehnteln, ein Glissando vor dem Refrain, Streicher, die nach oben in "
+                           "den Refrain laufen, und im Refrain die Hook vom Klavier in Oktaven. Nur im 4/4-Takt"),
+    ("anison_grooves", "Anison-Grooves", "In schnellen Songs (ab 140 BPM: J-Pop Energy, Rock, Idol-Pop, Dark "
+                                         "Vocaloid, Kawaii) 2-Beat im Refrain, Disco-Hi-Hats im Pre-Chorus, "
+                                         "Tom-Groove in der ersten Strophe, Snare-Wirbel als Anlauf und Becken-Stopps. "
+                                         "Nur im 4/4-Takt"),
+    ("section_buildup", "Aufbau in der Sektion", "Die erste Strophe beginnt nur mit Klavier oder Gitarre und Gesang, "
+                                                 "nach vier Takten kommen Bass und Schlagzeug dazu; die zweite Hälfte "
+                                                 "jedes Refrains bekommt eine Schicht mehr"),
+    ("surge_sounds", "Surge-Klänge", "Supersaw, Pluck, Chip-Lead, Future-Bass-Akkorde und Reese-Bass spielen Werks-"
+                                     "Klänge des kostenlosen Synthesizers Surge XT statt der eigenen Synths, gleich "
+                                     "laut. Erst nach Einrichten › Surge XT"),
+    ("amp_models", "Verstärker", "Verzerrte E-Gitarren spielen über Modelle echter Verstärker (Neural Amp Modeler): "
+                                 "ein Marshall JCM2000 für Overdrive, ein Peavey 6505+ für Distortion, dahinter die "
+                                 "Box. Erst nach Einrichten › Gitarren-Verstärker, nur mit „Verzerrte E-Gitarren "
+                                 "über Verstärker und Box“"),
+)
+
+# Melodie 1.3.0, jede Neuerung mit Schalter
+MELODY_SWITCHES = (
+    ("best_melody", "Beste Melodie suchen", "Jede Sektion wird 30-mal geschrieben; es singt die Fassung mit den meisten "
+                                            "Punkten: klarer Höhepunkt, Schritte und Sprünge gemischt, wenige "
+                                            "Tonwiederholungen, Motive, die wiederkommen, ein Refrain über der Strophe"),
+    ("melody_pickups", "Auftakte und Synkopen", "Manche Phrasen beginnen ein bis drei Silben vor dem Takt, und Töne auf "
+                                                "der Eins kommen manchmal eine Sechzehntel früher, wie im J-Pop. Nur im "
+                                                "4/4-Takt"),
+    ("melody_tensions", "Spannungstöne", "Ab und zu liegt auf der betonten Zeit ein Ton über dem Akkordton, der sich "
+                                         "auf demselben Vokal auflöst (Vorhalt), und lange Refrain-Töne landen auf "
+                                         "der None oder der großen Septime"),
+    ("melody_climax", "Höhepunkt im letzten Refrain", "Strophen bleiben unter dem Spitzenton des Refrains, und die "
+                                                      "Schlusszeile des letzten Refrains endet oben, auf dem höchsten "
+                                                      "Ton des ganzen Songs"),
+    ("melody_triplets", "Triolen", "Drei Silben in einem Schlag werden manchmal zur Achteltriole, zwei Achtel zu "
+                                   "punktierter Achtel und Sechzehntel; im City Pop, in der Ballade und im Lo-Fi "
+                                   "öfter. NEUTRINO bekommt echte Triolen in den Noten. Nur im 4/4-Takt"),
+    ("intro_riff", "Eigenes Intro-Riff", "Die Lead-Stimme spielt im Intro eine eigene Figur aus zwei Takten statt der "
+                                         "Refrain-Melodie; sie kommt in einem Zwischenspiel nach dem ersten Refrain "
+                                         "und im Outro wieder und läuft im letzten Refrain leise mit"),
+)
+# (Einstellung, Text, von, bis, Schritt, Erklärung): Regler der Neuerungen aus 1.3.0, 0 = aus
+MELODY_SLIDERS = (
+    ("chord_spice", "Akkord-Würze", 0.0, 1.0, 0.05,
+     "Wie oft die Akkordfolge gewürzt wird: Zwischendominanten (III7 vor vi), Leihakkorde (iv, bVI bVII), "
+     "verminderte Durchgänge, sus4 vor der Dominante, laufender Bass und im Refrain die Marusa-Folge. 0 = nur die "
+     "Folgen des Stils"),
+)
+
 BAR_CHOICES = (2, 4, 8, 12, 16, 24, 32)
+
+
+def sliders(s: SongSettings, rows: tuple) -> None:
+    """Regler der Neuerungen aus 1.3.0 (0 = aus, 1 = 100 %)."""
+    for attr, text, lo, hi, step, tip in rows:
+        with ui.row().classes("w-full items-center gap-4"):
+            ui.label(text).classes("w-28").tooltip(tip)
+            ui.slider(min=lo, max=hi, step=step).bind_value(s, attr).props("label").classes("col") \
+                .tooltip(tip).mark(f"slider-{attr}")
 
 
 def structure_editor(s: SongSettings) -> None:
@@ -429,6 +525,18 @@ def text_panel(s: SongSettings) -> Callable[[], None]:
         .tooltip("Eine Zeile ganz in Romaji wird japanisch gesungen; ist ein englisches Wort darin (love, baby), bleibt "
                  "die Zeile, wie sie ist. Neben japanischer Schrift wird jedes Romaji-Wort umgewandelt.")
 
+    ui.switch("Partikel erkennen (きみは → きみわ, 一回 → いっかい)").bind_value(s, "smart_readings") \
+        .props("dense").mark("switch-smart_readings").on_value_change(lambda: preview.refresh()) \
+        .tooltip("は, へ und を werden auch in reinen Kana wie Partikel gesungen (わ, え, お), Zahl und Zählwort wie "
+                 "gesprochen (一回 いっかい, 三本 さんぼん). Eigene Lesungen gehören in Lesungen.txt im Datenordner, "
+                 "eine pro Zeile wie „明日=あした“; eine leere Datei ändert nichts.")
+    def open_readings() -> None:
+        import readings
+        from gui import media
+        media.open_folder(readings.ensure_file())
+
+    ui.button("Eigene Lesungen (Lesungen.txt)", icon="edit_note", on_click=open_readings) \
+        .props("flat dense no-caps").mark("open-readings")
     ui.switch("Text-Helfer: Silben gegen Platz, Reime und Lesungen pro Zeile").bind_value(s, "lyric_hints") \
         .props("dense").mark("switch-lyric_hints").on_value_change(lambda: preview.refresh()) \
         .tooltip("Neben jeder Zeile: wie viele Silben sie hat und wie viele bequem in ihre Phrase passen (rot = zu "
@@ -447,7 +555,7 @@ def text_panel(s: SongSettings) -> Callable[[], None]:
             if header:
                 rows.append(("header", header.group(1)))
             elif line:
-                sylls = syllables(line, s.romaji, s.english_kana)
+                sylls = syllables(line, **lyric_options(s))
                 count += len(sylls)
                 rows.append(("line", " ".join(sylls)))
         ui.label(f"So wird gesungen: {count} Silben").classes("text-subtitle2").mark("syllables")
@@ -477,6 +585,9 @@ def text_panel(s: SongSettings) -> Callable[[], None]:
                         ui.label(" ".join(str(x) for x in line.sung)).classes("text-body2 col")
                     color = {"zu viel": "text-red-5", "schnell": "text-orange-5"}.get(line.status, "text-grey-5")
                     ui.label(line.describe()).classes(f"text-caption q-ml-lg {color}").mark("line-hint")
+                    if line.changes:
+                        ui.label("gelesen: " + ", ".join(f"{a} → {b}" for a, b in line.changes)) \
+                            .classes("text-caption q-ml-lg text-teal-4").mark("line-reading")
                     if line.unread:
                         ui.label("Kanji ohne Lesung: schreib sie in Kana oder mit Lesung wie 君[きみ]") \
                             .classes("text-caption q-ml-lg text-red-5").mark("line-unread")
@@ -533,6 +644,8 @@ def band_panel(s: SongSettings) -> None:
         .mark("switch-guitar_strums") \
         .tooltip("Ruhige Teile in Vierteln, Refrains in Sechzehnteln mit abgedämpften Anschlägen; runter klingen die "
                  "tiefen Saiten, hoch die hohen (Spielweise geschlagen)")
+    for attr, text, tip in BAND_SWITCHES:
+        ui.switch(text).bind_value(s, attr).tooltip(tip).mark(f"switch-{attr}")
     ui.switch("Vocal Chops im Drop").bind_value(s, "vocal_chops").mark("switch-vocal_chops") \
         .tooltip("Kurze Schnipsel der Hauptstimme, umgestimmt auf die Akkorde, spielen im Drop einen Riff (im Future "
                  "Bass auch im Intro). Nur in Stilen mit Drop, nicht in Ballade, Rock, City Pop und Lo-Fi")
@@ -677,6 +790,9 @@ def voice_panel(s: SongSettings, singers: list, pick: PickFn | None = None) -> t
         .bind_value(s, "support_singer").classes("w-full").mark("support")
     hint("Eine zweite Stimme läuft als Support-Modell mit und gibt der Hauptstimme eine andere Färbung, z. B. MERROW "
          "mit SOMA. NEUTRINO nennt das selbst experimentell; braucht Run_support_model.bat (ab NEUTRINO 3).")
+    ui.select(GROUP_CHOICES, label="Gruppe").bind_value(s, "group_vocals").classes("w-full").mark("group-vocals")
+    hint("Drei oder vier installierte NEUTRINO-Stimmen singen den Refrain zusammen (links, Mitte, rechts) und die "
+         "Strophen reihum, wie eine Idol-Gruppe. Mit weniger als drei Stimmen singt die gewählte allein.")
     ui.switch("Zweite Stimme im Refrain").bind_value(s, "harmonies")
     ui.switch("Lieblingsstimme je Stil").bind_value(s, "style_singer").props("dense").mark("switch-style_singer") \
         .tooltip("Beim Wechsel des Stils wählt die App die Stimme, die du im Stimmen-Casting für ihn gemerkt hast")
@@ -740,8 +856,12 @@ def voice_panel(s: SongSettings, singers: list, pick: PickFn | None = None) -> t
         .mark("switch-voicevox_dynamics") \
         .tooltip("Betonte Silben und der Weg zum Höhepunkt einer Zeile gehen als Lautstärke in den Gesang ein, statt "
                  "danach lauter und leiser gedreht zu werden. Leiser klingt dann auch weicher.")
-    section_title("Rap-Teil")
+    section_title("Rap und Sprechen")
     rap_editor(s)
+    section_title("Gesang wie produziert")
+    for attr, text, tip in VOICE_SWITCHES:
+        ui.switch(text).bind_value(s, attr).props("dense").tooltip(tip).mark(f"switch-{attr}")
+    sliders(s, VOICE_SLIDERS)
     section_title("Lebendiger Gesang")
     for attr, text, tip in LIVELY_SWITCHES:
         ui.switch(text).bind_value(s, attr).props("dense").tooltip(tip).mark(f"switch-{attr}")
@@ -783,6 +903,10 @@ def rap_editor(s: SongSettings) -> None:
     hint("Eine Sektion „Rap“ (Ablauf und [Rap] im Liedtext) spricht VOICEVOX im Takt, wie der Rap in „Idol“; NEUTRINO "
          "kann nicht rappen. Dafür muss die VOICEVOX-App laufen, auch wenn NEUTRINO singt. Ohne VOICEVOX oder mit dem "
          "Schalter aus singt die Gesangsstimme den Rap fast auf einem Ton.")
+    ui.select(SPOKEN_SOUNDS, label="Sprechen klingt").bind_value(s, "spoken_sound").classes("w-full") \
+        .mark("spoken-sound")
+    hint("Eine Sektion „Sprechen“ (Ablauf und [Sprechen] im Liedtext) spricht dieselbe Stimme frei, nicht im Takt, "
+         "während die Band leise spielt. Ohne VOICEVOX fällt die Zeile weg.")
 
     async def load() -> None:
         found = await run.io_bound(voicevox.talkers, s.voicevox_url or voicevox.URL)
@@ -850,6 +974,11 @@ def mix_panel(s: SongSettings) -> None:
     hint("Die Lautheit gilt immer, auch beim Mastering nach Vorbild-Songs; der Limiter hält die Spitzen unten.")
     ui.switch("Bewegung im Mix").bind_value(s, "mix_movement").mark("switch-mix_movement") \
         .tooltip("Anlauf mit Filter vor jedem Refrain, Hall je nach Sektion, breitere Refrains")
+    ui.switch("Druck (Parallel-, Bus- und Mehrband-Kompression)").bind_value(s, "mix_punch") \
+        .mark("switch-mix_punch") \
+        .tooltip("Eine stark komprimierte Kopie des Schlagzeugs läuft leise mit, ein Bus-Kompressor hält die Band "
+                 "zusammen, und im Master werden Bässe, Mitten und Höhen einzeln verdichtet: der Song klingt dichter "
+                 "und druckvoller, ohne lauter zu werden")
     ui.switch("Spitzen auch zwischen den Samples begrenzen (-1 dBTP)").bind_value(s, "true_peak") \
         .mark("switch-true_peak") \
         .tooltip("MP3 und Streaming heben Spitzen zwischen den Samples sonst über 0 dB; das kann knacksen. "
@@ -933,6 +1062,11 @@ def paths_panel(s: SongSettings, pick: PickFn, status: Callable[[], None]) -> No
         .bind_value(s, "ai_accompaniment").mark("accompaniment-switch") \
         .tooltip("Der Anticipatory Music Transformer schreibt Klavier, Gitarre, Streicher, Synths und Bläser passend zu "
                  "Melodie, Bass und Schlagzeug; ohne NVIDIA-Grafikkarte dauert ein Song lange")
+    ui.switch("KI-Melodie im Refrain vorschlagen lassen (setup_begleitung.py, Versuch)") \
+        .bind_value(s, "ai_melody").mark("switch-ai_melody") \
+        .tooltip("Dasselbe Modell schreibt zu Akkorden, Bass und Schlagzeug vier Refrain-Melodien; die App passt sie an "
+                 "Silben und Stimmlage an und bewertet sie wie „Beste Melodie suchen“. Singt eine besser als die "
+                 "komponierte, singen alle Refrains sie. Braucht die eingerichtete KI-Begleitung")
     app_settings(s)
 
 

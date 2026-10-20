@@ -131,8 +131,8 @@ def sung_by(result) -> tuple:
 
 
 def open_folder(path: str) -> bool:
-    """Öffnet einen Ordner im Explorer (oder im Dateimanager)."""
-    if not os.path.isdir(path):
+    """Öffnet einen Ordner im Explorer (oder im Dateimanager), oder eine Datei mit ihrem Programm."""
+    if not os.path.exists(path):
         return False
     try:
         if sys.platform == "win32":

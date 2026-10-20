@@ -155,6 +155,14 @@ class SongSettings(BaseModel):
     more_motifs: bool = True           # mehr eingebaute Rhythmen und Gesten für die Gesangsmelodie (motifs.py)
     learned_motifs: bool = True        # Rhythmen und Gesten aus den MIDI-Dateien in motif_folder lernen
     motif_folder: str = ""             # Ordner mit MIDI-Melodien (leer = Motive im Datenordner)
+    # Melodie 1.3.0, jedes mit Schalter
+    best_melody: bool = True           # M1: jede Sektion vielfach schreiben, die Fassung mit den meisten Punkten singt
+    melody_pickups: bool = True        # M2: Auftakte vor dem Takt und vorgezogene Töne über den Taktstrich (nur 4/4)
+    melody_tensions: bool = True       # M3: Vorhalte und lange Refrain-Töne auf None oder großer Septime
+    melody_climax: bool = True         # M4: der höchste Ton des Songs kommt einmal, am Ende des letzten Refrains
+    melody_triplets: bool = True       # M5: Achteltriolen und punktierte Achtel (City Pop, Ballade mehr; nur 4/4)
+    chord_spice: float = 0.5           # M6: Akkord-Würze 0 bis 1 (Zwischendominanten, Leihakkorde, sus4, laufender Bass)
+    ai_melody: bool = False            # M7 (Versuch): die KI-Begleitung schlägt Refrain-Melodien vor, die beste singt
 
     active_sections: list[str] = Field(default_factory=lambda: [
         "Intro", "Verse", "PreChorus", "Chorus", "Verse", "PreChorus", "Chorus", "Bridge", "Chorus", "Outro"
@@ -197,6 +205,7 @@ class SongSettings(BaseModel):
     formant_fx: bool = True            # Formanten verschoben: kindlicher (Kawaii, Idol) oder dunkler
     vocal_swing: bool = True           # der Gesang swingt mit der Band, wenn der Song swingt (Lo-Fi)
     romaji: bool = True                # Liedtext in lateinischen Buchstaben (Romaji) japanisch singen
+    smart_readings: bool = True        # Partikel は/へ/を auch in reinen Kana, Zahlwörter wie 一回 richtig (1.3.0)
     # Gesang 1.1, jedes mit Schalter. Noten, die NEUTRINO gut singen kann (neutrino_score.py):
     long_vowel_mark: bool = True       # lang gezogene Vokale und Melisma als ー statt als neue Silbe
     breath_marks: bool = True          # Atemzeichen in langen Phrasen (NEUTRINO trennt dort, braucht weniger Speicher)
@@ -213,6 +222,13 @@ class SongSettings(BaseModel):
     vocal_ride: bool = True            # der Gesang wird nachgeführt, damit er gleich weit über der Band steht
     convolution_reverb: bool = True    # Gesangsplatte aus einer Impulsantwort, Pre-Delay im Tempo
     ducked_delay: bool = True          # das Gesangs-Delay ist leiser, solange gesungen wird
+    resonance_tamer: bool = True       # G2 (1.3.0): Härte zähmen, nur gerade herausstechende Frequenzen leiser
+    intonation: float = Field(0.5, ge=0.0, le=1.0)   # G1: ruhigen Teil schiefer Töne so weit zur Note ziehen
+    ornaments: float = Field(0.35, ge=0.0, le=1.0)   # G3: Shakuri, Fall, Kobushi; 0,35 = dezent, je Stil dosiert
+    vocal_pocket: bool = True          # G4: Gesang leicht hinter (City Pop, Lo-Fi, Ballade) oder vor dem Schlag (Rock, DnB)
+    group_vocals: int = Field(0, ge=0, le=4)         # G5: 0 = aus, 3 oder 4 NEUTRINO-Stimmen als Gruppe
+    diffsinger_expression: bool = True  # G8: DiffSinger mit Varianz-Modell: Strophe hauchig, Refrain kräftig
+    spoken_sound: str = "Hall"         # G7: Klang der Sektion „Sprechen“: Hall, Telefon oder trocken
     # Begleitstimmen wie in Produktionen (backing_vocals.py), von NEUTRINO gesungen
     harmony_variety: bool = True       # Harmonie je Refrain anders (Phrasenenden, Terz darunter, darüber, Oktave)
     harmony_double: bool = True        # jede Harmonie zweimal gesungen, links und rechts
@@ -249,6 +265,16 @@ class SongSettings(BaseModel):
     real_grooves: bool = True          # Grooves und Fills echter Schlagzeuger (setup_grooves.py), wenn vorhanden
     lively_bass: bool = True           # Ghost-Notes und Slides im Bass
     guitar_strums: bool = True         # Gitarre schlägt je nach Energie andere Muster an, mit Abdämpfern
+    # Band 1.3.0, jedes mit Schalter
+    intro_riff: bool = True            # I1: eigenes Riff in Intro, Zwischenspiel (nach dem ersten Refrain) und Outro
+    kime: bool = True                  # I2: gemeinsame Akzente (Kime), kurze Stopps und Läufe am Phrasenende (nur 4/4)
+    band_groove: bool = True           # I3: Bass, Gitarre und Klavier spielen im Timing des Schlagzeugers (nur 4/4)
+    bass_runs: bool = True             # I4: Bass-Läufe, Fills am Phrasenende, Oktaven im Refrain, City-Pop-Funk
+    band_runs: bool = True             # I5: Klavierläufe, Glissando und Streicherlauf in den Refrain, Klavier-Hook
+    anison_grooves: bool = True        # I6: 2-Beat, Disco-Hi-Hat, Tom-Groove, Wirbel und Becken-Stopps (schnelle Stile)
+    section_buildup: bool = True       # I7: erste Strophe beginnt nur mit Klavier/Gitarre, Refrain mit Schicht mehr
+    surge_sounds: bool = True          # I8: Supersaw, Pluck, Chip, Future-Bass, Reese aus Surge XT (setup_surge.py)
+    amp_models: bool = True            # I9: verzerrte Gitarren über NAM-Modelle echter Verstärker (setup_nam.py)
     draft: bool = False                # nur für einen Lauf (pipeline.draft_settings): schneller Entwurf
     auto_rating: bool = True           # mehrere Fassungen automatisch bewerten (setup_bewertung.py), wenn eingerichtet
     guitar_amp: bool = True            # verzerrte E-Gitarren über Verstärker und Box statt verzerrter Samples
@@ -288,6 +314,7 @@ class SongSettings(BaseModel):
     limiter_threshold: float = Field(-0.3, ge=-20.0, le=0.0)
     master_lufs: float = Field(-12.0, ge=-20.0, le=-6.0)   # Ziel-Lautheit des Masters (MASTER_TARGETS)
     true_peak: bool = True             # auch zwischen den Samples höchstens -1 dBTP (mixer.TRUE_PEAK_DB)
+    mix_punch: bool = True             # I10: Parallelkompression Schlagzeug, Bus-Kompressor Band, Mehrband im Master
     vocal_versions: bool = True        # Off-Vocal (ohne Gesang) und A-cappella (nur Gesang) als eigene MP3
     id3_tags: bool = True              # Titel, Stimme, Stil, Tempo, Tonart, Liedtext und Titelbild in die MP3
 

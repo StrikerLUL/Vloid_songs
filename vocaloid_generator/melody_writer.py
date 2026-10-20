@@ -8,7 +8,8 @@
 import logging
 import math
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from fractions import Fraction
 from typing import Optional
 
 from lyrics import Mora, for_occurrence, vowel
@@ -94,7 +95,7 @@ GESTURE_WEIGHTS = {
 }
 GESTURE_DEPTH = {"Chorus": 1.0, "Verse": 0.7, "PreChorus": 0.8, "Bridge": 0.8, "Rap": 0.2}
 # Singbare Silben pro Sekunde, an denen sich die Dichte orientiert
-SYLLABLES_PER_SECOND = {"Verse": 3.3, "PreChorus": 3.5, "Chorus": 3.6, "Bridge": 3.0, "Rap": 5.0}
+SYLLABLES_PER_SECOND = {"Verse": 3.3, "PreChorus": 3.5, "Chorus": 3.6, "Bridge": 3.0, "Rap": 5.0, "Spoken": 5.0}
 SINGING_SHARE = 0.75
 # Steigt der Akzent im Wort (tief → hoch), soll die Melodie nicht fallen, und umgekehrt
 ACCENT_COST = 1.5
@@ -104,6 +105,28 @@ SPECIAL_MORAE = ("ん", "っ")
 MELISMA_SHARE = {"Chorus": 0.35, "Verse": 0.2, "PreChorus": 0.25, "Bridge": 0.45, "Rap": 0.0}
 MELISMA_MIN_STEPS = 6
 LEARNED_SHARE = 0.5     # so oft singt ein Takt einen aus MIDI-Dateien gelernten Rhythmus (motifs.py), wenn es einen gibt
+# M2 (1.3.0): Auftakte und vorgezogene Töne. Eine Phrase beginnt mit 1 bis 3 Silben vor dem Taktstrich (Sechzehntel
+# vor der Eins), und ein Ton auf der Eins kommt manchmal eine Sechzehntel früher, über den Taktstrich gebunden.
+PICKUPS = {1: [(-2,), (-1,)], 2: [(-2, -1), (-3, -2)], 3: [(-3, -2, -1)]}
+PICKUP_SIZES = ((1, 0.45), (2, 0.4), (3, 0.15))
+PICKUP_SHARE = {"Chorus": 0.6, "PreChorus": 0.6, "Verse": 0.5, "Bridge": 0.5}
+PUSH_SHARE = {"Chorus": 0.3, "PreChorus": 0.3, "Verse": 0.2, "Bridge": 0.2}
+PUSH_STEPS = 1          # so viele Sechzehntel früher
+# M3: Vorhalte (ein Ton über dem Akkordton auf der betonten Zeit, der sich auf demselben Vokal löst) und lange
+# Refrain-Töne auf der None oder der großen Septime
+APPOGGIATURA_SHARE = {"Chorus": 0.15, "PreChorus": 0.12, "Verse": 0.1, "Bridge": 0.15}
+APPOGGIATURA_MIN_BEATS = 1.0
+COLOR_SHARE = {"Chorus": 0.35, "Bridge": 0.2}
+COLOR_MIN_BEATS = 1.5
+MAJOR_QUALITIES = ("maj", "maj7", "add9", "maj9", "6")
+# M5: drei Silben in einem Schlag als Achteltriole, zwei Achtel als punktierte Achtel und Sechzehntel; so oft je
+# Schlag, der dafür passt (City Pop, Ballade und Lo-Fi mehr)
+TRIPLET_SHARE = {"City Pop": 0.3, "Ballade": 0.3, "Lo-Fi": 0.25}
+DOTTED_SHARE = {"City Pop": 0.25, "Ballade": 0.25, "Lo-Fi": 0.2}
+FIGURE_SHARE = 0.1
+# M4: der höchste Ton des Songs kommt einmal, am Ende des letzten Refrains; so viele Halbtöne darf er über der
+# geschriebenen Stimmlage liegen
+CLIMAX_ABOVE = 2
 
 
 @dataclass
@@ -113,6 +136,13 @@ class MelNote:
     pitch: int
     syllable: Optional[str] = None
     strong: bool = False
+    pushed: bool = False          # M2: kommt eine Sechzehntel vor dem Takt, gemeint ist der Akkord danach
+    tension: bool = False         # M3: ein gewollter Spannungston (Vorhalt, None), kein Fehler im Akkord
+
+
+def heard_at(note: MelNote) -> float:
+    """Der Schlag, dessen Akkord ein Ton meint: bei einem vorgezogenen Ton der nach dem Taktstrich."""
+    return note.start + PUSH_STEPS / STEPS_PER_BEAT if getattr(note, "pushed", False) else note.start
 
 
 @dataclass
@@ -162,13 +192,16 @@ def _local_scale(tonic: int, mode: str, chord: Chord) -> set:
 
 
 class SectionMelodyWriter:
-    def __init__(self, plan: SongPlan, section: Section, rng: random.Random, motifs=None):
-        """motifs: zusätzliche Rhythmen und Gesten (motifs.Motifs); None = nur die eingebauten."""
+    def __init__(self, plan: SongPlan, section: Section, rng: random.Random, motifs=None, extras=()):
+        """motifs: zusätzliche Rhythmen und Gesten (motifs.Motifs); None = nur die eingebauten.
+        extras: eingeschaltete Neuerungen aus 1.3.0 (pipeline.COMPOSITION_EXTRAS), z. B. "melody_pickups"."""
         self.plan = plan
         self.sec = section
         self.rng = rng
         self.extra = motifs
-        self.kind = section.kind if section.kind in ROLE_SEQUENCES else "Verse"
+        self.extras = extras
+        # die Sektion „Sprechen“ bekommt den Rhythmus des Raps (gesprochen wird sie frei, spoken.py)
+        self.kind = "Rap" if section.kind == "Spoken" else section.kind if section.kind in ROLE_SEQUENCES else "Verse"
         lo, hi = plan.vocal_range
         center = plan.style.vocal_center + KIND_OFFSET.get(self.kind, 0)
         self.center = max(lo + 7, min(hi - 8, center))
@@ -177,6 +210,9 @@ class SectionMelodyWriter:
         self.motifs = {}
         self.gestures = {}
         self.melisma = {}
+        self.pushes = {}
+        self.tensions = {}
+        self.figures = {}
         # Sechzehntel pro Takt: 16, im 3/4-Takt 12 (dort schreibt der Writer im fertigen Takt, meter.py)
         self.bar_steps = int(round(section.bar_beats * STEPS_PER_BEAT))
         self.waltz = self.bar_steps == 12
@@ -247,8 +283,10 @@ class SectionMelodyWriter:
             self.motifs[key] = self.rng.choice(options) if count <= 6 else self._motif(count)
         return self.motifs[key]
 
-    def phrase_rhythm(self, n: int, phrase_bars: int, role: str) -> list:
-        """Einsätze und Längen (in Sechzehnteln) für n Silben in einer Phrase."""
+    def phrase_rhythm(self, n: int, phrase_bars: int, role: str, pickup: tuple = ()) -> list:
+        """Einsätze und Längen (in Sechzehnteln) für n Silben in einer Phrase. pickup: Einsätze vor der Eins (negativ,
+        M2) für die ersten Silben."""
+        n -= len(pickup)
         if phrase_bars == 1:
             counts, end = [], n
         else:
@@ -269,6 +307,7 @@ class SectionMelodyWriter:
             onsets.extend(b * self.bar_steps + s for s in self._motif(c, variant))
         last_bar = len(counts) * self.bar_steps
         onsets.extend(last_bar + s for s in self._end_rhythm(end, role))
+        onsets = list(pickup) + onsets
         phrase_end = last_bar + self.release
         if onsets and onsets[-1] >= phrase_end - 1:
             phrase_end = min(last_bar + self.bar_steps, onsets[-1] + 2)
@@ -430,7 +469,8 @@ class SectionMelodyWriter:
         written = {}
         for ph, (chunk, role) in enumerate(zip(chunks, roles)):
             phrase_start = self.sec.start + ph * pb * self.sec.bar_beats
-            slots = self.phrase_rhythm(len(chunk), pb, role)
+            slots = self.phrase_rhythm(len(chunk), pb, role, self._pickup(ph, role, len(chunk), notes, phrase_start))
+            slots = self._figures(slots, role)
             base_role = role.rstrip("2")
             reference = written.get(base_role)
             same_rhythm = reference and [s.step for s, _ in reference] == [s.step for s in slots]
@@ -442,12 +482,150 @@ class SectionMelodyWriter:
                 if role == "H":
                     pitches = self.sequence_bars(slots, pitches, phrase_start)
             written.setdefault(role, list(zip(slots, pitches)))
-            for slot, pitch, syl in zip(slots, pitches, chunk):
-                note = MelNote(start=phrase_start + slot.step / STEPS_PER_BEAT, dur=slot.dur / STEPS_PER_BEAT,
-                               pitch=pitch, syllable=syl, strong=slot.strong)
-                notes += self._melisma(note, role) if slot.last and slot.dur >= MELISMA_MIN_STEPS else [note]
+            phrase = [MelNote(start=phrase_start + float(slot.step) / STEPS_PER_BEAT,
+                              dur=float(slot.dur) / STEPS_PER_BEAT, pitch=pitch, syllable=syl, strong=slot.strong)
+                      for slot, pitch, syl in zip(slots, pitches, chunk)]
+            self._push(slots, phrase, role)
+            for slot, group in zip(slots, self._tension(slots, phrase, role)):
+                if len(group) > 1:
+                    notes += group
+                else:
+                    notes += self._melisma(group[0], role) if slot.last and slot.dur >= MELISMA_MIN_STEPS else group
             prev = pitches[-1] if pitches else prev
         return notes
+
+    # ── Auftakte und vorgezogene Töne (M2) ───────────────────────────────────────
+    def _grooves(self) -> bool:
+        return "melody_pickups" in self.extras and not self.waltz and self.kind != "Rap"
+
+    def _pickup(self, ph: int, role: str, n: int, notes: list, phrase_start: float) -> tuple:
+        """Einsätze vor der Eins für die ersten Silben der Phrase, oder (). Nie in der ersten Phrase der Sektion und
+        nie in Phrasen, die wörtlich wiederkehren (H, A, P), damit die Hook gleich bleibt."""
+        if not self._grooves() or ph == 0 or role in ("H", "A", "P") or not notes:
+            return ()
+        if self.rng.random() >= PICKUP_SHARE.get(self.kind, 0.3):
+            return ()
+        room = (phrase_start - notes[-1].start - notes[-1].dur) * STEPS_PER_BEAT - 1   # eine Sechzehntel zum Atmen
+        sizes, weights = zip(*PICKUP_SIZES)
+        k = min(self.rng.choices(sizes, weights)[0], n - 2)
+        while k > 0:
+            options = [p for p in PICKUPS[k] if -p[0] <= room]
+            if options:
+                return self.rng.choice(options)
+            k -= 1
+        return ()
+
+    def _push(self, slots: list, phrase: list, role: str) -> None:
+        """Töne auf der Eins kommen eine Sechzehntel früher, der Ton davor wird so viel kürzer (Synkope über den
+        Taktstrich). Gleiche Stellen gleicher Phrasen werden gleich vorgezogen."""
+        if not self._grooves():
+            return
+        share = PUSH_SHARE.get(self.kind, 0.2)
+        early = PUSH_STEPS / STEPS_PER_BEAT
+        for i in range(1, len(slots)):
+            slot, before = slots[i], slots[i - 1]
+            if slot.step <= 0 or slot.step % self.bar_steps or before.step + before.dur != slot.step or before.dur < 2:
+                continue
+            key = (role.rstrip("2"), slot.step)
+            if key not in self.pushes:
+                self.pushes[key] = self.rng.random() < share
+            if self.pushes[key]:
+                note, prev = phrase[i], phrase[i - 1]
+                note.start -= early
+                note.dur += early
+                note.pushed = True
+                prev.dur -= early
+
+    # ── Triolen und punktierte Rhythmen (M5) ─────────────────────────────────────
+    def _figures(self, slots: list, role: str) -> list:
+        """Schläge mit drei Einsätzen werden zur Achteltriole, Schläge mit zwei Achteln punktiert. Gleiche Stellen
+        gleicher Phrasen entscheiden gleich (die Hook bleibt), nur im 4/4-Takt."""
+        if "melody_triplets" not in self.extras or self.waltz or self.kind == "Rap" or not slots:
+            return slots
+        style = self.plan.style.name
+        out = list(slots)
+        beats = int(max(s.step + s.dur for s in slots) // STEPS_PER_BEAT)
+        for b in range(beats):
+            begin, end = b * STEPS_PER_BEAT, (b + 1) * STEPS_PER_BEAT
+            idx = [i for i, s in enumerate(out) if begin <= s.step < end]
+            if not idx or out[idx[0]].step != begin:
+                continue
+            last = out[idx[-1]]
+            reach = last.step + last.dur
+            if len(idx) == 3 and reach >= end:
+                key, share = (role.rstrip("2"), b, 3), TRIPLET_SHARE.get(style, FIGURE_SHARE)
+                third = Fraction(STEPS_PER_BEAT, 3)
+                if self._figure(key, share):
+                    for k, i in enumerate(idx):
+                        start = begin + k * third
+                        out[i] = _Slot(start, third if k < 2 else reach - start, out[i].strong, out[i].last)
+            elif len(idx) == 2 and out[idx[1]].step == begin + 2 and out[idx[0]].dur == 2 and reach >= end:
+                key, share = (role.rstrip("2"), b, 2), DOTTED_SHARE.get(style, FIGURE_SHARE)
+                if self._figure(key, share):
+                    first, second = out[idx[0]], out[idx[1]]
+                    out[idx[0]] = _Slot(first.step, 3, first.strong, first.last)
+                    out[idx[1]] = _Slot(begin + 3, reach - begin - 3, second.strong, second.last)
+        return out
+
+    def _figure(self, key: tuple, share: float) -> bool:
+        if key not in self.figures:
+            self.figures[key] = self.rng.random() < share
+        return self.figures[key]
+
+    # ── Vorhalte und Spannungstöne (M3) ──────────────────────────────────────────
+    def _tension(self, slots: list, phrase: list, role: str) -> list:
+        """[[Töne] je Einsatz]: ein Ton allein oder ein Vorhalt mit seiner Auflösung. Gleiche Stellen gleicher Phrasen
+        entscheiden gleich, damit die Hook gleich bleibt."""
+        if "melody_tensions" not in self.extras or self.kind == "Rap":
+            return [[n] for n in phrase]
+        out = []
+        for i, (slot, note) in enumerate(zip(slots, phrase)):
+            key = (role.rstrip("2"), slot.step)
+            if key not in self.tensions:
+                roll = self.rng.random()
+                if roll < APPOGGIATURA_SHARE.get(self.kind, 0.0):
+                    self.tensions[key] = "lean"
+                elif roll < APPOGGIATURA_SHARE.get(self.kind, 0.0) + COLOR_SHARE.get(self.kind, 0.0):
+                    self.tensions[key] = "color"
+                else:
+                    self.tensions[key] = ""
+            choice = self.tensions[key]
+            final = slot.last and role in ("END", "C")
+            if choice == "lean" and i > 0 and slot.strong:
+                out.append(self._lean(note))
+            elif choice == "color" and not final and note.dur >= COLOR_MIN_BEATS:
+                self._color(note)
+                out.append([note])
+            else:
+                out.append([note])
+        return out
+
+    def _lean(self, note: MelNote) -> list:
+        """Vorhalt: die erste Hälfte einen Schritt über dem Akkordton, dann auf demselben Vokal hinunter."""
+        sung = vowel(note.syllable or "")
+        if note.dur < APPOGGIATURA_MIN_BEATS or sung is None or str(note.syllable) in SPECIAL_MORAE:
+            return [note]
+        chord = self.sec.chord_at(heard_at(note))
+        scale = _local_scale(self.sec.tonic, self.sec.mode, chord)
+        upper = next((p for p in (note.pitch + 1, note.pitch + 2) if p % 12 in scale), None)
+        if upper is None or upper % 12 in chord.pcs or upper > self.hi or note.pitch % 12 not in chord.pcs:
+            return [note]
+        first = max(0.5, math.floor(note.dur) / 2)
+        return [replace(note, dur=first, pitch=upper, tension=True),
+                MelNote(note.start + first, note.dur - first, note.pitch, Mora(sung, melisma=True), False)]
+
+    def _color(self, note: MelNote) -> None:
+        """Ein langer Ton rückt auf die None oder (in Dur-Akkorden) die große Septime, wenn sie nah liegt."""
+        chord = self.sec.chord_at(heard_at(note))
+        scale = _local_scale(self.sec.tonic, self.sec.mode, chord)
+        colors = {(chord.root + 2) % 12}
+        if chord.quality in MAJOR_QUALITIES:
+            colors.add((chord.root + 11) % 12)
+        near = [p for p in range(note.pitch - 2, note.pitch + 3)
+                if p % 12 in colors and p % 12 in scale and self.lo <= p <= self.hi and p != note.pitch]
+        if near:
+            note.pitch = min(near, key=lambda p: (abs(p - note.pitch), p))
+            note.tension = True
 
     def _melisma(self, note: MelNote, role: str) -> list:
         """Der lange Schlusston gleitet auf den nächsten Akkordton darunter (oder darüber), auf demselben Vokal."""
@@ -465,7 +643,7 @@ class SectionMelodyWriter:
         target = max(below) if below else min(above) if above else None
         if target is None:
             return [note]
-        return [MelNote(note.start, first, note.pitch, note.syllable, note.strong),
+        return [replace(note, dur=first),
                 MelNote(second_start, note.dur - first, target, Mora(sung, melisma=True), False)]
 
 
@@ -522,7 +700,7 @@ def _scale_shift(scale: list, pitch: int, steps: int) -> Optional[int]:
 
 # ── Ganzer Song ──────────────────────────────────────────────────────────────────
 def write_vocal_melody(plan: SongPlan, lyrics: dict, rng: random.Random, rerolls: Optional[dict] = None,
-                       imported: Optional[dict] = None, motifs=None, singable: bool = False) -> list:
+                       imported: Optional[dict] = None, motifs=None, singable: bool = False, extras=()) -> list:
     """
     Melodie für alle Sektionen mit Gesang. Jede Sektionsart wird einmal komponiert; spätere Vorkommen
     singen dieselbe Melodie (im Schlussrefrain höher, wenn der Song die Tonart wechselt). Hat ein späteres Vorkommen
@@ -531,6 +709,8 @@ def write_vocal_melody(plan: SongPlan, lyrics: dict, rng: random.Random, rerolls
     imported {Sektionsart: Melodie aus melody_import.load}: dort singt die eigene Melodie, Ton für Ton.
     motifs: zusätzliche Rhythmen und Gesten (motifs.Motifs), None = nur die eingebauten.
     singable: die komponierten Töne danach auf Singbarkeit prüfen (make_singable).
+    extras: eingeschaltete Neuerungen aus 1.3.0; "best_melody" schreibt jede Sektionsart mehrmals und nimmt die
+    Fassung mit den meisten Punkten (melody_score.py).
     """
     seed = rng.getrandbits(64)
     rerolls, imported = rerolls or {}, imported or {}
@@ -545,25 +725,89 @@ def write_vocal_melody(plan: SongPlan, lyrics: dict, rng: random.Random, rerolls
                 sec_notes = fit(imported[sec.kind], plan, sec, lyrics.get(sec.kind, []))
             else:
                 kind_rng = rerolls.get(sec.kind) or random.Random(f"{seed}:{sec.kind}")
-                sec_notes = SectionMelodyWriter(plan, sec, kind_rng, motifs).write(lyrics.get(sec.kind, []))
-                if sec.kind == "Rap":
+                words = lyrics.get(sec.kind, [])
+                if "best_melody" in extras and sec.kind not in ("Rap", "Spoken"):
+                    before = [n for kind, (_, ns) in written.items() if kind in ("Verse", "PreChorus") for n in ns]
+                    sec_notes = _best_of(plan, sec, kind_rng, motifs, words, extras, before)
+                else:
+                    sec_notes = SectionMelodyWriter(plan, sec, kind_rng, motifs, extras).write(words)
+                if sec.kind in ("Rap", "Spoken"):
                     _chant(sec_notes)
             written[sec.kind] = (sec, sec_notes)
         else:
             first, first_notes = written[sec.kind]
             shift = (sec.tonic - first.tonic + 6) % 12 - 6
-            sec_notes = [MelNote(n.start - first.start + sec.start, n.dur, n.pitch + shift, n.syllable, n.strong)
-                         for n in first_notes]
+            sec_notes = [replace(n, start=n.start - first.start + sec.start, pitch=n.pitch + shift) for n in first_notes]
             own = for_occurrence(lyrics, sec.kind, sec.occurrence)
             if own:
                 sec_notes = fit_text(sec_notes, own)
                 log.info("%s %d singt seinen eigenen Text (%d Silben)", sec.kind, sec.occurrence, len(own))
         notes.extend(sec_notes)
     composed = [n for n in notes if not imported.get(plan.section_at(n.start).kind)]
+    if "melody_climax" in extras:
+        _plan_climax(plan, notes, composed)
     _fit_to_chords(plan, composed)
     if singable:
         make_singable(plan, composed)
     return notes
+
+
+def _best_of(plan: SongPlan, sec: Section, rng: random.Random, motifs, words: list, extras, before: list) -> list:
+    """M1: die Sektion melody_score.CANDIDATES-mal schreiben, die Fassung mit den meisten Punkten gewinnt.
+    before: Töne der Strophe und des Pre-Chorus, über die der Refrain hinausgehen soll."""
+    import melody_score
+    base = rng.getrandbits(64)
+    candidates = [SectionMelodyWriter(plan, sec, random.Random(f"{base}:{i}"), motifs, extras).write(words)
+                  for i in range(melody_score.CANDIDATES)]
+    best, points, mean = melody_score.pick(candidates, sec.kind, before, plan.vocal_range[1], sec.bar_beats)
+    log.info("Beste Melodie: %s aus %d Fassungen, %.1f Punkte (Schnitt %.1f)", sec.kind, len(candidates), points, mean)
+    return candidates[best]
+
+
+def _plan_climax(plan: SongPlan, notes: list, composed: list) -> None:
+    """M4: die Schlusszeile des letzten Refrains endet oben, auf dem höchsten Ton des ganzen Songs, und nur dort
+    (ein Akkordton; reicht die Stimmlage nicht darüber, rücken die anderen Töne so hoch einen Schritt tiefer).
+    Strophe, Pre-Chorus und Bridge bleiben unter dem Spitzenton der Refrain-Hook."""
+    choruses = [sec for sec in plan.sections if sec.kind == "Chorus" and sec.has_vocals]
+    mine = set(id(n) for n in composed)
+    if not choruses:
+        return
+    first, last = choruses[0], choruses[-1]
+    ending = sorted((n for n in notes if last.start <= n.start < last.end and id(n) in mine), key=lambda n: n.start)
+    if not ending:
+        return
+    held = [n for n in ending if not _held(n)]
+    final = held[-1] if held else ending[-1]
+    tail = [n for n in ending if n.start >= final.start]
+    rest = [n for n in notes if n.start < final.start or n.start >= last.end]
+    top = max((n.pitch for n in rest), default=final.pitch)
+    chord = plan.chord_at(heard_at(final))
+    hi = plan.vocal_range[1] + CLIMAX_ABOVE
+    climax = next((p for p in range(top + 1, top + 6) if p % 12 in chord.pcs and p <= hi), None) or \
+        next((p for p in range(min(top, hi), top - 5, -1) if p % 12 in chord.pcs), None)
+    if climax is None or climax < final.pitch:
+        log.info("Höhepunkt: kein Akkordton nahe %d, der Schluss bleibt", top)
+        return
+    for n in tail:
+        n.pitch = climax
+    lowered = sum(_below(plan, n, climax) for n in rest if n.pitch >= climax and id(n) in mine)
+    hook = [n.pitch for n in notes if first.start <= n.start < first.end and n.start < final.start]
+    peak = max(hook) if hook else climax
+    lowered += sum(_below(plan, n, peak) for n in notes if id(n) in mine and n.pitch >= peak
+                   and plan.section_at(n.start).kind in ("Verse", "PreChorus", "Bridge"))
+    log.info("Höhepunkt: der letzte Refrain endet auf %d (sonst höchstens %d), %d Töne tiefer", climax,
+             max((n.pitch for n in rest), default=climax), lowered)
+
+
+def _below(plan: SongPlan, n: MelNote, ceiling: int) -> int:
+    """Der Ton rückt unter ceiling, auf den nächsten Akkordton (lang oder betont) oder Ton der Tonleiter. 1 = gerückt."""
+    scale, chord = _scale_at(plan, n)
+    pcs = chord.pcs if n.strong or n.dur >= 1 else scale
+    below = [p for p in range(ceiling - 7, ceiling) if p % 12 in pcs]
+    if not below:
+        return 0
+    n.pitch = max(below)
+    return 1
 
 
 RAP_RANGE = 2           # Halbtöne um die Mitte: ein Rap ohne Sprechstimme klingt wie ein Sprechgesang
@@ -595,7 +839,7 @@ def fit_text(notes: list, syllables: list) -> list:
     dieses Vorkommens verschoben), syllables: der neue Text. Ist er viel kürzer als der alte, wird er wie beim ersten
     Vorkommen wiederholt. Rückgabe: neue Töne mit den neuen Silben; Tonhöhen und Phrasen bleiben.
     """
-    out = [[MelNote(n.start, n.dur, n.pitch, n.syllable, n.strong), not _held(n)] for n in sorted(notes, key=lambda n: n.start)]
+    out = [[replace(n), not _held(n)] for n in sorted(notes, key=lambda n: n.start)]
     words = [w for w in syllables if w]
     if not out or not words:
         return [n for n, _ in out]
@@ -681,7 +925,7 @@ def make_singable(plan: SongPlan, notes: list) -> dict:
 
 def _scale_at(plan: SongPlan, n: MelNote) -> tuple:
     sec = plan.section_at(n.start)
-    chord = plan.chord_at(n.start)
+    chord = plan.chord_at(heard_at(n))
     return _local_scale(sec.tonic, sec.mode, chord), chord
 
 
@@ -753,9 +997,10 @@ def _breathe(plan: SongPlan, ordered: list) -> int:
 def _fit_to_chords(plan: SongPlan, notes: list) -> None:
     """Sicherheitsnetz: lange oder betonte Töne, die nicht zum Akkord passen (z. B. vor dem Tonartwechsel), rücken auf den nächsten Akkordton."""
     for n in notes:
-        chord = plan.chord_at(n.start)
+        chord = plan.chord_at(heard_at(n))
         sec = plan.section_at(n.start)
-        if n.pitch % 12 in _local_scale(sec.tonic, sec.mode, chord) and not (n.strong and n.dur >= 1 and n.pitch % 12 not in chord.pcs):
+        if n.tension or n.pitch % 12 in _local_scale(sec.tonic, sec.mode, chord) and \
+                not (n.strong and n.dur >= 1 and n.pitch % 12 not in chord.pcs):
             continue
         lo, hi = plan.vocal_range
         candidates = [p for p in range(n.pitch - 3, n.pitch + 4) if p % 12 in chord.pcs and lo <= p <= hi + 1]
@@ -788,7 +1033,7 @@ def harmony_line(plan: SongPlan, notes: list, kinds: tuple = ("Chorus",), modes:
         mode = (modes or {}).get(sec.start, "above")
         if mode == "ends" and id(n) not in ends:
             continue
-        chord = sec.chord_at(n.start)
+        chord = sec.chord_at(heard_at(n))
         scale = sorted(set(scale_pcs(sec.tonic, sec.mode)) | set(chord.pcs))
         ladder = [p for p in range(n.pitch - 12, n.pitch + 13) if p % 12 in scale]
         i = ladder.index(n.pitch) if n.pitch in ladder else min(range(len(ladder)), key=lambda j: abs(ladder[j] - n.pitch))
@@ -831,6 +1076,45 @@ def split_for_duet(plan: SongPlan, data: list, syllables: list) -> tuple:
                 d.append((None, dur))
         t += dur
     return tuple((_merge_rests(d), s) for d, s in parts)
+
+
+def group_turns(plan: SongPlan, count: int) -> dict:
+    """G5: wer in einer Gruppe singt, je Sektion (Nummer der Sektion → Stimme, None = alle). Die Refrains singen alle
+    zusammen, jede Strophe, Bridge und jeder Rap kommt reihum an die nächste Stimme, der Pre-Chorus bleibt bei der
+    Stimme der Strophe davor."""
+    out, turn = {}, -1
+    for sec in plan.sections:
+        if not sec.has_vocals:
+            continue
+        if sec.kind == "Chorus":
+            out[sec.index] = None
+            continue
+        if sec.kind != "PreChorus" or turn < 0:
+            turn += 1
+        out[sec.index] = turn % count
+    return out
+
+
+def split_for_group(plan: SongPlan, data: list, syllables: list, count: int) -> list:
+    """Melodie (wie melody_data) in die Teile der Stimmen einer Gruppe (group_turns): was die anderen allein singen,
+    wird Pause. Rückgabe: [(Daten, Silben)] je Stimme."""
+    turns = group_turns(plan, count)
+    parts = [([], []) for _ in range(count)]
+    t, i = 0.0, 0
+    for pitch, dur in data:
+        if pitch is not None:
+            who = turns.get(plan.section_at(t + 1e-6).index)
+            for k, (d, s) in enumerate(parts):
+                mine = who is None or who == k
+                d.append((pitch, dur) if mine else (None, dur))
+                if mine:
+                    s.append(syllables[i] if i < len(syllables) else "ら")
+            i += 1
+        else:
+            for d, _ in parts:
+                d.append((None, dur))
+        t += dur
+    return [(_merge_rests(d), s) for d, s in parts]
 
 
 def _merge_rests(data: list) -> list:

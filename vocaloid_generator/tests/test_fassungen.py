@@ -35,6 +35,28 @@ def share_of_the_voice(audio: np.ndarray, rate: int) -> float:
 
 
 @pytest.fixture
+def silent_intro(neutrino_attrappe, monkeypatch):
+    """Die Attrappe schweigt bis zum ersten Ton ihrer Noten: dann ist das Intro wie bei NEUTRINO ohne Gesang."""
+    import music21
+
+    import vocal_synthesizer
+    sing, first = vocal_synthesizer._run, {}
+
+    def run(cmd, cwd, timeout):
+        done = sing(cmd, cwd, timeout)
+        if os.path.basename(cmd[0]) == "musicXMLtoLabel.exe":
+            beats = min(n.offset for n in music21.converter.parse(cmd[1]).flatten().notes)
+            first[cmd[2]] = float(beats) * 60.0 / vocal_synthesizer._tempo_aus_musicxml(cmd[1])
+        else:
+            audio, rate = sf.read(cmd[5], dtype="float32")
+            audio[:int(first[cmd[1]] * rate)] = 0.0
+            sf.write(cmd[5], audio, rate)
+        return done
+    monkeypatch.setattr(vocal_synthesizer, "_run", run)
+    return neutrino_attrappe
+
+
+@pytest.fixture
 def tagged(monkeypatch):
     """MP3s ohne ffmpeg (ein Rahmen genügt) und welche MP3s Tags bekommen."""
     import exporter
@@ -49,8 +71,8 @@ def tagged(monkeypatch):
     return written
 
 
-def test_a_song_gets_off_vocal_and_a_cappella_as_loud_as_in_the_song(tmp_path, neutrino_attrappe, tagged):
-    root, _ = neutrino_attrappe
+def test_a_song_gets_off_vocal_and_a_cappella_as_loud_as_in_the_song(tmp_path, silent_intro, tagged):
+    root, _ = silent_intro
     s = song_settings(tmp_path, root)
     result = pipeline.generate_song(s, keep_history=False)
     assert result.versions == {kind: os.path.join(result.output_dir, mp3)
@@ -61,7 +83,8 @@ def test_a_song_gets_off_vocal_and_a_cappella_as_loud_as_in_the_song(tmp_path, n
     alone, _ = sf.read(os.path.join(result.output_dir, "final_acappella.wav"), always_2d=True)
     assert len(off) == len(full) == len(alone)
     intro = slice(int(0.5 * rate), int(4 * 4 * 60 / s.bpm * rate) - rate // 2)    # vier Takte ohne Gesang
-    assert abs(rms_db(off[intro]) - rms_db(full[intro])) < 1.5        # die Band so laut wie im Song
+    assert abs(rms_db(off[intro]) - rms_db(full[intro])) < 0.3        # die Band so laut wie im Song
+    assert np.max(np.abs(off)) < 10 ** (s.limiter_threshold / 20) + 1e-3     # ohne den Gesang nicht übersteuert
     assert share_of_the_voice(alone, rate) > 0.8 > share_of_the_voice(full, rate)
     assert share_of_the_voice(off, rate) < 0.05
     assert mixer._loudness(off.T) < mixer._loudness(full.T)

@@ -989,3 +989,25 @@ async def test_the_setup_wizard_shows_and_frees_space(user, monkeypatch, tmp_pat
     assert dropped == [SongSettings.load().output_dir()]
     user.find(marker="wizard-clear").click()
     await user.should_see("Aufgeräumt:", retries=50)
+
+
+async def test_every_new_feature_of_130_has_its_switch_in_the_app(user):
+    import main
+    await user.open("/")
+    found = set()
+
+    def there(marker: str) -> bool:
+        try:
+            return bool(user.find(marker=marker).elements)
+        except AssertionError:          # find meldet ein fehlendes Element als Fehler
+            return False
+    others = ("switch-ai_melody", "group-vocals", "spoken-sound")      # KI-Melodie, Gruppe, Klang von „Sprechen“
+    for tab in ("Song", "Text", "Band", "Gesang", "Mix", "Pfade"):
+        user.find(marker=f"tab-{tab}").click()
+        found |= {name for name, _, _ in main.OFF_130 if there(f"switch-{name}") or there(f"slider-{name}")}
+        found |= {marker for marker in others if there(marker)}
+    assert found == {name for name, _, _ in main.OFF_130} | set(others)
+    user.find(marker="tab-Band").click()
+    user.find(marker="switch-surge_sounds").elements.pop().set_value(False)
+    user.find(marker="switch-amp_models").elements.pop().set_value(False)
+    await until(lambda: not SongSettings.load().surge_sounds and not SongSettings.load().amp_models)

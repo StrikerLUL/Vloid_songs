@@ -8,6 +8,8 @@ import pretty_midi
 
 import grooves
 import meter as meters
+import anison
+import riff as riffs
 import ritardando as rits
 from drums import CRASH, GROOVES, KICK, OPEN_HAT, HAT, PEDAL_HAT, RIDE, TAMBOURINE, TOMS, drum_section, lead_in
 from lyrics import kind_of, parse_lyrics
@@ -40,6 +42,9 @@ SWING_MAX = 1 / 6                       # Swing 0.5 schiebt die zweite Sechzehnt
 # Stile, die wirklich swingen (Lo-Fi), spielen die eingebauten Grooves. Sein eigenes Timing ersetzt dann den Swing.
 GROOVE_SWING_UNTIL = 0.2
 SLIDE_SECONDS, SLIDE_STEPS = 0.08, 8     # so lange gleitet ein Bass-Slide, in so vielen Schritten
+# Neuerungen aus 1.3.0, die nur im 4/4-Takt spielen (Synkopen und Triolen im Sechzehntel-Raster)
+FOUR_FOUR_ONLY = ("melody_pickups", "kime", "melody_triplets", "band_groove", "bass_runs", "band_runs",
+                  "anison_grooves")
 # Teile mit eigenem Zufall (wie settings.REROLLABLE): Akkorde und Ablauf, Gesangsmelodie, jedes Instrument
 REROLLABLE = ("chords",) + INSTRUMENTS
 
@@ -56,7 +61,8 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
                      imported_melody: dict = None, melody_edits: dict = None, motifs=None,
                      melody_lengths: dict = None, real_grooves: bool = False, lively_bass: bool = False,
                      guitar_strums: bool = False, singable: bool = False, meter: str = "4/4",
-                     band_style: str = None, melody_bpm: float = None, ritardando: bool = False) -> dict:
+                     band_style: str = None, melody_bpm: float = None, ritardando: bool = False,
+                     extras: dict = None) -> dict:
     """
     Komponiert den kompletten Song und schreibt eine MIDI-Datei pro Instrument nach output_dir.
 
@@ -81,12 +87,23 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
     band_style, melody_bpm: Remix (v6 Nr. 8): Akkorde und Gesangsmelodie entstehen wie im Stil style bei melody_bpm,
     die Band spielt wie im Stil band_style bei bpm.
     ritardando: eine Ballade wird vor dem Schlussakkord langsamer, der Akkord klingt länger aus (ritardando.py).
+    extras: {Schalter: Wert} der eingeschalteten Neuerungen aus 1.3.0 (pipeline.composition_extras); fehlt einer,
+    bleibt es wie in 1.2.
     Rückgabe: {Instrument: [pretty_midi.Note]}, dazu "melody_data", "silben", "vocal_melody", die zweite
     Stimme für den Refrain ("harmony_data", "harmony_silben") und "plan".
     """
     profile = get_style(style or genre)
     band = get_style(band_style) if band_style else profile
     m = meters.get(meter)
+    extras = dict(extras or {})
+    if m.name != "4/4":
+        for name in FOUR_FOUR_ONLY:
+            extras.pop(name, None)
+    if "intro_riff" in extras:
+        longer = riffs.with_interlude(structure)
+        if longer != list(structure):
+            log.info("Zwischenspiel nach dem ersten Refrain (Intro-Riff)")
+        structure = longer
     dice = Dice(random.getrandbits(32), variations or {})
     swing = min(1.0, band.swing + (swing or 0.0))        # Stile mit eigenem Swing (Lo-Fi) legen ihn dazu
     if m.compound:
@@ -106,13 +123,14 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
                           imported_bars(imported_melody.get(kind, []), steps / 4))
                 for kind in set(structure) if section_config.get(kind, {}).get("has_vocals", True)}
     plan = build_plan(profile, melody_bpm or bpm, structure, key, mode, section_config, dice.part("chords"), min_bars,
-                      custom_chords=custom_chords, rerolls=dice.rerolled_kinds("chords"), meter=m.name)
+                      custom_chords=custom_chords, rerolls=dice.rerolled_kinds("chords"), meter=m.name,
+                      spice=float(extras.get("chord_spice", 0.0)), spice_seed=dice.label("chords") + ":spice")
     if vocal_range:
         plan.vocal_range = tuple(vocal_range)
     real = m.plan(plan)          # Sektionen und Akkorde an ihren Plätzen im Takt
     melody = write_vocal_melody(real if m.native else plan, sung, dice.part("melody"),
                                 rerolls=dice.rerolled_kinds("melody"), imported=imported_melody, motifs=motifs,
-                                singable=singable)
+                                singable=singable, extras=extras)
     _apply_edits(melody, melody_edits or {}, melody_lengths or {})
     for done in {id(plan): plan, id(real): real}.values():   # ab hier spielt die Band (im Remix ein anderer Stil)
         done.style, done.bpm = band, bpm
@@ -129,6 +147,7 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
     contexts["bass"]["lively"] = lively_bass and dice.label("bass")      # eigener Zufall: aus = wie bisher
     contexts["guitar"]["strums"] = guitar_strums and dice.label("guitar")
     drummer = grooves.for_song(bpm, dice.label("drums")) if real_grooves and swing < GROOVE_SWING_UNTIL else None
+    riff = riffs.compose(plan, random.Random(dice.label("melody") + ":riff"), m.drop) if "intro_riff" in extras else None
     drops = []                   # 3/4: (Anfang, Ende, ausfallender Schlag) je Teil der Sektion, für das Schlagzeug
     seen = {}
     for sec in plan.sections:
@@ -141,21 +160,54 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
                     if single:
                         events[inst] += part(single, piece, plan, rngs[inst], contexts[inst])
             lead = _pattern(profile, piece, "melody")
-            if lead == "hook":
+            if lead == "hook" and riff is not None:
+                events["melody"] += riffs.play(riff, piece, final=piece.end >= plan.total_beats - 1e-6)
+            elif lead == "hook":
                 events["melody"] += lead_hook(piece, plan, vocal_notes)
             elif lead == "solo":
                 events["melody"] += lead_solo(piece, plan, vocal_notes, rngs["melody"])
+            if riff is not None and sec.kind == "Chorus" and sec.is_last_of_kind and piece.end >= sec.end - 1e-6:
+                events["melody"] += riffs.last_chorus(riff, sec)
             if piece.feel == "breakdown":
                 events["drums"] += lead_in(piece, rngs["drums"])
                 drops.append((piece.start, piece.end, m.drop))
             else:
                 groove = "halftime" if piece.feel == "halftime" else profile.groove(sec.kind)
+                if "anison_grooves" in extras:
+                    groove = anison.groove_for(piece, profile.name, bpm, groove, dice.label("drums"))
                 events["drums"] += drum_section(piece, groove, rngs["drums"], drummer)
                 drops.append((piece.start, piece.end, meters.drum_drop(GROOVES.get(groove, {})) if m.native else None))
 
+    if "anison_grooves" in extras:
+        done = anison.apply(plan, events, profile.name, bpm, dice.label("drums"))
+        log.info("Anison: %d Wirbel in den Refrain, %d Becken-Stopps", len(done["rolls"]), len(done["stops"]))
+    if "bass_runs" in extras:
+        import bass_runs
+        done = bass_runs.apply(plan, events, dice.label("bass"), profile.name)
+        log.info("Bass: %d Läufe, %d Fills, %d Oktaven, %d Funk-Oktaven", done["runs"], done["fills"],
+                 done["octaves"], done["funk"])
+    if "section_buildup" in extras:
+        import buildup
+        done = buildup.apply(plan, events)
+        log.info("Aufbau: Strophe beginnt allein: %s, Schicht mehr in %d Refrains", done["verse"] is not None,
+                 len(done["choruses"]))
+    if "kime" in extras:
+        import kime
+        done = kime.apply(plan, events, dice.label("drums"), profile.name)
+        log.info("Kime in %d Takten, %d Stopps, %d Läufe am Phrasenende", len(done["kime"]), len(done["stops"]),
+                 len(done["fills"]))
     _breaks_before_chorus(plan, events)
+    if "band_runs" in extras:
+        import band_runs
+        done = band_runs.apply(plan, events, vocal_notes, dice.label("piano"))
+        log.info("Läufe: %d Klavierläufe, %d Glissandi, %d Streicherläufe, %d Refrains mit Klavier-Hook",
+                 done["runs"], done["glissandi"], done["strings"], done["hooks"])
     _final_chord(plan, events)
     _spread_stereo(plan, profile, events, instrument_styles)
+    if "band_groove" in extras:
+        import groove_feel
+        moved = groove_feel.apply(events, plan.total_beats - BEATS_PER_BAR)
+        log.info("Band im Groove: %d Töne mit dem Schlagzeuger verschoben", sum(moved.values()))
     events = _into_meter(m, events, drops)
     rit = rits.window(real, profile.name) if ritardando else None
     if rit:
@@ -267,7 +319,7 @@ def _default_output() -> str:
 
 
 # Sektionen, in denen ein Instrument mitspielt, das der Stil sonst gar nicht nutzt, wenn man ihm eine Spielweise gibt
-FULL_BAND = ("Intro", "PreChorus", "Chorus", "Outro")
+FULL_BAND = ("Intro", "Interlude", "PreChorus", "Chorus", "Outro")
 
 
 def _pattern(profile, sec, inst: str, overrides: dict = None):

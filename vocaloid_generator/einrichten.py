@@ -57,6 +57,16 @@ def _airwindows() -> bool:
     return airwindows.available()
 
 
+def _surge() -> bool:
+    import surge_sounds
+    return surge_sounds.installed()
+
+
+def _nam() -> bool:
+    import amp_models
+    return amp_models.installed()
+
+
 def _rating() -> bool:
     import rating
     return rating.complete()        # fehlt der Umgebung ein Paket, bietet der Assistent sie wieder an
@@ -107,6 +117,11 @@ COMPONENTS = (
               "Dataset)", "etwa 3 MB", "setup_grooves.py", _grooves),
     Component("airwindows", "Airwindows-Effekte", "Bandsättigung für den Gesang und ein analoges Mischpult aus "
               "Airwindows Consolidated", "etwa 15 MB", "setup_airwindows.py", _airwindows),
+    Component("surge", "Surge XT", "Supersaw, Pluck, Chip-Lead, Future-Bass-Akkorde und Reese-Bass aus Werks-"
+              "Klängen des kostenlosen Synthesizers Surge XT statt der eigenen Synths", "etwa 50 MB",
+              "setup_surge.py", _surge),
+    Component("nam", "Gitarren-Verstärker", "Verzerrte E-Gitarren über Modelle echter Verstärker (Marshall "
+              "JCM2000, Peavey 6505+) aus dem Neural Amp Modeler", "etwa 1 MB", "setup_nam.py", _nam),
     Component("rating", "Automatische Bewertung", "Bei mehreren Fassungen hört ein Modell zu und lädt die beste",
               "etwa 3 GB", "setup_bewertung.py", _rating),
     Component("demucs", "Mix wie die Vorbilder", "Demucs zerlegt deine Vorbild-Songs; Gesang, Schlagzeug, Bass und "

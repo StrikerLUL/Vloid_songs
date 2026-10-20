@@ -15,7 +15,7 @@ import mixdown
 import rendering
 import singing
 from config import remove_file
-from lyrics import parse_lyrics, shared_only
+from lyrics import options as lyric_options, parse_lyrics, shared_only
 from orchestrator import orchestrate_song
 from settings import DEFAULT_JITTER, INSTRUMENTS, SongSettings
 
@@ -36,6 +36,12 @@ STYLE_TO_GENRE = {
 }
 
 ProgressFn = Callable[[float, str], None]
+
+# Neuerungen aus 1.3.0, die die Noten ändern: orchestrate_song bekommt die eingeschalteten als extras
+NEW_COMPOSITION = ("best_melody", "melody_pickups", "intro_riff", "kime", "melody_tensions", "melody_climax",
+                   "chord_spice", "melody_triplets", "band_groove", "bass_runs", "band_runs", "anison_grooves",
+                   "section_buildup")
+COMPOSITION_EXTRAS = NEW_COMPOSITION     # die Tests schalten sie hier ab (conftest.py)
 
 
 @dataclass
@@ -78,8 +84,13 @@ def seed_everything(seed: int) -> None:
 
 def sung_lyrics(settings: SongSettings) -> dict:
     """Die Silben je Sektion; mit numbered_lyrics auch die eigenen Texte einzelner Vorkommen („[Verse 2]“)."""
-    lyrics = parse_lyrics(settings.lyrics, settings.romaji, settings.english_kana)
+    lyrics = parse_lyrics(settings.lyrics, **lyric_options(settings))
     return lyrics if settings.numbered_lyrics else shared_only(lyrics)
+
+
+def composition_extras(settings: SongSettings) -> dict:
+    """{Schalter: Wert} der eingeschalteten Neuerungen aus 1.3.0, die die Noten ändern (0 und aus fehlen)."""
+    return {name: getattr(settings, name) for name in COMPOSITION_EXTRAS if getattr(settings, name)}
 
 
 def compose(settings: SongSettings, seed: Optional[int] = None):
@@ -87,10 +98,24 @@ def compose(settings: SongSettings, seed: Optional[int] = None):
     if seed is None:
         seed = settings.seed if settings.seed is not None else new_seed()
     seed_everything(seed)
-    import motifs
     from vocal_synthesizer import stimmlage
     lo, hi, _ = stimmlage(settings.singer)
-    tracks = orchestrate_song(
+    own = _own_melody(settings)
+    tracks = _orchestrate(settings, own, lo, hi)
+    if settings.ai_melody and not settings.draft and "Chorus" not in own:
+        import ai_melody
+        melody = ai_melody.for_song(tracks, seed, settings.output_dir(), settings.reuse_steps)
+        if melody:
+            seed_everything(seed)              # derselbe Song, nur der Refrain singt die Melodie des Modells
+            tracks = _orchestrate(settings, {**own, "Chorus": melody}, lo, hi)
+    import backing_vocals
+    backing_vocals.add(tracks, settings)
+    return tracks, seed
+
+
+def _orchestrate(settings: SongSettings, imported: dict, lo: int, hi: int) -> dict:
+    import motifs
+    return orchestrate_song(
         genre=genre_for_style(settings.style),
         bpm=settings.bpm,
         structure=list(settings.active_sections),
@@ -108,7 +133,7 @@ def compose(settings: SongSettings, seed: Optional[int] = None):
         vocal_range=(lo, hi),
         variations=settings.variations,
         custom_chords=settings.custom_chords,
-        imported_melody=_own_melody(settings),
+        imported_melody=imported,
         melody_edits=settings.melody_edits,
         melody_lengths=settings.melody_lengths,
         motifs=motifs.for_settings(settings),
@@ -118,10 +143,8 @@ def compose(settings: SongSettings, seed: Optional[int] = None):
         singable=settings.singable_melody,
         meter=settings.meter,
         ritardando=settings.ritardando,
+        extras=composition_extras(settings),
     )
-    import backing_vocals
-    backing_vocals.add(tracks, settings)
-    return tracks, seed
 
 
 def remix(settings: SongSettings, style: str) -> SongSettings:
@@ -289,7 +312,7 @@ VERSIONS = {"offvocal": ("final_offvocal.wav", "final_song_offvocal.mp3", "Off V
             "acappella": ("final_acappella.wav", "final_song_acappella.mp3", "A Cappella")}
 
 
-def _mix_versions(settings: SongSettings, result: SongResult, stems: list, mix_args: dict, level: Optional[float],
+def _mix_versions(settings: SongSettings, result: SongResult, stems: list, mix_args: dict, level,
                   report: ProgressFn) -> None:
     """Die Band ohne Gesang (Off-Vocal, zum Mitsingen und für Cover) und der Gesang allein (A-cappella), jeweils so
     laut, wie sie im Song klingen: mit denselben Einstellungen gemischt, nur stumm geschaltet (mixer: level_of)."""
@@ -561,7 +584,7 @@ def _write_karaoke(settings: SongSettings, tracks: dict, out: str) -> None:
     import karaoke
     from lyrics import section_lines
     from settings import DEFAULT_LYRICS, DEFAULT_RAP_LYRICS
-    own = section_lines(settings.lyrics, settings.romaji, settings.english_kana)
+    own = section_lines(settings.lyrics, **lyric_options(settings))
     lengths = {kind: [len(line) for line in text_lines]
                for kind, text_lines in {**section_lines(DEFAULT_LYRICS + DEFAULT_RAP_LYRICS),
                                         **(own if settings.numbered_lyrics else shared_only(own))}.items()}

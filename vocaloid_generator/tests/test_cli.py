@@ -99,3 +99,11 @@ def test_chorus_choices_from_the_command_line(monkeypatch, tmp_path, caplog):
     caplog.set_level("INFO")
     assert main.main(["--refrains", "2"]) == 0
     assert "--seed 9 --refrain 2" in caplog.text
+
+
+def test_every_new_feature_can_be_switched_off(captured):
+    for name, flag, _ in main.OFF_130:
+        assert main.main([flag]) == 0
+        assert not getattr(captured["settings"], name), flag
+        assert main.main([]) == 0
+        assert getattr(captured["settings"], name) == SongSettings.model_fields[name].default

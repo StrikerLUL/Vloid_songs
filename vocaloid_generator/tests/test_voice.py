@@ -489,7 +489,8 @@ def test_voicevox_gets_the_vibrato_and_glide_settings(tmp_path, fake_voicevox, m
                      voicevox_url=fake_voicevox, vibrato=0.0, glide=2.0, harmonies=False, final_choir=False)
     tracks, _ = pipeline.compose(s, seed=4)
     shaped = []
-    monkeypatch.setattr(voice_fx, "shape_pitch", lambda f0, frame, notes, v, g, offset: shaped.append((v, g)) or f0)
+    monkeypatch.setattr(voice_fx, "shape_pitch",
+                        lambda f0, frame, notes, offset, vibrato, glide, **more: shaped.append((vibrato, glide)) or f0)
     singing._synthesize_vocals(s, tracks, s.output_dir())
     assert shaped == [(0.0, 2.0)]
 

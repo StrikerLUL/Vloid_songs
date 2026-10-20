@@ -13,7 +13,7 @@ BEATS_PER_BAR = 4            # beim Komponieren; im 3/4-Takt rückt meter.py die
 SLOW_BPM = 100
 VOCAL_RANGE = (57, 79)       # A3 bis G5: Lage, in der die Melodie geschrieben wird
 SHARED_PROGRESSION = {"Intro": "Chorus", "Outro": "Chorus", "Drop": "Chorus", "Solo": "Chorus", "Build-up": "PreChorus",
-                      "Rap": "Verse"}
+                      "Rap": "Verse", "Interlude": "Chorus", "Spoken": "Verse"}
 
 
 @dataclass
@@ -140,7 +140,7 @@ def _colorize(chord: Chord, symbol: str, color: str, kind: str) -> Chord:
         if degree.upper() == "V":
             return Chord(chord.root, "7", chord.bass)
         return Chord(chord.root, "maj7", chord.bass)
-    if color == "add9" and kind in ("Chorus", "Bridge", "Intro", "Outro"):
+    if color == "add9" and kind in ("Chorus", "Bridge", "Intro", "Interlude", "Outro"):
         return Chord(chord.root, "add9" if chord.quality == "maj" else "madd9", chord.bass)
     return chord
 
@@ -159,7 +159,7 @@ def _section_bars(kind: str, bars: int, progression: list, mode_class: str, next
 
 def build_plan(style: StyleProfile, bpm: float, structure: list, key: str, mode: str, section_config: dict,
                rng: random.Random, min_bars: Optional[dict] = None, custom_chords: Optional[dict] = None,
-               rerolls: Optional[dict] = None, meter: str = "4/4") -> SongPlan:
+               rerolls: Optional[dict] = None, meter: str = "4/4", spice: float = 0.0, spice_seed: str = "") -> SongPlan:
     """
     Legt Tonart, Akkorde und Energie jeder Sektion fest. Gleiche Sektionsarten bekommen dieselbe
     Akkordfolge (der zweite Refrain klingt wie der erste). Der letzte Refrain kann einen oder zwei
@@ -170,7 +170,9 @@ def build_plan(style: StyleProfile, bpm: float, structure: list, key: str, mode:
     und Solo teilen sie mit dem Refrain).
     meter: im 6/8-Takt sind die Takte aus section_config 6/8-Takte (zwei pro Kompositionstakt), jeder mit eigenem
     Akkord; die Zeiten bleiben in Kompositionsschlägen (meter.Meter.plan rechnet sie um).
+    spice: Akkord-Würze 0 bis 1 (chord_spice.py) mit eigenem Zufall aus spice_seed; 0 = wie bis 1.2.
     """
+    import chord_spice
     tonic = key_pc(key)
     mode_class = "minor" if is_minor(mode) else "major"
     min_bars = min_bars or {}
@@ -186,6 +188,9 @@ def build_plan(style: StyleProfile, bpm: float, structure: list, key: str, mode:
             other = next((r for k, r in (rerolls or {}).items() if SHARED_PROGRESSION.get(k, k) == bank), None)
             if other is not None and len(options) > 1:
                 chosen[bank] = other.choice([p for p in options if p != chosen[bank]])
+            if chord_spice.marusa(bank, mode_class, spice, random.Random(f"{spice_seed}:marusa")):
+                chosen[bank] = chord_spice.MARUSA
+                log.info("Akkord-Würze: der Refrain spielt die Marusa-Folge")
         progressions[kind] = custom.get(kind, custom.get(SHARED_PROGRESSION.get(kind, kind), (chosen[bank],)))[0]
 
     n_chorus = structure.count("Chorus")
@@ -225,6 +230,10 @@ def build_plan(style: StyleProfile, bpm: float, structure: list, key: str, mode:
         else:
             bar_symbols = _section_bars(kind, chord_bars, _parse_progression(progressions[kind]), mode_class,
                                         sec.next_kind)
+            bar_symbols, spiced = chord_spice.season(bar_symbols, kind, mode_class, spice,
+                                                     random.Random(f"{spice_seed}:{kind}:{chord_bars}"))
+            if spiced and counts[kind] == 1:
+                log.info("Akkord-Würze im %s: %s", kind, ", ".join(spiced))
         for b, symbols in enumerate(bar_symbols):
             dur = bar_len / len(symbols)
             for j, sym in enumerate(symbols):

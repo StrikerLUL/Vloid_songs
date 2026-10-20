@@ -141,10 +141,19 @@ def jpop_song(tmp_path_factory):
 
 
 @pytest.fixture(autouse=True)
-def without_surge(monkeypatch):
-    """Ein installiertes Surge XT taucht in den Tests nicht auf."""
+def without_surge(tmp_path, monkeypatch):
+    """Ein installiertes oder eingerichtetes Surge XT (setup_surge.py) taucht in den Tests nicht auf."""
+    import surge_sounds
     import vst_sounds
     monkeypatch.setattr(vst_sounds, "_surge_candidates", lambda: ())
+    monkeypatch.setattr(surge_sounds, "FOLDER", str(tmp_path / "surge"))
+
+
+@pytest.fixture(autouse=True)
+def without_amp_models(tmp_path, monkeypatch):
+    """Eingerichtete Verstärker-Modelle (setup_nam.py) färben die Gitarren der Tests nicht."""
+    import amp_models
+    monkeypatch.setattr(amp_models, "FOLDER", str(tmp_path / "nam"))
 
 
 @pytest.fixture(autouse=True)
@@ -218,3 +227,33 @@ def without_ritardando(monkeypatch):
     zurück."""
     import ritardando
     monkeypatch.setattr(ritardando, "STYLES", {})
+
+
+@pytest.fixture(autouse=True)
+def without_new_composition(monkeypatch):
+    """Die Neuerungen aus 1.3.0 in den Noten (pipeline.COMPOSITION_EXTRAS) sind aus: die Songs der Tests bleiben wie in
+    1.2; die Tests der Neuerungen holen sie sich mit dem Fixture new_composition zurück."""
+    import pipeline
+    monkeypatch.setattr(pipeline, "COMPOSITION_EXTRAS", ())
+
+
+@pytest.fixture
+def new_composition(monkeypatch):
+    """Alle Neuerungen aus 1.3.0 in den Noten wieder an."""
+    import pipeline
+    monkeypatch.setattr(pipeline, "COMPOSITION_EXTRAS", pipeline.NEW_COMPOSITION)
+
+
+@pytest.fixture(autouse=True)
+def without_resonance_tamer(monkeypatch):
+    """Härte zähmen (1.3.0, G2) ändert die Mixe der Tests nicht; test_gesang_130.py holt es sich zurück."""
+    import resonance
+    monkeypatch.setattr(resonance, "MAX_CUT_DB", 0.0)
+
+
+@pytest.fixture(autouse=True)
+def without_smart_readings(monkeypatch):
+    """„Partikel erkennen“ (1.3.0, G6) ändert die Silben der Tests nicht (を bleibt を); test_gesang_130.py holt es sich
+    zurück."""
+    import readings
+    monkeypatch.setattr(readings, "ACTIVE", False)

@@ -47,6 +47,8 @@ Lizenz. Was mit „lädt die App“ markiert ist, kommt erst über den Einrichte
 | DRS Kit (lädt die App) | DrumGizmo-Team, Jes Eiler (DRSDrums) | CC-BY 4.0 |
 | Salamander Grand Piano V3 (lädt die App) | Alexander Holm; SFZ-Fassung sfzinstruments | CC-BY 3.0 |
 | Growlybass, Emily Guitar (lädt die App) | Karoryfer Samples | CC0 |
+| Surge XT (lädt die App) | Surge Synth Team | GPL-3.0 |
+| Surge-Klänge 96 Osc Supersaw, Gameboy, Super Pluck, Japanese Unison, Primitive Reese (kommen mit Surge XT) | Luna, Vincent Zauhar, Claes Johanson, Vospi | GPL-3.0 |
 | Groove MIDI Dataset (lädt die App) | Google Magenta | CC-BY 4.0 |
 
 ## Mix, Analyse und Modelle
@@ -54,6 +56,8 @@ Lizenz. Was mit „lädt die App“ markiert ist, kommt erst über den Einrichte
 | Was | Von | Lizenz |
 | --- | --- | --- |
 | pedalboard | Spotify | GPL-3.0 |
+| Neural Amp Modeler (das WaveNet der Modelle, in numpy nachgerechnet) | Steven Atkinson | MIT |
+| Verstärker-Modelle Marshall JCM2000 Crunch, Peavey 6505+ Red (lädt die App, aus der Sammlung NAM_models) | Tim R, Helga Behrens; pelennor2170 | GPL-3.0 |
 | Airwindows Consolidated (lädt die App) | Chris Johnson (Airwindows), Paul Walker (baconpaul) | MIT (Effekte), GPL-3.0 (Plugin) |
 | matchering | Sergey Grishakov | GPL-3.0 |
 | librosa | librosa-Team | ISC |

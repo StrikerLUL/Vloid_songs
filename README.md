@@ -2,13 +2,13 @@
 
 Erzeugt komplette Vocaloid-Songs auf Knopfdruck: Akkorde, Bass, Schlagzeug, Melodie und Begleitung, Gesang mit NEUTRINO oder VOICEVOX (oder einer lokalen Vorschau-Stimme), Mix mit Kompressor und Limiter und am Ende eine fertige MP3.
 
-Läuft unter Windows. Version 1.2.0.
+Läuft unter Windows. Version 1.3.0: Was neu ist, steht in der [Anleitung › Neu in 1.3](ANLEITUNG.md#neu-in-13).
 
 | Zum Lesen | Was drinsteht |
 | --- | --- |
 | [ANLEITUNG.md](ANLEITUNG.md) | Erste Schritte, was die App kann, jeder Schalter, alle Details und die Kommandozeile (in der App: Hilfe › Erste Schritte) |
 | [FEHLERBEHEBUNG.md](FEHLERBEHEBUNG.md) | wenn etwas nicht klappt (Hilfe › Fehlerbehebung) |
-| [TESTLISTE.md](TESTLISTE.md) | der Praxistest für 1.2.0 (mit den Punkten aus 1.1.0) |
+| [TESTLISTE.md](TESTLISTE.md) | der Praxistest für 1.3.0 (mit den Punkten aus 1.1 und 1.2) |
 | [CHANGELOG.md](CHANGELOG.md) | was in jeder Version neu ist |
 | [CREDITS.md](CREDITS.md) | wessen Arbeit drinsteckt, mit Lizenzen |
 
@@ -48,17 +48,18 @@ Mit der Setup.exe: „Vloid Songs“ im Startmenü. Aus dem Quellcode `uv run vo
 uv run vocaloid_generator\main.py --style Rock --bpm 140 --key E --scale minor --seed 42
 uv run vocaloid_generator\main.py --rezept "Walzer im Mondlicht (3/4)"
 uv run vocaloid_generator\main.py --neu melody:Chorus          # der letzte Song mit neuer Refrain-Melodie
+uv run vocaloid_generator\main.py --style Rock --ohne-verstaerker-modelle   # schneller, mit dem eingebauten Verzerrer
 ```
 
 Alle Optionen stehen in der [Anleitung unter Kommandozeile](ANLEITUNG.md#kommandozeile) und in `main.py --help`.
 
 ## Was die App kann
 
-- **Komponieren:** zehn Stile, Bauplan mit bewährten Akkordfolgen, Melodie nach dem Wortakzent, Begleitung, Schlagzeug mit Grooves echter Schlagzeuger, 4/4-, 3/4- und 6/8-Takt, Rap-Teil, Solo.
-- **Singen:** NEUTRINO (mit Fassungen und Comping, StyleShift pro Sektion, Duett, Begleitstimmen, Idol-Rufen), VOICEVOX, DiffSinger (Versuch) oder eine eigene Gesangsspur.
-- **Klingen:** SoundFonts, Orchester, Flügel, Bass und Gitarre aus echten Aufnahmen, eigene Synths, Drum-Machines, Verstärker, Surge XT, ein Mix mit Platz für den Gesang, Mastering nach Vorbild-Songs.
+- **Komponieren:** zehn Stile, Bauplan mit bewährten Akkordfolgen und Akkord-Würze, die eingängigste von 30 Melodien je Sektion (nach dem Wortakzent, mit Auftakten, Triolen und Höhepunkt im letzten Refrain), eigenes Intro-Riff, Begleitung mit Kime, Läufen und Aufbau, Schlagzeug mit Grooves echter Schlagzeuger und Anison-Grooves, 4/4-, 3/4- und 6/8-Takt, Rap-Teil, Solo, KI-Melodie (Versuch).
+- **Singen:** NEUTRINO (mit Fassungen und Comping, StyleShift pro Sektion, Duett, Gruppe aus drei oder vier Stimmen, Begleitstimmen, Idol-Rufen), sanft geglättete Tonhöhe, dezente Verzierungen und Gesang im Groove, VOICEVOX (auch für gesprochene Zeilen), DiffSinger (Versuch) oder eine eigene Gesangsspur.
+- **Klingen:** SoundFonts, Orchester, Flügel, Bass und Gitarre aus echten Aufnahmen, Klänge aus Surge XT, Modelle echter Verstärker, Drum-Machines, ein Mix mit Druck und Platz für den Gesang, Härte zähmen, Mastering nach Vorbild-Songs.
 - **Ändern:** Neu würfeln pro Teil und Sektion, Töne in der Piano-Roll ziehen, eine Phrase neu singen, Remix in einem anderen Stil, Wieder öffnen aus dem Verlauf.
-- **Schreiben:** Japanisch mit Kanji, Romaji und englischen Wörtern, eigener Text pro Wiederholung, Text-Helfer, Song-Rezepte mit Beispieltext.
+- **Schreiben:** Japanisch mit Kanji, Romaji und englischen Wörtern, は, へ, を und Zahlwörter richtig gelesen, eigene Lesungen, eigener Text pro Wiederholung, Text-Helfer, Song-Rezepte mit Beispieltext.
 - **Ausgeben:** MP3 mit Tags und Titelbild, Off-Vocal und A-cappella, Lyric-Video in 1080p, „Fertig für YouTube“, ZIP für die DAW, Noten für Tuning-Tools, Album über Nacht.
 
 Was jede Funktion genau tut und wo ihr Schalter steht: [ANLEITUNG.md](ANLEITUNG.md).

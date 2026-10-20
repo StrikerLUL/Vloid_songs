@@ -56,7 +56,7 @@ def choose(plugin_path: str, state: str = "", timeout: float = CHOOSE_TIMEOUT) -
             f.write(state)
         try:
             done = subprocess.run([sys.executable, os.path.abspath(__file__), plugin_path, before, after],
-                                  timeout=timeout, capture_output=True, text=True)
+                                  timeout=timeout, capture_output=True, text=True, errors="replace")
         except (OSError, subprocess.TimeoutExpired) as e:
             log.warning("Fenster von %s: %s", os.path.basename(plugin_path), e)
             return None

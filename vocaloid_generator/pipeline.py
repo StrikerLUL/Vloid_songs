@@ -461,7 +461,35 @@ def generate_variants(settings: SongSettings, count: int, parts: tuple = (),
         if clips:
             report(0.96, "Bewerte die Fassungen...")
             _rate(clips)
+    chosen = best(results)
+    if chosen is not None and chosen is not results[-1]:
+        # Player, Noten und Export nehmen die beste; im Ausgabeordner liegt aber die zuletzt erzeugte
+        report(0.97, f"Lade die beste Fassung (Seed {chosen.seed})...")
+        results[next(i for i, r in enumerate(results) if r is chosen)] = bring_back(
+            chosen, lambda fraction, message: report(0.97 + 0.03 * fraction, f"Beste Fassung: {message}"))
     return results
+
+
+def bring_back(result: SongResult, progress: Optional[ProgressFn] = None) -> SongResult:
+    """
+    Mehrere Fassungen und die Songs eines Albums entstehen nacheinander im selben Ausgabeordner, am Ende liegt dort
+    nur der zuletzt erzeugte. Dieser Song entsteht dort noch einmal, damit Player, Noten, Text und Export wieder zu
+    ihm passen: derselbe Seed, der Gesang aus seinem Projekt im Verlauf (sonst wird er neu gesungen), Band und Mix
+    neu. Verlauf und Note bleiben; ein Fehler hier lässt result, wie es war.
+    """
+    import project
+    settings = result.settings.with_updates(reuse_steps=True)
+    try:
+        if result.history:
+            project.unpack(result.history, settings, result.output_dir)
+        again = generate_song(settings, progress=progress, keep_history=False)
+    except cancel.Cancelled:
+        raise
+    except Exception as e:  # noqa: BLE001 – die Fassungen selbst sind fertig und im Verlauf
+        log.warning("Beste Fassung (Seed %s) nicht wieder geladen: %s", result.seed, e)
+        return result
+    again.history, again.rating = result.history, result.rating
+    return again
 
 
 def _rate(clips: list) -> None:

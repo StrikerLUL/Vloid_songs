@@ -113,6 +113,25 @@ def test_download_checks_the_checksum(tmp_path):
     assert sorted(os.listdir(ziel)) == ["gut.sf2"]
 
 
+def test_a_dropped_connection_is_tried_again(tmp_path, monkeypatch):
+    """Bricht die Verbindung ab, lädt das Skript noch einmal, statt die Datei gleich aufzugeben."""
+    import urllib.request
+    src = tmp_path / "quelle.sf2"
+    src.write_bytes(b"RIFF" + bytes(100))
+    real, calls = urllib.request.urlopen, []
+
+    def flaky(url, timeout=None):
+        calls.append(url)
+        if len(calls) == 1:
+            raise ConnectionResetError("Verbindung getrennt")
+        return real(url, timeout=timeout)
+
+    monkeypatch.setattr(urllib.request, "urlopen", flaky)
+    ziel = tmp_path / "soundfonts"
+    assert setup_soundfonts.hole(_download(src, "gut.sf2"), str(ziel))
+    assert len(calls) == 2 and (ziel / "gut.sf2").read_bytes() == src.read_bytes()
+
+
 def test_download_unpacks_the_soundfont_from_a_7z_archive(tmp_path):
     import py7zr
     inner = tmp_path / "Gitarre 2020.sf2"

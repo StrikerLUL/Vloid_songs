@@ -27,8 +27,12 @@ def exportiere_song(wav_pfad, mp3_pfad=None):
         log.warning(f"MP3-Export übersprungen (ffmpeg fehlt?), der Song liegt als WAV vor: {e}")
         return None
 
-    with open(mp3_pfad, "wb") as f:
-        f.write(buffer.getvalue())
+    try:
+        with open(mp3_pfad, "wb") as f:
+            f.write(buffer.getvalue())
+    except OSError as e:        # z. B. unter Windows: die alte MP3 ist gerade in einem Player offen
+        log.warning(f"MP3 nicht geschrieben ({e}), der Song liegt als WAV vor")
+        return None
     log.info(f"MP3 exportiert: {mp3_pfad}")
     return mp3_pfad
 

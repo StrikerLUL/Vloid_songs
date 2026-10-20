@@ -505,9 +505,13 @@ class SongSettings(BaseModel):
         return cls()
 
     def save(self, path: str = None) -> None:
+        """Erst in eine Nebendatei, dann umbenennen: stürzt die App mittendrin ab, bleiben die alten Einstellungen
+        lesbar, statt dass eine halbe Datei beim nächsten Start alles auf Standard setzt."""
         path = path or SETTINGS_PATH
-        with open(path, "w", encoding="utf-8") as f:
+        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+        with open(path + ".tmp", "w", encoding="utf-8") as f:
             json.dump(self.model_dump(), f, indent=2, ensure_ascii=False)
+        os.replace(path + ".tmp", path)
 
     @classmethod
     def _validate_leniently(cls, data: dict) -> "SongSettings":

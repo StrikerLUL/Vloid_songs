@@ -55,7 +55,12 @@ class Entry:
 
     @property
     def score(self) -> Optional[float]:
-        return self.rating.get("overall") if self.rating else None
+        """Die Note der Bewertung. Gespeichert sind ihre Teile (rating.Rating.to_dict), die Note selbst nicht."""
+        if not self.rating:
+            return None
+        from rating import Rating
+        found = Rating.from_dict(self.rating)
+        return found.overall if found else self.rating.get("overall")
 
     def restore(self, current: Optional[SongSettings] = None) -> SongSettings:
         """Die Einstellungen dieses Songs; die Pfade (NEUTRINO, SoundFont, ...) bleiben die von current."""

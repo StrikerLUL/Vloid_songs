@@ -31,6 +31,10 @@ def test_data_dir_follows_env_choice_and_default(tmp_path, monkeypatch):
     assert config.data_dir() == config.BASE_DIR
     choice.write_text(str(tmp_path / "stick"))
     assert config.data_dir() == str(tmp_path / "stick")
+    choice.write_text("﻿Programmordner\r\n", encoding="utf-8")       # mit BOM, wie der Windows-Editor speichert
+    assert config.data_dir() == config.BASE_DIR
+    choice.write_text("Daten")                                           # ohne Laufwerk: neben datenordner.txt
+    assert config.data_dir() == os.path.join(config.REPO_ROOT, "Daten")
 
 
 def test_the_tests_never_touch_the_real_data_folder():

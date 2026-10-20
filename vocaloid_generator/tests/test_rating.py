@@ -177,19 +177,20 @@ def test_without_setup_nothing_is_rated(tmp_path):
 
 @pytest.fixture
 def rated_variants(tmp_path, monkeypatch):
-    """Erzeugen ist nachgebaut: Fassung k ist k Sekunden lang, das nachgebaute Modell mag lange Fassungen."""
+    """Erzeugen ist nachgebaut: Fassung k ist 2, 5 oder 3 Sekunden lang, das nachgebaute Modell mag lange Fassungen.
+    Mit Seed (pipeline.bring_back) entsteht dieselbe Fassung noch einmal."""
     out = str(tmp_path / "out")
     made = []
 
     def fake_song(settings, progress=None, seed=None, keep_history=True):
         made.append(settings)
-        seconds = [2, 5, 3][(len(made) - 1) % 3]
+        settings = settings.with_updates(seed=len(made) if settings.seed is None else settings.seed)
         os.makedirs(out, exist_ok=True)
-        mix = wav(os.path.join(out, "final_mix.wav"), seconds)        # jede Fassung überschreibt den Mix
-        settings = settings.with_updates(seed=len(made))
-        entry = history.record(mix, settings, out)
+        mix = wav(os.path.join(out, "final_mix.wav"), [2, 5, 3][(settings.seed - 1) % 3])   # überschreibt den Mix
+        entry = history.record(mix, settings, out) if keep_history else None
         progress(1.0, "Fertig")
-        return SongResult(seed=len(made), output_dir=out, mix_wav=mix, settings=settings, history=entry.audio)
+        return SongResult(seed=settings.seed, output_dir=out, mix_wav=mix, settings=settings,
+                          history=entry.audio if entry else None)
 
     monkeypatch.setattr(pipeline, "generate_song", fake_song)
     monkeypatch.setattr(main, "generate_song", fake_song)
@@ -201,6 +202,9 @@ def test_variants_get_a_rating_and_the_best_is_found(rated_variants, fake_model)
     results = generate_variants(rated_variants, 3, progress=lambda f, msg: steps.append((f, msg)))
     assert [r.rating.enjoyment for r in results] == [2.0, 5.0, 3.0]
     assert pipeline.best(results).seed == 2
+    # die beste ist nicht die letzte: sie entsteht im Ausgabeordner noch einmal, Player und Export passen zu ihr
+    assert sf.info(pipeline.best(results).mix_wav).duration == pytest.approx(5.0)
+    assert pipeline.best(results).history and len(history.entries(rated_variants.output_ordner)) == 3
     assert any(msg == "Bewerte die Fassungen..." for _, msg in steps)
     saved = {e.settings.seed: Rating.from_dict(e.rating) for e in history.entries(rated_variants.output_ordner)}
     assert saved[2].enjoyment == 5.0 and saved[1].enjoyment == 2.0

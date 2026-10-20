@@ -304,7 +304,9 @@ def main(argv=None) -> int:
     _logging(settings.log_file, args.verbose)
     overrides = {"output_ordner": args.output, "reuse_steps": False if args.ohne_wiederverwenden else None,
                  "keep_projects": False if args.ohne_projekt else None}
-    settings = settings.with_updates(**{k: v for k, v in overrides.items() if v is not None})
+    settings = _with(settings, overrides)
+    if settings is None:
+        return 1
 
     if args.verlauf is not None:
         return _list_history(settings, args.verlauf, args.sortieren)
@@ -409,7 +411,9 @@ def main(argv=None) -> int:
         channels = {ch: data.model_dump() for ch, data in settings.channels.items()}
         channels["drums"]["style"] = args.schlagzeug
         overrides["channels"] = channels
-    settings = settings.with_updates(**{k: v for k, v in overrides.items() if v is not None})
+    settings = _with(settings, overrides)
+    if settings is None:
+        return 1
     if args.remix:
         try:
             settings = remix(settings, args.remix)
@@ -481,6 +485,18 @@ def main(argv=None) -> int:
         from exporter import exportiere_noten
         log.info("Noten für Tuning-Tools: %s", exportiere_noten(chosen, args.noten_zip))
     return 0
+
+
+def _with(settings: SongSettings, overrides: dict):
+    """Die Einstellungen mit den Werten der Optionen (None = nicht angegeben); None bei einem Wert außerhalb des
+    erlaubten Bereichs (z. B. --bpm 300), mit Meldung statt Programmabsturz."""
+    from pydantic import ValidationError
+    try:
+        return settings.with_updates(**{k: v for k, v in overrides.items() if v is not None})
+    except ValidationError as e:
+        for error in e.errors():
+            log.error("Ungültiger Wert für %s: %s", ".".join(map(str, error["loc"])), error["msg"])
+        return None
 
 
 def _quiet(record: logging.LogRecord) -> bool:

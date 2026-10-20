@@ -2,7 +2,7 @@
 
 Erzeugt komplette Vocaloid-Songs auf Knopfdruck: Akkorde, Bass, Schlagzeug, Melodie und Begleitung, Gesang mit NEUTRINO oder VOICEVOX (oder einer lokalen Vorschau-Stimme), Mix mit Kompressor und Limiter und am Ende eine fertige MP3.
 
-Läuft unter Windows. Version 1.3.0: Was neu ist, steht in der [Anleitung › Neu in 1.3](ANLEITUNG.md#neu-in-13).
+Läuft unter Windows. Version 1.3.1: Was neu ist, steht in der [Anleitung › Neu in 1.3](ANLEITUNG.md#neu-in-13).
 
 | Zum Lesen | Was drinsteht |
 | --- | --- |

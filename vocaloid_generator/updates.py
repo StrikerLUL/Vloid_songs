@@ -121,9 +121,14 @@ def download_setup(release: Release, say: Callable[[str], None] = print) -> Opti
     target = os.path.join(tempfile.mkdtemp(prefix="vloid-update-"), f"VloidSongs-Setup-{release.version}.exe")
     try:
         with urllib.request.urlopen(release.setup_url, timeout=60) as answer, open(target, "wb") as f:
+            length = answer.headers.get("Content-Length")
             shutil.copyfileobj(answer, f, 1 << 20)
+        # reißt die Verbindung mittendrin ab, endet der Download ohne Fehler, nur zu kurz: so eine Setup.exe nie starten
+        if length is not None and os.path.getsize(target) != int(length):
+            raise OSError("Verbindung mittendrin abgebrochen")
     except OSError as e:
         say(f"Download fehlgeschlagen: {e}")
+        shutil.rmtree(os.path.dirname(target), ignore_errors=True)
         return None
     say(f"Geladen: {target}")
     return target

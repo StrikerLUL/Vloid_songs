@@ -297,6 +297,20 @@ def test_neutrino_v3_takes_its_options_from_run_bat(tmp_path):
     assert args[6:] == ["-n", "5", "-k", "0", "-d", "3", "-t"]
 
 
+def test_run_bat_with_quoted_paths_is_read_too(tmp_path):
+    """Steht der Aufruf in der Run.bat in Anführungszeichen, gilt er genauso; eine unlesbare Zeile führt zum eigenen
+    Aufruf, statt NEUTRINO ganz scheitern zu lassen."""
+    from vocal_synthesizer import _run_bat_aufruf
+    files = {"full": "F.lab", "timing": "T.lab", ".f0": "a.f0", ".melspec": "a.mel", ".wav": "a.wav", "model": "M\\"}
+    quoted = RUN_BAT.replace("bin\\NEUTRINO.exe", '"bin\\NEUTRINO.exe"') \
+        .replace("model\\%ModelDir%\\ ", '"model\\%ModelDir%\\" ')
+    (tmp_path / "Run.bat").write_text(quoted)
+    assert _run_bat_aufruf(str(tmp_path), "N.exe", files, "4") == \
+        ["N.exe", "F.lab", "T.lab", "a.f0", "a.mel", "a.wav", "M\\", "-n", "4", "-k", "0", "-d", "3", "-t"]
+    (tmp_path / "Run.bat").write_text("start /b cmd /c bin\\NEUTRINO.exe& pause")
+    assert _run_bat_aufruf(str(tmp_path), "N.exe", files, "4") is None
+
+
 @pytest.mark.skipif(os.name == "nt", reason="die Attrappen sind Python-Skripte, keine Windows-Programme")
 def test_style_shift_reaches_neutrino(tmp_path):
     root = tmp_path / "NEUTRINO-windows-v3.2.5" / "NEUTRINO"

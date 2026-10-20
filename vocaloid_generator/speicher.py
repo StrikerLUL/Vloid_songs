@@ -27,6 +27,7 @@ def _folders() -> dict:
     """Baustein (einrichten.COMPONENTS) → sein Ordner unter tools."""
     import accompaniment
     import airwindows
+    import amp_models
     import band_library
     import drum_kit
     import grooves
@@ -36,10 +37,12 @@ def _folders() -> dict:
     import sample_library
     import separation
     import sound_library
+    import surge_sounds
     return {"fluidsynth": os.path.dirname(renderer.FLUIDSYNTH_DIR), "soundfonts": sound_library.FOLDER,
             "samples": sample_library.FOLDER, "band": band_library.FOLDER, "drums": drum_kit.FOLDER,
-            "grooves": grooves.FOLDER, "airwindows": airwindows.FOLDER, "rating": rating.FOLDER,
-            "demucs": separation.FOLDER, "begleitung": accompaniment.FOLDER, "ace_step": polish.FOLDER}
+            "grooves": grooves.FOLDER, "airwindows": airwindows.FOLDER, "surge": surge_sounds.FOLDER,
+            "nam": amp_models.FOLDER, "rating": rating.FOLDER, "demucs": separation.FOLDER,
+            "begleitung": accompaniment.FOLDER, "ace_step": polish.FOLDER}
 
 
 def size(path: str) -> int:

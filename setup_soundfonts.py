@@ -8,6 +8,7 @@
 #   uv run setup_soundfonts.py --ohne-verzerrt   ohne die große verzerrte Gitarre (130 MB weniger)
 import argparse
 import hashlib
+import http.client
 import os
 import shutil
 import sys
@@ -60,12 +61,16 @@ VERSUCHE = 3
 
 
 def _laden(url: str, ziel: str) -> str:
-    """Lädt url nach ziel und gibt die SHA-256 der Datei zurück."""
+    """Lädt url nach ziel und gibt die SHA-256 der Datei zurück; bricht die Verbindung ab, "" (dann noch einmal)."""
     h = hashlib.sha256()
-    with urllib.request.urlopen(url, timeout=120) as antwort, open(ziel, "wb") as f:
-        while block := antwort.read(1 << 20):
-            h.update(block)
-            f.write(block)
+    try:
+        with urllib.request.urlopen(url, timeout=120) as antwort, open(ziel, "wb") as f:
+            while block := antwort.read(1 << 20):
+                h.update(block)
+                f.write(block)
+    except (OSError, http.client.HTTPException) as e:      # auch urllib.error.URLError, Zeitüberschreitung
+        print(f"    {e}")
+        return ""
     return h.hexdigest()
 
 

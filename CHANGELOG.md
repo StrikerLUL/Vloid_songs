@@ -2,6 +2,32 @@
 
 Jede Version hat hier einen Abschnitt. Die App zeigt ihn einmal nach einem Update (Hilfe › Was ist neu).
 
+## 1.3.1
+
+Fehler behoben, die beim Durchsehen des ganzen Codes aufgefallen sind. Neue Funktionen gibt es keine, an deinen
+Einstellungen ändert sich nichts.
+
+- **Mehrere Fassungen: der Player spielte nicht die beste.** Mit automatischer Bewertung stand „Geladen ist die
+  beste“, zu hören (und in Noten, Text und Export) war aber die zuletzt erzeugte: alle Fassungen schreiben
+  nacheinander in denselben Ordner. Jetzt entsteht die beste am Ende dort noch einmal; ihr Gesang bleibt, nur Band und
+  Mix werden neu gerechnet. Dasselbe beim Album über Nacht für den ersten Song des Albums.
+- **„Beste Note zuerst“ sortierte nicht** (Tab Verlauf und `--verlauf --sortieren bewertung`): die Note stand beim
+  Song, beim Sortieren wurde sie aber nie gefunden.
+- **Wieder öffnen sang Songs mit Rap- oder Sprech-Teil neu**, obwohl ihr Gesang aufgehoben war.
+- **Einstellungen sicherer gespeichert:** Stürzte die App genau beim Speichern ab, blieb eine halbe Datei, und beim
+  nächsten Start stand alles auf Standard. Jetzt bleibt die alte Datei ganz, bis die neue fertig ist.
+- **Alte MP3 in einem Player offen:** Hatte ein anderes Programm `final_song.mp3` offen, scheiterte der ganze Song kurz
+  vor Schluss. Jetzt bleibt er als WAV, mit einem Hinweis im Protokoll.
+- **Hilfe › Einrichten** zeigt jetzt auch bei Surge XT und den Gitarren-Verstärkern, wie viel Platz sie belegen, und
+  kann sie entfernen.
+- **Downloads:** „Bessere Klänge“ lädt nach einem Verbindungsabbruch noch einmal, statt die Datei aufzugeben. Eine beim
+  Update nur halb geladene Setup.exe wird nicht mehr gestartet.
+- **NEUTRINO:** Steht der Aufruf in der `Run.bat` in Anführungszeichen, singt NEUTRINO trotzdem (vorher sang dann
+  VOICEVOX oder die Vorschau-Stimme).
+- **`datenordner.txt`** klappt auch, wenn der Windows-Editor ein unsichtbares Zeichen an den Anfang schreibt, und mit
+  einem Ordner ohne Laufwerk (er liegt dann im Programmordner).
+- **Kommandozeile:** Ein Wert außerhalb des Bereichs, z. B. `--bpm 300`, gibt eine Meldung statt eines Absturzes.
+
 ## 1.3.0
 
 Diese Version macht Gesang, Melodie und Band besser. Jede Neuerung hat einen Schalter (oder Regler) und eine Option

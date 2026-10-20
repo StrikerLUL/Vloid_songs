@@ -111,9 +111,10 @@ def default_data_dir() -> str:
 
 
 def data_choice() -> str:
-    """Was in datenordner.txt steht: "programmordner", ein Ordner oder "" (Standard)."""
+    """Was in datenordner.txt steht: "programmordner", ein Ordner oder "" (Standard). Der Windows-Editor schreibt
+    manchmal ein unsichtbares Zeichen (BOM) an den Anfang; das zählt nicht mit."""
     try:
-        with open(DATA_CHOICE, encoding="utf-8") as f:
+        with open(DATA_CHOICE, encoding="utf-8-sig") as f:
             return f.read().strip()
     except OSError:
         return ""
@@ -125,7 +126,8 @@ def data_dir() -> str:
     choice = data_choice()
     if choice.lower() == PROGRAM_FOLDER:
         return BASE_DIR
-    return os.path.abspath(choice) if choice else default_data_dir()
+    # ein Ordner ohne Laufwerk gilt neben datenordner.txt, nicht dort, wo die App gerade gestartet wurde
+    return os.path.abspath(os.path.join(REPO_ROOT, choice)) if choice else default_data_dir()
 
 
 DATA_DIR        = data_dir()

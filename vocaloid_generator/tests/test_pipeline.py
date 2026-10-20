@@ -155,6 +155,31 @@ def test_mp3_export_without_ffmpeg_leaves_no_empty_file(tmp_path, monkeypatch):
     assert not os.path.exists(mp3)
 
 
+def test_a_locked_mp3_keeps_the_song_as_wav(tmp_path, monkeypatch):
+    """Ist die alte MP3 unter Windows gerade in einem Player offen, lässt sie sich nicht überschreiben: dann bleibt der
+    Song als WAV, statt dass der ganze Lauf kurz vor Schluss scheitert."""
+    import builtins
+
+    import numpy as np
+    import soundfile as sf
+    from pydub import AudioSegment
+
+    import exporter
+    wav = str(tmp_path / "mix.wav")
+    sf.write(wav, np.zeros((4410, 2), dtype=np.float32), 44100)
+    mp3 = str(tmp_path / "song.mp3")
+    monkeypatch.setattr(AudioSegment, "export", lambda self, out, **kw: out.write(b"ID3"))
+    real_open = builtins.open
+
+    def locked(path, mode="r", *args, **kw):
+        if path == mp3 and "w" in mode:
+            raise PermissionError(13, "Der Prozess kann nicht auf die Datei zugreifen", path)
+        return real_open(path, mode, *args, **kw)
+
+    monkeypatch.setattr(builtins, "open", locked)
+    assert exporter.exportiere_song(wav, mp3) is None
+
+
 def test_pydub_does_not_warn_about_its_regexes():
     """pydub 0.25.1 meldet beim ersten Import unter Python 3.12 SyntaxWarnings im Fenster; nur diese bleiben weg."""
     import subprocess

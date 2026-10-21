@@ -210,6 +210,20 @@ def test_latest_release_is_read_and_cached(monkeypatch):
     assert updates.latest(force=True) is None
 
 
+def test_a_cut_off_setup_download_is_never_started(tmp_path, monkeypatch):
+    """Reißt die Verbindung ab, liefert urllib einfach weniger Bytes: so eine Setup.exe wird nicht gestartet."""
+    def answer(length: str):
+        return type("Sized", (Answer,), {"headers": {"Content-Length": length}})(b"MZ" * 10)
+
+    said = []
+    release = updates.Release("v9.0.0", "", "https://example.org/s.exe", "")
+    monkeypatch.setattr(updates.urllib.request, "urlopen", lambda url, timeout=None: answer("1000"))
+    assert updates.download_setup(release, said.append) is None and "abgebrochen" in said[-1]
+    monkeypatch.setattr(updates.urllib.request, "urlopen", lambda url, timeout=None: answer("20"))
+    path = updates.download_setup(release, said.append)
+    assert path and os.path.getsize(path) == 20
+
+
 def test_whats_new_comes_from_the_changelog(tmp_path, monkeypatch):
     log = tmp_path / "CHANGELOG.md"
     log.write_text("# Änderungen\n\n## 1.0.0 – 2026-10-14\n\n- Installer\n- Drums\n\n## 0.2.0\n\n- alt\n",

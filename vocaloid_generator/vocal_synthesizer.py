@@ -502,8 +502,10 @@ def _run_bat_aufruf(neutrino_pfad: str, neutrino_exe: str, dateien: dict, thread
         return None
     werte["numthreads"] = threads
     werte["styleshift"] = str(style_shift)
-    tokens = zeile.split()
-    start = next(k for k, t in enumerate(tokens) if t.lower().endswith("neutrino.exe"))
+    tokens = [t.strip('"') for t in zeile.split()]     # "bin\NEUTRINO.exe" in Anführungszeichen ist dasselbe
+    start = next((k for k, t in enumerate(tokens) if t.lower().endswith("neutrino.exe")), None)
+    if start is None:                                     # dann der eigene Aufruf, statt ganz aufzugeben
+        return None
     cmd = [neutrino_exe]
     support = False
     for token in tokens[start + 1:]:

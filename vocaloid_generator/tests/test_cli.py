@@ -43,6 +43,14 @@ def test_invalid_option_is_rejected(captured):
         main.main(["--key", "H"])
 
 
+@pytest.mark.parametrize("args", [["--bpm", "300"], ["--lautheit", "-30"], ["--veredler-staerke", "2"],
+                                  ["--vibrato", "5"]])
+def test_values_out_of_range_give_a_message_instead_of_a_crash(captured, caplog, args):
+    with caplog.at_level("ERROR"):
+        assert main.main(args) == 1
+    assert "Ungültiger Wert für" in caplog.text and "settings" not in captured
+
+
 def test_failure_returns_exit_code_1(monkeypatch):
     def boom(settings, progress=None, seed=None):
         raise RuntimeError("Keine Audiospuren zum Mischen vorhanden.")

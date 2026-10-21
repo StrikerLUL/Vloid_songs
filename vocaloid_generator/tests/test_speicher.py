@@ -74,3 +74,10 @@ def test_sizes_read_like_the_explorer():
     assert speicher.describe(None) == "…" and speicher.describe(0) == "0 KB" and speicher.describe(1500) == "2 KB"
     assert speicher.describe(350_000_000) == "350 MB" and speicher.describe(1_234_000_000) == "1,2 GB"
     assert speicher.describe(20_400_000_000) == "20 GB" and speicher.describe(5_500_000) == "5,5 MB"
+
+
+def test_every_part_from_the_setup_has_its_folder():
+    """Was sich einrichten lässt, zeigt die Speicher-Übersicht auch an und lässt sich dort entfernen (auch Surge XT
+    und die Verstärker-Modelle aus 1.3.0)."""
+    import einrichten
+    assert {c.key for c in einrichten.COMPONENTS} == set(speicher._folders())

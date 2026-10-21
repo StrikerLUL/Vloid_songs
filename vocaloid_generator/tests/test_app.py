@@ -67,8 +67,8 @@ def fake_generation(monkeypatch):
             progress(0.5, step)
         result = write_song(settings.output_dir(), seed)
         result.settings = settings
-        entry = history.record(result.audio, settings, settings.output_dir())
-        result.history = entry.audio
+        if keep_history:
+            result.history = history.record(result.audio, settings, settings.output_dir()).audio
         return result
 
     monkeypatch.setattr(pipeline, "generate_song", fake_song)
@@ -81,7 +81,7 @@ def sung_generation(fake_generation, monkeypatch):
     fake_song = pipeline.generate_song
 
     def sung_song(settings, progress=None, seed=None, keep_history=True):
-        result = fake_song(settings, progress, seed)
+        result = fake_song(settings, progress, seed, keep_history)
         midi = pretty_midi.PrettyMIDI()
         inst = pretty_midi.Instrument(0)
         inst.notes += [pretty_midi.Note(100, 64 + i, 0.5 * i, 0.5 * i + 0.4) for i in range(4)]
@@ -244,8 +244,10 @@ async def test_album_overnight_from_the_app(user, fake_generation, tmp_path):
     user.find(marker="album-styles").elements.pop().set_value(["Rock", "Ballade"])
     user.find(marker="album-name").type("Probe")
     user.find(marker="album-start").click()
-    await until(lambda: len(fake_generation) == 3, seconds=10)
-    assert [c.style for c in fake_generation] == ["Rock", "Ballade", "Rock"]
+    await until(lambda: len(fake_generation) == 4, seconds=10)
+    # Danach wird der erste Song wieder geladen: alle Songs schreiben in denselben Ordner
+    assert [c.style for c in fake_generation] == ["Rock", "Ballade", "Rock", "Rock"]
+    assert fake_generation[3].seed == fake_generation[0].seed
     await until(lambda: user.find(marker="library-search").elements.pop().value == "Probe")
     out = str(tmp_path / "out")
     [folder] = os.listdir(os.path.join(out, "Alben"))
@@ -392,7 +394,7 @@ async def test_the_polished_version_can_be_played_and_tuned(user, fake_generatio
     fake_song = pipeline.generate_song
 
     def polished_song(settings, progress=None, seed=None, keep_history=True):
-        result = fake_song(settings, progress, seed)
+        result = fake_song(settings, progress, seed, keep_history)
         result.polished_wav = os.path.join(result.output_dir, "final_mix_veredelt.wav")
         shutil.copy(result.mix_wav, result.polished_wav)
         return result

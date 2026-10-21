@@ -95,14 +95,25 @@ def _remember_vocals(out: str, key: str) -> None:
         log.debug("Fingerabdruck des Gesangs nicht gespeichert: %s", e)
 
 
-def _synthesize_vocals(settings: SongSettings, tracks: dict, out: str) -> Optional[str]:
-    vocals_wav = os.path.join(out, "vocals.wav")
+def _engine_tracks(settings: SongSettings, tracks: dict) -> tuple:
+    """(was die Engine singt, Rap-Stellen, Sprech-Stellen): Rap und Sprechen singt sie nicht, VOICEVOX spricht sie."""
     spans = _rap_spans(settings, tracks)
     said = _spoken_spans(settings, tracks)
-    whole = tracks
     if spans or said:
         import rap
-        tracks = rap.without(tracks, spans + said)    # die Engine singt Rap und Sprechen nicht, VOICEVOX spricht sie
+        tracks = rap.without(tracks, spans + said)
+    return tracks, spans, said
+
+
+def vocal_key(settings: SongSettings, tracks: dict) -> str:
+    """Der Fingerabdruck, unter dem _synthesize_vocals den Gesang dieser Spuren wiederfindet (project.unpack)."""
+    return _vocal_key(settings, _engine_tracks(settings, tracks)[0])
+
+
+def _synthesize_vocals(settings: SongSettings, tracks: dict, out: str) -> Optional[str]:
+    vocals_wav = os.path.join(out, "vocals.wav")
+    whole = tracks
+    tracks, spans, said = _engine_tracks(settings, whole)
     melody_data = tracks.get("melody_data", [])
     silben = tracks.get("silben", [])
     key = _vocal_key(settings, tracks) if settings.reuse_steps and settings.channels["vocals"].enabled else None

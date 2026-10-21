@@ -1,12 +1,13 @@
 import os
 import shutil
+import sys
 
 def setup():
     base_dir = os.path.dirname(os.path.abspath(__file__))
     src_root = os.path.join(base_dir, "めろう（NEUTRINO-Library）-v3.1")
     dest_dir = os.path.join(base_dir, "NEUTRINO-windows-v3.1", "NEUTRINO", "model", "MERROW")
 
-    print(f"Starting NEUTRINO MERROW setup...")
+    print("Starting NEUTRINO MERROW setup...")
     print(f"Source root: {src_root}")
     print(f"Destination: {dest_dir}")
 
@@ -58,4 +59,4 @@ def setup():
     return True
 
 if __name__ == "__main__":
-    setup()
+    sys.exit(0 if setup() else 1)

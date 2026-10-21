@@ -102,7 +102,7 @@ def unpack(audio: str, settings, out: str) -> tuple:
             shutil.copyfile(os.path.join(source, vocal_check.SUNG_FILE), os.path.join(out, vocal_check.SUNG_FILE))
     except (OSError, RuntimeError) as e:
         return False, f"Gesang nicht lesbar ({e}), er wird neu gesungen."
-    singing._remember_vocals(out, singing._vocal_key(settings, tracks))
+    singing._remember_vocals(out, singing.vocal_key(settings, tracks))
     return True, "Song wieder geöffnet: Band und Mix entstehen neu, der Gesang bleibt."
 
 

@@ -44,6 +44,22 @@ def test_a_reopened_song_keeps_its_vocals_and_is_not_sung_again(tmp_path, neutri
     assert len(history.entries(first.output_dir)) == 2                  # nicht noch einmal im Verlauf
 
 
+def test_a_song_with_a_spoken_line_is_reopened_without_singing_again(tmp_path, neutrino_attrappe):
+    """Die Zeilen der Sektion „Sprechen“ singt die Engine nie (VOICEVOX spricht sie): auch dann bleibt beim Wieder-Öffnen
+    der aufgehobene Gesang, statt dass NEUTRINO alles neu singt."""
+    root, calls = neutrino_attrappe
+    spoken = dict(active_sections=["Verse", "Spoken"], section_bars={"Verse": 4, "Spoken": 4},
+                  lyrics="[Verse]\nよ る の ま ち\n[Sprechen]\nき み の な ま え を よ ん だ")
+    first = pipeline.generate_song(song_settings(tmp_path, root, **spoken))
+    pipeline.generate_song(song_settings(tmp_path, root, seed=6, **spoken))
+    entry = history.entries(first.output_dir)[1]
+    restored = entry.restore(song_settings(tmp_path, root, seed=99, **spoken))
+    ok, _ = project.unpack(entry.audio, restored, restored.output_dir())
+    before = neutrino_runs(calls)
+    pipeline.generate_song(restored, keep_history=False)
+    assert ok and neutrino_runs(calls) == before
+
+
 def test_changed_notes_are_sung_again(tmp_path, neutrino_attrappe):
     root, _ = neutrino_attrappe
     first = pipeline.generate_song(song_settings(tmp_path, root))

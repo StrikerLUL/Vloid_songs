@@ -113,12 +113,15 @@ def test_songs_get_a_name_and_a_note_and_are_found_again(tmp_path):
 
 
 def test_favorites_filter_and_sorting(tmp_path):
+    from rating import Rating
     out = str(tmp_path / "out")
     for nr, score in ((1, 6.5), (2, None), (3, 8.0)):
         entry = _record(tmp_path, out, nr)
         if score:
-            history.set_rating(entry.audio, {"overall": score})
+            # so speichert die App die Bewertung (pipeline._rate): die Teile, nicht die Note
+            history.set_rating(entry.audio, Rating(score, 5.0, 5.0, score).to_dict())
     songs = _by_seed(out)
+    assert (songs[1].score, songs[2].score, songs[3].score) == (6.5, None, 8.0)
     history.set_favorite(songs[2], True)
     every = history.entries(out)
     assert [e.settings.seed for e in history.find(every)] == [e.settings.seed for e in every]   # wie gespeichert
@@ -154,7 +157,8 @@ def test_command_line_searches_and_sorts_the_history(tmp_path, caplog):
     out = str(tmp_path / "out")
     for nr, style in ((1, "Rock"), (2, "Ballade"), (3, "Rock")):
         _record(tmp_path, out, nr, style=style)
-    history.set_rating(_by_seed(out)[1].audio, {"overall": 9.0})
+    history.set_rating(_by_seed(out)[1].audio, {"enjoyment": 9.5, "usefulness": 5.0, "complexity": 5.0,
+                                                "quality": 8.5})
     number = [e.settings.seed for e in history.entries(out)].index(1) + 1
     with caplog.at_level("INFO", logger="vocaloid"):
         assert main.main(["--output", out, "--verlauf", "rock", "--sortieren", "bewertung"]) == 0
@@ -196,7 +200,8 @@ def test_album_lyrics_come_one_file_per_song(tmp_path):
 
 @pytest.fixture
 def overnight(monkeypatch, tmp_path):
-    """Erzeugen nachgestellt: jeder Song legt eine MP3 ab und landet im Verlauf; Song 2 scheitert."""
+    """Erzeugen nachgestellt: jeder Song legt eine MP3 ab und landet im Verlauf; Song 2 scheitert. Ein Song mit Seed
+    (pipeline.bring_back) entsteht mit diesem Seed noch einmal."""
     made = []
 
     def fake_song(settings, progress=None, seed=None, keep_history=True):
@@ -208,12 +213,12 @@ def overnight(monkeypatch, tmp_path):
         out = settings.output_dir()
         os.makedirs(out, exist_ok=True)
         mp3 = os.path.join(out, "final_song.mp3")
+        settings = settings.with_updates(seed=1000 + nr if settings.seed is None else settings.seed)
         with open(mp3, "wb") as f:
-            f.write(f"ID3 Song {nr}".encode())
-        settings = settings.with_updates(seed=1000 + nr)
-        entry = history.record(mp3, settings, out, keep=settings.history_keep)
+            f.write(f"ID3 Song {settings.seed - 1000}".encode())
+        entry = history.record(mp3, settings, out, keep=settings.history_keep) if keep_history else None
         return SongResult(seed=settings.seed, output_dir=out, mix_wav=mp3, mp3=mp3, settings=settings,
-                          history=entry.audio)
+                          history=entry.audio if entry else None)
 
     monkeypatch.setattr(pipeline, "generate_song", fake_song)
     return made
@@ -229,7 +234,10 @@ def test_album_overnight_sorts_by_rating_and_survives_a_failed_song(tmp_path, ov
     steps = []
     made = album.make(s, 4, ["Rock", "Ballade"], progress=lambda f, m: steps.append((f, m)), name="Erste Nacht")
 
-    assert len(overnight) == 4 and made.failed == 1 and not made.cancelled
+    assert len(overnight) == 5 and made.failed == 1 and not made.cancelled
+    # der beste Song entsteht zuletzt noch einmal im Ausgabeordner: den zeigt die App danach an
+    assert overnight[-1].seed == 1003 and made.results[0].history and made.results[0].rating.overall == 9.0
+    assert open(made.results[0].audio, "rb").read() == b"ID3 Song 3"
     assert os.path.dirname(made.folder) == os.path.join(str(tmp_path / "out"), album.FOLDER)
     assert made.folder.endswith("Erste Nacht")
     names = sorted(os.listdir(made.folder))
@@ -265,7 +273,8 @@ def test_album_from_the_command_line(tmp_path, overnight, monkeypatch):
     out = str(tmp_path / "out")
     assert main.main(["--output", out, "--album", "3", "--album-stile", "Rock, Ballade", "--album-gleich",
                       "--album-name", "Test"]) == 0
-    assert [s.style for s in overnight] == ["Rock", "Ballade", "Rock"]
+    assert [s.style for s in overnight[:3]] == ["Rock", "Ballade", "Rock"]
+    assert overnight[3].seed == 1001                                # der erste Song noch einmal (bring_back)
     assert not overnight[0].album_vary
     [folder] = os.listdir(os.path.join(out, album.FOLDER))
     assert folder.endswith("Test") and len(history.entries(out)) == 2

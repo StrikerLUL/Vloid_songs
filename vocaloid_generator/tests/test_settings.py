@@ -78,6 +78,24 @@ def test_save_and_load_round_trip(tmp_path):
     assert SongSettings.load() == s
 
 
+def test_a_failed_save_keeps_the_old_settings(tmp_path, monkeypatch):
+    """Bricht das Speichern mittendrin ab (Absturz, Platte voll), bleibt die alte Datei ganz; ein neuer Ordner
+    entsteht von selbst."""
+    path = str(tmp_path / "neu" / "Einstellungen.json")
+    SongSettings(bpm=128).save(path)
+    real_dump = json.dump
+
+    def broken(data, f, **kw):
+        f.write('{"bpm": 1')
+        raise OSError("Datenträger voll")
+
+    monkeypatch.setattr(json, "dump", broken)
+    with pytest.raises(OSError):
+        SongSettings(bpm=99).save(path)
+    monkeypatch.setattr(json, "dump", real_dump)
+    assert SongSettings.load(path).bpm == 128
+
+
 def test_load_prefers_new_file_over_legacy(tmp_path):
     with open(settings.LEGACY_SETTINGS_PATH, "w", encoding="utf-8") as f:
         json.dump({"bpm": 90, "volume_bass": 0.3}, f)

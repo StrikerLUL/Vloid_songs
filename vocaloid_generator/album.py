@@ -130,6 +130,14 @@ def make(settings: SongSettings, count: int, styles: list, lyrics_folder: str = 
         os.replace(staged, target)
         album.results.append(result)
         album.files.append(target)
+    if album.results and not album.cancelled and album.results[0] is not finished[-1][0]:
+        # die App zeigt danach den ersten Song des Albums; im Ausgabeordner liegt aber der zuletzt erzeugte
+        report(0.97, "Album: lade den ersten Song...")
+        try:
+            album.results[0] = pipeline.bring_back(album.results[0],
+                                                   lambda fraction, message: report(0.97 + 0.02 * fraction, message))
+        except cancel.Cancelled:
+            album.cancelled = True
     _write_lists(album)
     report(1.0, f"Album fertig: {album.describe()}")
     log.info("Album „%s“: %s", name, album.describe())

@@ -128,6 +128,59 @@ nichts geändert (z. B. nur der Mix), singt NEUTRINO nicht noch einmal.
 **Updates.** Einmal am Tag sieht die App nach, ob es eine neue Version gibt; dann steht oben „Update da“. „Update
 holen“ lädt die neue Setup.exe und startet sie, deine Daten bleiben. Danach zeigt „Was ist neu“, was sich geändert hat.
 
+## Neu in 1.4
+
+1.4 gibt jedem Stil und jedem Song seinen eigenen Charakter und macht die Stimme schöner. Bis 1.3 teilten sich alle
+Stile dieselben Akkordfolgen, dieselben Regeln für die Melodie und denselben Hall, und zwei Songs eines Stils hatten
+dieselben Klänge und Grooves; deshalb klang vieles ähnlich. Alles ist ab Werk an und hat einen eigenen Schalter;
+ausgeschaltet klingt es wie in 1.3.
+
+**Akkorde je Stil** (Tab Song). Jeder Stil hat eigene Akkordfolgen für Strophe, Pre-Chorus, Refrain und Bridge und eine
+eigene Kadenz in den Refrain und zum Schluss: Rock spielt mit bVII, endet auf bVI–bVII–I und landet vor dem Refrain
+auf der Dominante,
+Dark Vocaloid bleibt in Moll mit bII und harmonischer Dominante, City Pop und Lo-Fi spielen Septakkorde mit ii7–V7–Imaj7,
+die Ballade den Kanon mit laufendem Bass und Vsus4–V vor dem Refrain, Idol-Pop die „Royal Road“ IV–V–iii–vi. Die
+Akkord-Würze kommt wie bisher dazu.
+
+**Melodie-Charakter je Stil** (Tab Song). Die Melodie folgt im Stil eigenen Regeln: Kawaii und Idol-Pop singen kurz,
+abgesetzt und hüpfend (Terzen und Quarten, Tonwiederholungen), die Ballade gebunden in Schritten mit weiten Bögen, Rock
+gerufen mit Quarten und Quinten und Synkopen, City Pop und Lo-Fi zurückgelehnt mit Einsätzen nach dem Schlag, Lo-Fi
+dazu eng und tief, Dark Vocaloid dicht und dramatisch mit Sexten. Auch „Beste Melodie suchen“ bewertet nach dem Stil:
+in der Ballade zählen Schritte, im Kawaii Tonwiederholungen, im Idol-Pop wiederkehrende Motive mehr.
+
+**Arrangement je Stil** (Tab Band). Jeder Stil besetzt seine Sektionen anders: Rock spielt vor dem Refrain
+abgedämpft, damit der Refrain mit Powerchords aufgeht, und in der Bridge das Gitarrensolo über Powerchords; die Ballade
+lässt im Refrain Gitarre und Synth weg; Dark Vocaloid hat Staccato-Streicher in der Strophe; Kawaii Glitzer-Glocken
+und eine Antwort-Melodie im Refrain; City Pop Bläser und Congas in der zweiten Strophe.
+
+**Charakter pro Song** (Tab Band). Jeder Song würfelt aus seinem Seed, was zum Stil passt: die Klänge von Klavier,
+Gitarre, Lead, Glocken und Gegenstimme (z. B. Rhodes statt Flügel, Tenorsax statt Altsax), die Synth-Stimmen, den
+Groove von Strophe und Refrain, wie Bass, Klavier und Gitarre spielen, wie das Intro beginnt (volle Band, leise, nur
+Schlagzeug und Bass, nur die Hook) und wie der Song endet (Schlussakkord klingt aus, harter Stopp, wird leiser). Im
+Protokoll steht unter „Charakter“, was dein Song bekommen hat. Mit demselben Seed kommt derselbe Charakter.
+
+**Klangbild je Stil** (Tab Mix). Hall, Delay, Klangfarbe des Masters, Stereobreite und Sättigung hängen am Stil: die
+Ballade weit und weich mit großem Hall, Lo-Fi in einem kleinen dumpfen Raum mit warmer Sättigung, Rock trocken mit
+Biss in den Mitten, Future Bass riesig und breit, City Pop glänzend wie die 80er, Dark Vocaloid dunkel mit langem
+Delay. Im Protokoll steht „Klangbild“.
+
+**Schönere Stimme** (Tab Gesang). Drei Dinge machten die Stimme unschön, und alle drei sind jetzt anders:
+
+- *Wohlfühlbereich der Stimme.* Jede NEUTRINO-Stimme singt in einem Tempobereich am schönsten (laut studio-neutrino.com
+  MERROW etwa 80 bis 140 BPM, KIRITAN, REINA und No.7 120 bis 180). Weit darüber verschleift sie schnelle Silben.
+  Liegt dein Song außerhalb, steht im Protokoll, welche installierte Stimme dort schöner singt. Kennt deine
+  NEUTRINO-Ausgabe keinen StyleShift (vor 3.2.2), singt NEUTRINO den Song am Stück statt in Teilen: das spart Zeit und
+  Schnitte.
+- *Sanfte Nachbearbeitung.* Vibrato, Übergänge und Verzierungen rechnet die App nur noch dort neu, wo sich die
+  Tonhöhe wirklich ändert; der Rest bleibt, wie NEUTRINO ihn gesungen hat. Kaum hörbare Formant-Verschiebungen (Idol,
+  Dark) fallen weg, weil sie die Stimme nur aufrauen.
+- *Weichere Gesangskette.* Der erste Kompressor quetschte mit 6:1 in einer Millisekunde jeden Silbeneinsatz; jetzt
+  höchstens 3:1 und 6 ms, die Präsenz ist breiter und sitzt höher, der Glanz bei 12 kHz. Die Stimme klingt runder.
+
+Am meisten hilft der Stimme aber eine neue NEUTRINO-Ausgabe: Seit 3.2.2 singt NEUTRINO mit einem neuen Vocoder
+deutlich sauberer, und erst damit klingen Strophe und Refrain verschieden (StyleShift). Die App sagt unter Hilfe ›
+Einrichten, welche Ausgabe du hast.
+
 ## Neu in 1.3
 
 1.3 macht Gesang, Melodie und Band besser. Alles ist ab Werk an (außer der KI-Melodie) und hat einen eigenen
@@ -250,6 +303,10 @@ löscht ihn (neu einrichten geht jederzeit). Darunter: wie groß Songs und aufge
 | Kime, Band im Groove, Bass-Läufe, Läufe, Anison-Grooves, Aufbau, Surge-Klänge, Verstärker (1.3) | Tab Band |
 | Druck (1.3) | Tab Mix |
 | KI-Melodie (1.3, Versuch) | Tab Pfade |
+| Akkorde je Stil, Melodie-Charakter je Stil (1.4) | Tab Song |
+| Arrangement je Stil, Charakter pro Song (1.4) | Tab Band |
+| Wohlfühlbereich der Stimme, Sanfte Nachbearbeitung, Weichere Gesangskette (1.4) | Tab Gesang |
+| Klangbild je Stil (1.4) | Tab Mix |
 
 ## Wo was liegt
 
@@ -281,7 +338,7 @@ Die App ruft NEUTRINO so auf, wie es die `Run.bat` der installierten Version vor
 
 Damit der Gesang natürlich klingt, bereitet die App die Noten für NEUTRINO vor: ein Takt Vorlauf, kurze Pausen innerhalb einer Phrase werden an die Note davor gebunden, und die Melodie bleibt im Tonumfang der gewählten Stimme. Männliche Stimmen (NAKUMO, SOMA, RUNO) singen eine Oktave tiefer. Im Refrain singt NEUTRINO eine zweite Stimme dazu, der Hauptgesang wird gedoppelt, und ein De-Esser nimmt scharfe S-Laute zurück.
 
-Im Tab „Gesang“ wählst du die Stimme, ob im Refrain eine zweite Stimme mitsingt, und die Klangfarbe (StyleShift): plus klingt heller, minus dunkler. StyleShift braucht eine NEUTRINO-Version, die die Option `-k` kennt; sonst singt NEUTRINO ohne. Zu Beginn jedes Songs steht im Protokoll, welche NEUTRINO-Version und welche Stimmen gefunden wurden.
+Im Tab „Gesang“ wählst du die Stimme, ob im Refrain eine zweite Stimme mitsingt, und die Klangfarbe (StyleShift): plus klingt heller, minus dunkler. Jede Stimme hat ein Tempo, in dem sie am schönsten singt (MERROW, ZUNKO und AOI langsamer, etwa 80 bis 140 BPM; KIRITAN, REINA, No.7, ITAKO und ZUNDAMON schneller, 120 bis 180); liegt der Song weit daneben, nennt das Protokoll eine installierte Stimme, die dort besser passt (`--ohne-wohlfuehlbereich`). StyleShift braucht eine NEUTRINO-Version, die die Option `-k` kennt; sonst singt NEUTRINO ohne. Zu Beginn jedes Songs steht im Protokoll, welche NEUTRINO-Version und welche Stimmen gefunden wurden.
 
 Schlägt NEUTRINO fehl, steht die Meldung im Protokoll, und die App versucht es mit VOICEVOX; läuft das auch nicht, nimmt sie die lokale Vorschau-Stimme (Windows-Sprachausgabe plus Tonhöhen-Korrektur).
 
@@ -544,6 +601,10 @@ Jeder Stil bringt eigene Instrumente, Spielweisen, Schlagzeug-Grooves und Akkord
 | Lo-Fi | Rhodes mit Jazz-Akkorden, gemütlicher Boom-Bap mit Swing, Jazz-Gitarre, Vibraphon; die Band klingt wie von einer alten Bandmaschine, und eine Schallplatte knistert (Schalter im Tab „Band“) |
 | Idol-Pop | 180 BPM in Dur, Funk-Gitarre, Bläser-Stabs, Oktav-Bass, Four-on-the-Floor im Refrain, Claps und Tamburin, der letzte Refrain steigt fast immer |
 
+Seit 1.4 hat jeder Stil auch eigene Akkordfolgen und Kadenzen, einen eigenen Melodie-Charakter, eine eigene Besetzung
+der Sektionen und ein eigenes Klangbild, und jeder Song würfelt aus seinem Seed eigene Klänge, Grooves, Intro und
+Schluss (siehe [Neu in 1.4](#neu-in-14)).
+
 Keine Sektion klingt zweimal gleich: Die zweite Strophe bekommt eine Gegenstimme, der letzte Refrain Chor und Glockenspiel in der Oktave der Hook, und im Refrain spielen mehrere Synth-Schichten zusammen.
 
 Auch der Ablauf ändert sich von Song zu Song. Je nach Stil und Zufall steigt der letzte Refrain einen oder zwei Halbtöne oder bleibt in der Tonart, beginnt leise nur mit Klavier und Streichern (wie das „Ochisabi“ im J-Pop), die Bridge wird zum Breakdown ohne Schlagzeug, oder die zweite Strophe beginnt im Halftime. Was ein Song davon hat, steht im Protokoll unter „Ablauf“. „Akkorde“ neu würfeln würfelt auch das neu.
@@ -653,6 +714,8 @@ uv run vocaloid_generator\main.py --style Rock --bpm 140 --key E --scale minor -
 | `--ki-melodie`, `--ohne-ki-melodie` | das Modell der KI-Begleitung schlägt Refrain-Melodien vor (Versuch), oder nicht |
 | `--ohne-kime`, `--ohne-band-groove`, `--ohne-bass-laeufe`, `--ohne-laeufe`, `--ohne-anison-grooves`, `--ohne-aufbau` | Band 1.3 einzeln abschalten |
 | `--ohne-surge-klaenge`, `--ohne-verstaerker-modelle`, `--ohne-druck` | eigene Synths statt Surge XT, eingebauter Verzerrer statt Verstärker-Modell, Mix ohne Parallel-, Bus- und Mehrband-Kompression |
+| `--ohne-stil-akkorde`, `--ohne-melodie-charakter`, `--ohne-stil-arrangement`, `--ohne-song-charakter`, `--ohne-klangbild` | Charakter 1.4 einzeln abschalten: Akkorde, Melodie, Besetzung, Klänge und Grooves pro Song, Hall und Klang wie bis 1.3 |
+| `--ohne-wohlfuehlbereich`, `--ohne-sanfte-nachbearbeitung`, `--ohne-weiche-gesangskette` | Stimme 1.4 einzeln abschalten: kein Tempo-Hinweis und StyleShift pro Sektion zerlegt immer, jede Phrase ganz neu gerechnet, die Gesangskette mit 6:1 wie bis 1.3 |
 | `-v` | alle Details ausgeben |
 
 Die fertigen Dateien landen in `Songs` im Datenordner (oder im Ordner aus den Einstellungen): `final_song.mp3`, `final_mix.wav`, `final_song_offvocal.mp3` (ohne Gesang), `final_song_acappella.mp3` (nur Gesang), die einzelnen Spuren als WAV und MIDI, `vocals.xml` für NEUTRINO, die `.ust`-Dateien für OpenUtau und `liedtext.json` mit der Zeit jeder Silbe (für das Mitlesen und das Lyric-Video).

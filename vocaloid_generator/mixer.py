@@ -8,7 +8,7 @@ from typing import Optional
 import numpy as np
 import pretty_midi
 import soundfile as sf
-from pedalboard import (Compressor, Delay, HighpassFilter, HighShelfFilter, Limiter, LowpassFilter,
+from pedalboard import (Compressor, Delay, HighpassFilter, HighShelfFilter, Limiter, LowpassFilter, LowShelfFilter,
                         Pedalboard, PeakFilter, Reverb, load_plugin)
 
 from config import SOUNDFONT_PFAD
@@ -314,9 +314,11 @@ def _channel_chain(key: str, tone=None) -> Pedalboard:
     """EQ und Kompressor einer Spur; tone (vocal_tone.Tone): die Kette des Gesangs für Stimme und Stil."""
     if key == "vocals" and tone is not None:
         return Pedalboard([HighpassFilter(tone.highpass),
-                           Compressor(threshold_db=-14, ratio=tone.ratio, attack_ms=1, release_ms=40),
-                           PeakFilter(tone.mud_hz, tone.mud_db, 1.0), PeakFilter(tone.presence_hz, tone.presence_db, 1.0),
-                           HighShelfFilter(10000, tone.air_db),
+                           Compressor(threshold_db=tone.threshold_db, ratio=tone.ratio, attack_ms=tone.attack_ms,
+                                      release_ms=tone.release_ms),
+                           PeakFilter(tone.mud_hz, tone.mud_db, 1.0),
+                           PeakFilter(tone.presence_hz, tone.presence_db, tone.presence_q),
+                           HighShelfFilter(tone.air_hz, tone.air_db),
                            Compressor(threshold_db=-22, ratio=3, attack_ms=8, release_ms=120)])
     chains = {
         "drums":   [HighpassFilter(30), Compressor(threshold_db=-12, ratio=2.5, attack_ms=15, release_ms=120)],
@@ -526,6 +528,7 @@ def mische_spuren(
     level_of: Optional["Level"] = None,
     tame: bool = False,
     punch: bool = False,
+    sound=None,
 ) -> Optional["Level"]:
     """
     Mischt die Spuren zu einem Stereo-Master:
@@ -560,6 +563,8 @@ def mische_spuren(
     Frequenzen gerade herausstechen.
     punch: Druck (I10): Parallelkompression aufs Schlagzeug, Bus-Kompressor über die Band, Mehrband-Kompressor im
     Master.
+    sound: Klangbild des Stils (1.4.0, style_dna.Sound): Raum, Delay, Klangfarbe, Breite und Sättigung; None = das
+    gemeinsame Klangbild bis 1.3.
     level_of: der Pegel des ganzen Songs (der Rückgabewert seines Mixes); dann ist dieser Mix ein Teil davon
     (Off-Vocal, A-cappella) und geht mit derselben Verstärkung durch den Master, so klingt er so laut wie im Song,
     statt auf target_lufs zu kommen.
@@ -608,6 +613,8 @@ def mische_spuren(
                 audio = _saturate(audio) if vocal_tone is None else _saturate(audio, vocal_tone.drive_db,
                                                                                 vocal_tone.drive_mix)
         audio = _channel_chain("vocals" if key == "double" else key, vocal_tone)(audio, SAMPLE_RATE)
+        if sound is not None and key not in VOCAL_KEYS and key != "fx":
+            audio = _band_color(audio, key, sound)
         if punch and key == "drums":
             audio = parallel_compress(audio)
         if console is not None:
@@ -683,6 +690,8 @@ def mische_spuren(
     if room is not None:
         mix += LowpassFilter(9000)(vocal_mix.convolve(HighpassFilter(250)(send, SAMPLE_RATE), room, SAMPLE_RATE)
                                    * np.float32(HALL_GAIN), SAMPLE_RATE)
+    elif sound is not None:
+        mix += _hall(sound)(send, SAMPLE_RATE) * np.float32(sound.hall_gain)
     else:
         hall = Pedalboard([HighpassFilter(250), Reverb(room_size=0.78, damping=0.45, wet_level=1.0, dry_level=0.0,
                                                        width=1.0), LowpassFilter(9000)])
@@ -696,13 +705,17 @@ def mische_spuren(
                                 LowpassFilter(11000)])
             mix += plate(plate_send, SAMPLE_RATE)
     if np.any(vocal_send):
-        echo = Pedalboard([HighpassFilter(300), Delay(delay_seconds=0.75 * 60.0 / bpm, feedback=0.3, mix=1.0),
-                           LowpassFilter(6000)])
+        beats, feedback, top = (sound.delay_beats, sound.delay_feedback, sound.delay_lowpass) if sound is not None \
+            else (0.75, 0.3, 6000.0)
+        echo = Pedalboard([HighpassFilter(300), Delay(delay_seconds=beats * 60.0 / bpm, feedback=feedback, mix=1.0),
+                           LowpassFilter(top)])
         wet = echo(vocal_send, SAMPLE_RATE)
         if ducked_delay and lead:
             wet = vocal_mix.duck(wet, lead[0], SAMPLE_RATE)
         mix += wet
 
+    if sound is not None:
+        mix = _master_color(mix, sound)
     if buss is not None:
         mix = buss(mix, SAMPLE_RATE)
     master_volume = min(max(volumes.get("master", 1.0), 0.05), 1.0)
@@ -729,6 +742,38 @@ class Level:
     premaster: float
     gain_db: Optional[float] = None     # vor dem Limiter; None nach dem Mastering nach Vorbild
     scale: float = 1.0                  # nach dem Limiter, damit keine Spitze über die Grenze kommt
+
+
+def _hall(sound) -> Pedalboard:
+    """Der gemeinsame Hall im Klangbild des Stils: Größe, Dämpfung, Vorverzögerung und Höhen."""
+    chain = [HighpassFilter(250)]
+    if sound.predelay > 0:
+        chain.append(Delay(delay_seconds=sound.predelay, feedback=0.0, mix=1.0))
+    chain += [Reverb(room_size=sound.room, damping=sound.damping, wet_level=1.0, dry_level=0.0, width=1.0),
+              LowpassFilter(sound.hall_lowpass)]
+    return Pedalboard(chain)
+
+
+BAND_DRIVE_DB = 9.0          # Sättigung der Band im Klangbild des Stils, bei drive 1 zur Hälfte beigemischt
+WIDE_KEYS = ("piano", "guitar", "strings", "synth", "brass", "bells", "choir", "counter", "perc")   # Breite je Stil
+
+
+def _band_color(audio: np.ndarray, key: str, sound) -> np.ndarray:
+    """Sättigung und Stereobreite einer Band-Spur im Klangbild des Stils; Bass und Bassdrum bleiben in der Mitte."""
+    if sound.drive > 0 and key != "bass":
+        audio = _keep_level(_saturate(audio, BAND_DRIVE_DB, 0.5 * sound.drive), audio)
+    if abs(sound.width - 1.0) > 1e-3 and key in WIDE_KEYS and audio.shape[0] == 2:
+        mid, side = (audio[0] + audio[1]) / 2, (audio[0] - audio[1]) / 2 * np.float32(sound.width)
+        audio = np.vstack([mid + side, mid - side]).astype(np.float32)
+    return audio
+
+
+def _master_color(mix: np.ndarray, sound) -> np.ndarray:
+    """Die Klangfarbe des Stils auf der Summe, vor dem Master: Tiefen, Mitten und Höhen."""
+    chain = [f for f, db in ((LowShelfFilter(110, sound.low_db, 0.7), sound.low_db),
+                             (PeakFilter(sound.mid_hz, sound.mid_db, 0.8), sound.mid_db),
+                             (HighShelfFilter(9000, sound.high_db, 0.7), sound.high_db)) if abs(db) >= 0.05]
+    return Pedalboard(chain)(mix, SAMPLE_RATE) if chain else mix
 
 
 def _airwindows(tone, vocal_chain: bool) -> tuple:

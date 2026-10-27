@@ -145,21 +145,23 @@ def _colorize(chord: Chord, symbol: str, color: str, kind: str) -> Chord:
     return chord
 
 
-def _section_bars(kind: str, bars: int, progression: list, mode_class: str, next_kind: Optional[str]) -> list:
-    """Akkordstufen pro Takt dieser Sektion, inklusive Abschluss-Kadenz."""
+def _section_bars(kind: str, bars: int, progression: list, mode_class: str, next_kind: Optional[str],
+                  cadence: Optional[dict] = None) -> list:
+    """Akkordstufen pro Takt dieser Sektion, inklusive Abschluss-Kadenz. cadence: die eigene des Stils (style_dna)."""
     out = [list(progression[b % len(progression)]) for b in range(bars)]
-    cad = CADENCES[mode_class]
+    cad = cadence or CADENCES[mode_class]
     if kind in ("Chorus", "Outro") and bars >= 4:
         out[-2] = cad["end"][0].split()
         out[-1] = [cad["end"][1]]
     elif kind in ("PreChorus", "Build-up") or (kind == "Bridge" and next_kind == "Chorus"):
-        out[-1] = [cad["to_chorus"]]
+        out[-1] = cad["to_chorus"].split()
     return out
 
 
 def build_plan(style: StyleProfile, bpm: float, structure: list, key: str, mode: str, section_config: dict,
                rng: random.Random, min_bars: Optional[dict] = None, custom_chords: Optional[dict] = None,
-               rerolls: Optional[dict] = None, meter: str = "4/4", spice: float = 0.0, spice_seed: str = "") -> SongPlan:
+               rerolls: Optional[dict] = None, meter: str = "4/4", spice: float = 0.0, spice_seed: str = "",
+               own_chords: bool = False) -> SongPlan:
     """
     Legt Tonart, Akkorde und Energie jeder Sektion fest. Gleiche Sektionsarten bekommen dieselbe
     Akkordfolge (der zweite Refrain klingt wie der erste). Der letzte Refrain kann einen oder zwei
@@ -171,8 +173,10 @@ def build_plan(style: StyleProfile, bpm: float, structure: list, key: str, mode:
     meter: im 6/8-Takt sind die Takte aus section_config 6/8-Takte (zwei pro Kompositionstakt), jeder mit eigenem
     Akkord; die Zeiten bleiben in Kompositionsschlägen (meter.Meter.plan rechnet sie um).
     spice: Akkord-Würze 0 bis 1 (chord_spice.py) mit eigenem Zufall aus spice_seed; 0 = wie bis 1.2.
+    own_chords: die eigenen Akkordfolgen und Kadenzen des Stils (1.4.0, style_dna.py); aus = wie bis 1.3.
     """
     import chord_spice
+    import style_dna
     tonic = key_pc(key)
     mode_class = "minor" if is_minor(mode) else "major"
     min_bars = min_bars or {}
@@ -183,7 +187,8 @@ def build_plan(style: StyleProfile, bpm: float, structure: list, key: str, mode:
     for kind in dict.fromkeys(structure):
         bank = SHARED_PROGRESSION.get(kind, kind)
         if bank not in chosen:
-            options = progressions_for(style.name, mode_class, bank)
+            options = (own_chords and style_dna.progressions(style.name, mode_class, bank)) or \
+                progressions_for(style.name, mode_class, bank)
             chosen[bank] = rng.choice(options)
             other = next((r for k, r in (rerolls or {}).items() if SHARED_PROGRESSION.get(k, k) == bank), None)
             if other is not None and len(options) > 1:
@@ -193,6 +198,11 @@ def build_plan(style: StyleProfile, bpm: float, structure: list, key: str, mode:
                 log.info("Akkord-Würze: der Refrain spielt die Marusa-Folge")
         progressions[kind] = custom.get(kind, custom.get(SHARED_PROGRESSION.get(kind, kind), (chosen[bank],)))[0]
 
+    cadence = style_dna.cadences(style.name, mode_class) if own_chords else None
+    if own_chords:
+        log.info("Akkorde je Stil (%s): %s", style.name,
+                 "; ".join(f"{kind} {chosen[SHARED_PROGRESSION.get(kind, kind)]}" for kind in dict.fromkeys(structure)
+                           if kind in ("Verse", "PreChorus", "Chorus", "Bridge")))
     n_chorus = structure.count("Chorus")
     last_chorus_idx = max((i for i, k in enumerate(structure) if k == "Chorus"), default=-1)
     modulation = rng.choice(style.key_changes) if n_chorus >= 2 else 0
@@ -229,7 +239,7 @@ def build_plan(style: StyleProfile, bpm: float, structure: list, key: str, mode:
             bar_symbols = [own[1][b % len(own[1])] for b in range(chord_bars)]
         else:
             bar_symbols = _section_bars(kind, chord_bars, _parse_progression(progressions[kind]), mode_class,
-                                        sec.next_kind)
+                                        sec.next_kind, cadence)
             bar_symbols, spiced = chord_spice.season(bar_symbols, kind, mode_class, spice,
                                                      random.Random(f"{spice_seed}:{kind}:{chord_bars}"))
             if spiced and counts[kind] == 1:

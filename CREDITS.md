@@ -21,6 +21,7 @@ Lizenz. Was mit „lädt die App“ markiert ist, kommt erst über den Einrichte
 | Was | Von | Lizenz |
 | --- | --- | --- |
 | NEUTRINO (nicht dabei, lädst du selbst) | SHACHI / studio-neutrino.com | eigene Bedingungen |
+| Wohlfühl-Tempo und Genres der NEUTRINO-Stimmen (Angaben von den Stimmen-Seiten, 1.4) | studio-neutrino.com | Angaben, kein Code |
 | VOICEVOX (nicht dabei, läuft getrennt) | Hiroshiba Kazuyuki | eigene Bedingungen pro Figur |
 | pyworld (WORLD-Vocoder) | Masanori Morise, Jeremy Hsu | MIT |
 | pyttsx3 (Vorschau-Stimme) | Natesh M Bhat | MPL-2.0 |

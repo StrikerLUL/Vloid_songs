@@ -66,7 +66,7 @@ def _render_instruments(settings: SongSettings, tracks: dict, out: str, report: 
             log.info("%s", drum_kit.status())
             extra = extra + [drum_kit.SFZ_NAME, str(os.path.getmtime(drum_kit.path()))]
     active = [inst for inst in INSTRUMENTS if settings.channels[inst].enabled and tracks.get(inst)]
-    jobs = {inst: _render_job(settings, out, inst) for inst in active}
+    jobs = {inst: _render_job(settings, out, inst, tracks.get("voices")) for inst in active}
     keys = {inst: _render_key(jobs[inst], extra) for inst in active}
     kept = [inst for inst in active if _rendered_before(jobs[inst]["wav_pfad"], keys[inst])]
     for inst in INSTRUMENTS:
@@ -148,10 +148,11 @@ def _remember_render(wav: str, key: str) -> None:
         log.debug("Fingerabdruck für %s nicht gespeichert: %s", wav, e)
 
 
-def _render_job(settings: SongSettings, out: str, inst: str) -> dict:
-    """Die Angaben für mixer.midi_zu_wav: welche Klänge diese Spur spielen."""
+def _render_job(settings: SongSettings, out: str, inst: str, song_voices: Optional[dict] = None) -> dict:
+    """Die Angaben für mixer.midi_zu_wav: welche Klänge diese Spur spielen. song_voices: die eigenen Synth-Stimmen
+    des Songs (tracks["voices"], song_character.py); None = die des Stils."""
     from styles import get_style
-    profile = get_style(settings.style)
+    voices = (song_voices if song_voices is not None else get_style(settings.style).voices).get(inst)
     vst, state = _vst_for(settings, inst)
     return dict(
         midi_pfad=os.path.join(out, f"{inst}.mid"), wav_pfad=os.path.join(out, f"{inst}.wav"),
@@ -160,7 +161,7 @@ def _render_job(settings: SongSettings, out: str, inst: str) -> dict:
         vst_pfad=vst,
         vst_state=state,
         soundfont_pfad=settings.soundfont_file(),
-        voices=None if settings.draft else profile.voices.get(inst),     # eigene Synths brauchen Zeit
+        voices=None if settings.draft else voices,     # eigene Synths brauchen Zeit
         library=settings.sound_library and not settings.own_soundfont(),
         drum_machine=_drum_machine(settings) if inst == "drums" else None,
         amp=settings.guitar_amp,
@@ -168,7 +169,7 @@ def _render_job(settings: SongSettings, out: str, inst: str) -> dict:
         samples=_samples(settings),
         real_drums=settings.real_drums and not settings.own_soundfont() and inst == "drums",
         band=_band(settings),
-        surge=_surge(settings, profile.voices.get(inst)),
+        surge=_surge(settings, voices),
         amp_models=_amp_models(settings),
     )
 

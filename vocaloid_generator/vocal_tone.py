@@ -18,11 +18,16 @@ class Tone:
     ratio: float = 6.0              # erster, schneller Kompressor
     drive_db: float = 6.0           # Sättigung (nur mit der Studio-Kette)
     drive_mix: float = 0.3
+    threshold_db: float = -14.0     # erster Kompressor: ab hier, so schnell und so lange (1.4.0 weicher)
+    attack_ms: float = 1.0
+    release_ms: float = 40.0
+    presence_q: float = 1.0         # Breite der Präsenz-Anhebung (kleiner = breiter und weicher)
+    air_hz: float = 10000.0
 
     def describe(self) -> str:
         return (f"Hochpass {self.highpass:.0f} Hz, {self.mud_db:+.1f} dB bei {self.mud_hz:.0f} Hz, "
                 f"{self.presence_db:+.1f} dB bei {self.presence_hz / 1000:g} kHz, Glanz {self.air_db:+.1f} dB, "
-                f"Kompressor {self.ratio:g}:1, Sättigung {self.drive_mix:.0%}")
+                f"Kompressor {self.ratio:g}:1 in {self.attack_ms:g} ms, Sättigung {self.drive_mix:.0%}")
 
 
 STANDARD = Tone()                    # die Kette bis 1.0
@@ -47,6 +52,25 @@ STYLES = {
     "Drum and Bass": {"presence_db": 0.5},
 }
 ADDED = ("mud_db", "presence_db", "air_db")
+
+
+# 1.4.0 weichere Gesangskette: der erste Kompressor griff mit 6:1 in einer Millisekunde zu, quetschte jeden Einsatz und
+# machte die Stimme flach; die Präsenz saß schmal bei 3,5 kHz, wo NEUTRINO-Stimmen ohnehin spitz klingen. Jetzt
+# höchstens 3:1, Einsätze dürfen durch, die Präsenz ist breiter und höher, der Glanz sitzt bei 12 kHz.
+SOFT_RATIO = 3.0
+SOFT_CHAIN = {"threshold_db": -18.0, "attack_ms": 6.0, "release_ms": 80.0, "presence_q": 0.7, "air_hz": 12000.0}
+SOFT = SOFT_CHAIN                   # die Tests schalten sie hier ab (conftest.py)
+SOFT_PRESENCE = (0.6, 1000.0)       # Präsenz: so viel davon, so viel Hz höher
+SOFT_DRIVE = 0.7                    # Sättigung: so viel davon
+
+
+def softened(tone: Tone) -> Tone:
+    """Die weichere Gesangskette (1.4.0) zu einer Kette; ohne SOFT (die Tests) bleibt sie, wie sie ist."""
+    if not SOFT:
+        return tone
+    share, higher = SOFT_PRESENCE
+    return replace(tone, ratio=min(tone.ratio, SOFT_RATIO), presence_db=tone.presence_db * share,
+                   presence_hz=tone.presence_hz + higher, drive_mix=tone.drive_mix * SOFT_DRIVE, **SOFT)
 
 
 def voice_kind(singer: Optional[str]) -> str:

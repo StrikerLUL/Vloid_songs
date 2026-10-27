@@ -28,16 +28,21 @@ WEIGHTS = {"range": 1.0, "peak": 1.0, "moves": 1.5, "runs": 0.8, "motif": 1.0, "
 
 
 def score(notes: list, kind: str, below: Optional[list] = None, top: Optional[int] = None,
-          bar_beats: float = 4) -> float:
+          bar_beats: float = 4, targets: Optional[dict] = None) -> float:
     """
     Punkte einer Sektion (MelNotes), mehr ist besser. below: die schon geschriebenen Töne der Sektionen vor dem
     Refrain (der Refrain soll höher hinaus), top: höchster Ton der Stimme, bar_beats: Schläge pro Takt.
+    targets: was im Stil anders gut ist (1.4.0, style_dna.MelodyCharacter.score): "steps", "leaps", "repeats" als
+    (von, bis), "range" als {Sektionsart: (von, bis)}, "motif_weight" als Gewicht der Motive.
     """
-    return sum(WEIGHTS[name] * value for name, value in parts(notes, kind, below, top, bar_beats).items())
+    weights = dict(WEIGHTS)
+    if targets and "motif_weight" in targets:
+        weights["motif"] = targets["motif_weight"]
+    return sum(weights[name] * value for name, value in parts(notes, kind, below, top, bar_beats, targets).items())
 
 
 def parts(notes: list, kind: str, below: Optional[list] = None, top: Optional[int] = None,
-          bar_beats: float = 4) -> dict:
+          bar_beats: float = 4, targets: Optional[dict] = None) -> dict:
     """Die einzelnen Punkte (jeweils etwa -1 bis 1), zum Nachsehen und für die Tests."""
     sung = sorted((n for n in notes if not getattr(n.syllable, "melisma", False)), key=lambda n: n.start)
     if len(sung) < 2:
@@ -45,9 +50,9 @@ def parts(notes: list, kind: str, below: Optional[list] = None, top: Optional[in
     pitches = [n.pitch for n in sung]
     moves = [b.pitch - a.pitch for a, b in zip(sung, sung[1:]) if b.start - a.start - a.dur < PHRASE_GAP]
     return {
-        "range": _range(pitches, kind),
+        "range": _range(pitches, kind, (targets or {}).get("range")),
         "peak": _peak(sung),
-        "moves": _moves(moves),
+        "moves": _moves(moves, targets),
         "runs": _runs(sung),
         "motif": _motif(sung, bar_beats),
         "text": _text(notes),
@@ -57,8 +62,8 @@ def parts(notes: list, kind: str, below: Optional[list] = None, top: Optional[in
     }
 
 
-def _range(pitches: list, kind: str) -> float:
-    lo, hi = IDEAL_RANGE.get(kind, (7, 11))
+def _range(pitches: list, kind: str, own: Optional[dict] = None) -> float:
+    lo, hi = (own or {}).get(kind) or IDEAL_RANGE.get(kind, (7, 11))
     span = max(pitches) - min(pitches)
     return 1.0 - 0.25 * max(lo - span, span - hi, 0)
 
@@ -76,15 +81,17 @@ def _share_penalty(share: float, bounds: tuple) -> float:
     return max(lo - share, share - hi, 0.0) * 4
 
 
-def _moves(moves: list) -> float:
+def _moves(moves: list, targets: Optional[dict] = None) -> float:
     if not moves:
         return 0.0
+    targets = targets or {}
     n = len(moves)
     steps = sum(1 for m in moves if 1 <= abs(m) <= 2) / n
     leaps = sum(1 for m in moves if abs(m) >= 3) / n
     repeats = sum(1 for m in moves if m == 0) / n
-    return 1.0 - _share_penalty(steps, STEP_SHARE) - _share_penalty(leaps, LEAP_SHARE) - \
-        _share_penalty(repeats, REPEAT_SHARE)
+    return 1.0 - _share_penalty(steps, targets.get("steps", STEP_SHARE)) - \
+        _share_penalty(leaps, targets.get("leaps", LEAP_SHARE)) - \
+        _share_penalty(repeats, targets.get("repeats", REPEAT_SHARE))
 
 
 def _runs(sung: list) -> float:
@@ -149,8 +156,8 @@ def _high(sung: list, top: Optional[int]) -> float:
 
 
 def pick(candidates: list, kind: str, below: Optional[list] = None, top: Optional[int] = None,
-         bar_beats: float = 4) -> tuple:
+         bar_beats: float = 4, targets: Optional[dict] = None) -> tuple:
     """Die beste Fassung: (Index, Punkte, Schnitt aller Fassungen). candidates: Listen von MelNotes."""
-    scores = [score(c, kind, below, top, bar_beats) for c in candidates]
+    scores = [score(c, kind, below, top, bar_beats, targets) for c in candidates]
     best = max(range(len(scores)), key=lambda i: (scores[i], -i))
     return best, scores[best], sum(scores) / len(scores)

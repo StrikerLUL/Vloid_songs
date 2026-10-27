@@ -97,6 +97,15 @@ ELSEWHERE = {
     "vocal_pocket": "test_gesang_130.py::test_the_voice_sits_behind_or_ahead_of_the_beat_by_style",
     "diffsinger_expression": "test_gesang_130.py::test_diffsinger_breathes_in_the_verse_and_pushes_in_the_chorus",
     "ai_melody": "test_melodie_130.py::test_the_ai_suggests_chorus_melodies_and_the_better_one_sings",
+    # 1.4.0
+    "style_chords": "test_charakter_140.py::test_each_style_has_its_own_chords_and_cadences",
+    "melody_character": "test_charakter_140.py::test_each_style_sings_with_its_own_melody_character",
+    "style_arrangement": "test_charakter_140.py::test_each_style_arranges_its_sections",
+    "song_character": "test_charakter_140.py::test_each_song_gets_its_own_character_from_the_seed",
+    "style_sound": "test_charakter_140.py::test_each_style_has_its_own_room_and_color",
+    "voice_comfort": "test_stimme_140.py::test_the_voice_comfort_names_better_voices_and_sings_in_one_piece",
+    "gentle_reshape": "test_stimme_140.py::test_gentle_reshape_only_touches_what_changes",
+    "soft_vocal_chain": "test_stimme_140.py::test_the_soft_chain_lets_the_attacks_through",
 }
 # Bedienung der App, ändert den Song nicht
 APP = ("show_karaoke", "reuse_steps", "log_file", "update_check", "setup_wizard", "done_notice", "lyric_hints",

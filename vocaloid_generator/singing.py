@@ -47,7 +47,8 @@ VOCAL_FIELDS = ("bpm", "meter", "seed", "rap_voice", "rap_speaker", "singer", "v
                 "harmony_variety", "harmony_double", "sung_pads", "adlibs", "idol_calls", "syllable_dynamics",
                 "recorded_breaths", "psola_reshape", "own_vocal", "own_vocal_align", "phrase_fixes", "style",
                 "telephone_fx", "stutter_fx", "hard_tune", "formant_fx", "vocal_swing", "breathiness", "shimmer",
-                "intonation", "ornaments", "vocal_pocket", "group_vocals", "diffsinger_expression", "spoken_sound")
+                "intonation", "ornaments", "vocal_pocket", "group_vocals", "diffsinger_expression", "spoken_sound",
+                "voice_comfort", "gentle_reshape")
 
 
 def _vocal_key(settings: SongSettings, tracks: dict) -> str:
@@ -448,6 +449,8 @@ def _sing_neutrino(settings: SongSettings, tracks: dict, out: str, vocals_wav: s
     log.info("%s; singe mit %s", neutrino_info(neutrino_dir), voice)
     if neutrino_hinweis(neutrino_dir):
         log.warning(neutrino_hinweis(neutrino_dir))
+    if settings.voice_comfort and VOICE_COMFORT and lead and not group:
+        _comfort_hint(settings, neutrino_dir)
     if group:
         _sing_group(settings, tracks, out, neutrino_dir, group, vocals_wav)
     elif duet:
@@ -509,9 +512,18 @@ def _neutrino_lead(settings: SongSettings, data: list, xml: str, wav: str, neutr
             if part.xml != xml:
                 remove_file(part.xml)
     double = os.path.join(os.path.dirname(wav), "vocals_double.wav")
+    gentle = settings.gentle_reshape and voice_fx.GENTLE_CENTS > 0
     if os.path.exists(double):
-        voice_fx.reshape(double, notes, psola=settings.psola_reshape, **pitch_options(settings))
-    voice_fx.reshape(wav, notes, psola=settings.psola_reshape, **pitch_options(settings))
+        voice_fx.reshape(double, notes, psola=settings.psola_reshape, gentle=gentle, **pitch_options(settings))
+    voice_fx.reshape(wav, notes, psola=settings.psola_reshape, gentle=gentle, **pitch_options(settings))
+
+
+def _comfort_hint(settings: SongSettings, neutrino_dir: str) -> None:
+    """1.4.0 Wohlfühlbereich: ein Hinweis im Protokoll, wenn das Tempo der Stimme nicht liegt."""
+    from vocal_synthesizer import installed_singers, komfort_hinweis
+    hint = komfort_hinweis(settings.singer, settings.bpm, settings.style, tuple(installed_singers(neutrino_dir)))
+    if hint:
+        log.warning(hint)
 
 
 def pitch_options(settings: SongSettings) -> dict:
@@ -564,6 +576,8 @@ def _phrase_shifts(settings: SongSettings, notes: list, sections: list) -> list:
     base = settings.style_shift
     if not settings.section_style or not sections:
         return [base] * len(notes)
+    if settings.voice_comfort and VOICE_COMFORT and not _styleshift_arrives(settings):
+        return [base] * len(notes)
     offsets = {"Verse": settings.verse_style_shift, "Chorus": settings.chorus_style_shift}
     groups = voice_fx.phrases(notes)
     out, used = [], {}
@@ -574,6 +588,25 @@ def _phrase_shifts(settings: SongSettings, notes: list, sections: list) -> list:
     if len(set(out)) > 1:
         log.info("StyleShift pro Sektion: %s", ", ".join(f"{kind} {shift:+d}" for kind, shift in used.items()))
     return out
+
+
+# 1.4.0 Wohlfühlbereich: ohne StyleShift (NEUTRINO 3.0 bis 3.2.1 mit Run.bat ohne StyleShift) klingen alle Sektionen
+# gleich; dann singt NEUTRINO den Song am Stück, statt ihn in Gruppen zu zerlegen, die nur Zeit und Schnitte kosten.
+# Dazu ein Hinweis, wenn das Tempo nicht im Wohlfühlbereich der Stimme liegt (vocal_synthesizer.komfort_hinweis).
+VOICE_COMFORT = True                # die Tests schalten ihn hier ab (conftest.py)
+_NO_STYLESHIFT_SAID: set = set()
+
+
+def _styleshift_arrives(settings: SongSettings) -> bool:
+    from vocal_synthesizer import kennt_styleshift
+    neutrino_dir = settings.neutrino_dir()
+    if kennt_styleshift(neutrino_dir):
+        return True
+    if neutrino_dir not in _NO_STYLESHIFT_SAID:
+        _NO_STYLESHIFT_SAID.add(neutrino_dir)
+        log.info("Diese NEUTRINO-Ausgabe kennt keinen StyleShift: der Gesang wird am Stück gesungen, nicht pro "
+                 "Sektion (StyleShift pro Sektion braucht NEUTRINO 3.2.2 oder neuer)")
+    return False
 
 
 def _sing_takes(settings: SongSettings, parts: list, wav: str, neutrino_dir: str) -> list:

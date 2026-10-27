@@ -41,7 +41,9 @@ ProgressFn = Callable[[float, str], None]
 NEW_COMPOSITION = ("best_melody", "melody_pickups", "intro_riff", "kime", "melody_tensions", "melody_climax",
                    "chord_spice", "melody_triplets", "band_groove", "bass_runs", "band_runs", "anison_grooves",
                    "section_buildup")
-COMPOSITION_EXTRAS = NEW_COMPOSITION     # die Tests schalten sie hier ab (conftest.py)
+# Neuerungen aus 1.4.0, die die Noten ändern (Charakter je Stil und Song)
+NEW_140 = ("style_chords", "melody_character", "style_arrangement", "song_character")
+COMPOSITION_EXTRAS = NEW_COMPOSITION + NEW_140     # die Tests schalten sie hier ab (conftest.py)
 
 
 @dataclass
@@ -89,7 +91,7 @@ def sung_lyrics(settings: SongSettings) -> dict:
 
 
 def composition_extras(settings: SongSettings) -> dict:
-    """{Schalter: Wert} der eingeschalteten Neuerungen aus 1.3.0, die die Noten ändern (0 und aus fehlen)."""
+    """{Schalter: Wert} der eingeschalteten Neuerungen aus 1.3.0 und 1.4.0, die die Noten ändern (0 und aus fehlen)."""
     return {name: getattr(settings, name) for name in COMPOSITION_EXTRAS if getattr(settings, name)}
 
 

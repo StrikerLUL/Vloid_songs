@@ -2,13 +2,15 @@
 
 Erzeugt komplette Vocaloid-Songs auf Knopfdruck: Akkorde, Bass, Schlagzeug, Melodie und Begleitung, Gesang mit NEUTRINO oder VOICEVOX (oder einer lokalen Vorschau-Stimme), Mix mit Kompressor und Limiter und am Ende eine fertige MP3.
 
-Läuft unter Windows. Version 1.3.1: Was neu ist, steht in der [Anleitung › Neu in 1.3](ANLEITUNG.md#neu-in-13).
+Läuft unter Windows. Version 1.4.0: Jeder Stil und jeder Song hat jetzt seinen eigenen Charakter (eigene Akkorde,
+Melodie, Besetzung, Klangbild, Klänge und Grooves), und die Stimme klingt runder. Was neu ist, steht in der
+[Anleitung › Neu in 1.4](ANLEITUNG.md#neu-in-14).
 
 | Zum Lesen | Was drinsteht |
 | --- | --- |
 | [ANLEITUNG.md](ANLEITUNG.md) | Erste Schritte, was die App kann, jeder Schalter, alle Details und die Kommandozeile (in der App: Hilfe › Erste Schritte) |
 | [FEHLERBEHEBUNG.md](FEHLERBEHEBUNG.md) | wenn etwas nicht klappt (Hilfe › Fehlerbehebung) |
-| [TESTLISTE.md](TESTLISTE.md) | der Praxistest für 1.3.0 (mit den Punkten aus 1.1 und 1.2) |
+| [TESTLISTE.md](TESTLISTE.md) | der Praxistest für 1.4.0 (mit den Punkten aus 1.1 bis 1.3) |
 | [CHANGELOG.md](CHANGELOG.md) | was in jeder Version neu ist |
 | [CREDITS.md](CREDITS.md) | wessen Arbeit drinsteckt, mit Lizenzen |
 
@@ -55,8 +57,11 @@ Alle Optionen stehen in der [Anleitung unter Kommandozeile](ANLEITUNG.md#kommand
 
 ## Was die App kann
 
+- **Charakter:** jeder Stil mit eigenen Akkordfolgen und Kadenzen, eigenem Melodie-Charakter (gebunden, hüpfend,
+  gerufen, zurückgelehnt), eigener Besetzung und eigenem Klangbild; jeder Song würfelt eigene Klänge, Grooves, Intro und
+  Schluss, damit zwei Songs eines Stils nicht gleich klingen.
 - **Komponieren:** zehn Stile, Bauplan mit bewährten Akkordfolgen und Akkord-Würze, die eingängigste von 30 Melodien je Sektion (nach dem Wortakzent, mit Auftakten, Triolen und Höhepunkt im letzten Refrain), eigenes Intro-Riff, Begleitung mit Kime, Läufen und Aufbau, Schlagzeug mit Grooves echter Schlagzeuger und Anison-Grooves, 4/4-, 3/4- und 6/8-Takt, Rap-Teil, Solo, KI-Melodie (Versuch).
-- **Singen:** NEUTRINO (mit Fassungen und Comping, StyleShift pro Sektion, Duett, Gruppe aus drei oder vier Stimmen, Begleitstimmen, Idol-Rufen), sanft geglättete Tonhöhe, dezente Verzierungen und Gesang im Groove, VOICEVOX (auch für gesprochene Zeilen), DiffSinger (Versuch) oder eine eigene Gesangsspur.
+- **Singen:** NEUTRINO (mit Fassungen und Comping, StyleShift pro Sektion, Duett, Gruppe aus drei oder vier Stimmen, Begleitstimmen, Idol-Rufen, Hinweis auf das Wohlfühl-Tempo jeder Stimme), sanfte Nachbearbeitung und weiche Gesangskette, sanft geglättete Tonhöhe, dezente Verzierungen und Gesang im Groove, VOICEVOX (auch für gesprochene Zeilen), DiffSinger (Versuch) oder eine eigene Gesangsspur.
 - **Klingen:** SoundFonts, Orchester, Flügel, Bass und Gitarre aus echten Aufnahmen, Klänge aus Surge XT, Modelle echter Verstärker, Drum-Machines, ein Mix mit Druck und Platz für den Gesang, Härte zähmen, Mastering nach Vorbild-Songs.
 - **Ändern:** Neu würfeln pro Teil und Sektion, Töne in der Piano-Roll ziehen, eine Phrase neu singen, Remix in einem anderen Stil, Wieder öffnen aus dem Verlauf.
 - **Schreiben:** Japanisch mit Kanji, Romaji und englischen Wörtern, は, へ, を und Zahlwörter richtig gelesen, eigene Lesungen, eigener Text pro Wiederholung, Text-Helfer, Song-Rezepte mit Beispieltext.
@@ -82,6 +87,8 @@ uv run pytest -m "not slow"   # ohne den Test, der echtes Audio rendert
 | `rap.py`, `vocal_chops.py` | Rap-Teil von der VOICEVOX-Sprechstimme; Vocal Chops im Drop |
 | `theory.py` | Tonarten, Akkorde, Stufen wie „IVmaj7“, Griffe mit Stimmführung |
 | `styles.py` | die Stile: Instrumente, Spielweisen pro Sektion, Akkordfolgen, Mix |
+| `style_dna.py` | was jeden Stil ausmacht (1.4): eigene Akkordfolgen und Kadenzen, Melodie-Charakter, Arrangement, Klangbild |
+| `song_character.py` | jeder Song ein eigenes Gesicht (1.4): Klänge, Synth-Stimmen, Grooves, Spielweisen, Intro und Schluss aus dem Seed |
 | `song_plan.py` | Bauplan: Sektionen, Tonarten, Akkorde und Energie |
 | `melody_writer.py` | Gesangsmelodie mit Motiven, Refrain-Hook, Wortakzent, Melisma und Duett-Aufteilung |
 | `melody_import.py` | eigene Melodie aus einer MIDI-Datei lesen und in eine Sektion legen |

@@ -46,6 +46,7 @@ def mix_arguments(settings: SongSettings, tracks: dict, out: str, has_vocals: bo
         true_peak=settings.true_peak,
         tame=settings.resonance_tamer,
         punch=settings.mix_punch,
+        sound=_sound(settings),
         sung_pads=chorus_windows(plan) if has_vocals and os.path.exists(
             os.path.join(out, "vocals_flaechen.wav")) else None,
         vocal_space=sections_in_seconds(plan) if plan is not None else None,
@@ -54,16 +55,30 @@ def mix_arguments(settings: SongSettings, tracks: dict, out: str, has_vocals: bo
 
 
 def _vocal_tone(settings: SongSettings, out: str):
-    """Kette pro Stimme und Stil (vocal_tone.py); die Stimmlage kennt die App nur von NEUTRINO-Stimmen."""
-    if not settings.vocal_tone:
-        return None
-    import vocal_check
+    """Kette pro Stimme und Stil (vocal_tone.py); die Stimmlage kennt die App nur von NEUTRINO-Stimmen. Mit der
+    weicheren Gesangskette (1.4.0) greift der erste Kompressor sanfter zu, und die Präsenz ist breiter."""
     import vocal_tone
+    if not settings.vocal_tone:
+        return vocal_tone.softened(vocal_tone.STANDARD) if settings.soft_vocal_chain and vocal_tone.SOFT else None
+    import vocal_check
     info = vocal_check.read(out) or {}
     singer = settings.singer if info.get("engine") == "NEUTRINO" else None
     tone = vocal_tone.for_song(singer, settings.style)
+    if settings.soft_vocal_chain:
+        tone = vocal_tone.softened(tone)
     log.info("Gesangskette: %s Stimme, %s (%s)", vocal_tone.voice_kind(singer), settings.style, tone.describe())
     return tone
+
+
+def _sound(settings: SongSettings):
+    """Das Klangbild des Stils (1.4.0, style_dna.Sound): Raum, Delay, Klangfarbe, Breite, Sättigung; None = aus."""
+    if not settings.style_sound:
+        return None
+    import style_dna
+    sound = style_dna.sound(settings.style)
+    if sound is not None:
+        log.info("Klangbild %s: %s", settings.style, sound.describe())
+    return sound
 
 
 def _reference_targets(settings: SongSettings, tracks: dict, out: str, has_vocals: bool) -> dict:

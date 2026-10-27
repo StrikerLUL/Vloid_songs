@@ -32,8 +32,18 @@ und Systeminfo (keine Songs) und landet in `Dokumente\Vloid Songs\Fehlerberichte
 - **Ein Song dauert lange.** NEUTRINO braucht pro Fassung so lange wie für eine. Weniger Fassungen (Tab Gesang),
   zum Ausprobieren „Entwurf“ nehmen. Klang-Veredler und KI-Begleitung brauchen ohne NVIDIA-Grafikkarte sehr lange;
   unter Pfade ausschalten.
-- **Strophe und Refrain klingen gleich**, im Protokoll steht ein Hinweis zu StyleShift. Die NEUTRINO-Ausgabe mit
-  Tuning-Tool (.ex) kennt keinen StyleShift. Für StyleShift pro Sektion die normale Ausgabe installieren.
+- **Die Stimme klingt rau, verwaschen oder blechern.** Zuerst die NEUTRINO-Ausgabe ansehen (Hilfe › Einrichten):
+  Vor 3.2.2 singt NEUTRINO mit dem alten Vocoder, der deutlich rauer klingt. Die neue Ausgabe gibt es kostenlos auf
+  studio-neutrino.com; entpacken, die Stimmen in `model` legen und in Einrichten den neuen Ordner wählen. Dann ins
+  Protokoll sehen: Steht dort „singt laut NEUTRINO am schönsten bei …“, ist das Tempo für die Stimme zu schnell oder
+  zu langsam (MERROW etwa 80 bis 140 BPM); das Tempo ändern oder eine der genannten Stimmen nehmen. Tab Gesang
+  „Sanfte Nachbearbeitung“ und „Weichere Gesangskette“ sollten an sein.
+- **Strophe und Refrain klingen gleich**, im Protokoll steht ein Hinweis zu StyleShift. NEUTRINO bis 3.2.1 und die
+  Ausgabe mit Tuning-Tool (.ex) kennen keinen StyleShift; dann singt die App den Song am Stück. Für StyleShift pro
+  Sektion NEUTRINO 3.2.2 oder neuer installieren.
+- **Alle Songs klingen ähnlich.** Seit 1.4 hat jeder Stil eigene Akkorde, Melodie, Besetzung und Klang, und jeder Song
+  würfelt eigene Klänge, Grooves, Intro und Schluss. Sind die Schalter dafür an (Tab Song, Band, Mix)? Mit festem
+  Seed klingt jeder Song gleich; im Tab Song das Seed-Feld leeren.
 - **Ein Effekt stört** (Telefon, Stottern, harter Tune, Flächen, Ad-libs …). Jeder hat einen Schalter im Tab Gesang.
 - **DiffSinger singt nicht, es singt NEUTRINO.** Im Protokoll steht warum. Meist fehlt der Vocoder (z. B. nsf_hifigan):
   die `.oudep`-Datei, die bei der Stimme verlinkt ist, in OpenUtau ziehen; sie landet in `Dependencies`. Oder im Tab

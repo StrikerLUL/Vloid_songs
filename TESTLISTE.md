@@ -1,7 +1,7 @@
-# Testliste für Vloid Songs 1.3.0
+# Testliste für Vloid Songs 1.4.0
 
-Etwa anderthalb Stunden auf deinem PC, davon viel Warten. 1.1 und 1.2 sind noch nicht getestet, deshalb stehen ihre
-Punkte (A bis I) weiter hier; neu in 1.3 ist Teil J. Wenig Zeit: A, B, C und J. Hak ab, was klappt, und schreib zu
+Etwa anderthalb Stunden auf deinem PC, davon viel Warten. 1.1 bis 1.3 sind noch nicht ganz getestet, deshalb stehen
+ihre Punkte (A bis J) weiter hier; neu in 1.4 ist Teil K, und der ist der wichtigste. Wenig Zeit: A, B, C und K. Hak ab, was klappt, und schreib zu
 allem anderen eine Zeile, was passiert ist. Am Ende **Hilfe › Fehlerbericht speichern** und das ZIP zusammen mit der
 Liste zurückschicken.
 
@@ -128,6 +128,29 @@ genannten Schalter aus erzeugen und im Tab Verlauf mit A und B hin- und herschal
 - [ ] Tab Mix › Druck aus und an: Hat das Schlagzeug mehr Druck, klingt die Band mehr wie aus einem Guss, ohne dass es
       pumpt?
 
+## K. Neu in 1.4: Charakter und Stimme (20 Minuten)
+
+Hier geht es darum, ob die Songs jetzt verschieden genug klingen und die Stimme schöner ist. Für die Vergleiche
+„Seed festhalten“ anhaken und im Tab Verlauf mit A und B umschalten.
+
+- [ ] Hilfe › Einrichten: Welche NEUTRINO-Ausgabe steht dort? Ist sie älter als 3.2.2, die neue von
+      studio-neutrino.com installieren (kostenlos, die Stimmen in `model` legen, in Einrichten den neuen Ordner
+      wählen). Das ist der größte Schritt für eine schönere Stimme.
+- [ ] Drei Songs hintereinander im selben Stil (Seed-Feld leer), z. B. J-Pop Energy. Klingen sie verschieden (andere
+      Klänge, anderer Groove, anderes Intro, anderer Schluss)? Im Protokoll steht bei jedem eine Zeile „Charakter: …“.
+- [ ] Je einen Song in Ballade, Rock, City Pop und Kawaii Chiptune. Erkennst du die Stile blind am Klang, an den
+      Akkorden und an der Art, wie die Melodie singt (Ballade gebunden, Kawaii kurz und hüpfend, Rock gerufen, City
+      Pop zurückgelehnt)?
+- [ ] Ballade gegen Lo-Fi gegen Rock: Klingt der Raum verschieden (Ballade großer Hall, Lo-Fi klein und dumpf, Rock
+      trocken)? Vergleich: Tab Mix „Klangbild je Stil“ aus.
+- [ ] Stil Rock: Spielt die Gitarre vor dem Refrain abgedämpft und geht im Refrain mit Powerchords auf?
+- [ ] Ein Song mit MERROW bei 160 BPM: Steht im Protokoll „MERROW singt laut NEUTRINO am schönsten bei 80 bis 140 BPM“
+      und eine Stimme, die besser passt? Dasselbe bei 120 BPM: klingt sie sauberer?
+- [ ] Stimme: einmal mit, einmal ohne „Sanfte Nachbearbeitung“ und „Weichere Gesangskette“ (Tab Gesang). Klingt sie
+      mit beiden runder und weniger rau oder spitz? Ist sie noch deutlich genug zu verstehen?
+- [ ] Gefällt dir ein Stil nach dem Update weniger? Dann den Schalter nennen, der es ändert (Akkorde, Melodie,
+      Arrangement, Charakter, Klangbild), und was dich stört.
+
 ## Wenn du mehr Zeit hast
 
 - [ ] **DiffSinger (Versuch):** eine freie DiffSinger-Stimme in OpenUtau installieren (oder in
@@ -157,4 +180,5 @@ genannten Schalter aus erzeugen und im Tab Verlauf mit A und B hin- und herschal
 1. Hilfe › Fehlerbericht speichern (das ZIP liegt in `Dokumente\Vloid Songs\Fehlerberichte`).
 2. Diese Liste mit deinen Haken und Notizen, oder einfach die Punkte, die nicht geklappt haben.
 3. Ein Satz zum Klang: Schlagzeug, Gesang, Idol-Rufe und Rap-Teil und, wenn ausprobiert, DiffSinger, KI-Begleitung und
-   Mix pro Instrument. Für 1.3: Was klingt jetzt besser, und was stört dich beim Hören immer noch am meisten?
+   Mix pro Instrument. Für 1.4: Klingen die Songs jetzt verschieden genug, und was stört dich an der Stimme noch am
+   meisten (rau, nasal, verwaschen, zu leise, zu spitz)? Am besten mit einem kurzen Ausschnitt von `vocals.wav`.

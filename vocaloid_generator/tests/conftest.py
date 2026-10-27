@@ -257,3 +257,45 @@ def without_smart_readings(monkeypatch):
     zurück."""
     import readings
     monkeypatch.setattr(readings, "ACTIVE", False)
+
+
+@pytest.fixture(autouse=True)
+def without_style_sound(monkeypatch):
+    """Kein Klangbild je Stil (1.4.0): die Mixe der Tests klingen wie in 1.3; test_charakter_140.py holt es sich
+    zurück."""
+    import style_dna
+    monkeypatch.setattr(style_dna, "SOUNDS", {})
+
+
+@pytest.fixture(autouse=True)
+def without_soft_vocal_chain(monkeypatch):
+    """Die weichere Gesangskette (1.4.0) ändert die Mixe der Tests nicht; test_stimme_140.py holt sie sich zurück."""
+    import vocal_tone
+    monkeypatch.setattr(vocal_tone, "SOFT", {})
+
+
+@pytest.fixture(autouse=True)
+def without_gentle_reshape(monkeypatch):
+    """Die sanfte Nachbearbeitung (1.4.0) rechnet in den Tests wie bisher jede Phrase ganz und lässt die kleinen
+    Formant-Verschiebungen; test_stimme_140.py holt sie sich zurück."""
+    import style_fx
+    import voice_fx
+    monkeypatch.setattr(voice_fx, "GENTLE_CENTS", 0.0)
+    monkeypatch.setattr(style_fx, "FORMANT_MIN_SHIFT", 0.0)
+
+
+@pytest.fixture(autouse=True)
+def without_voice_comfort(monkeypatch):
+    """Der Wohlfühlbereich der Stimmen (1.4.0) ändert in den Tests nichts: StyleShift pro Sektion zerlegt den Gesang
+    wie bisher, und es gibt keinen Tempo-Hinweis; test_stimme_140.py holt ihn sich zurück."""
+    import singing
+    monkeypatch.setattr(singing, "VOICE_COMFORT", False)
+
+
+@pytest.fixture
+def new_140(monkeypatch):
+    """Die Neuerungen aus 1.3.0 und 1.4.0 in den Noten an, dazu das Klangbild je Stil."""
+    import pipeline
+    import style_dna
+    monkeypatch.setattr(pipeline, "COMPOSITION_EXTRAS", pipeline.NEW_COMPOSITION + pipeline.NEW_140)
+    monkeypatch.setattr(style_dna, "SOUNDS", style_dna.STYLE_SOUNDS)

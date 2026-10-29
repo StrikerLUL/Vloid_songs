@@ -373,7 +373,6 @@ class SongSettings(BaseModel):
     # 1.6.0
     simple_view: bool = True           # einfache Ansicht: Stil, Stimmung, Stimme, Länge, Text, ein Knopf (gui/einfach.py)
     quality: str = "Gut"               # in der einfachen Ansicht: Schnell, Gut oder Beste (qualitaet.py)
-    song_length: str = "Normal"        # in der einfachen Ansicht: Kurz, Normal oder Lang (qualitaet.LENGTHS)
     tidy_switches: bool = True         # Schalter ausblenden, die im Hör-Duell keinen hörbaren Unterschied machten
     mood: float = Field(0.5, ge=0.0, le=1.0)   # Stimmung: 0 ruhig … 1 wild, verschiebt die Spannung aller Sektionen
     tension_curve: bool = True         # die gezeichnete Spannungskurve lenkt Schlagzeug, Besetzung und Mix (spannung.py)
@@ -414,14 +413,6 @@ class SongSettings(BaseModel):
         from qualitaet import PRESETS
         if value not in PRESETS:
             raise ValueError(f"Unbekannte Qualität: {value} (möglich: {', '.join(PRESETS)})")
-        return value
-
-    @field_validator("song_length")
-    @classmethod
-    def _check_length(cls, value: str) -> str:
-        from qualitaet import LENGTHS
-        if value not in LENGTHS:
-            raise ValueError(f"Unbekannte Länge: {value} (möglich: {', '.join(LENGTHS)})")
         return value
 
     @field_validator("tension", mode="before")

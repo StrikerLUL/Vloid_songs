@@ -45,6 +45,12 @@ def past(what: str) -> list:
     return [run for run in _load().get(what, []) if run.get("total", 0) > 0 and run.get("marks")]
 
 
+def typical(what: str) -> Optional[float]:
+    """Wie lange Läufe dieser Art meist dauern (Median in Sekunden); None ohne frühere Läufe."""
+    totals = sorted(run["total"] for run in past(what))
+    return totals[len(totals) // 2] if totals else None
+
+
 def record(what: str, marks: list, total: float) -> None:
     """Einen fertigen Lauf merken; marks: [(Anteil 0–1, Sekunden seit dem Start)]."""
     data = _load()

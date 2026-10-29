@@ -135,7 +135,7 @@ ELSEWHERE = {
 }
 # Bedienung der App, ändert den Song nicht
 APP = ("show_karaoke", "reuse_steps", "log_file", "update_check", "setup_wizard", "done_notice", "lyric_hints",
-       "shortcuts")
+       "shortcuts", "simple_view", "tidy_switches", "remote_lan")
 
 GROUPS = {"NOTES": NOTES, "MIX": tuple(MIX), "RENDER": RENDER, "LIVEN": LIVEN, "STYLE_FX": tuple(STYLE_FX),
           "SCORE": SCORE, "SUGGESTIONS": SUGGESTIONS, "WIRED": WIRED, "ELSEWHERE": tuple(ELSEWHERE), "APP": APP}

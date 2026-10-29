@@ -24,11 +24,12 @@ import pipeline
 import polish
 import preview
 import project
+import qualitaet
 import rating
 import resume
 import updates
 import youtube
-from gui import dialogs, hoerduell, labels, media, panels
+from gui import dialogs, einfach, hoerduell, labels, media, panels
 from gui.components import Karaoke, PianoRoll, WavePlayer, add_style
 from settings import ChannelSettings, SongSettings, edit_key
 from styles import STYLES
@@ -168,6 +169,10 @@ def build() -> None:
         ui.image(os.path.join(os.path.dirname(__file__), "vloid.png")).classes("w-8 h-8")
         ui.label("Vloid Songs").classes("text-h6")
         ui.space()
+        ui.toggle({True: "Einfach", False: "Profi"}).bind_value(settings, "simple_view") \
+            .on_value_change(lambda: show_view()).props("no-caps dense rounded toggle-color=secondary") \
+            .mark("view-toggle").tooltip("Einfach: nur Stil, Stimmung, Stimme, Länge, Qualität und Text. Profi: alle "
+                                         "Einstellungen in Tabs")
         count = ui.select(COUNTS, value=1).props("dense outlined dark").classes("w-36").mark("count") \
             .tooltip("Mehrere Fassungen landen im Verlauf; dort hörst du sie an und behältst die beste.")
         draft_button = ui.button("Entwurf", icon="bolt", on_click=lambda: generate(draft=True)) \
@@ -215,7 +220,7 @@ def build() -> None:
                     .bind_visibility_from(settings, "show_karaoke")
                 stem_row = ui.row().classes("gap-1 q-mt-sm")
                 compare_row = ui.row().classes("items-center gap-1 q-mt-sm")
-            with ui.card().classes("w-full bg-grey-9"):
+            with ui.card().classes("w-full bg-grey-9") as notes_card:
                 with ui.row().classes("w-full items-center gap-1"):
                     ui.label("Noten").classes("text-subtitle1 q-mr-md")
                     legend = ui.row().classes("gap-1")
@@ -236,7 +241,7 @@ def build() -> None:
                         .props("unelevated dense no-caps color=secondary").mark("resing")
                     ui.button("Änderungen verwerfen", icon="undo", on_click=lambda: drop_edits()) \
                         .props("flat dense no-caps").mark("drop-edits")
-            with ui.card().classes("w-full bg-grey-9"):
+            with ui.card().classes("w-full bg-grey-9") as reroll_card:
                 with ui.row().classes("w-full items-center no-wrap"):
                     ui.label("Neu würfeln: nur dieser Teil wird neu, der Rest bleibt").classes("text-subtitle1")
                     ui.space()
@@ -302,13 +307,21 @@ def build() -> None:
 
         # ── Rechts: Einstellungen und Verlauf ─────────────────────────────────────
         with ui.card().classes("bg-grey-9").style("flex: 2; min-width: 440px"):
+            refresh_simple = refresh_text = lambda: None       # bis die Tabs stehen (der Tab-Wechsel ruft sie)
             with ui.tabs().props("dense no-caps align=left").classes("w-full") as tabs:
-                for name, icon in (("Song", "music_note"), ("Text", "notes"), ("Band", "piano"),
-                                   ("Gesang", "mic"), ("Mix", "tune"), ("Video", "movie"),
+                tab_items = {}
+                for name, icon in (("Einfach", "auto_awesome"), ("Song", "music_note"), ("Text", "notes"),
+                                   ("Band", "piano"), ("Gesang", "mic"), ("Mix", "tune"), ("Video", "movie"),
                                    ("Verlauf", "history"), ("Pfade", "folder")):
-                    ui.tab(name, icon=icon).mark(f"tab-{name}")
-            tabs.on_value_change(lambda e: refresh_text() if e.value == "Text" else None)
-            with ui.tab_panels(tabs, value="Song").classes("w-full bg-transparent") as panel_box:
+                    tab_items[name] = ui.tab(name, icon=icon).mark(f"tab-{name}")
+            tabs.on_value_change(lambda e: refresh_text() if e.value == "Text" else
+                                 refresh_simple() if e.value == "Einfach" else None)
+            with ui.tab_panels(tabs, value="Einfach" if settings.simple_view else "Song") \
+                    .classes("w-full bg-transparent") as panel_box:
+                with ui.tab_panel("Einfach"):
+                    refresh_simple = einfach.simple_panel(settings, lambda: _singers(settings),
+                                                          lambda: generate(), lambda: open_duel(),
+                                                          lambda: open_text_builder())
                 with ui.tab_panel("Song"):
                     panels.song_panel(settings, picker, lambda new: assign(settings, new))
                 with ui.tab_panel("Text"):
@@ -364,10 +377,14 @@ def build() -> None:
             current = current.with_updates(variations={}, melody_edits={}, melody_lengths={}, phrase_fixes={},
                                            remix_from="", remix_bpm=0)
         save_settings()
+        simple = settings.simple_view
+        if simple:
+            current = qualitaet.apply(current)      # die Stufe der einfachen Ansicht; die Schalter bleiben
         if draft:
             current, n = pipeline.draft_settings(current), 1
-        n = n or int(count.value or 1)
-        job.start(laufzeit.kind(current, n if not part else 1, draft))
+        n = 1 if simple and not draft else n or int(count.value or 1)
+        job.start(einfach.run_kind(settings, settings.quality) if simple and not draft and not part else
+                  laufzeit.kind(current, n if not part else 1, draft))
         set_busy(True)
         try:
             if n > 1 or part:
@@ -581,6 +598,24 @@ def build() -> None:
         assign(settings, new)
         save_settings()
         tidy()
+
+    def show_view() -> None:
+        """Einfach: nur die Tabs Einfach und Verlauf, ohne Noten, Neu würfeln, Album und Fassungen. Profi: alles."""
+        simple = settings.simple_view
+        for name, tab in tab_items.items():
+            tab.set_visibility(name in ("Einfach", "Verlauf") if simple else name != "Einfach")
+        for element in (notes_card, reroll_card, album_button, count):
+            element.set_visibility(not simple)
+        if simple and panel_box.value not in ("Einfach", "Verlauf"):
+            panel_box.set_value("Einfach")
+        elif not simple and panel_box.value == "Einfach":
+            panel_box.set_value("Song")
+        if simple:
+            refresh_simple()
+
+    def open_text_builder() -> None:
+        from gui import textbau
+        textbau.open_builder(dialog_host, settings, lambda: (refresh_text(), refresh_simple()))
 
     def tidy() -> None:
         """Schalter, die im Hör-Duell keinen hörbaren Unterschied machten, ausblenden (settings.tidy_switches)."""
@@ -1026,6 +1061,9 @@ def build() -> None:
                                   on_click=lambda _, e=entry: favorite(e)).props("flat round dense color=amber") \
                             .mark("history-favorite")
                         thumbs_menu(entry, nr)
+                        ui.button(icon="info_outline", on_click=lambda _, e=entry: song_info(e)) \
+                            .props("flat round dense color=grey").mark("history-info") \
+                            .tooltip("Was steckt in diesem Song? Gewürfeltes, Schalter, was heute anders ist")
                         ui.button(icon="settings_backup_restore", on_click=lambda _, e=entry: restore(e)) \
                             .props("flat round dense").tooltip("Einstellungen dieses Songs übernehmen") \
                             .mark("history-restore")
@@ -1036,6 +1074,9 @@ def build() -> None:
                                          "lässt sich der Song weiter bearbeiten")
                         ui.button(icon="delete", on_click=lambda _, e=entry: remove(e)) \
                             .props("flat round dense color=grey").mark("history-delete")
+
+    def song_info(entry) -> None:
+        einfach.song_info(dialog_host, entry, settings, einfach.switch_names(ui.context.client))
 
     def favorite(entry) -> None:
         history.set_favorite(entry, not entry.favorite)
@@ -1185,6 +1226,7 @@ def build() -> None:
     show_status()
     show_edits()
     tidy()
+    show_view()
     offer_resume()
     on_start()
 

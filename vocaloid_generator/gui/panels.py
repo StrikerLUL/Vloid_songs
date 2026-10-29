@@ -283,7 +283,8 @@ def structure_editor(s: SongSettings) -> None:
         with ui.row().classes("gap-1 items-center"):
             ui.label("Vorlage:").classes("text-caption")
             for text, parts in labels.STRUCTURES.items():
-                ui.button(text, on_click=lambda _, p=parts: set_all(p)).props("outline dense no-caps")
+                ui.button(text, on_click=lambda _, p=parts: set_all(p)).props("outline dense no-caps") \
+                    .mark(f"structure-{text}")
 
     def remove(i: int) -> None:
         if len(s.active_sections) > 1:

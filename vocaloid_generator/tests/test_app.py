@@ -315,7 +315,7 @@ async def test_templates_keep_sound_but_not_text(user, tmp_path, monkeypatch):
 
 async def test_structure_can_be_changed(user):
     await user.open("/")
-    user.find("Kurz").click()
+    user.find(marker="structure-Kurz").click()
     await until(lambda: SongSettings.load().active_sections == ["Intro", "Verse", "PreChorus", "Chorus", "Outro"])
 
 

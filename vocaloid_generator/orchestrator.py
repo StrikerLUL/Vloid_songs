@@ -124,7 +124,8 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
                 for kind in set(structure) if section_config.get(kind, {}).get("has_vocals", True)}
     plan = build_plan(profile, melody_bpm or bpm, structure, key, mode, section_config, dice.part("chords"), min_bars,
                       custom_chords=custom_chords, rerolls=dice.rerolled_kinds("chords"), meter=m.name,
-                      spice=float(extras.get("chord_spice", 0.0)), spice_seed=dice.label("chords") + ":spice")
+                      spice=float(extras.get("chord_spice", 0.0)), spice_seed=dice.label("chords") + ":spice",
+                      own_chords="style_chords" in extras)
     if vocal_range:
         plan.vocal_range = tuple(vocal_range)
     real = m.plan(plan)          # Sektionen und Akkorde an ihren Plätzen im Takt
@@ -132,6 +133,7 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
                                 rerolls=dice.rerolled_kinds("melody"), imported=imported_melody, motifs=motifs,
                                 singable=singable, extras=extras)
     _apply_edits(melody, melody_edits or {}, melody_lengths or {})
+    band, character = _styled_band(band, extras, dice)
     for done in {id(plan): plan, id(real): real}.values():   # ab hier spielt die Band (im Remix ein anderer Stil)
         done.style, done.bpm = band, bpm
     profile = band
@@ -203,6 +205,9 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
         log.info("Läufe: %d Klavierläufe, %d Glissandi, %d Streicherläufe, %d Refrains mit Klavier-Hook",
                  done["runs"], done["glissandi"], done["strings"], done["hooks"])
     _final_chord(plan, events)
+    if character is not None:
+        import song_character
+        song_character.finish(plan, events, character, DRUM_TRACKS)
     _spread_stereo(plan, profile, events, instrument_styles)
     if "band_groove" in extras:
         import groove_feel
@@ -231,6 +236,8 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
     data, syllables = melody_data(sung_notes)
     tracks["harmony_data"], tracks["harmony_silben"] = melody_data(harmony_line(real, sung_notes))
     tracks["vocal_melody"] = vocal_track
+    if character is not None:
+        tracks["voices"] = band.voices          # die Synth-Stimmen des Songs (Charakter), für rendering.py
     tracks["melody_data"] = data
     tracks["silben"] = syllables
     tracks["plan"] = real
@@ -240,6 +247,22 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
 
 
 BREAKDOWN_ENERGY = 0.4
+
+
+def _styled_band(band, extras: dict, dice: "Dice") -> tuple:
+    """1.4.0: die Band mit dem Arrangement ihres Stils (style_dna) und dem eigenen Charakter des Songs
+    (song_character). Rückgabe: (StyleProfile, Charakter oder None)."""
+    from dataclasses import replace as changed
+    if "style_arrangement" in extras:
+        import style_dna
+        band = changed(band, parts=style_dna.arranged(band.parts, band.name))
+    character = None
+    if "song_character" in extras:
+        import song_character
+        character = song_character.choose(band.name, dice.label("character"))
+        band = song_character.apply(band, character)
+        log.info("Charakter: %s", character.describe())
+    return band, character
 
 
 def _pieces(sec) -> list:

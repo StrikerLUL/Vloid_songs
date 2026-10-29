@@ -275,6 +275,16 @@ class SongSettings(BaseModel):
     section_buildup: bool = True       # I7: erste Strophe beginnt nur mit Klavier/Gitarre, Refrain mit Schicht mehr
     surge_sounds: bool = True          # I8: Supersaw, Pluck, Chip, Future-Bass, Reese aus Surge XT (setup_surge.py)
     amp_models: bool = True            # I9: verzerrte Gitarren über NAM-Modelle echter Verstärker (setup_nam.py)
+    # Charakter 1.4.0 (style_dna.py, song_character.py), jedes mit Schalter
+    style_chords: bool = True          # eigene Akkordfolgen und Kadenzen je Stil (Rock bVI-bVII-I, City Pop ii-V-I …)
+    melody_character: bool = True      # Melodie je Stil: Dichte, Rhythmus, Sprünge, Staccato, Bogen
+    style_arrangement: bool = True     # wer wann spielt, je Stil (Lo-Fi ohne Gitarre, Rock ohne Streicher …)
+    song_character: bool = True        # jeder Song eigene Klänge, Grooves, Intro und Schluss (aus dem Seed)
+    style_sound: bool = True           # Klangbild je Stil: Raum, Delay, Klangfarbe, Breite, Sättigung
+    # Stimme 1.4.0
+    voice_comfort: bool = True         # Wohlfühl-Tempo der NEUTRINO-Stimme beachten, ohne StyleShift am Stück singen
+    gentle_reshape: bool = True        # Vibrato und Übergänge nur dort neu rechnen, wo sich etwas ändert
+    soft_vocal_chain: bool = True      # weichere Gesangskette: sanfterer Kompressor, breitere Präsenz
     draft: bool = False                # nur für einen Lauf (pipeline.draft_settings): schneller Entwurf
     auto_rating: bool = True           # mehrere Fassungen automatisch bewerten (setup_bewertung.py), wenn eingerichtet
     guitar_amp: bool = True            # verzerrte E-Gitarren über Verstärker und Box statt verzerrter Samples

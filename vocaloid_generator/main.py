@@ -42,6 +42,20 @@ OFF_130 = (
     ("chord_spice", "--ohne-akkord-wuerze", "nur die Akkordfolgen des Stils, ohne Zwischendominanten und Leihakkorde"),
     ("smart_readings", "--ohne-partikel", "は/へ/を in reinen Kana und Zahlwörter wie 一回 so singen, wie geschrieben"),
 )
+# Neuerungen aus 1.4.0 (Charakter je Stil und Song, schönere Stimme)
+OFF_140 = (
+    ("style_chords", "--ohne-stil-akkorde", "alle Stile teilen sich die Akkordfolgen und Kadenzen wie bis 1.3"),
+    ("melody_character", "--ohne-melodie-charakter", "die Melodie folgt in jedem Stil denselben Regeln"),
+    ("style_arrangement", "--ohne-stil-arrangement", "jede Sektion spielt die Instrumente wie bis 1.3"),
+    ("song_character", "--ohne-song-charakter", "alle Songs eines Stils mit denselben Klängen, Grooves, Intro und "
+                                                "Schluss"),
+    ("style_sound", "--ohne-klangbild", "alle Stile mit demselben Hall, Delay und Master-Klang"),
+    ("voice_comfort", "--ohne-wohlfuehlbereich", "kein Tempo-Hinweis für die Stimme, StyleShift pro Sektion "
+                                                 "zerlegt den Gesang immer"),
+    ("gentle_reshape", "--ohne-sanfte-nachbearbeitung", "Vibrato und Übergänge rechnen jede Phrase ganz neu, "
+                                                        "auch kleine Formant-Verschiebungen"),
+    ("soft_vocal_chain", "--ohne-weiche-gesangskette", "die Gesangskette mit dem schnellen 6:1-Kompressor wie bis 1.3"),
+)
 
 
 def _off(name: str):
@@ -288,7 +302,7 @@ def parse_args(argv=None):
                    help="Protokolle, Einstellungen und Systeminfo als ZIP speichern (ohne Songs) und beenden")
     p.add_argument("--einrichten", metavar="TEILE",
                    help="Klänge und Modelle laden: 'alles' (was noch fehlt) oder z. B. 'soundfonts,samples'")
-    for name, flag, text in OFF_130:
+    for name, flag, text in OFF_130 + OFF_140:
         p.add_argument(flag, action="store_true", dest=f"off_{name}", help=text)
     p.add_argument("-v", "--verbose", action="store_true", help="alle Details ausgeben")
     return p.parse_args(argv)
@@ -400,7 +414,7 @@ def main(argv=None) -> int:
                  "video_colors": False if args.ohne_stilfarben else None,
                  "more_motifs": False if args.ohne_motive else None,
                  "learned_motifs": False if args.ohne_motive else None}
-    overrides.update({name: _off(name) for name, _, _ in OFF_130 if getattr(args, f"off_{name}")})
+    overrides.update({name: _off(name) for name, _, _ in OFF_130 + OFF_140 if getattr(args, f"off_{name}")})
     if args.akkorde:
         overrides["custom_chords"] = {**settings.custom_chords, **dict(args.akkorde)}
     if args.takte:

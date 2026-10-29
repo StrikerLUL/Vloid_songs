@@ -88,7 +88,7 @@ def song_panel(s: SongSettings, pick: PickFn, apply_template: Callable[[SongSett
     templates_editor(s, apply_template)
 
 
-# Gesang 1.3.0, jede Neuerung mit Schalter
+# Gesang 1.3.0 und 1.4.0, jede Neuerung mit Schalter
 VOICE_SWITCHES = (
     ("resonance_tamer", "Härte zähmen", "Wie das Plugin soothe2: wenn hohe, laute Töne schrill werden, werden nur die "
                                         "Frequenzen leiser, die gerade herausstechen, und nur so lange. Die Stimme "
@@ -98,6 +98,20 @@ VOICE_SWITCHES = (
     ("diffsinger_expression", "DiffSinger-Ausdruck", "DiffSinger-Stimmen mit Varianz-Modell singen die Strophe "
                                                      "hauchig und den Refrain kräftig, lange Töne werden zum Ende "
                                                      "hauchiger, hohe Töne gespannter"),
+    # 1.4.0
+    ("voice_comfort", "Wohlfühlbereich der Stimme", "Liegt das Tempo weit außerhalb dessen, was die NEUTRINO-Stimme "
+                                                    "am schönsten singt (MERROW etwa 80 bis 140 BPM), steht im "
+                                                    "Protokoll, welche installierte Stimme besser passt. Kennt "
+                                                    "NEUTRINO keinen StyleShift (vor 3.2.2), singt es den Song am "
+                                                    "Stück statt in Teilen"),
+    ("gentle_reshape", "Sanfte Nachbearbeitung", "Vibrato, Übergänge und Verzierungen werden nur dort neu gerechnet, "
+                                                 "wo sich die Tonhöhe hörbar ändert; der Rest bleibt, wie NEUTRINO "
+                                                 "ihn gesungen hat. Kaum hörbare Formant-Verschiebungen (Idol, Dark) "
+                                                 "fallen weg, weil sie die Stimme nur aufrauen"),
+    ("soft_vocal_chain", "Weichere Gesangskette", "Der erste Kompressor greift mit höchstens 3:1 und 6 ms sanfter zu, "
+                                                  "statt mit 6:1 in 1 ms jeden Einsatz zu quetschen; die Präsenz ist "
+                                                  "breiter und sitzt höher, der Glanz bei 12 kHz. Die Stimme klingt "
+                                                  "runder und weniger spitz"),
 )
 # (Einstellung, Text, von, bis, Schritt, Erklärung), 0 = aus
 VOICE_SLIDERS = (
@@ -111,7 +125,7 @@ VOICE_SLIDERS = (
 GROUP_CHOICES = {0: "aus", 3: "3 Stimmen", 4: "4 Stimmen"}
 SPOKEN_SOUNDS = {"Hall": "mit Hall", "Telefon": "wie am Telefon", "trocken": "trocken"}
 
-# Band 1.3.0, jede Neuerung mit Schalter
+# Band 1.3.0 und 1.4.0, jede Neuerung mit Schalter
 BAND_SWITCHES = (
     ("kime", "Kime, Stopps und Fills", "Vor manchen Refrains und am Ende spielt die ganze Band dieselben Akzente mit "
                                        "Becken, in Strophen setzt sie manchmal zwei Schläge aus (nur der Gesang), und "
@@ -139,9 +153,21 @@ BAND_SWITCHES = (
                                  "ein Marshall JCM2000 für Overdrive, ein Peavey 6505+ für Distortion, dahinter die "
                                  "Box. Erst nach Einrichten › Gitarren-Verstärker, nur mit „Verzerrte E-Gitarren "
                                  "über Verstärker und Box“"),
+    # 1.4.0
+    ("style_arrangement", "Arrangement je Stil", "Jeder Stil besetzt seine Sektionen anders: Rock mit abgedämpfter "
+                                                 "Gitarre vor dem Refrain und Gitarrensolo über Powerchords in der "
+                                                 "Bridge, die Ballade im Refrain "
+                                                 "ohne Gitarre und Synth, Dark Vocaloid mit Staccato-Streichern und "
+                                                 "Klavier-Arpeggio in der Bridge, Kawaii mit Glitzer-Glocken und "
+                                                 "Antwort-Melodie im Refrain, City Pop mit Bläsern und Congas"),
+    ("song_character", "Charakter pro Song", "Jeder Song bekommt aus seinem Seed eigene Klänge (z. B. Rhodes statt "
+                                             "Klavier, Fingerbass statt Pick), eigene Grooves je Sektion, ein "
+                                             "eigenes Intro (leise, nur Schlagzeug, mit der Hook) und einen eigenen "
+                                             "Schluss (ausklingen, harter Stopp, ausblenden). Zwei Songs eines Stils "
+                                             "klingen so nicht mehr gleich"),
 )
 
-# Melodie 1.3.0, jede Neuerung mit Schalter
+# Melodie 1.3.0 und 1.4.0, jede Neuerung mit Schalter
 MELODY_SWITCHES = (
     ("best_melody", "Beste Melodie suchen", "Jede Sektion wird 30-mal geschrieben; es singt die Fassung mit den meisten "
                                             "Punkten: klarer Höhepunkt, Schritte und Sprünge gemischt, wenige "
@@ -161,6 +187,15 @@ MELODY_SWITCHES = (
     ("intro_riff", "Eigenes Intro-Riff", "Die Lead-Stimme spielt im Intro eine eigene Figur aus zwei Takten statt der "
                                          "Refrain-Melodie; sie kommt in einem Zwischenspiel nach dem ersten Refrain "
                                          "und im Outro wieder und läuft im letzten Refrain leise mit"),
+    # 1.4.0
+    ("style_chords", "Akkorde je Stil", "Jeder Stil hat eigene Akkordfolgen und Kadenzen: Rock bVI–bVII–I, City Pop "
+                                        "ii7–V7–Imaj7, Ballade den Kanon mit Bass-Lauf, Dark Vocaloid i–bVI–bVII mit "
+                                        "harmonischer Dominante, Lo-Fi kreisende Zweier-Folgen"),
+    ("melody_character", "Melodie-Charakter je Stil", "Jeder Stil singt anders: Kawaii dicht, kurz und hüpfend, "
+                                                      "Ballade lang, schrittweise und weit gespannt, Rock treibend "
+                                                      "mit Quart-Sprüngen, City Pop synkopisch, Lo-Fi flach und "
+                                                      "zurückgelehnt. Auch die Punkte von „Beste Melodie suchen“ "
+                                                      "richten sich nach dem Stil"),
 )
 # (Einstellung, Text, von, bis, Schritt, Erklärung): Regler der Neuerungen aus 1.3.0, 0 = aus
 MELODY_SLIDERS = (
@@ -974,6 +1009,10 @@ def mix_panel(s: SongSettings) -> None:
     hint("Die Lautheit gilt immer, auch beim Mastering nach Vorbild-Songs; der Limiter hält die Spitzen unten.")
     ui.switch("Bewegung im Mix").bind_value(s, "mix_movement").mark("switch-mix_movement") \
         .tooltip("Anlauf mit Filter vor jedem Refrain, Hall je nach Sektion, breitere Refrains")
+    ui.switch("Klangbild je Stil").bind_value(s, "style_sound").mark("switch-style_sound") \
+        .tooltip("Jeder Stil hat seinen eigenen Raum und Klang: Ballade großer, weicher Hall, Lo-Fi kleiner dumpfer "
+                 "Raum mit warmer Sättigung, Rock kurzer Raum mit Biss in den Mitten, Future Bass riesig und breit, "
+                 "City Pop glänzend wie die 80er, Dark Vocaloid dunkel mit langem Delay")
     ui.switch("Druck (Parallel-, Bus- und Mehrband-Kompression)").bind_value(s, "mix_punch") \
         .mark("switch-mix_punch") \
         .tooltip("Eine stark komprimierte Kopie des Schlagzeugs läuft leise mit, ein Bus-Kompressor hält die Band "

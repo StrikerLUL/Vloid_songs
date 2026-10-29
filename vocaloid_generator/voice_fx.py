@@ -455,51 +455,123 @@ def _glides(base: np.ndarray, t: np.ndarray, notes: list, amount: float) -> np.n
 
 
 def reshape(path: str, notes: list, vibrato: float = 1.0, glide: float = 1.0, psola: bool = True,
-            intonation: float = 0.0, ornaments: float = 0.0, seed: int = 0) -> bool:
+            intonation: float = 0.0, ornaments: float = 0.0, seed: int = 0, gentle: bool = False) -> bool:
     """Vibrato und Übergänge einer gesungenen Spur ändern, schiefe Töne sanft korrigieren und Verzierungen singen
     (shape_pitch). Gerechnet wird Phrase für Phrase; Phrasen, an denen sich nichts ändert, und die Pausen bleiben
     unberührt. psola: mit Praat-PSOLA (parselmouth), das nur die Tonhöhe verschiebt und den Klang der Stimme lässt;
     ohne, oder wenn parselmouth fehlt, baut der WORLD-Vocoder die Phrase neu (klingt eine Spur rauer).
+    gentle: nur die Stellen neu rechnen, an denen sich die Tonhöhe hörbar ändert (1.4.0, repitch).
     False, wenn nichts zu tun war."""
     if abs(vibrato - 1.0) < 1e-3 and abs(glide - 1.0) < 1e-3 and intonation <= 0 and ornaments <= 0:
         return False
 
     def curve(f0: np.ndarray, frame: float, phrase: list, offset: float) -> np.ndarray:
         return shape_pitch(f0, frame, phrase, vibrato, glide, offset, intonation, ornaments, seed)
-    changed = repitch(path, notes, curve, psola)
-    log.info("Vibrato %.1f, Übergänge %.1f, Tonhöhe geglättet %.0f %%, Verzierungen %.0f %% (%s)", vibrato, glide,
-             intonation * 100, ornaments * 100, "PSOLA" if psola and psola_available() else "WORLD")
-    return changed
+    changed = repitch(path, notes, curve, psola, gentle)
+    log.info("Vibrato %.1f, Übergänge %.1f, Tonhöhe geglättet %.0f %%, Verzierungen %.0f %% (%s%s)", vibrato, glide,
+             intonation * 100, ornaments * 100, "PSOLA" if psola and psola_available() else "WORLD",
+             f", nur {changed:.0%} des Gesangs neu gerechnet" if gentle and changed else "")
+    return bool(changed)
 
 
-def repitch(path: str, notes: list, curve: Callable, psola: bool = True) -> bool:
+def repitch(path: str, notes: list, curve: Callable, psola: bool = True, gentle: bool = False) -> float:
     """Eine neue Tonhöhenkurve für jede Phrase der notes: curve(f0 in Hz je FRAME, FRAME, Phrase, Zeit des ersten
-    Rahmens) gibt sie zurück. Mit PSOLA, wenn psola und parselmouth da sind, sonst mit WORLD."""
+    Rahmens) gibt sie zurück. Mit PSOLA, wenn psola und parselmouth da sind, sonst mit WORLD.
+    gentle (1.4.0): jede Neuberechnung färbt den Klang ein wenig, also werden nur die Stellen neu gerechnet, an denen
+    die neue Kurve mehr als GENTLE_CENTS von der gesungenen abweicht (mit etwas Rand); der Rest bleibt, wie die Engine
+    ihn gesungen hat. Rückgabe: Anteil der Gesangszeit, der neu gerechnet wurde (0 = nichts geändert)."""
     method = _psola if psola and psola_available() else _world
     audio, rate = sf.read(path, dtype="float64", always_2d=True)
     mono = audio.mean(axis=1)
     out = mono.copy()
     pad = 0.15
-    changed = False
+    done, total = 0, 0
     for phrase in phrases(notes):
         a = max(0, int((phrase[0].start - pad) * rate))
         b = min(len(mono), int((phrase[-1].end + pad) * rate))
         if b - a < int(0.1 * rate):
             continue
+        total += b - a
         x = np.ascontiguousarray(mono[a:b])
-        y = method(x, rate, lambda f0, frame, offset, phrase=phrase: curve(f0, frame, phrase, offset), a / rate)
-        if y is None:
-            continue
-        y = np.pad(y[:len(x)], (0, max(0, len(x) - len(y))))
-        fade = min(len(y) // 4, int(0.01 * rate))
-        ramp = np.linspace(0, 1, fade)
-        y[:fade] = x[:fade] * (1 - ramp) + y[:fade] * ramp
-        y[-fade:] = y[-fade:] * ramp[::-1] + x[-fade:] * (1 - ramp[::-1])
-        out[a:b] = y
-        changed = True
-    if changed:
+
+        def phrase_curve(f0, frame, offset, phrase=phrase):
+            return curve(f0, frame, phrase, offset)
+        pieces = _changed_spans(x, rate, phrase_curve, a / rate) if gentle else [(0, len(x), None)]
+        for start, end, target in pieces:
+            piece = np.ascontiguousarray(x[start:end])
+            shape = phrase_curve if target is None else _follow(target)
+            y = method(piece, rate, shape, (a + start) / rate)
+            if y is None:
+                continue
+            y = np.pad(y[:len(piece)], (0, max(0, len(piece) - len(y))))
+            fade = min(len(y) // 4, int(0.01 * rate))
+            ramp = np.linspace(0, 1, fade)
+            y[:fade] = piece[:fade] * (1 - ramp) + y[:fade] * ramp
+            y[-fade:] = y[-fade:] * ramp[::-1] + piece[-fade:] * (1 - ramp[::-1])
+            out[a + start:a + end] = y
+            done += end - start
+    if done:
         sf.write(path, np.repeat(out[:, None], audio.shape[1], axis=1).astype(np.float32), rate, subtype="FLOAT")
-    return changed
+    return done / total if total else 0.0
+
+
+GENTLE_CENTS = 4.0           # so weit muss die neue Tonhöhe abweichen, damit eine Stelle neu gerechnet wird
+GENTLE_MARGIN = 0.05         # Sekunden Rand um jede geänderte Stelle
+GENTLE_MIN = 0.12            # Sekunden: kürzere Stellen werden auf diese Länge erweitert (PSOLA braucht Perioden)
+
+
+def _changed_spans(x: np.ndarray, rate: int, curve: Callable, offset: float) -> list:
+    """[(Anfang, Ende in Samples, Zielkurve)] der Stellen einer Phrase, an denen curve die Tonhöhe hörbar ändert.
+    Zielkurve: (Zeiten in Sekunden ab Songanfang, Hz) der ganzen Phrase, damit jede Stelle dasselbe Ziel bekommt wie
+    bei einer Rechnung am Stück."""
+    f0, times = _f0(x, rate)
+    if not np.any(f0 > 0):
+        return []
+    new = curve(f0, FRAME, offset)
+    both = (f0 > 0) & (new > 0)
+    cents = np.zeros_like(f0)
+    cents[both] = np.abs(1200 * np.log2(new[both] / f0[both]))
+    moved = (cents > GENTLE_CENTS) | ((f0 > 0) != (new > 0))
+    if not moved.any():
+        return []
+    target = (offset + np.asarray(times, dtype=np.float64), np.asarray(new, dtype=np.float64))
+    margin = int(GENTLE_MARGIN / FRAME)
+    spans = []
+    idx = np.flatnonzero(moved)
+    start = prev = idx[0]
+    for k in idx[1:]:
+        if k - prev > 2 * margin:
+            spans.append((start, prev))
+            start = k
+        prev = k
+    spans.append((start, prev))
+    out = []
+    for lo, hi in spans:
+        a = max(0, int((times[lo] - GENTLE_MARGIN) * rate))
+        b = min(len(x), int((times[hi] + GENTLE_MARGIN) * rate))
+        if b - a < GENTLE_MIN * rate:
+            grow = int((GENTLE_MIN * rate - (b - a)) / 2) + 1
+            a, b = max(0, a - grow), min(len(x), b + grow)
+        if out and a <= out[-1][1]:
+            out[-1] = (out[-1][0], b, target)
+        else:
+            out.append((a, b, target))
+    return out
+
+
+def _follow(target: tuple) -> Callable:
+    """Eine Kurve für repitch, die das vorab für die ganze Phrase berechnete Ziel trifft (in stimmhaften Rahmen)."""
+    times, hz = target
+    voiced = hz > 0
+
+    def curve(f0: np.ndarray, frame: float, offset: float) -> np.ndarray:
+        t = offset + np.arange(len(f0)) * frame
+        if not voiced.any():
+            return f0
+        wanted = 2 ** np.interp(t, times[voiced], np.log2(hz[voiced]))
+        inside = (t >= times[voiced][0]) & (t <= times[voiced][-1])
+        return np.where((f0 > 0) & inside, wanted, f0)
+    return curve
 
 
 def psola_available() -> bool:

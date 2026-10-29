@@ -26,6 +26,9 @@ STYLES = {
 TELEPHONE_BAND = (300.0, 3400.0)     # Hz, wie eine Telefonleitung
 STUTTER_REPEATS = 4                  # so oft wiederholt sich die Silbe im letzten Schlag vor dem Refrain
 FADE = 0.004                         # Sekunden Blende an jedem Schnitt, damit nichts knackt
+# 1.4.0 sanfte Nachbearbeitung: eine Formant-Verschiebung rechnet die ganze Spur mit dem Vocoder neu und raut die Stimme
+# auf; so kleine Verschiebungen (Idol ×1,04, Dark ×0,95) hört man kaum, die Rauheit schon. Sie fallen dann weg.
+FORMANT_MIN_SHIFT = 0.06
 
 
 def effects_for(style: str, settings) -> dict:
@@ -33,7 +36,11 @@ def effects_for(style: str, settings) -> dict:
     wanted = STYLES.get(style, {})
     switches = {"telephone": settings.telephone_fx, "stutter": settings.stutter_fx,
                 "hard_tune": settings.hard_tune, "formant": settings.formant_fx}
-    return {name: value for name, value in wanted.items() if switches.get(name)}
+    chosen = {name: value for name, value in wanted.items() if switches.get(name)}
+    if "formant" in chosen and getattr(settings, "gentle_reshape", False) and \
+            abs(chosen["formant"] - 1.0) < FORMANT_MIN_SHIFT:
+        del chosen["formant"]
+    return chosen
 
 
 def apply(path: str, notes: list, sections: list, bpm: float, effects: dict) -> list:

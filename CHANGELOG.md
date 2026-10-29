@@ -2,6 +2,52 @@
 
 Jede Version hat hier einen Abschnitt. Die App zeigt ihn einmal nach einem Update (Hilfe › Was ist neu).
 
+## 1.4.0
+
+Diese Version gibt jedem Stil und jedem Song seinen eigenen Charakter und macht die Stimme schöner. Bis 1.3 teilten
+sich alle Stile dieselben Akkordfolgen, dieselben Regeln für die Melodie und denselben Hall, und zwei Songs eines
+Stils hatten dieselben Klänge und Grooves; deshalb klang so vieles ähnlich. Jede Neuerung hat einen Schalter und eine
+Option auf der Kommandozeile; alles aus klingt wie in 1.3.
+
+**Charakter je Stil**
+
+- **Akkorde je Stil** (Tab Song, `--ohne-stil-akkorde`): eigene Akkordfolgen für Strophe, Pre-Chorus, Refrain und
+  Bridge und eigene Kadenzen in den Refrain und zum Schluss. Rock mit bVII und bVI–bVII–I, Dark Vocaloid in Moll mit
+  bII und harmonischer Dominante, City Pop und Lo-Fi mit Septakkorden und ii7–V7–Imaj7, die Ballade mit dem Kanon,
+  laufendem Bass und Vsus4–V vor dem Refrain, Idol-Pop mit der „Royal Road“ IV–V–iii–vi.
+- **Melodie-Charakter je Stil** (Tab Song, `--ohne-melodie-charakter`): Kawaii und Idol-Pop singen kurz, abgesetzt
+  und hüpfend, die Ballade gebunden in Schritten mit weiten Bögen, Rock gerufen mit Quarten, Quinten und Synkopen, City
+  Pop und Lo-Fi zurückgelehnt nach dem Schlag, Lo-Fi eng und tief, Dark Vocaloid dicht und dramatisch. „Beste Melodie
+  suchen“ bewertet nach dem Stil.
+- **Arrangement je Stil** (Tab Band, `--ohne-stil-arrangement`): Rock abgedämpft vor dem Refrain und mit Gitarrensolo
+  über Powerchords in der Bridge, die Ballade im Refrain ohne Gitarre und Synth, Dark Vocaloid mit Staccato-Streichern,
+  Kawaii mit Glitzer-Glocken und Antwort-Melodie, City Pop mit Bläsern und Congas.
+- **Klangbild je Stil** (Tab Mix, `--ohne-klangbild`): eigener Hall (Größe, Dämpfung, Vorverzögerung), eigenes Delay
+  auf dem Gesang, eigene Klangfarbe des Masters, Stereobreite und Sättigung der Band. Die Ballade weit und weich, Lo-Fi
+  klein, warm und dumpf, Rock trocken und nach vorn, Future Bass riesig und breit, City Pop glänzend.
+
+**Charakter pro Song**
+
+- **Charakter pro Song** (Tab Band, `--ohne-song-charakter`): jeder Song würfelt aus seinem Seed, was zum Stil passt:
+  die Klänge von Klavier, Gitarre, Lead, Glocken, Bläsern und Gegenstimme, die Synth-Stimmen, die Grooves von Strophe
+  und Refrain, die Spielweisen von Bass, Klavier und Gitarre, das Intro (volle Band, leise, Schlagzeug und Bass, nur
+  die Hook) und den Schluss (klingt aus, harter Stopp, wird leiser). Im Protokoll steht „Charakter: …“.
+
+**Stimme** (Tab Gesang)
+
+- **Wohlfühlbereich der Stimme** (`--ohne-wohlfuehlbereich`): jede NEUTRINO-Stimme singt laut studio-neutrino.com in
+  einem Tempobereich am schönsten (MERROW etwa 80 bis 140 BPM). Liegt der Song weit daneben, nennt das Protokoll
+  installierte Stimmen, die dort schöner singen. Kennt die NEUTRINO-Ausgabe keinen StyleShift (vor 3.2.2), singt
+  NEUTRINO den Song am Stück statt in Teilen, die dort nur Zeit und Schnitte kosteten.
+- **Sanfte Nachbearbeitung** (`--ohne-sanfte-nachbearbeitung`): Vibrato, Übergänge und Verzierungen werden nur dort neu
+  gerechnet, wo sich die Tonhöhe hörbar ändert; der Rest bleibt, wie NEUTRINO ihn gesungen hat. Kaum hörbare
+  Formant-Verschiebungen (Idol ×1,04, Dark ×0,95) fallen weg, weil sie die Stimme nur aufrauen.
+- **Weichere Gesangskette** (`--ohne-weiche-gesangskette`): der erste Kompressor greift mit höchstens 3:1 und 6 ms
+  statt 6:1 in 1 ms zu und lässt Silbeneinsätze stehen; die Präsenz ist breiter und sitzt höher, der Glanz bei 12 kHz.
+
+Für die Stimme bringt eine neue NEUTRINO-Ausgabe am meisten: seit 3.2.2 mit neuem Vocoder deutlich sauberer, und erst
+dann klingen Strophe und Refrain verschieden. Hilfe › Einrichten zeigt, welche Ausgabe du hast.
+
 ## 1.3.1
 
 Fehler behoben, die beim Durchsehen des ganzen Codes aufgefallen sind. Neue Funktionen gibt es keine, an deinen

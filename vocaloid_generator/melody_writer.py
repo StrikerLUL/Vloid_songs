@@ -221,6 +221,13 @@ class SectionMelodyWriter:
         self.strong_steps = (0,) if self.waltz else (0, 8)
         self.release = self.bar_steps - 4         # der Schlusston endet einen Schlag vor dem Taktende
         self.own_rhythms = bool(motifs) and self.bar_steps == BAR_STEPS   # gelernte Rhythmen sind 4/4
+        # 1.4.0: der Melodie-Charakter des Stils (style_dna.py); None = wie bis 1.3
+        self.char = None
+        if "melody_character" in extras and self.kind not in ("Rap",):
+            import style_dna
+            self.char = style_dna.character(plan.style.name)
+        self.costs = INTERVAL_COST if self.char is None else _interval_costs(self.char)
+        self.detached = {}
 
     # ── Silben verteilen ─────────────────────────────────────────────────────────
     def allocate(self, syllables: list) -> tuple:
@@ -231,6 +238,8 @@ class SectionMelodyWriter:
         syllables = list(syllables) or ["ら"]
         seconds = bars * self.sec.bar_beats * self.plan.seconds_per_beat
         comfortable = SYLLABLES_PER_SECOND.get(self.kind, 3.3) * seconds * SINGING_SHARE
+        if self.char is not None:
+            comfortable *= self.char.density
         reps = max(1, round(comfortable / len(syllables)))
         while reps > 1 and len(syllables) * reps > max_syllables(bars, self.bar_steps):
             reps -= 1
@@ -263,16 +272,26 @@ class SectionMelodyWriter:
                 learned = self.extra.learned.get(count, [])
                 if learned and self.rng.random() < LEARNED_SHARE:
                     options = list(learned)
+            if self.char is not None and not self.waltz:
+                import style_dna
+                options += style_dna.EXTRA_RHYTHMS.get(self.char.rhythm, {}).get(count, [])
             first = self.motifs.get((count, 0))
             if variant and first in options and len(set(options)) > 1:
                 options = [o for o in options if o != first]
-            motif = self.rng.choice(options)
+            motif = self.rng.choice(options) if self.char is None else self._styled_choice(options)
         else:
             eighths = set(range(0, self.bar_steps, 2))
             extra = [s for s in (3, 11, 7, 15, 1, 9, 5, 13) if s < self.bar_steps][:count - len(eighths)]
             motif = tuple(sorted(eighths | set(extra)))[:count]
         self.motifs[key] = motif
         return motif
+
+    def _styled_choice(self, options: list) -> tuple:
+        """Ein Rhythmus, gewichtet nach dem Rhythmus des Stils (style_dna.rhythm_fit)."""
+        import style_dna
+        weights = [math.exp(self.char.rhythm_pull * style_dna.rhythm_fit(o, self.char.rhythm, self.bar_steps))
+                   for o in options]
+        return self.rng.choices(options, weights)[0]
 
     def _end_rhythm(self, count: int, role: str) -> tuple:
         key = ("end", role, count)
@@ -325,6 +344,8 @@ class SectionMelodyWriter:
         key = (role.rstrip("2"), bar)
         if key not in self.gestures:
             weights = GESTURE_WEIGHTS.get(self.kind, GESTURE_WEIGHTS["Verse"])
+            if self.char is not None and self.kind in self.char.gestures:
+                weights = self.char.gestures[self.kind]
             if self.extra:
                 weights = {**weights, **self.extra.weights(self.kind)}
             names = list(weights)
@@ -364,9 +385,11 @@ class SectionMelodyWriter:
             cost = abs(p - target) * 0.35
             if prev is not None:
                 d = abs(p - prev)
-                cost += INTERVAL_COST[min(d, len(INTERVAL_COST) - 1)]
+                cost += self.costs[min(d, len(self.costs) - 1)]
                 if d == 0:
                     cost += -0.6 if slot.dur <= 1 else 0.6   # schnelle Tonwiederholungen sind typisch, lange nicht
+                    if self.char is not None and slot.dur <= 1:
+                        cost -= self.char.repeat_bonus
                 if abs(prev_move) >= 5 and (p - prev) * prev_move > 0:
                     cost += 2.0           # nach einem Sprung in die Gegenrichtung
                 if d == 0 and len(history) >= 2 and history[-1] == history[-2] == p:
@@ -410,7 +433,10 @@ class SectionMelodyWriter:
         last_bar_start = (slots[-1].step // self.bar_steps) * self.bar_steps
         for i, slot in enumerate(slots):
             chord = self._chord_at_step(phrase_start, slot.step)
-            target = self.center + contour(slot.step / total) + gesture[i]
+            if self.char is None:
+                target = self.center + contour(slot.step / total) + gesture[i]
+            else:
+                target = self.center + self.char.contour * (contour(slot.step / total) + gesture[i])
             ref = ref_by_step.get(slot.step)
             in_last_bar = slot.step >= last_bar_start and len(slots) > 1
             if ref is not None and not (in_last_bar and role in ("H2", "A2", "P2")):
@@ -486,6 +512,7 @@ class SectionMelodyWriter:
                               dur=float(slot.dur) / STEPS_PER_BEAT, pitch=pitch, syllable=syl, strong=slot.strong)
                       for slot, pitch, syl in zip(slots, pitches, chunk)]
             self._push(slots, phrase, role)
+            self._detach(slots, phrase, role)
             for slot, group in zip(slots, self._tension(slots, phrase, role)):
                 if len(group) > 1:
                     notes += group
@@ -535,6 +562,23 @@ class SectionMelodyWriter:
                 note.dur += early
                 note.pushed = True
                 prev.dur -= early
+
+    # ── Abgesetzte Töne (1.4.0, Melodie-Charakter) ───────────────────────────────
+    def _detach(self, slots: list, phrase: list, role: str) -> None:
+        """Achtel mitten in der Phrase werden zur Sechzehntel mit Sechzehntelpause danach (Kawaii, Idol: kurz und
+        abgesetzt). Gleiche Stellen gleicher Phrasen entscheiden gleich, damit die Hook gleich bleibt."""
+        if self.char is None or self.char.staccato <= 0:
+            return
+        for i in range(len(slots) - 1):
+            slot, note = slots[i], phrase[i]
+            if slot.dur != 2 or slots[i + 1].step != slot.step + 2 or str(note.syllable) in SPECIAL_MORAE \
+                    or getattr(note, "pushed", False) or getattr(phrase[i + 1], "pushed", False):
+                continue
+            key = (role.rstrip("2"), slot.step)
+            if key not in self.detached:
+                self.detached[key] = self.rng.random() < self.char.staccato
+            if self.detached[key]:
+                note.dur = 1.0 / STEPS_PER_BEAT
 
     # ── Triolen und punktierte Rhythmen (M5) ─────────────────────────────────────
     def _figures(self, slots: list, role: str) -> list:
@@ -645,6 +689,23 @@ class SectionMelodyWriter:
             return [note]
         return [replace(note, dur=first),
                 MelNote(second_start, note.dur - first, target, Mora(sung, melisma=True), False)]
+
+
+FAVORITE_SHARE = 0.4      # so viel kostet ein typischer Sprung des Stils im Vergleich zu sonst
+
+
+def _interval_costs(char) -> list:
+    """INTERVAL_COST für einen Melodie-Charakter: Schritte und Sprünge teurer oder billiger, typische Sprünge billig."""
+    out = []
+    for d, cost in enumerate(INTERVAL_COST):
+        if 1 <= d <= 2:
+            cost *= char.step_cost
+        elif d >= 3:
+            cost *= char.leap_cost
+        if d in char.favorite_leaps:
+            cost *= FAVORITE_SHARE
+        out.append(cost)
+    return out
 
 
 def accent_moves(words: list) -> list:
@@ -759,7 +820,11 @@ def _best_of(plan: SongPlan, sec: Section, rng: random.Random, motifs, words: li
     base = rng.getrandbits(64)
     candidates = [SectionMelodyWriter(plan, sec, random.Random(f"{base}:{i}"), motifs, extras).write(words)
                   for i in range(melody_score.CANDIDATES)]
-    best, points, mean = melody_score.pick(candidates, sec.kind, before, plan.vocal_range[1], sec.bar_beats)
+    targets = None
+    if "melody_character" in extras:
+        import style_dna
+        targets = style_dna.character(plan.style.name).score or None
+    best, points, mean = melody_score.pick(candidates, sec.kind, before, plan.vocal_range[1], sec.bar_beats, targets)
     log.info("Beste Melodie: %s aus %d Fassungen, %.1f Punkte (Schnitt %.1f)", sec.kind, len(candidates), points, mean)
     return candidates[best]
 

@@ -3,6 +3,7 @@ import logging
 import os
 import subprocess
 from fractions import Fraction
+from typing import Optional
 
 import soundfile as sf
 
@@ -202,6 +203,28 @@ STIMMEN = {
     "SEVEN": (57, 72), "NAKUMO": (45, 71), "SOMA": (48, 72), "RUNO": (43, 69),
 }
 OKTAVE_TIEFER = {"NAKUMO", "SOMA", "RUNO"}
+# 1.4.0, Wohlfühlbereich: das Tempo, in dem jede Stimme laut studio-neutrino.com am schönsten singt (得意なBPM), und
+# ihre Genres (得意なジャンル). Weit außerhalb davon verschleift sie schnelle Silben oder klingt angestrengt.
+KOMFORT = {
+    "MERROW": ((80, 140), ("Ballade", "Lo-Fi", "City Pop")),
+    "NAKUMO": ((80, 160), ("Rock", "Ballade")),
+    "SOMA": ((90, 180), ("J-Pop Energy", "Rock", "City Pop")),
+    "RUNO": ((120, 180), ("Rock", "Dark Vocaloid")),
+    "KIRITAN": ((120, 180), ("J-Pop Energy", "Idol-Pop", "Kawaii Chiptune")),
+    "ITAKO": ((120, 180), ("J-Pop Energy", "Idol-Pop")),
+    "ZUNDAMON": ((120, 180), ("J-Pop Energy", "Kawaii Chiptune")),
+    "SEVEN": ((120, 180), ("Rock", "J-Pop Energy", "Dark Vocaloid")),
+    "REINA": ((120, 180), ("Rock", "Dark Vocaloid", "J-Pop Energy")),
+    "ZUNKO": ((80, 140), ("Ballade", "J-Pop Energy")),
+    "AOI": ((80, 140), ("Ballade", "Lo-Fi")),
+    "AKANE": ((120, 180), ("Rock", "J-Pop Energy")),
+    "METAN": ((100, 160), ("J-Pop Energy", "City Pop")),
+    "TOBARI": ((100, 200), ("Rock", "Dark Vocaloid", "Drum and Bass")),
+    "CHANKO": ((100, 180), ("Idol-Pop", "Kawaii Chiptune", "J-Pop Energy")),
+    "JSUT": ((90, 110), ("Ballade",)),
+    "YOKO": ((90, 110), ("Ballade",)),
+}
+KOMFORT_SPIELRAUM = 10      # BPM über oder unter dem Bereich, die noch als passend gelten
 
 
 def stimmlage(singer: str) -> tuple:
@@ -360,6 +383,43 @@ def neutrino_hinweis(neutrino_pfad: str) -> str:
         return (f"NEUTRINO {ausgabe} gibt es für Windows nur mit dem Tuning-Tool (.ex). Diese Ausgabe kennt keinen "
                 "StyleShift: Strophe und Refrain klingen gleich, sonst läuft alles.")
     return ""
+
+
+def kennt_styleshift(neutrino_pfad: str) -> bool:
+    """Kommt ein StyleShift bei dieser NEUTRINO-Ausgabe an? v2 kennt ihn (-k), v3 erst ab 3.2.2: dann reicht ihn die
+    Run.bat weiter (neutrino_synthese ruft NEUTRINO so auf, wie die Run.bat es tut). Ohne Run.bat bekommt NEUTRINO.exe
+    ihn direkt; dann zählt nur eine erkennbar ältere Ausgabe als ohne."""
+    if neutrino_version(neutrino_pfad) == 2:
+        return True
+    if os.path.exists(os.path.join(neutrino_pfad, "Run.bat")):
+        return _bat_kennt_styleshift(neutrino_pfad)
+    ausgabe = neutrino_ausgabe(neutrino_pfad)
+    return not ausgabe or NEUESTE_AUSGABE <= _versionsnummer(ausgabe)
+
+
+def komfort(singer: str) -> Optional[tuple]:
+    """((langsamstes, schnellstes Wohlfühl-Tempo), Stile) einer Stimme, oder None, wenn sie unbekannt ist."""
+    return KOMFORT.get((singer or "").upper())
+
+
+def komfort_hinweis(singer: str, bpm: float, style: str = "", installiert: tuple = ()) -> str:
+    """Ein Hinweis, wenn das Tempo weit außerhalb des Wohlfühlbereichs der Stimme liegt, mit installierten Stimmen,
+    die dort schöner singen (die für den Stil zuerst). Leer, wenn es passt oder die Stimme unbekannt ist."""
+    found = komfort(singer)
+    if found is None:
+        return ""
+    (lo, hi), _ = found
+    if lo - KOMFORT_SPIELRAUM <= bpm <= hi + KOMFORT_SPIELRAUM:
+        return ""
+    besser = [name for name in installiert if name.upper() != (singer or "").upper() and komfort(name)
+              and komfort(name)[0][0] - KOMFORT_SPIELRAUM <= bpm <= komfort(name)[0][1] + KOMFORT_SPIELRAUM]
+    besser.sort(key=lambda name: style not in komfort(name)[1])
+    zu_schnell = bpm > hi
+    tipp = f" Bei {bpm:.0f} BPM singen schöner: {', '.join(besser[:3])}." if besser else \
+        f" Etwas {'langsamer' if zu_schnell else 'schneller'} klingt sie sauberer."
+    folge = "verschleift sie schnelle Silben leichter" if zu_schnell else "wackeln lange Töne leichter"
+    return (f"{singer} singt laut NEUTRINO am schönsten bei {lo} bis {hi} BPM; dieser Song hat {bpm:.0f} BPM, "
+            f"da {folge}.{tipp}")
 
 
 # Wie der letzte NEUTRINO-Lauf gesungen hat (für den Gesangs-Check und StyleShift pro Sektion):

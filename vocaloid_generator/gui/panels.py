@@ -536,6 +536,7 @@ def reference_editor(s: SongSettings, pick: PickFn, apply_template: Callable[[So
         summary_box.refresh()
 
     rows()
+    link_editor(s, take)
     with ui.column().classes("w-full gap-0"):
         ui.label("Die Vorbilder bestimmen:").classes("text-caption text-grey-5 q-mt-sm")
         for attr, text, tip in REFERENCE_SWITCHES:
@@ -545,6 +546,68 @@ def reference_editor(s: SongSettings, pick: PickFn, apply_template: Callable[[So
         hint(separation.status())
     summary_box()
     ui.timer(0.1, measure, once=True)
+
+
+def link_editor(s: SongSettings, take: Callable) -> None:
+    """1.6.0: ein Video-Link als Vorbild (vorbild_link.py), nur mit dem Schalter video_links."""
+    import vorbild_link
+    found = {"link": next(iter(vorbild_link.load()), None)}
+
+    async def measure() -> None:
+        url = (link.value or "").strip()
+        if not vorbild_link.valid(url):
+            ui.notify("Bitte einen Link einfügen, der mit https:// beginnt", type="warning")
+            return
+        button.disable()
+        status.set_text("Lade den Ton und messe (eine halbe bis zwei Minuten)...")
+        try:
+            found["link"] = await run.io_bound(vorbild_link.measure, url)
+        except Exception as e:  # noqa: BLE001 – yt-dlp kennt viele Fehler, alle gehen nur an den Nutzer
+            ui.notify(f"Das Video ließ sich nicht messen: {str(e).splitlines()[0][:200]}", type="warning",
+                      multi_line=True)
+        finally:
+            button.enable()
+            status.set_text("")
+        result.refresh()
+
+    def take_structure(template) -> None:
+        take(**template.updates(s))
+
+    @ui.refreshable
+    def result() -> None:
+        m = found["link"]
+        if m is None:
+            return
+        ui.label(f"„{m.title}“: {m.describe()}").classes("text-body2").mark("reference-link-result")
+        with ui.row().classes("gap-2"):
+            if s.ref_tempo_key:
+                ui.button(f"{m.bpm} BPM, {m.key} übernehmen", icon="speed",
+                          on_click=lambda: take(bpm=m.bpm, key=m.key, scale=m.scale)) \
+                    .props("outline dense no-caps").mark("reference-link-tempo")
+            if s.ref_style and m.style != s.style:
+                ui.button(f"Stil {m.style} übernehmen", icon="style", on_click=lambda: take(style=m.style)) \
+                    .props("outline dense no-caps").mark("reference-link-style")
+            template = m.structure()
+            if s.ref_structure and template is not None:
+                ui.button("Ablauf und Akkorde übernehmen", icon="view_timeline",
+                          on_click=lambda: take_structure(template)).props("outline dense no-caps") \
+                    .mark("reference-link-structure")
+
+    ui.switch("Video-Links als Vorbild (YouTube, Niconico, SoundCloud …)").bind_value(s, "video_links") \
+        .props("dense").mark("switch-video_links") \
+        .tooltip("Die App lädt nur den Ton, misst ihn und löscht ihn gleich wieder. Die Nutzungsbedingungen von "
+                 "YouTube erlauben das Herunterladen nur über YouTubes eigene Knöpfe: nimm eigene Videos oder solche, "
+                 "deren Rechteinhaber zustimmt.")
+    with ui.column().classes("w-full gap-1").bind_visibility_from(s, "video_links").mark("reference-link-box"):
+        with ui.row().classes("w-full items-center no-wrap gap-2"):
+            link = ui.input("Link zum Video", placeholder="https://www.youtube.com/watch?v=…").classes("col") \
+                .props("dense clearable").mark("reference-link")
+            button = ui.button("Messen", icon="graphic_eq", on_click=measure).props("flat dense no-caps") \
+                .mark("reference-link-measure")
+        status = ui.label("").classes("text-caption text-grey-5")
+        hint("Nur für eigene Videos oder mit Erlaubnis. Der Ton liegt nur während der Messung auf dem PC; übrig "
+             "bleiben Tempo, Tonart, Ablauf und Akkorde. Das Mastering nach dem Vorbild braucht die Datei selbst.")
+        result()
 
 
 def recipes_editor(apply_template: Callable[[SongSettings], None], s: SongSettings) -> None:

@@ -19,7 +19,9 @@ pyttsx3
 pywebview
 pyworld
 scipy
+segno
 setuptools<81
 soundfile
 tinysoundfont
 unidic-lite
+yt-dlp

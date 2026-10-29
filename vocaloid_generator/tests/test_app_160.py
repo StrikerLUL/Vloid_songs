@@ -193,3 +193,25 @@ async def test_the_text_kit_builds_swaps_and_takes_a_text(simple_user):
     lyrics = SongSettings.load().lyrics
     assert lyrics.startswith("[Verse]") and "粉雪" in lyrics and first not in lyrics.split("[Pre-Chorus]")[0]
     assert marked(simple_user, "simple-lyrics")[0].value == lyrics
+
+
+async def test_a_video_link_is_only_there_with_its_switch_and_gives_tempo_and_structure(user, monkeypatch):
+    import vorbild_ablauf
+    import vorbild_link
+    template = vorbild_ablauf.Template("https://x.y/v", 132, "E", "minor",
+                                       [vorbild_ablauf.Part("Verse", 0.0, 8, [["vi"]] * 8),
+                                        vorbild_ablauf.Part("Chorus", 14.5, 8, [["IV"], ["V"]] * 4)])
+    from dataclasses import asdict
+    found = vorbild_link.Messung("https://x.y/v", "Lied", 132, "E", "minor", "Rock", asdict(template))
+    monkeypatch.setattr(vorbild_link, "measure", lambda url, progress=None, again=False: found)
+    await user.open("/")
+    assert not marked(user, "reference-link-box")[0].visible
+    marked(user, "switch-video_links")[0].value = True
+    await until(lambda: marked(user, "reference-link-box")[0].visible)
+    user.find(marker="reference-link").type("https://x.y/v")
+    user.find(marker="reference-link-measure").click()
+    await user.should_see("„Lied“: 132 BPM, E Moll, klingt nach Rock; Verse 8 · Chorus 8", retries=50)
+    user.find(marker="reference-link-tempo").click()
+    user.find(marker="reference-link-structure").click()
+    await until(lambda: SongSettings.load().bpm == 132 and SongSettings.load().active_sections == ["Verse", "Chorus"])
+    assert SongSettings.load().custom_chords["Chorus"] == "IV | V"

@@ -82,6 +82,12 @@ class Job:
         """„noch etwa 3 Min.“ aus früheren Läufen derselben Art; leer, solange sich nichts sagen lässt."""
         return laufzeit.describe(laufzeit.remaining(self.past, self.fraction, self.elapsed)) if self.kind else ""
 
+    def __setattr__(self, name: str, value) -> None:
+        if name == "running" and bool(value) != bool(getattr(self, "running", False)):
+            import fernbedienung
+            fernbedienung.awake(bool(value))         # 1.6.0: solange ein Song entsteht, schläft der PC nicht ein
+        super().__setattr__(name, value)
+
     def finish(self) -> None:
         """Ein fertiger Lauf: für die nächste Schätzung merken."""
         if self.kind:
@@ -89,11 +95,15 @@ class Job:
 
 
 class Picker:
-    """Datei- und Ordnerauswahl über das native Fenster; im Browser gibt es sie nicht."""
+    """Datei- und Ordnerauswahl über das native Fenster; im Browser und auf dem Handy (remote, 1.6.0) gibt es sie
+    nicht, dort lädt man Dateien hoch."""
+
+    def __init__(self, remote: bool = False) -> None:
+        self.remote = remote
 
     @property
     def available(self) -> bool:
-        return app.native.main_window is not None
+        return not self.remote and app.native.main_window is not None
 
     async def __call__(self, folder: bool = False, file_types: tuple = ()) -> Optional[str]:
         window = app.native.main_window
@@ -153,7 +163,9 @@ def build() -> None:
     settings = SongSettings.load()
     state = {"result": None, "saved": settings.model_dump(), "compare": {"A": None, "B": None}}
     job = Job()
-    picker = Picker()
+    import fernbedienung
+    remote = fernbedienung.is_remote(ui.context.client)        # 1.6.0: diese Seite ist auf dem Handy offen
+    picker = Picker(remote)
     logs = LogQueue()
     logging.getLogger().addHandler(logs)
     ui.context.client.on_delete(lambda: logging.getLogger().removeHandler(logs))
@@ -165,9 +177,9 @@ def build() -> None:
     ui.page_title("Vloid Songs")
 
     # ── Kopfzeile: erzeugen ───────────────────────────────────────────────────────
-    with ui.header().classes("items-center gap-4 bg-grey-10 q-px-md"):
+    with ui.header().classes("items-center gap-4 bg-grey-10 q-px-md vg-header"):
         ui.image(os.path.join(os.path.dirname(__file__), "vloid.png")).classes("w-8 h-8")
-        ui.label("Vloid Songs").classes("text-h6")
+        ui.label("Vloid Songs").classes("text-h6 vg-title-text")
         ui.space()
         ui.toggle({True: "Einfach", False: "Profi"}).bind_value(settings, "simple_view") \
             .on_value_change(lambda: show_view()).props("no-caps dense rounded toggle-color=secondary") \
@@ -194,7 +206,7 @@ def build() -> None:
         dialogs.help_menu(settings, picker, lambda: show_status())
         dialog_host = ui.element("div")
 
-    with ui.row().classes("w-full no-wrap items-start gap-4 q-pa-md"):
+    with ui.row().classes("w-full no-wrap items-start gap-4 q-pa-md vg-main"):
         # ── Links: anhören, neu würfeln, Fortschritt ───────────────────────────────
         with ui.column().classes("gap-4").style("flex: 3; min-width: 0"):
             resume_box = ui.column().classes("w-full")
@@ -296,8 +308,14 @@ def build() -> None:
                     youtube_button = ui.button("Fertig für YouTube", icon="smart_display",
                                                on_click=lambda: make_youtube()).props("flat no-caps").mark("youtube") \
                         .tooltip("MP3, Video, Titelbild und Beschreibung zusammen in einem Ordner (ohne KI)")
-                    ui.button("Ausgabeordner öffnen", icon="folder",
-                              on_click=lambda: media.open_folder(settings.output_dir())).props("flat no-caps")
+                    mp3_button = ui.button("MP3 aufs Handy", icon="download", on_click=lambda: download_mp3()) \
+                        .props("flat no-caps").mark("mp3-download") \
+                        .tooltip("Lädt den Song auf dieses Gerät (Downloads)")
+                    mp3_button.set_visibility(remote)
+                    folder_button = ui.button("Ausgabeordner öffnen", icon="folder",
+                                              on_click=lambda: media.open_folder(settings.output_dir())) \
+                        .props("flat no-caps")
+                    folder_button.set_visibility(not remote)          # er ginge am PC auf, nicht auf dem Handy
             with ui.card().classes("w-full bg-grey-9"):
                 progress = ui.linear_progress(value=0, show_value=False).props("rounded color=secondary")
                 step_label = ui.label("Bereit").classes("text-caption").mark("step")
@@ -927,6 +945,15 @@ def build() -> None:
         settings.variations = result.settings.variations
         settings.taste_snapshot = result.settings.taste_snapshot      # derselbe Song: mit demselben Geschmack
         ui.notify(f"Seed {result.seed} festgehalten: „Song erzeugen“ macht jetzt diesen Song mit deinen Änderungen")
+
+    def download_mp3() -> None:
+        result = state["result"]
+        audio = result.audio if result is not None else None
+        if not audio or not os.path.exists(audio):
+            ui.notify("Noch kein Song zum Herunterladen.", type="warning")
+            return
+        name = f"song_{result.settings.style.replace(' ', '-')}_{result.seed}{os.path.splitext(audio)[1]}"
+        ui.download.file(audio, name)
 
     async def export_zip() -> None:
         result = state["result"]

@@ -1418,3 +1418,30 @@ def pick_button(pick: PickFn, s: SongSettings, attr: str, folder: bool = False, 
                 then()
     button = ui.button("Wählen", icon="folder_open", on_click=choose).props("flat dense no-caps")
     button.set_visibility(pick.available)
+    if getattr(pick, "remote", False) and not folder:          # 1.6.0: auf dem Handy hochladen statt wählen
+
+        def done(path: str) -> None:
+            setattr(s, attr, path)
+            if then:
+                then()
+        upload_button(file_types, lambda: os.path.join(s.output_dir(), "hochgeladen"), done, f"upload-{attr}")
+
+
+def upload_button(file_types: tuple, folder: Callable[[], str], done: Callable[[str], None], marker: str) -> None:
+    """Ein Knopf, der eine Datei vom Gerät hochlädt (auf dem Handy statt der Dateiauswahl des PCs); done bekommt den
+    Pfad der Kopie auf dem PC."""
+    import re
+
+    async def uploaded(e) -> None:
+        os.makedirs(folder(), exist_ok=True)
+        target = os.path.join(folder(), os.path.basename(e.file.name))
+        await e.file.save(target)
+        done(target)
+        ui.notify(f"Hochgeladen: {os.path.basename(target)}", type="positive")
+
+    accept = ",".join(re.findall(r"\*(\.\w+)", " ".join(file_types)))
+    upload = ui.upload(auto_upload=True, on_upload=uploaded).props(f"accept={accept}" if accept else "") \
+        .style("position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none") \
+        .mark(f"{marker}-file")
+    ui.button("Hochladen", icon="upload").props("flat dense no-caps").mark(marker) \
+        .on("click", js_handler=f"() => getElement({upload.id}).$refs.qRef.pickFiles()")

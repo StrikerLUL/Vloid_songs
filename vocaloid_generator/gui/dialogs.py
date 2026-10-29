@@ -438,6 +438,58 @@ def markdown_page(title: str, path: str) -> ui.dialog:
 
 
 # ── Hilfe-Menü ─────────────────────────────────────────────────────────────────
+def remote_dialog(s: SongSettings) -> ui.dialog:
+    """Handy als Fernbedienung (1.6.0, fernbedienung.py): einschalten, QR-Code, Adresse und Zugangscode."""
+    import fernbedienung
+    running = fernbedienung.ACTIVE
+
+    def later(on: bool) -> str:
+        if on and running is None:
+            return ("Gilt ab dem nächsten Start: App schließen und wieder öffnen. Windows fragt dann einmal, ob die App "
+                    "ins Netzwerk darf: „Private Netzwerke“ erlauben.")
+        if not on and running is not None:
+            return "Gilt ab dem nächsten Start: dann ist die App wieder nur auf diesem PC offen."
+        return ""
+
+    with ui.dialog() as dialog, ui.card().classes("w-[560px] max-w-full bg-grey-9").mark("remote-dialog"):
+        _title("Handy als Fernbedienung")
+        _hint("Ein Handy oder Tablet im selben WLAN bedient die App im Browser: Text eintippen, Song erzeugen, anhören "
+              "und die MP3 aufs Handy laden. Rechnen tut der PC; solange ein Song entsteht, schläft er nicht ein. "
+              "Jedes andere Gerät braucht den Zugangscode.")
+        ui.switch("Im WLAN erreichbar, mit Zugangscode").bind_value(s, "remote_lan").mark("switch-remote_lan")
+        ui.label().bind_text_from(s, "remote_lan", backward=later).classes("text-caption text-amber-5") \
+            .mark("remote-later")
+
+        @ui.refreshable
+        def info() -> None:
+            if running is None:
+                return
+            with ui.row().classes("w-full items-center gap-4"):
+                ui.image(fernbedienung.qr_image(running.login_url)).classes("w-44 h-44 shrink-0") \
+                    .props("fit=contain").mark("remote-qr")
+                with ui.column().classes("gap-1"):
+                    ui.label("Mit der Kamera des Handys scannen, oder im Browser des Handys eingeben:") \
+                        .classes("text-caption")
+                    ui.label(running.url).classes("text-subtitle1").mark("remote-url")
+                    ui.label("Zugangscode").classes("text-caption q-mt-sm")
+                    ui.label(running.code).classes("text-h4").style("letter-spacing: .3rem").mark("remote-code")
+            with ui.row().classes("items-center gap-2"):
+                ui.button("Neuen Code würfeln", icon="lock_reset", on_click=renew).props("flat dense no-caps") \
+                    .mark("remote-new-code").tooltip("Sperrt alle Geräte aus, die schon drin waren")
+            _hint("Das Handy merkt sich den Zugang 30 Tage. Geht es nicht: Handy und PC im selben WLAN? Ein Gast-WLAN "
+                  "trennt die Geräte. Mehr unter Hilfe › Fehlerbehebung.")
+
+        def renew() -> None:
+            fernbedienung.new_code()
+            info.refresh()
+            ui.notify("Neuer Zugangscode: alle anderen Geräte müssen ihn neu eingeben", type="info")
+
+        info()
+        with ui.row().classes("w-full justify-end"):
+            ui.button("Schließen", on_click=dialog.close).props("flat no-caps").mark("remote-close")
+    return dialog
+
+
 def help_menu(s: SongSettings, pick: PickFn, on_change: Callable[[], None]) -> None:
     host = ui.element("div")        # die Fenster hängen hier, nicht im Menü, das sich beim Klick schließt
 
@@ -454,6 +506,7 @@ def help_menu(s: SongSettings, pick: PickFn, on_change: Callable[[], None]) -> N
             ui.menu_item("Fehlerbehebung", lambda: page("Fehlerbehebung", "FEHLERBEHEBUNG.md")).mark("menu-help")
             ui.menu_item("Einrichten", lambda: show(lambda: setup_wizard(s, pick, on_change))).mark("menu-setup")
             ui.menu_item("System prüfen", lambda: show(lambda: system_check(s))).mark("menu-check")
+            ui.menu_item("Handy als Fernbedienung", lambda: show(lambda: remote_dialog(s))).mark("menu-remote")
             ui.menu_item("Fehlerbericht speichern", lambda: save_report(s)).mark("menu-report")
             ui.separator()
             ui.menu_item("Datenordner öffnen", lambda: media.open_folder(config.DATA_DIR))

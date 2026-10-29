@@ -380,7 +380,6 @@ class SongSettings(BaseModel):
     local_cache: bool = True           # Zwischenspeicher und Projekte nicht in OneDrive, sondern auf dem PC (speicher.py)
     video_links: bool = False          # Video-Links als Vorbild: yt-dlp lädt den Ton nur zum Messen (vorbild_link.py)
     remote_lan: bool = False           # Handy als Fernbedienung: die App im WLAN, mit Zugangscode (fernbedienung.py)
-    remote_code: str = ""              # Zugangscode fürs Handy; leer = beim ersten Einschalten würfeln
 
     channels: dict[str, ChannelSettings] = Field(default_factory=_default_channels)
 

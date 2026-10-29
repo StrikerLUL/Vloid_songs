@@ -183,6 +183,64 @@ PRESETS = {
             "piano": True, "bass": True, "guitar": True, "strings": True,
             "synth": True, "brass": True, "drums": True, "melody": True, "vocals": True
         }
+    },
+    # 1.5.0
+    "Wafuu-Rock": {
+        "bpm": 162,
+        "key": "D",
+        "scale": "minor",
+        "active_sections": ["Intro", "Verse", "PreChorus", "Chorus", "Interlude", "Verse", "PreChorus", "Chorus",
+                            "Bridge", "Chorus", "Outro"],
+        "volumes": {
+            "piano": 0.8, "bass": 0.9, "guitar": 0.9, "strings": 0.7,
+            "synth": 0.5, "brass": 0.6, "drums": 1.0, "melody": 0.85, "vocals": 1.0, "master": 1.0
+        },
+        "panning": {
+            "piano": -0.3, "bass": 0.0, "guitar": 0.35, "strings": -0.35,
+            "synth": 0.0, "brass": 0.2, "drums": 0.0, "melody": -0.15, "vocals": 0.0, "master": 0.0
+        },
+        "enabled": {
+            "piano": True, "bass": True, "guitar": True, "strings": True,
+            "synth": False, "brass": False, "drums": True, "melody": True, "vocals": True
+        }
+    },
+    "Electro-Swing": {
+        "bpm": 124,
+        "key": "G",
+        "scale": "minor",
+        "active_sections": ["Intro", "Verse", "PreChorus", "Chorus", "Verse", "PreChorus", "Chorus", "Drop",
+                            "Chorus", "Outro"],
+        "volumes": {
+            "piano": 0.85, "bass": 0.9, "guitar": 0.6, "strings": 0.6,
+            "synth": 0.5, "brass": 0.9, "drums": 0.9, "melody": 0.8, "vocals": 1.0, "master": 1.0
+        },
+        "panning": {
+            "piano": -0.25, "bass": 0.0, "guitar": 0.3, "strings": -0.35,
+            "synth": 0.0, "brass": 0.25, "drums": 0.0, "melody": -0.15, "vocals": 0.0, "master": 0.0
+        },
+        "enabled": {
+            "piano": True, "bass": True, "guitar": True, "strings": True,
+            "synth": True, "brass": True, "drums": True, "melody": True, "vocals": True
+        }
+    },
+    "Hyperpop": {
+        "bpm": 168,
+        "key": "E",
+        "scale": "major",
+        "active_sections": ["Intro", "Verse", "PreChorus", "Chorus", "Verse", "PreChorus", "Chorus", "Bridge",
+                            "Drop", "Chorus", "Outro"],
+        "volumes": {
+            "piano": 0.7, "bass": 1.0, "guitar": 0.6, "strings": 0.5,
+            "synth": 0.9, "brass": 0.6, "drums": 1.0, "melody": 0.8, "vocals": 1.0, "master": 1.0
+        },
+        "panning": {
+            "piano": -0.25, "bass": 0.0, "guitar": 0.3, "strings": -0.35,
+            "synth": 0.0, "brass": 0.2, "drums": 0.0, "melody": -0.15, "vocals": 0.0, "master": 0.0
+        },
+        "enabled": {
+            "piano": True, "bass": True, "guitar": True, "strings": True,
+            "synth": True, "brass": False, "drums": True, "melody": True, "vocals": True
+        }
     }
 }
 

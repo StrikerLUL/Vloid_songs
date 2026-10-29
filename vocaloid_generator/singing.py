@@ -405,7 +405,8 @@ def _vocal_swing(settings: SongSettings, tracks: dict, out: str) -> None:
 
 
 # G4 (1.3.0): Millisekunden, die der Gesang je Stil hinter (plus) oder vor (minus) dem Schlag liegt
-VOCAL_POCKET_MS = {"City Pop": 18.0, "Lo-Fi": 24.0, "Ballade": 20.0, "Rock": -10.0, "Drum and Bass": -12.0}
+VOCAL_POCKET_MS = {"City Pop": 18.0, "Lo-Fi": 24.0, "Ballade": 20.0, "Rock": -10.0, "Drum and Bass": -12.0,
+                   "Electro-Swing": 15.0, "Wafuu-Rock": -8.0, "Hyperpop": -6.0}
 
 
 def vocal_pocket_ms(settings: SongSettings) -> float:

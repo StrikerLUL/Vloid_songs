@@ -163,6 +163,50 @@ PROGRESSIONS = {
             "Chorus": ["bVI | bVII | i | i", "bVI | bVII | V | i"],
         },
     },
+    # 1.5.0: Wafuu-Rock in Moll mit bVI-bVII-i und dem „Senbonzakura“-Gang, Electro-Swing mit Jazz-Wendungen,
+    # Hyperpop hell und mit großen Sprüngen zwischen den Stufen
+    "Wafuu-Rock": {
+        "minor": {
+            "Verse": ["i | bVII | bVI | bVII", "i | iv | bVII | bIII", "i | bVI | bVII | i", "i | i | iv | v"],
+            "PreChorus": ["bVI | bVII | bIII | bVI", "iv | v | bVI | bVII", "bVI | bVII | V | V"],
+            "Chorus": ["bVI | bVII | v | i", "bVImaj7 | bVII | v7 | i", "i | bVII | bVI | bVII i",
+                       "bVI | bVII | i | i"],
+            "Bridge": ["iv | i | bVII | bIII", "bVI | bIII | bVII | V"],
+        },
+        "major": {
+            "Verse": ["vi | IV | V | vi", "I | V | vi | iii"],
+            "PreChorus": ["IV | V | iii | vi"],
+            "Chorus": ["IV | V | iii | vi", "IVmaj7 | V | iii7 | vi"],
+            "Bridge": ["vi | IV | I | V"],
+        },
+    },
+    "Electro-Swing": {
+        "minor": {
+            "Verse": ["i | i | iv | V7", "i | bVI7 | V7 | i", "i7 | iv7 | V7 | i7"],
+            "PreChorus": ["iv7 | i | bVI7 | V7", "iv | iv | V7 | V7"],
+            "Chorus": ["i | iv | V7 | i", "i | bVI7 | V7 | i", "iv7 | V7 | i7 | VI7"],
+            "Bridge": ["bVImaj7 | V7 | i | i", "iv7 | bVII7 | bIIImaj7 | V7"],
+        },
+        "major": {
+            "Verse": ["I | VI7 | ii7 | V7", "Imaj7 | vi7 | ii7 | V7", "I | I7 | IV | iv"],
+            "PreChorus": ["ii7 | V7 | iii7 | VI7", "IV | iv | I | V7"],
+            "Chorus": ["I | VI7 | II7 | V7", "Imaj7 | VI7 | ii7 | V7", "IV | iv | I | VI7"],
+            "Bridge": ["III7 | VI7 | II7 | V7"],
+        },
+    },
+    "Hyperpop": {
+        "major": {
+            "Verse": ["I | V | vi | IV", "vi | IV | I | V", "I | iii | vi | IV"],
+            "PreChorus": ["IV | V | vi | vi", "IV | IV | V | V"],
+            "Chorus": ["I | V | vi | IV", "IV | V | vi | I", "I V | vi IV | I V | IV V"],
+            "Bridge": ["vi | IV | ii | V", "bVI | bVII | I | I"],
+        },
+        "minor": {
+            "Verse": ["i | bVI | bIII | bVII", "i | bVII | bVI | bVII"],
+            "Chorus": ["bVI | bVII | i | i", "i | bVI | bIII | bVII"],
+            "Bridge": ["bVI | bIII | bVII | V"],
+        },
+    },
 }
 
 # Schluss des Refrains und Akkord vor dem Refrain je Stil (wie styles.CADENCES)
@@ -187,6 +231,12 @@ CADENCES = {
               "minor": {"to_chorus": "V7", "end": ("iim7b5 V7", "i9")}},
     "Idol-Pop": {"major": {"to_chorus": "V7", "end": ("ii V7", "I")},
                  "minor": {"to_chorus": "V7", "end": ("iv V7", "i")}},
+    "Wafuu-Rock": {"minor": {"to_chorus": "bVI bVII", "end": ("bVI bVII", "i")},
+                   "major": {"to_chorus": "IV V", "end": ("IV V", "vi")}},
+    "Electro-Swing": {"minor": {"to_chorus": "V7", "end": ("iim7b5 V7", "i")},
+                      "major": {"to_chorus": "V7", "end": ("ii7 V7", "I")}},
+    "Hyperpop": {"major": {"to_chorus": "IV V", "end": ("IV V", "I")},
+                 "minor": {"to_chorus": "bVII", "end": ("bVI bVII", "i")}},
 }
 
 
@@ -215,6 +265,9 @@ class MelodyCharacter:
     staccato: float = 0.0          # so viele Achtel (mitten in der Phrase) werden kurz und abgesetzt gesungen
     gestures: dict = field(default_factory=dict)   # Sektionsart → Gewichte der Gesten (melody_writer.GESTURES)
     score: dict = field(default_factory=dict)      # was die Bewertung der besten Melodie im Stil anders sieht
+    # 1.5.0: Stufen (Halbtöne über dem Grundton), die die Melodie meidet: {"major": …, "minor": …}; Wafuu-Rock
+    # singt so in der japanischen Fünftonleiter (Yonanuki: ohne vierte und siebte Stufe, in Moll ohne zweite und sechste)
+    avoid: dict = field(default_factory=dict)
 
 
 # Die Rhythmen, die jeder Stil zusätzlich kennt (Einsätze in Sechzehnteln, wie melody_writer.BODY_RHYTHMS)
@@ -274,6 +327,23 @@ CHARACTERS = {
                                 contour=1.1, staccato=0.35,
                                 score={"repeats": (0.1, 0.36), "motif_weight": 1.6}),
 }
+# 1.5.0
+CHARACTERS.update({
+    # Fünftonleiter, weite Bögen mit Quarten und Quinten, lange Töne am Phrasenende
+    "Wafuu-Rock": MelodyCharacter(density=1.0, rhythm="driving", rhythm_pull=1.2, leap_cost=0.85,
+                                  favorite_leaps=(5, 7), contour=1.25, staccato=0.05,
+                                  avoid={"major": (5, 11), "minor": (2, 8)},
+                                  gestures={"Chorus": {"arch": 3, "leap_fall": 2, "fall": 1}},
+                                  score={"range": {"Chorus": (10, 15)}}),
+    # Swing: synkopiert und abgehackt wie eine Bläser-Phrase, Terzen und Sexten
+    "Electro-Swing": MelodyCharacter(density=1.0, rhythm="syncopated", rhythm_pull=1.8, leap_cost=0.9,
+                                     favorite_leaps=(3, 4, 9), repeat_bonus=0.3, contour=1.0, staccato=0.35,
+                                     score={"repeats": (0.1, 0.38)}),
+    # alles zu viel: dicht, hoch, Oktavsprünge, kurz abgesetzt
+    "Hyperpop": MelodyCharacter(density=1.2, rhythm="even", rhythm_pull=1.4, step_cost=1.1, leap_cost=0.75,
+                                favorite_leaps=(5, 7, 12), repeat_bonus=0.4, contour=1.35, staccato=0.45,
+                                score={"leaps": (0.18, 0.42), "range": {"Chorus": (11, 16)}}),
+})
 NEUTRAL = MelodyCharacter()
 
 
@@ -363,6 +433,16 @@ ARRANGEMENT = {
         "Bridge": {"synth": None},
         "Verse:2": {"perc": "claps+tambourine"},
     },
+    "Wafuu-Rock": {
+        "Verse:2": {"perc": "taiko"},
+        "Bridge": {"guitar": None, "perc": None},
+    },
+    "Electro-Swing": {
+        "Chorus:2": {"strings": "pizzicato"},
+    },
+    "Hyperpop": {
+        "Bridge": {"guitar": None, "counter": None},
+    },
 }
 
 
@@ -435,6 +515,15 @@ STYLE_SOUNDS = {
     "Idol-Pop": Sound(room=0.72, damping=0.25, hall_lowpass=12000.0, predelay=0.015, delay_beats=0.5,
                       delay_feedback=0.25, delay_lowpass=8000.0, low_db=1.0, mid_db=-0.5, mid_hz=700.0, high_db=2.0,
                       width=1.25, describe_as="poliert und strahlend"),
+    "Wafuu-Rock": Sound(room=0.66, damping=0.45, hall_lowpass=9000.0, predelay=0.02, delay_beats=0.75,
+                        delay_feedback=0.3, low_db=1.0, mid_db=1.0, mid_hz=2200.0, high_db=0.5, width=1.1, drive=0.35,
+                        describe_as="Halle eines Schreins, Gitarren vorn"),
+    "Electro-Swing": Sound(room=0.5, damping=0.5, hall_lowpass=8500.0, predelay=0.01, hall_gain=0.85,
+                           delay_beats=0.5, delay_feedback=0.25, delay_lowpass=5000.0, low_db=2.0, mid_db=1.0,
+                           mid_hz=1000.0, high_db=-0.5, width=0.95, drive=0.25, describe_as="Shellack-Mitten, Club-Bass"),
+    "Hyperpop": Sound(room=0.6, damping=0.2, hall_lowpass=13000.0, hall_gain=0.8, delay_beats=0.5,
+                      delay_feedback=0.35, delay_lowpass=10000.0, low_db=2.5, mid_db=0.5, mid_hz=3000.0, high_db=2.5,
+                      width=1.35, drive=0.45, describe_as="zu laut, zu hell, zu breit (Absicht)"),
 }
 
 SOUNDS = STYLE_SOUNDS            # die Tests schalten es hier ab (conftest.py)

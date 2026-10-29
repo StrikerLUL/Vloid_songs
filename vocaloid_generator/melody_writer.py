@@ -227,6 +227,10 @@ class SectionMelodyWriter:
             import style_dna
             self.char = style_dna.character(plan.style.name)
         self.costs = INTERVAL_COST if self.char is None else _interval_costs(self.char)
+        self.avoid = ()
+        if self.char is not None and self.char.avoid:
+            major = (self.sec.tonic + 4) % 12 in scale_pcs(self.sec.tonic, self.sec.mode)
+            self.avoid = self.char.avoid.get("major" if major else "minor", ())
         self.detached = {}
 
     # ── Silben verteilen ─────────────────────────────────────────────────────────
@@ -404,6 +408,8 @@ class SectionMelodyWriter:
                     cost += 2.5
             if p % 12 not in scale:
                 cost += 5.0
+            if self.avoid and (p - self.sec.tonic) % 12 in self.avoid:
+                cost += AVOID_COST
             cost += self.rng.random() * 0.7
             if cost < best_cost:
                 best, best_cost = p, cost
@@ -692,6 +698,7 @@ class SectionMelodyWriter:
 
 
 FAVORITE_SHARE = 0.4      # so viel kostet ein typischer Sprung des Stils im Vergleich zu sonst
+AVOID_COST = 2.0          # so viel kostet eine Stufe, die der Stil meidet (style_dna.MelodyCharacter.avoid)
 
 
 def _interval_costs(char) -> list:

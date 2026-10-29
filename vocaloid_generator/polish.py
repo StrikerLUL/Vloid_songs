@@ -44,6 +44,9 @@ CAPTIONS = {
     "Drum and Bass": "liquid drum and bass, fast breakbeats, deep sub bass, atmospheric pads",
     "Lo-Fi": "lo-fi hip hop, mellow electric piano, dusty drums, warm tape sound, relaxed",
     "Idol-Pop": "japanese idol pop, cheerful, bright synths, brass hits, four on the floor drums, sparkling bells",
+    "Wafuu-Rock": "japanese wagakki rock, shamisen, koto, shakuhachi, taiko drums, distorted guitars, fast and epic",
+    "Electro-Swing": "electro swing, 1930s big band brass, walking upright bass, ragtime piano, four on the floor",
+    "Hyperpop": "hyperpop, distorted 808 bass, glitchy chiptune leads, supersaws, fast trap hi-hats, maximalist",
 }
 DEFAULT_CAPTION = "j-pop, bright band, piano, synths, drums"
 PRODUCTION = "instrumental, polished studio production, clear mix"

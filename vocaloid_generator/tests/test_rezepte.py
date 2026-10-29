@@ -11,10 +11,10 @@ from settings import SongSettings
 from styles import STYLES
 
 
-def test_eight_to_ten_recipes_each_a_song_with_its_own_text():
-    assert 8 <= len(rezepte.RECIPES) <= 10 and len(set(rezepte.names())) == len(rezepte.RECIPES)
-    assert {"Idol-Pop", "Ballade", "City Pop", "Future Bass", "Dark Vocaloid"} <= \
-        {r.values["style"] for r in rezepte.RECIPES}
+def test_recipes_each_a_song_with_its_own_text():
+    assert 8 <= len(rezepte.RECIPES) <= 12 and len(set(rezepte.names())) == len(rezepte.RECIPES)
+    assert {"Idol-Pop", "Ballade", "City Pop", "Future Bass", "Dark Vocaloid", "Wafuu-Rock", "Electro-Swing",
+            "Hyperpop"} <= {r.values["style"] for r in rezepte.RECIPES}
     for recipe in rezepte.RECIPES:
         s = rezepte.apply(recipe.name, SongSettings())
         assert s.style in STYLES and s.lyrics == recipe.lyrics and recipe.about

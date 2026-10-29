@@ -21,7 +21,7 @@ CHANNEL_FIELDS = ("volume", "pan", "enabled", "mute", "solo")
 # Wählbare Spielweisen pro Instrument; "default" nimmt das Muster des Genres
 STYLE_OPTIONS = {
     "piano": ("default", "chords", "eighths", "stabs", "arpeggio", "arpeggio16", "ballad_arp", "jazz_ch"),
-    "bass": ("default", "root", "driving", "sync", "octaves", "wobble", "sub_pulse", "lazy", "rolling"),
+    "bass": ("default", "root", "driving", "sync", "octaves", "wobble", "sub_pulse", "lazy", "rolling", "walking"),
     "guitar": ("default", "chill_riff", "strummed", "palm_mute", "power_chords", "cutting"),
     "strings": ("default", "legato", "build", "pizzicato", "staccato", "harp"),
     "synth": ("default", "pad", "riser", "staccato_pluck", "wide_saw", "pluck", "arp", "supersaw", "fb_chords"),
@@ -29,7 +29,7 @@ STYLE_OPTIONS = {
     "bells": ("default", "sparkle", "sparkle16", "hook_octave", "accents", "music_box"),
     "choir": ("default", "aahs", "oohs"),
     "counter": ("default", "answer", "guide", "solo"),
-    "perc": ("default", "shaker", "claps", "tambourine", "congas", "cowbell"),
+    "perc": ("default", "shaker", "claps", "tambourine", "congas", "cowbell", "taiko"),
     # Drums spielen die Grooves des Stils; wählbar ist der Klang: SoundFont-Kit oder Drum-Machine 808/909.
     # Die Lead-Stimme spielt den Refrain-Hook im Intro und Outro
     "drums": ("default", "soundfont", "808", "909"),

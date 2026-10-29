@@ -33,6 +33,9 @@ PALETTES = {
     "Drum and Bass": ("#141e30", "#000000", "#00f5d4"),
     "Lo-Fi": ("#c9a27e", "#3e3a4f", "#f2e8cf"),
     "Idol-Pop": ("#fbc2eb", "#a18cd1", "#ffffff"),
+    "Wafuu-Rock": ("#7a1022", "#140a1e", "#ffb000"),
+    "Electro-Swing": ("#3a2f1c", "#0b0a12", "#d4af37"),
+    "Hyperpop": ("#ff3cac", "#2b86c5", "#f6ff00"),
 }
 DEFAULT_PALETTE = ("#6a3093", "#1a1030", "#ff4f8b")
 # Schriften mit japanischen Zeichen zuerst (Windows, dann Linux), sonst die eingebaute von Pillow

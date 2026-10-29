@@ -340,7 +340,7 @@ SHAKURI_LEAP = 3             # Halbtöne aufwärts, ab denen der Ton von unten k
 # Wie stark je Stil: Ballade mehr, Chiptune gar nicht (die Stimme klingt dort wie ein Instrument)
 STYLE_ORNAMENTS = {"Ballade": 1.6, "City Pop": 1.2, "Lo-Fi": 1.1, "Rock": 0.9, "Dark Vocaloid": 0.8,
                    "J-Pop Energy": 0.8, "Idol-Pop": 0.6, "Future Bass": 0.6, "Drum and Bass": 0.5,
-                   "Kawaii Chiptune": 0.0}
+                   "Kawaii Chiptune": 0.0, "Wafuu-Rock": 1.4, "Electro-Swing": 0.9, "Hyperpop": 0.0}
 
 
 def ornament_amount(strength: float, style: str) -> float:

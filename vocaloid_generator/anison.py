@@ -12,7 +12,7 @@ from drums import CRASH, KICK, SNARE, _vel
 from parts import Ev
 from song_plan import BEATS_PER_BAR
 
-STYLES = ("J-Pop Energy", "Rock", "Idol-Pop", "Dark Vocaloid", "Kawaii Chiptune")
+STYLES = ("J-Pop Energy", "Rock", "Idol-Pop", "Dark Vocaloid", "Kawaii Chiptune", "Wafuu-Rock")
 MIN_BPM = 140               # langsamer treibt kein 2-Beat
 TWO_BEAT_SHARE, DISCO_SHARE, TOM_SHARE, STOP_SHARE, ROLL_SHARE = 0.5, 0.5, 0.5, 0.5, 0.6
 

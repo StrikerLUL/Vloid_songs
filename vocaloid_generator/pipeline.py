@@ -33,6 +33,9 @@ STYLE_TO_GENRE = {
     "Drum and Bass": "EDM",
     "Lo-Fi": "Lo-Fi",
     "Idol-Pop": "J-Pop",
+    "Wafuu-Rock": "Rock",
+    "Electro-Swing": "EDM",
+    "Hyperpop": "EDM",
 }
 
 ProgressFn = Callable[[float, str], None]

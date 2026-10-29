@@ -31,6 +31,10 @@ PROGRAMS = {
               "bells": [11, 10]},
     "Idol-Pop": {"piano": [1, 4, 5], "guitar": [27, 28], "bells": [9, 8, 13], "counter": [61, 56, 62],
                  "brass": [61, 62]},
+    # Koto oder Harfe als Zupfinstrument, Shakuhachi oder Flöte als Lead, Shamisen oder Koto antwortet
+    "Wafuu-Rock": {"piano": [107, 46], "melody": [77, 73, 106], "counter": [106, 107, 77], "bells": [107, 108]},
+    "Electro-Swing": {"piano": [0, 3], "melody": [56, 59, 66, 71], "counter": [66, 65, 71, 56], "brass": [61, 56]},
+    "Hyperpop": {"piano": [8, 10, 4], "bells": [9, 10, 13], "guitar": [30, 29]},
 }
 # Eigene Synth-Stimmen (synth_engine.VOICES) je Unterspur: {Instrument: {Unterspur: [Stimmen]}}
 VOICES = {
@@ -41,6 +45,8 @@ VOICES = {
                     "melody": {"": ["lead", "pluck"]}},
     "Drum and Bass": {"bass": {"": ["reese", "sub"]}, "synth": {"": ["pluck", "chip"]}},
     "Idol-Pop": {"synth": {"": ["pluck", "chip"], "saw": ["supersaw", "fb_chord"]}, "melody": {"": ["lead", "chip"]}},
+    "Hyperpop": {"synth": {"": ["chip", "pluck"], "saw": ["supersaw", "fb_chord"]}, "bass": {"": ["reese", "sub"]},
+                 "melody": {"": ["chip", "lead"]}},
 }
 # Grooves (drums.GROOVES), die im Stil passen: {Sektion: [Grooves]}
 GROOVES = {
@@ -57,6 +63,9 @@ GROOVES = {
     "Drum and Bass": {"Verse": ["dnb_verse", "halftime"]},
     "Lo-Fi": {"Verse": ["lofi", "lofi_light"]},
     "Idol-Pop": {"Verse": ["idol_verse", "edm_verse"], "Chorus": ["four_floor", "disco"]},
+    "Wafuu-Rock": {"Verse": ["rock_verse", "tom_verse"], "Chorus": ["rock_chorus", "two_beat", "double_kick"]},
+    "Electro-Swing": {"Verse": ["swing_verse", "swing_floor"], "Chorus": ["swing_floor", "disco"]},
+    "Hyperpop": {"Verse": ["hyper_verse", "fb_verse"], "Chorus": ["hyper", "four_floor"]},
 }
 # Spielweisen (parts.PARTS): {Sektion: {Instrument: [Spielweisen]}}; nur wo der Stil das Instrument schon spielt
 PATTERNS = {
@@ -101,7 +110,8 @@ SOUND_NAMES = {0: "Flügel", 1: "helles Klavier", 2: "E-Flügel", 4: "Rhodes", 5
                28: "gedämpfte E-Gitarre", 29: "Overdrive-Gitarre", 30: "Distortion-Gitarre", 40: "Violine",
                42: "Cello", 48: "Streicher", 49: "weiche Streicher", 56: "Trompete", 61: "Bläsersatz",
                62: "Synth-Bläser", 65: "Altsax", 66: "Tenorsax", 68: "Oboe", 71: "Klarinette", 73: "Flöte",
-               81: "Saw-Lead", 89: "warme Fläche"}
+               81: "Saw-Lead", 89: "warme Fläche", 3: "Honky-Tonk-Klavier", 10: "Spieluhr", 46: "Harfe",
+               59: "gedämpfte Trompete", 77: "Shakuhachi", 106: "Shamisen", 107: "Koto", 108: "Kalimba"}
 PART_NAMES = {"piano": "Klavier", "guitar": "Gitarre", "melody": "Lead", "bells": "Glocken", "counter": "Gegenstimme",
               "brass": "Bläser", "strings": "Streicher", "synth": "Synth", "bass": "Bass"}
 SECTION_NAMES = {"Verse": "Strophe", "Chorus": "Refrain"}

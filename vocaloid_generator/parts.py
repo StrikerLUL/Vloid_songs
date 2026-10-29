@@ -212,6 +212,22 @@ def bass(pattern: str, sec: Section, plan: SongPlan, rng: random.Random, ctx: di
         for i, t in enumerate(hits):
             end = hits[i + 1] if i + 1 < len(hits) else sec.end
             note(t, (end - t) * 0.95, _chord_for(sec, t), 1.0 if abs(t % 4) < 1e-6 else 0.85)
+    elif pattern == "walking":
+        # Electro-Swing (1.5.0): Viertel wie ein Kontrabass, Grundton, Akkordtöne und ein Halbton vor dem nächsten
+        for i, slot in enumerate(sec.chords):
+            nxt = sec.chords[i + 1].chord if i + 1 < len(sec.chords) else slot.chord
+            beats = max(1, int(round(slot.dur)))
+            tones = [slot.chord.pcs[min(1, len(slot.chord.pcs) - 1)], slot.chord.fifth_pc,
+                     slot.chord.pcs[min(3, len(slot.chord.pcs) - 1)]]
+            for k in range(beats):
+                t = slot.start + k
+                if k == 0:
+                    note(t, 0.9, slot.chord, 1.0)
+                elif k == beats - 1:
+                    target = _bass_pitch(nxt.bass_pc, prev)
+                    out.append(Ev(t, 0.9, target - 1 if target > prev else target + 1, _vel(sec, 0.75)))
+                else:
+                    out.append(Ev(t, 0.9, _bass_pitch(tones[(k - 1) % len(tones)], prev), _vel(sec, 0.85)))
     ctx["bass"] = prev
     if ctx.get("lively") and pattern in LIVELY_BASS:
         out = _liven_bass(out, sec, random.Random(f"{ctx['lively']}:{sec.kind}:{sec.start}"))
@@ -648,8 +664,9 @@ def counter(pattern: str, sec: Section, plan: SongPlan, rng: random.Random, ctx:
     return out
 
 
-# ── Percussion: Shaker, Claps, Tamburin, Congas, Cowbell ─────────────────────────
+# ── Percussion: Shaker, Claps, Tamburin, Congas, Cowbell, Taiko ─────────────────────────
 SHAKER, CLAPS, TAMB, COWBELL, CONGA_MUTE, CONGA_OPEN, CONGA_LOW = 82, 39, 54, 56, 62, 63, 64
+TAIKO_LOW, TAIKO_HIGH = 41, 43
 PERC_PATTERNS = {
     "shaker": [(s, SHAKER, 0.62 if s % 4 == 2 else 0.42 if s % 2 == 0 else 0.3) for s in range(16)],
     "claps": [(4, CLAPS, 0.85), (12, CLAPS, 0.85)],
@@ -657,6 +674,9 @@ PERC_PATTERNS = {
     "congas": [(0, CONGA_LOW, 0.8), (3, CONGA_OPEN, 0.65), (6, CONGA_MUTE, 0.55), (8, CONGA_LOW, 0.7),
                (10, CONGA_OPEN, 0.7), (11, CONGA_OPEN, 0.5), (14, CONGA_MUTE, 0.55)],
     "cowbell": [(s, COWBELL, 0.6 if s % 8 == 0 else 0.45) for s in range(0, 16, 4)],
+    # Wafuu-Rock (1.5.0): tiefe Toms wie Taiko, „don don doko“
+    "taiko": [(0, TAIKO_LOW, 1.0), (3, TAIKO_LOW, 0.55), (6, TAIKO_HIGH, 0.75), (8, TAIKO_LOW, 0.95),
+              (11, TAIKO_HIGH, 0.6), (12, TAIKO_HIGH, 0.85), (14, TAIKO_LOW, 0.7)],
 }
 
 

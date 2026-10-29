@@ -51,6 +51,9 @@ STYLE_TRAITS = {
     "Drum and Bass": {"bpm": (165, 180), "mode": 0, "bright": 0.6, "drums": 0.85},
     "Lo-Fi": {"bpm": (68, 95), "mode": 0, "bright": 0.1, "drums": 0.5},
     "Idol-Pop": {"bpm": (165, 195), "mode": 1, "bright": 0.65, "drums": 0.65},
+    "Wafuu-Rock": {"bpm": (150, 185), "mode": -1, "bright": 0.7, "drums": 0.6},
+    "Electro-Swing": {"bpm": (115, 132), "mode": 0, "bright": 0.45, "drums": 0.65},
+    "Hyperpop": {"bpm": (150, 190), "mode": 1, "bright": 0.85, "drums": 0.7},
 }
 
 

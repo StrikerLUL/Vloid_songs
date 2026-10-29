@@ -16,7 +16,8 @@ log = logging.getLogger(__name__)
 FILE = "chops.wav"
 # Stile mit Chops und die Sektionen ohne Gesang, in denen sie spielen
 CHOP_STYLES = {"Future Bass": ("Drop", "Intro"), "J-Pop Energy": ("Drop",), "Kawaii Chiptune": ("Drop",),
-               "Idol-Pop": ("Drop",), "Drum and Bass": ("Drop",), "Dark Vocaloid": ("Drop",)}
+               "Idol-Pop": ("Drop",), "Drum and Bass": ("Drop",), "Dark Vocaloid": ("Drop",),
+               "Hyperpop": ("Drop", "Intro"), "Electro-Swing": ("Drop",)}
 # Riff je Takt: (Schlag, Länge in Schlägen); der letzte Takt einer Sektion endet mit einem Stottern
 PATTERN = ((0.0, 0.5), (0.75, 0.5), (1.5, 0.5), (2.0, 0.25), (2.5, 0.5), (3.25, 0.25), (3.5, 0.5))
 STUTTER = ((0.0, 0.5), (0.75, 0.5), (1.5, 0.5), (2.0, 0.25), (2.5, 0.25), (3.0, 0.25), (3.25, 0.25), (3.5, 0.25),

@@ -269,6 +269,9 @@ def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None,
     keep_history = keep_history and not settings.draft
     out = settings.output_dir()
     os.makedirs(out, exist_ok=True)
+    import speicher
+    if speicher.low_space(out):
+        log.warning(speicher.low_space(out))
 
     report(0.05, "Komponiere Song...")
     settings = with_taste(settings, seed)
@@ -346,6 +349,9 @@ def _produce(settings: SongSettings, tracks: dict, out: str, report: ProgressFn,
         entry = history.record(result.audio, settings, out, keep=settings.history_keep,
                                character=song_character(tracks))
         result.history = entry.audio if entry else None
+        if entry:
+            import speicher
+            speicher.cloud_copy(out, entry.audio)       # die MP3 auch nach OneDrive, wenn die App außerhalb arbeitet
         if entry and settings.keep_projects:
             import project
             report(0.98, "Hebe den Gesang als Projekt auf...")

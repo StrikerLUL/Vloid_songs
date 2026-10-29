@@ -1286,6 +1286,11 @@ def app_settings(s: SongSettings, tidy: Callable[[], None] = lambda: None) -> No
         .mark("switch-keep_projects") \
         .tooltip("Etwa 20 bis 60 MB pro Song (FLAC). Ein wieder geöffneter Song singt nicht neu: Band und Mix "
                  "entstehen frisch, danach lässt er sich weiter bearbeiten.")
+    ui.switch("Arbeitsdateien außerhalb von OneDrive (Spuren, Gesang, Verlauf, Projekte)").bind_value(s, "local_cache") \
+        .mark("switch-local_cache") \
+        .tooltip("Liegt der Ausgabeordner in OneDrive oder Dropbox, arbeitet die App in einem Ordner auf diesem Rechner "
+                 "(%LOCALAPPDATA%\\Vloid Songs). Sonst lädt OneDrive bei jedem Song Hunderte MB hoch. Die fertige MP3 "
+                 "kommt trotzdem in den Ordner MP3 in OneDrive, ältere Songs bleiben im Verlauf.")
     ui.label(userdata.describe()).classes("text-caption").mark("data-folder")
     ui.switch("Daten im Programmordner lassen statt in Dokumente (gilt ab dem nächsten Start)",
               value=userdata.in_program_folder(), on_change=lambda e: userdata.choose_program_folder(e.value)) \

@@ -24,7 +24,7 @@ log = logging.getLogger(__name__)
 
 RESULT_FILE = "systemcheck.json"
 FOLDER = "Systemcheck"            # im Datenordner: der kurze Probesong
-MIN_FREE_GB = 5.0
+MIN_FREE_GB = 5.0                   # wie speicher.LOW_GB
 # Immer nur eine Prüfung: Zwei gleichzeitige (z. B. „Prüfen“ in einem zweiten Fenster „System prüfen“) singen den
 # Probesong in denselben Ordner und löschen sich gegenseitig die Gesangsdateien (Errno 2, „System error“).
 _lock = threading.Lock()
@@ -78,8 +78,13 @@ def check_space(settings, folder: str) -> tuple:
         os.remove(probe)
     except OSError as e:
         return False, f"In den Datenordner {config.DATA_DIR} lässt sich nicht schreiben: {e}"
+    import speicher
     free = shutil.disk_usage(config.DATA_DIR).free / 1e9
     text = f"{config.DATA_DIR}, {free_space(config.DATA_DIR)}"
+    work = settings.output_dir()
+    if speicher.where(settings):
+        text += f"; Arbeitsordner {work}, {free_space(work)}"
+        free = min(free, (speicher.free(work) or 0) / 1e9)
     return (free >= MIN_FREE_GB), text if free >= MIN_FREE_GB else f"Wenig Platz: {text}"
 
 

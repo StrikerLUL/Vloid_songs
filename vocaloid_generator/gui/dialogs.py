@@ -128,6 +128,9 @@ def setup_wizard(s: SongSettings, pick: PickFn, on_change: Callable[[], None]) -
             caches_label = ui.label("Zwischenspeicher: …").classes("text-body2 col").mark("wizard-caches")
             ui.button("Aufräumen", icon="cleaning_services", on_click=lambda: clear_caches()) \
                 .props("flat dense no-caps").mark("wizard-clear")
+        where = speicher.where(s)
+        if where:
+            _hint(where)
         _hint("Projekte sind der aufgehobene Gesang zum Wieder-Öffnen aus dem Verlauf; Favoriten und benannte Songs "
               "behalten ihres. Zwischenspeicher sind Messungen der Vorbilder, alte Protokolle und Fehlerberichte, die "
               "beim nächsten Mal neu entstehen. Eingerichtete Klänge und Modelle lassen sich oben mit „Entfernen“ "

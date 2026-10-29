@@ -521,12 +521,16 @@ class SongSettings(BaseModel):
             return True
 
     def output_dir(self) -> str:
+        """Wo die App Songs erzeugt. Liegt der Ausgabeordner in OneDrive, mit local_cache ein Ordner auf diesem Rechner
+        (speicher.outside_cloud, 1.6.0)."""
         configured = self.output_ordner
+        target = config.OUTPUT_ORDNER
         if configured and (os.path.isdir(configured) or os.path.isdir(os.path.dirname(configured))):
-            return configured
-        if configured:
+            target = configured
+        elif configured:
             log.warning("Output-Ordner nicht erreichbar: %s. Nutze %s", configured, config.OUTPUT_ORDNER)
-        return config.OUTPUT_ORDNER
+        import speicher
+        return speicher.work_dir(self, target)
 
     # ── Hilfen für die Pipeline ─────────────────────────────────────────────────
     def instrument_styles(self) -> dict:

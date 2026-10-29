@@ -380,6 +380,10 @@ def build() -> None:
             current = current.with_updates(variations={}, melody_edits={}, melody_lengths={}, phrase_fixes={},
                                            remix_from="", remix_bpm=0)
         save_settings()
+        import speicher
+        tight = speicher.low_space(current.output_dir())
+        if tight:
+            ui.notify(tight, type="warning", timeout=10000)
         simple = settings.simple_view
         if simple:
             current = qualitaet.apply(current)      # die Stufe der einfachen Ansicht; die Schalter bleiben

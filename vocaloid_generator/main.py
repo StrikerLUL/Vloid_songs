@@ -69,6 +69,10 @@ OFF_150 = (
     ("video_hud", "--ohne-video-ablauf", "keine Ablaufleiste im Video"),
     ("youtube_chapters", "--ohne-kapitel", "keine Kapitel in der YouTube-Beschreibung"),
     ("ai_backgrounds", "--ohne-ki-bilder", "keine KI-Bilder im Video, auch wenn setup_bilder.py gelaufen ist"),
+    ("ref_structure", "--ohne-vorbild-ablauf", "--vom-vorbild übernimmt Ablauf, Takte und Akkorde nicht"),
+    ("key_words", "--ohne-schluesselwoerter", "Kernwort und Gefühlswörter zählen bei der besten Melodie nicht"),
+    ("catchy_chorus", "--ohne-ohrwurm", "keine Ohrwurm-Wertung des Refrains bei der besten Melodie"),
+    ("chorus_lift", "--ohne-refrain-steigerung", "alle Refrains gleich voll wie bis 1.4"),
 )
 OFF_ALL = OFF_130 + OFF_140 + OFF_150
 
@@ -253,7 +257,8 @@ def parse_args(argv=None):
     p.add_argument("--ohne-vorbild-gesangsklang", action="store_true",
                    help="die Klangkurve des Gesangs nicht an den Gesang der Vorbilder angleichen")
     p.add_argument("--vom-vorbild", action="store_true",
-                   help="Tempo, Tonart und Stil der Vorbilder übernehmen (soweit in den Einstellungen erlaubt)")
+                   help="Tempo, Tonart, Stil, Ablauf und Akkorde der Vorbilder übernehmen (soweit in den "
+                        "Einstellungen erlaubt)")
     p.add_argument("--lautheit", type=float, metavar="LUFS", help="Ziel-Lautheit des Masters, z. B. -14 für YouTube")
     p.add_argument("--verlauf", nargs="?", const="", metavar="SUCHE",
                    help="die Songs im Verlauf auflisten und beenden; mit SUCHE nur passende (Name, Notiz, Stil, Seed)")
@@ -362,6 +367,8 @@ def main(argv=None) -> int:
     if args.vorbild:
         settings = settings.with_updates(reference_tracks=[ReferenceTrack(path=p).model_dump() for p in args.vorbild])
     if args.vom_vorbild:
+        if args.off_ref_structure:          # wirkt schon beim Übernehmen, nicht erst danach
+            settings = settings.with_updates(ref_structure=False)
         settings = from_references(settings)
     if args.rezept:
         settings = rezepte.apply(args.rezept, settings)

@@ -119,6 +119,10 @@ ELSEWHERE = {
     "video_hud": "test_video_150.py::test_each_part_of_the_video_has_its_switch",
     "youtube_chapters": "test_video_150.py::test_the_description_lists_chapters_only_with_the_switch",
     "ai_backgrounds": "test_video_150.py::test_ai_pictures_are_painted_once_per_section_kind_and_reused",
+    "ref_structure": "test_lieder_150.py::test_from_references_takes_structure_and_chords_only_with_the_switch",
+    "key_words": "test_lieder_150.py::test_the_best_melody_puts_key_words_up_and_is_catchier_with_the_switches",
+    "catchy_chorus": "test_lieder_150.py::test_the_best_melody_puts_key_words_up_and_is_catchier_with_the_switches",
+    "chorus_lift": "test_lieder_150.py::test_the_first_chorus_is_leaner_and_the_last_has_everything",
 }
 # Bedienung der App, ändert den Song nicht
 APP = ("show_karaoke", "reuse_steps", "log_file", "update_check", "setup_wizard", "done_notice", "lyric_hints",

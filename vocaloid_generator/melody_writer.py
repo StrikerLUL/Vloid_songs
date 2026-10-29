@@ -831,7 +831,8 @@ def _best_of(plan: SongPlan, sec: Section, rng: random.Random, motifs, words: li
     if "melody_character" in extras:
         import style_dna
         targets = style_dna.character(plan.style.name).score or None
-    best, points, mean = melody_score.pick(candidates, sec.kind, before, plan.vocal_range[1], sec.bar_beats, targets)
+    best, points, mean = melody_score.pick(candidates, sec.kind, before, plan.vocal_range[1], sec.bar_beats, targets,
+                                           tuple(extras))
     log.info("Beste Melodie: %s aus %d Fassungen, %.1f Punkte (Schnitt %.1f)", sec.kind, len(candidates), points, mean)
     return candidates[best]
 

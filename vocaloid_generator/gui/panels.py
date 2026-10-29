@@ -165,6 +165,10 @@ BAND_SWITCHES = (
                                              "eigenes Intro (leise, nur Schlagzeug, mit der Hook) und einen eigenen "
                                              "Schluss (ausklingen, harter Stopp, ausblenden). Zwei Songs eines Stils "
                                              "klingen so nicht mehr gleich"),
+    # 1.5.0
+    ("chorus_lift", "Refrains steigern sich", "Der erste Refrain ist schlanker (Antwort-Melodie und Glocken erst ab "
+                                              "der Hälfte, keine Oktav-Schicht), der letzte spielt mit allem: Oktave "
+                                              "über den ganzen Refrain und ein Becken alle vier Takte"),
 )
 
 # Melodie 1.3.0 und 1.4.0, jede Neuerung mit Schalter
@@ -196,6 +200,14 @@ MELODY_SWITCHES = (
                                                       "mit Quart-Sprüngen, City Pop synkopisch, Lo-Fi flach und "
                                                       "zurückgelehnt. Auch die Punkte von „Beste Melodie suchen“ "
                                                       "richten sich nach dem Stil"),
+    # 1.5.0
+    ("key_words", "Wichtige Wörter betonen", "„Beste Melodie suchen“ nimmt lieber die Fassung, in der das Kernwort des "
+                                             "Refrains (das Wort, das am öftesten wiederkommt) hoch oder lang auf der "
+                                             "betonten Zeit liegt und Gefühlswörter wie 好き, 涙, さよなら lange Töne "
+                                             "bekommen"),
+    ("catchy_chorus", "Ohrwurm-Wertung", "„Beste Melodie suchen“ nimmt im Refrain lieber die Fassung, deren erste "
+                                         "Phrase mit kleiner Veränderung wiederkommt und deren Anfangsmotiv "
+                                         "zurückkehrt"),
 )
 # (Einstellung, Text, von, bis, Schritt, Erklärung): Regler der Neuerungen aus 1.3.0, 0 = aus
 MELODY_SLIDERS = (
@@ -387,6 +399,9 @@ REFERENCE_SWITCHES = (
                                                        "Vorbilder, höchstens 4 dB je Band; braucht Demucs"),
     ("ref_tempo_key", "Tempo und Tonart vorschlagen", "Ein Klick übernimmt Tempo und Tonart der Vorbilder"),
     ("ref_style", "Stil vorschlagen", "Ein Klick übernimmt den Stil, der am besten zu den Vorbildern passt"),
+    ("ref_structure", "Ablauf und Akkorde vorschlagen (wie dieser Song)",
+     "Ein Klick misst das Vorbild mit dem größten Gewicht ganz durch und übernimmt Ablauf (Intro, Strophe, Refrain …), "
+     "Takte und Akkorde als Stufen; alles steht danach in den Feldern und lässt sich ändern"),
 )
 
 
@@ -465,11 +480,26 @@ def reference_editor(s: SongSettings, pick: PickFn, apply_template: Callable[[So
                 ui.button(f"Stil {summary.style} übernehmen", icon="style",
                           on_click=lambda: take(style=summary.style)) \
                     .props("outline dense no-caps").mark("reference-take-style")
+            if s.ref_structure:
+                ui.button("Ablauf und Akkorde übernehmen", icon="view_timeline", on_click=take_structure) \
+                    .props("outline dense no-caps").mark("reference-take-structure") \
+                    .tooltip("Wie dieser Song: misst das wichtigste Vorbild ganz durch (dauert ein paar Sekunden)")
 
     def take(**values) -> None:
         apply_template(s.with_updates(**values))
         summary_box.refresh()
         ui.notify("Vom Vorbild übernommen: " + ", ".join(str(v) for v in values.values()), type="positive")
+
+    async def take_structure() -> None:
+        import vorbild_ablauf
+        refs = [r.model_copy() for r in s.reference_tracks]
+        template = await run.io_bound(vorbild_ablauf.for_references, refs)
+        if template is None:
+            ui.notify("Ablauf des Vorbilds nicht messbar (zu kurz oder keine Schläge erkannt)", type="warning")
+            return
+        apply_template(s.with_updates(**template.updates(s)))
+        summary_box.refresh()
+        ui.notify(f"Ablauf vom Vorbild übernommen: {template.describe()}", type="positive", multi_line=True)
 
     async def measure() -> None:
         if not reference.active(s.reference_tracks):

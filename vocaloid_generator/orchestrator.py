@@ -193,6 +193,11 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
         done = buildup.apply(plan, events)
         log.info("Aufbau: Strophe beginnt allein: %s, Schicht mehr in %d Refrains", done["verse"] is not None,
                  len(done["choruses"]))
+    if "chorus_lift" in extras:
+        import chorus_lift
+        done = chorus_lift.apply(plan, events)
+        log.info("Refrains steigern sich: erster schlanker: %s, letzter voll: %s (Oktave in %s)",
+                 done["lean"] is not None, done["full"] is not None, ", ".join(done["layers"]) or "keinem")
     if "kime" in extras:
         import kime
         done = kime.apply(plan, events, dice.label("drums"), profile.name)

@@ -92,7 +92,8 @@ def caches() -> list:
     import reference
     import separation
     import updates
-    found = [reference.CACHE, separation.CACHE, updates._cache_path(),
+    import vorbild_ablauf
+    found = [reference.CACHE, vorbild_ablauf.CACHE, separation.CACHE, updates._cache_path(),
              os.path.join(config.DATA_DIR, fehlerbericht.FOLDER)]
     if os.path.isdir(config.LOG_DIR):
         current = {"vloid_songs.log", "einrichten.log"}

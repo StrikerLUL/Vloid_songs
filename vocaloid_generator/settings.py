@@ -256,6 +256,11 @@ class SongSettings(BaseModel):
     ref_vocal_curve: bool = True       # die Klangkurve des Gesangs (Terzbänder, ±4 dB) wie im Vorbild-Gesang
     ref_tempo_key: bool = True         # Tempo und Tonart der Vorbilder vorschlagen
     ref_style: bool = True             # passenden Stil vorschlagen
+    ref_structure: bool = True         # S1 (1.5.0): Ablauf, Takte und Akkorde des Vorbilds vorschlagen (vorbild_ablauf)
+    # Songs 1.5.0, jedes mit Schalter
+    key_words: bool = True             # S2: Kernwort des Refrains hoch oder lang, Gefühlswörter lang (Beste Melodie)
+    catchy_chorus: bool = True         # S3: Ohrwurm-Wertung des Refrains bei „Beste Melodie suchen“
+    chorus_lift: bool = True           # S5: erster Refrain schlanker, letzter mit allem
     vst_path: str = ""
     vst_sounds: dict[str, str] = Field(default_factory=dict)   # Spur → gespeicherter Klang des VST-Instruments
     sound_library: bool = True         # bessere Klänge aus tools/soundfonts (setup_soundfonts.py), wenn vorhanden

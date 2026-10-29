@@ -46,7 +46,9 @@ NEW_COMPOSITION = ("best_melody", "melody_pickups", "intro_riff", "kime", "melod
                    "section_buildup")
 # Neuerungen aus 1.4.0, die die Noten ändern (Charakter je Stil und Song)
 NEW_140 = ("style_chords", "melody_character", "style_arrangement", "song_character")
-COMPOSITION_EXTRAS = NEW_COMPOSITION + NEW_140     # die Tests schalten sie hier ab (conftest.py)
+# Neuerungen aus 1.5.0, die die Noten ändern (wichtige Wörter, Ohrwurm, Refrain-Steigerung)
+NEW_150 = ("key_words", "catchy_chorus", "chorus_lift")
+COMPOSITION_EXTRAS = NEW_COMPOSITION + NEW_140 + NEW_150     # die Tests schalten sie hier ab (conftest.py)
 
 
 @dataclass
@@ -431,7 +433,14 @@ def from_references(settings: SongSettings) -> SongSettings:
     if settings.ref_style:
         updates["style"] = summary.style
     log.info("Vom Vorbild übernommen: %s", summary.describe())
-    return settings.with_updates(**updates)
+    settings = settings.with_updates(**updates)
+    if settings.ref_structure:
+        import vorbild_ablauf
+        template = vorbild_ablauf.for_references(settings.reference_tracks)
+        if template is not None:
+            log.info("Ablauf und Akkorde vom Vorbild: %s", template.describe())
+            settings = settings.with_updates(**template.updates(settings))
+    return settings
 
 
 def generate_variants(settings: SongSettings, count: int, parts: tuple = (),

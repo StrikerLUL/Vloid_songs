@@ -71,12 +71,26 @@ und Systeminfo (keine Songs) und landet in `Dokumente\Vloid Songs\Fehlerberichte
 - **Mix pro Instrument tut nichts.** Es braucht Demucs (Einrichten, „Mix wie die Vorbilder“) und mindestens ein
   angehaktes Vorbild. Das erste Mal zerlegt Demucs jedes Vorbild, danach geht es schnell. Im Protokoll steht eine Zeile
   „Mix wie die Vorbilder“ mit dem, was es geändert hat.
+- **Das Musikvideo dauert lange.** Jedes Bild wird einzeln gezeichnet, bei einem Song von vier Minuten sind das
+  einige Tausend. Zum Anschauen reicht die „Video-Vorschau (10 s)“ unter dem Player; im Tab Video lassen sich
+  einzelne Teile abschalten, mit „Musikvideo“ aus ist es das schnelle Lyric-Video wie bis 1.4.
+- **Im Video passt etwas nicht zum Song.** Unter „Szene“ eine andere für den Stil wählen oder die Bilder aus dem
+  Text ausschalten. Ein Song von vor 1.5 hat keine `songkarte.json`; dann kennt das Video keine Sektionen und
+  Akkorde, und das Bild folgt nur dem Klang des Mixes.
+  Ihn einmal neu erzeugen (gleicher Seed) schreibt sie.
+- **Keine KI-Bilder im Video.** Sie brauchen „KI-Bilder fürs Video“ aus Einrichten. Ohne NVIDIA-Grafikkarte malt
+  der Prozessor, das dauert einige Minuten pro Song. Läuft das Bildmodell nicht, nimmt das Video die gezeichnete
+  Szene; die Ausgabe steht in `tools\bilder\letzter_lauf.log` im Programmordner.
+- **Kein Hör-Check unter dem Player.** Er braucht „Hör-Check für den Text“ aus Einrichten und einen Song mit
+  Gesang und Text. Die Ausgabe der Spracherkennung steht in `tools\hoercheck\letzter_lauf.log`. Meldet er
+  undeutliche Zeilen, steht in `hoer_check.txt` im Songordner, was er gehört hat, und welche Wörter du in
+  Lesungen.txt prüfen solltest.
 
 ## Einrichten und Updates
 
 - **Ein Download bricht ab.** Einfach noch einmal „Ausgewählte einrichten“; was schon da ist, wird übersprungen.
   Oben steht, wie viel Platz frei ist; Klang-Veredler und KI-Begleitung brauchen viele GB.
-- **Ein Modell (Bewertung, Demucs, KI-Begleitung, Veredler) startet nicht.** Beim ersten Mal lädt es noch Dateien
+- **Ein Modell (Bewertung, Demucs, KI-Begleitung, Veredler, KI-Bilder, Hör-Check) startet nicht.** Beim ersten Mal lädt es noch Dateien
   nach; ein zweiter Versuch hilft oft. Die ganze Ausgabe steht bei der KI-Begleitung in
   `tools\begleitung\letzter_lauf.log` und beim Veredler in `tools\ace-step\letzter_lauf.log` im Programmordner.
 - **Im Protokoll steht „[Errno 22] Invalid argument“ bei einer Datei in `tools\…\huggingface`.** Bis 1.2.1 lagen

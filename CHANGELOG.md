@@ -2,6 +2,80 @@
 
 Jede Version hat hier einen Abschnitt. Die App zeigt ihn einmal nach einem Update (Hilfe › Was ist neu).
 
+## 1.5.0
+
+Diese Version macht aus dem Lyric-Video ein Musikvideo, das dem Song folgt, bringt drei neue Stile, bessere Melodien
+und Abläufe, eine Stimme, die mit dem Text atmet, und einen eigenen Produzentenstil. Jede Neuerung hat einen Schalter
+und eine Option auf der Kommandozeile; alles aus klingt und sieht aus wie in 1.4.
+
+**Musikvideo** (neuer Tab Video, `--ohne-musikvideo`)
+
+- **Das Bild folgt dem Song:** jede Sektion ist ein eigener Akt (Strophe ruhig, Refrain hell und voll, Bridge
+  anders), Bewegung auf Kick und Snare, dazu was gerade passiert. Die App schreibt dafür eine Songkarte
+  (`songkarte.json`) mit Sektionen, Schlägen, Akkorden, Schlagzeug und Melodie.
+- **Eine Szene pro Stil:** Anime-Opening (J-Pop), Glitch (Dark), Textkunst aus Zeichen wie ein altes Spiel (Kawaii),
+  Bühne (Rock), Fenster bei Nacht (Ballade), 80er (City Pop), Kreis (Future Bass), Tunnel (Drum and Bass), Zimmer
+  (Lo-Fi), Bühne mit Leuchtstäben (Idol), Wafuu, Art déco, Hyperpop. Jede Szene lässt sich für jeden Stil wählen.
+- **Bewegung:** „wie der Stil“, „ruhig und elegant“ oder „viel Bewegung“ (`--video-bewegung`). Blitze nie öfter als
+  dreimal pro Sekunde und nie grell.
+- **Text:** wie du ihn geschrieben hast, mit Kanji und Wort für Wort eingefärbt, darunter die Romaji und deine
+  Übersetzung. Die Übersetzung schreibst du im Tab Text in eine eigene Zeile mit „>“ davor unter die japanische; sie
+  wird nicht gesungen.
+- **Was im Bild ist:** Akkord mit dem nächsten, die Gesangsmelodie als Notenlinie, das Spektrum des Mixes, eine
+  Ablaufleiste, Titelkarte und Abspann, und Bilder aus deinem Text (Regen bei 雨, Sterne bei 星, Chat-Blasen bei 既読):
+  nur was im Text steht, damit nichts Unpassendes im Bild ist. Jedes davon mit eigenem Schalter.
+- **Eigene Figur** (optional): ein PNG, das im Takt hüpft und den Mund öffnet, solange gesungen wird.
+- **KI-Bild pro Sektion** (optional, Hilfe › Einrichten › KI-Bilder fürs Video, etwa 4 GB): LCM Dreamshaper malt für
+  jede Sektion ein Bild passend zu Stil und Text.
+- **Video-Vorschau (10 s)** ab dem ersten Refrain, in Sekunden statt Minuten. **YouTube-Kapitel** in der Beschreibung.
+
+**Neue Stile**
+
+- **Wafuu-Rock:** Rockband mit Shamisen, Koto und Shakuhachi, Taiko-Toms, Melodie in der japanischen Fünftonleiter.
+- **Electro-Swing:** Walking Bass, Swing, Bläser und Four-on-the-Floor.
+- **Hyperpop:** 808, wirbelnde Hi-Hats, Chip-Leads, Reese-Bass und große Sprünge.
+
+**Songs**
+
+- **Wie dieser Song** (Tab Song bei den Vorbildern, `--ohne-vorbild-ablauf`): die App misst das wichtigste Vorbild
+  ganz durch, mit Tempo, Tonart, Ablauf (Intro, Strophe, Pre-Chorus, Refrain …), Takten und Akkorden als Stufen.
+  „Ablauf und Akkorde übernehmen“ setzt sie für deinen Song; `--vom-vorbild` übernimmt sie mit.
+- **Wichtige Wörter betonen** (`--ohne-schluesselwoerter`): „Beste Melodie suchen“ legt das Kernwort des Refrains
+  hoch oder lang auf die betonte Zeit und gibt Gefühlswörtern wie 好き, 涙 und さよなら lange Töne.
+- **Ohrwurm-Wertung** (`--ohne-ohrwurm`): im Refrain gewinnt die Fassung, deren erste Phrase leicht verändert
+  wiederkommt und deren Anfangsmotiv zurückkehrt.
+- **Refrains steigern sich** (`--ohne-refrain-steigerung`): der erste Refrain ist schlanker, der letzte spielt mit
+  allem.
+
+**Stimme** (Tab Gesang)
+
+- **Ausdruck aus dem Text** (`--ohne-text-ausdruck`): Zeilen mit traurigen Wörtern singt sie leiser und dunkler,
+  Zeilen mit lauten Wörtern kräftiger und heller.
+- **Lange Töne leben** (`--ohne-schwellen`): gehaltene Töne mitten in der Phrase schwellen an.
+- **Lebendige Doppelung** (`--ohne-lebendige-doppelung`): die Doppelung im Refrain wandert wie ein zweiter Take.
+- **Hör-Check** (optional, Hilfe › Einrichten › Hör-Check, etwa 500 MB, `--ohne-hoercheck`): nach dem Singen hört eine
+  japanische Spracherkennung ab, ob man jede Zeile versteht. Unter dem Player steht, welche Zeilen undeutlich sind und
+  welche Wörter die App vielleicht falsch liest; Einzelheiten in `hoer_check.txt` im Songordner.
+- Für die Stimme bringt weiter eine aktuelle NEUTRINO-Ausgabe am meisten (ab 3.2.2); Hilfe › Einrichten zeigt, welche
+  du hast.
+
+**Charakter**
+
+- **J-Pop und Idol getrennt** (Tab Band, `--ohne-jpop-idol-trennung`): J-Pop Energy ist jetzt eine Anison-Band mit
+  Gitarrenriff, Powerchords, Lead-Gitarre und Rock-Grooves und spielt keine „Royal Road“ mehr, sondern vi–IV–V–I,
+  I–V–vi–IV und den Anlauf bVI–bVII vor dem Refrain. Idol-Pop bleibt Tanz-Pop mit Royal Road, jetzt mit
+  Synth-Bläsern, Disco-Oktaven im Bass und Rufen wie aus dem Publikum vor dem Refrain.
+- **Dein Produzentenstil** (Tab Band, `--produzent NAME`, `--ohne-produzent`): dein Name steht im Abspann, in der
+  YouTube-Beschreibung und als Künstler der MP3 („Name feat. MERROW“). Jeder Song beginnt mit deinem Producer-Tag,
+  vier Tönen aus deinem Namen (`--ohne-producer-tag`), im Erkennungsklang, der auch die Glocken spielt
+  (`--erkennungsklang`). Deine typische Akkordwendung (`--akkordwendung`) spielt der Refrain in zwei von drei Songs.
+  Die Lieblingsstimme für alle Stile wählst du im Tab Gesang.
+- **Geschmack lernen** (Tab Verlauf, `--ohne-geschmack`): jeder Song im Verlauf hat einen Daumen für Klang, Melodie,
+  Stimme und Groove. Die App würfelt danach öfter, was dir gefiel, und seltener, was nicht. Ein Song merkt sich den
+  Geschmack, mit dem er entstand, damit derselbe Seed derselbe Song bleibt.
+- **Stile mischen** (Tab Song, `--mische STIL --mischanteil 0.3`, `--ohne-stil-mischung`): ein zweiter Stil mit
+  Anteil, etwa Rock mit 30 % Kawaii Chiptune. Ein Teil der Instrumente, Grooves und Akkordfolgen kommt aus ihm.
+
 ## 1.4.0
 
 Diese Version gibt jedem Stil und jedem Song seinen eigenen Charakter und macht die Stimme schöner. Bis 1.3 teilten

@@ -7,6 +7,7 @@ import sys
 
 import applog
 import history
+import produzent
 import rezepte
 import userdata
 from pipeline import (best, draft_settings, from_references, generate_song, generate_variants, hook_choices, remix,
@@ -56,6 +57,35 @@ OFF_140 = (
                                                         "auch kleine Formant-Verschiebungen"),
     ("soft_vocal_chain", "--ohne-weiche-gesangskette", "die Gesangskette mit dem schnellen 6:1-Kompressor wie bis 1.3"),
 )
+OFF_150 = (
+    ("music_video", "--ohne-musikvideo", "das Lyric-Video wie bis 1.4: Text vor einem stehenden Bild"),
+    ("video_kanji", "--ohne-video-kanji", "im Video Hiragana Silbe für Silbe statt des Texts mit Kanji"),
+    ("video_romaji", "--ohne-video-romaji", "keine Romaji unter der Zeile"),
+    ("video_german", "--ohne-video-uebersetzung", "deine Übersetzung („> …“) nicht im Video zeigen"),
+    ("video_chords", "--ohne-video-akkorde", "keine Akkorde im Video"),
+    ("video_melody_line", "--ohne-video-notenlinie", "keine Notenlinie der Gesangsmelodie im Video"),
+    ("video_spectrum", "--ohne-video-spektrum", "kein Spektrum im Video"),
+    ("video_words", "--ohne-video-textbilder", "keine Bilder aus dem Text (Regen bei 雨 …)"),
+    ("video_titles", "--ohne-video-titel", "keine Titelkarte und kein Abspann im Video"),
+    ("video_hud", "--ohne-video-ablauf", "keine Ablaufleiste im Video"),
+    ("youtube_chapters", "--ohne-kapitel", "keine Kapitel in der YouTube-Beschreibung"),
+    ("ai_backgrounds", "--ohne-ki-bilder", "keine KI-Bilder im Video, auch wenn setup_bilder.py gelaufen ist"),
+    ("ref_structure", "--ohne-vorbild-ablauf", "--vom-vorbild übernimmt Ablauf, Takte und Akkorde nicht"),
+    ("key_words", "--ohne-schluesselwoerter", "Kernwort und Gefühlswörter zählen bei der besten Melodie nicht"),
+    ("catchy_chorus", "--ohne-ohrwurm", "keine Ohrwurm-Wertung des Refrains bei der besten Melodie"),
+    ("chorus_lift", "--ohne-refrain-steigerung", "alle Refrains gleich voll wie bis 1.4"),
+    ("jpop_idol_split", "--ohne-jpop-idol-trennung", "J-Pop Energy spielt wieder die Royal Road wie Idol-Pop"),
+    ("producer_profile", "--ohne-produzent", "kein Produzenten-Profil: kein Tag, kein Erkennungsklang, keine "
+                                             "Akkordwendung, kein Name im Abspann"),
+    ("producer_tag", "--ohne-producer-tag", "kein Producer-Tag am Anfang des Songs"),
+    ("taste_learning", "--ohne-geschmack", "die Daumen im Verlauf lenken die Würfel nicht"),
+    ("style_blend", "--ohne-stil-mischung", "kein zweiter Stil, auch wenn einer gewählt ist"),
+    ("text_expression", "--ohne-text-ausdruck", "Zeilen mit Gefühlswörtern nicht leiser oder kräftiger singen"),
+    ("note_swells", "--ohne-schwellen", "gehaltene Töne nicht anschwellen lassen"),
+    ("living_double", "--ohne-lebendige-doppelung", "die Doppelung im Refrain mit festem Abstand wie bis 1.4"),
+    ("hearing_check", "--ohne-hoercheck", "nach dem Singen nicht prüfen, ob man den Text versteht"),
+)
+OFF_ALL = OFF_130 + OFF_140 + OFF_150
 
 
 def _off(name: str):
@@ -111,6 +141,14 @@ def parse_args(argv=None):
     p.add_argument("--support-stimme", metavar="NAME", help="NEUTRINO-Stimme, die als Support-Modell die Hauptstimme "
                    "färbt (Versuch, braucht Run_support_model.bat; '' = aus)")
     p.add_argument("--engine", choices=["NEUTRINO", "VOICEVOX", "DiffSinger", "Vorschau"], help="wer singt")
+    p.add_argument("--mische", metavar="STIL", choices=list(STYLES) + [""],
+                   help="zweiter Stil für eine Mischung, z. B. 'Kawaii Chiptune' ('' = keine)")
+    p.add_argument("--mischanteil", type=float, metavar="ANTEIL", help="Anteil des zweiten Stils, 0.1 bis 0.5 "
+                   "(Standard 0.3)")
+    p.add_argument("--produzent", metavar="NAME", help="dein Produzentenname (Abspann, MP3, Producer-Tag; '' = keiner)")
+    p.add_argument("--erkennungsklang", choices=list(produzent.SOUNDS), help="Klang des Tags und der Glocken")
+    p.add_argument("--akkordwendung", choices=list(produzent.TURNS), metavar="WENDUNG",
+                   help="deine typische Akkordwendung im Refrain: " + "; ".join(produzent.TURNS))
     p.add_argument("--diffsinger-stimme", metavar="ORDNER", help="DiffSinger-Stimme für OpenUtau: ihr Ordner oder Name "
                    "(Versuch; leer = die erste gefundene)")
     p.add_argument("--voicevox-stimme", type=int, metavar="ID", help="VOICEVOX-Singstimme (Stil-ID)")
@@ -238,7 +276,8 @@ def parse_args(argv=None):
     p.add_argument("--ohne-vorbild-gesangsklang", action="store_true",
                    help="die Klangkurve des Gesangs nicht an den Gesang der Vorbilder angleichen")
     p.add_argument("--vom-vorbild", action="store_true",
-                   help="Tempo, Tonart und Stil der Vorbilder übernehmen (soweit in den Einstellungen erlaubt)")
+                   help="Tempo, Tonart, Stil, Ablauf und Akkorde der Vorbilder übernehmen (soweit in den "
+                        "Einstellungen erlaubt)")
     p.add_argument("--lautheit", type=float, metavar="LUFS", help="Ziel-Lautheit des Masters, z. B. -14 für YouTube")
     p.add_argument("--verlauf", nargs="?", const="", metavar="SUCHE",
                    help="die Songs im Verlauf auflisten und beenden; mit SUCHE nur passende (Name, Notiz, Stil, Seed)")
@@ -283,6 +322,13 @@ def parse_args(argv=None):
                    help="eigenes Bild als Hintergrund des Lyric-Videos ('' = Farbverlauf des Stils)")
     p.add_argument("--ohne-stilfarben", action="store_true",
                    help="Lyric-Video einfarbig dunkel mit pinkem Text wie bis 1.1 statt in den Farben des Stils")
+    p.add_argument("--video-vorschau", nargs="?", const="", metavar="DATEI",
+                   help="zehn Sekunden Musikvideo ab dem ersten Refrain; ohne DATEI video_vorschau.mp4 neben dem Song")
+    p.add_argument("--video-szene", metavar="NAME",
+                   help="Szene des Musikvideos: ein Stilname (z. B. 'Lo-Fi') oder 'Textkunst'; sonst wie der Stil")
+    p.add_argument("--video-bewegung", choices=("Stil", "ruhig", "lebhaft"), help="wie viel sich im Video bewegt")
+    p.add_argument("--video-figur", metavar="BILD", help="eigene Figur im Video (PNG mit Transparenz, Mund zu)")
+    p.add_argument("--video-figur-offen", metavar="BILD", help="dieselbe Figur mit offenem Mund")
     p.add_argument("--melodie-sektion", metavar="SEKTION", help="dort singt die eigene Melodie (Standard: Chorus)")
     p.add_argument("--motive", metavar="ORDNER", help="Rhythmen und Gesten aus den MIDI-Melodien in diesem Ordner lernen")
     p.add_argument("--ohne-motive", action="store_true",
@@ -302,7 +348,7 @@ def parse_args(argv=None):
                    help="Protokolle, Einstellungen und Systeminfo als ZIP speichern (ohne Songs) und beenden")
     p.add_argument("--einrichten", metavar="TEILE",
                    help="Klänge und Modelle laden: 'alles' (was noch fehlt) oder z. B. 'soundfonts,samples'")
-    for name, flag, text in OFF_130 + OFF_140:
+    for name, flag, text in OFF_ALL:
         p.add_argument(flag, action="store_true", dest=f"off_{name}", help=text)
     p.add_argument("-v", "--verbose", action="store_true", help="alle Details ausgeben")
     return p.parse_args(argv)
@@ -340,6 +386,8 @@ def main(argv=None) -> int:
     if args.vorbild:
         settings = settings.with_updates(reference_tracks=[ReferenceTrack(path=p).model_dump() for p in args.vorbild])
     if args.vom_vorbild:
+        if args.off_ref_structure:          # wirkt schon beim Übernehmen, nicht erst danach
+            settings = settings.with_updates(ref_structure=False)
         settings = from_references(settings)
     if args.rezept:
         settings = rezepte.apply(args.rezept, settings)
@@ -347,6 +395,8 @@ def main(argv=None) -> int:
                  "meter": args.takt,
                  "singer": args.stimme, "duet_singer": args.duett, "support_singer": args.support_stimme, "master_lufs": args.lautheit,
                  "vocal_engine": args.engine, "voicevox_singer": args.voicevox_stimme,
+                 "producer_name": args.produzent, "producer_sound": args.erkennungsklang,
+                 "producer_turn": args.akkordwendung, "blend_style": args.mische, "blend_share": args.mischanteil,
                  "voicevox_dynamics": False if args.ohne_voicevox_dynamik else None,
                  "rap_speaker": args.rap_stimme, "rap_voice": False if args.ohne_rap_stimme else None,
                  "spoken_sound": args.sprechen_klang, "group_vocals": args.gruppe,
@@ -412,9 +462,11 @@ def main(argv=None) -> int:
                  "own_vocal": args.eigener_gesang, "own_vocal_align": False if args.ohne_ausrichten else None,
                  "motif_folder": args.motive, "video_background": args.video_hintergrund,
                  "video_colors": False if args.ohne_stilfarben else None,
+                 "video_scene": args.video_szene, "video_motion": args.video_bewegung,
+                 "video_figure": args.video_figur, "video_figure_open": args.video_figur_offen,
                  "more_motifs": False if args.ohne_motive else None,
                  "learned_motifs": False if args.ohne_motive else None}
-    overrides.update({name: _off(name) for name, _, _ in OFF_130 + OFF_140 if getattr(args, f"off_{name}")})
+    overrides.update({name: _off(name) for name, _, _ in OFF_ALL if getattr(args, f"off_{name}")})
     if args.akkorde:
         overrides["custom_chords"] = {**settings.custom_chords, **dict(args.akkorde)}
     if args.takte:
@@ -481,6 +533,12 @@ def main(argv=None) -> int:
     if args.lyric_video is not None:
         try:
             log.info("Lyric-Video: %s", lyric_video(chosen, args.lyric_video or None))
+        except RuntimeError as e:
+            log.error("%s", e)
+            return 1
+    if args.video_vorschau is not None:
+        try:
+            log.info("Video-Vorschau: %s", lyric_video(chosen, args.video_vorschau or None, preview=True))
         except RuntimeError as e:
             log.error("%s", e)
             return 1

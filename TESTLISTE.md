@@ -1,7 +1,7 @@
-# Testliste für Vloid Songs 1.4.0
+# Testliste für Vloid Songs 1.5.0
 
 Etwa anderthalb Stunden auf deinem PC, davon viel Warten. 1.1 bis 1.3 sind noch nicht ganz getestet, deshalb stehen
-ihre Punkte (A bis J) weiter hier; neu in 1.4 ist Teil K, und der ist der wichtigste. Wenig Zeit: A, B, C und K. Hak ab, was klappt, und schreib zu
+ihre Punkte (A bis K) weiter hier; neu in 1.5 ist Teil L, und der ist der wichtigste. Wenig Zeit: A, B, C und L. Hak ab, was klappt, und schreib zu
 allem anderen eine Zeile, was passiert ist. Am Ende **Hilfe › Fehlerbericht speichern** und das ZIP zusammen mit der
 Liste zurückschicken.
 
@@ -151,6 +151,43 @@ Hier geht es darum, ob die Songs jetzt verschieden genug klingen und die Stimme 
 - [ ] Gefällt dir ein Stil nach dem Update weniger? Dann den Schalter nennen, der es ändert (Akkorde, Melodie,
       Arrangement, Charakter, Klangbild), und was dich stört.
 
+## L. Neu in 1.5: Video, Stile, Songs, Stimme, Charakter (30 Minuten)
+
+Zwei Dinge konnte ich hier nicht echt ausprobieren, weil ihre Modelle von Hugging Face kommen und das bei mir gesperrt
+ist: den Hör-Check und die KI-Bilder. Bitte die beiden zuerst.
+
+- [ ] Hilfe › Einrichten › „Hör-Check für den Text“ (etwa 500 MB). Läuft es durch? Danach einen Song mit NEUTRINO:
+      Steht unter dem Player „Hör-Check: …“? Passen die undeutlichen Zeilen zu dem, was du hörst? Liegt
+      `hoer_check.txt` im Songordner? Wie lange hat der Hör-Check gedauert (steht im Protokoll)?
+- [ ] Hilfe › Einrichten › „KI-Bilder fürs Video“ (etwa 4 GB). Läuft es durch? Dann „Video-Vorschau (10 s)“: Ist
+      hinter dem Refrain ein gemaltes Bild, das zum Stil passt? Wie lange dauerte das erste Bild?
+- [ ] Tab Video: „Video-Vorschau (10 s)“ in drei Stilen (z. B. J-Pop, Ballade, Kawaii). Passt die Szene zum Stil?
+      Bewegt sich das Bild auf den Schlägen? Ist irgendetwas im Bild, das nicht zum Song passt?
+- [ ] Text mit Kanji und einer Übersetzungszeile („> …“ unter einer Zeile) schreiben, Video bauen. Stehen Kanji,
+      Romaji und Deutsch untereinander, und wird die Übersetzung nicht gesungen?
+- [ ] Ein Text mit 雨 oder 星: Regnet es oder funkeln Sterne, solange die Zeile läuft?
+- [ ] „Bewegung“ auf „ruhig und elegant“ und auf „viel Bewegung“: Gefallen dir beide? Blitzt nichts unangenehm?
+- [ ] „Fertig für YouTube“: Stehen in der Beschreibung Kapitel („0:00 Intro …“)? Springt YouTube beim Hochladen an
+      die richtigen Stellen?
+- [ ] Je ein Song in Wafuu-Rock, Electro-Swing und Hyperpop. Klingt Wafuu japanisch (Shamisen, Koto, Taiko),
+      swingt Electro-Swing, ist Hyperpop schrill und voll?
+- [ ] Tab Song, Vorbilder: einen Lieblingssong angeben, „Ablauf und Akkorde übernehmen“. Stimmen Ablauf und Takte
+      ungefähr mit dem Vorbild überein? Klingt dein Song danach im Aufbau wie das Vorbild?
+- [ ] Ein Song mit „Beste Melodie suchen“: Liegt das Wort, das im Refrain am öftesten vorkommt, hoch oder lang?
+      Bleibt der Refrain eher im Ohr?
+- [ ] Ein Song mit drei Refrains: Ist der erste schlanker und der letzte am vollsten?
+- [ ] Stimme mit und ohne „Ausdruck aus dem Text“, „Lange Töne leben“ und „Lebendige Doppelung“ (Tab Gesang): Klingt
+      sie mit allen dreien lebendiger und nicht seltsam?
+- [ ] J-Pop Energy und Idol-Pop hintereinander: Klingen sie jetzt deutlich verschieden (J-Pop wie eine Anison-Band
+      mit Gitarren, Idol wie Tanz-Pop mit Rufen vor dem Refrain)?
+- [ ] Tab Band › Dein Produzentenstil: deinen Namen eintragen, zwei Songs in verschiedenen Stilen. Hörst du am Anfang
+      beider Songs dieselben vier Töne? Steht dein Name im Abspann des Videos und in der MP3 („Name feat. …“)?
+- [ ] Tab Verlauf: einem Song Daumen hoch für Klang geben, einem anderen Daumen runter für Groove, dann fünf neue
+      Songs im selben Stil. Kommen die Klänge des ersten öfter vor? (Im Protokoll steht „Geschmack aus dem Verlauf“
+      und bei jedem Song „Charakter: …“.)
+- [ ] Tab Song: „Mischen mit“ Kawaii Chiptune bei 30 %, Stil Rock. Klingt es nach Kawaii-Rock? Gefällt dir die
+      Mischung bei 50 % besser oder schlechter?
+
 ## Wenn du mehr Zeit hast
 
 - [ ] **DiffSinger (Versuch):** eine freie DiffSinger-Stimme in OpenUtau installieren (oder in
@@ -182,3 +219,4 @@ Hier geht es darum, ob die Songs jetzt verschieden genug klingen und die Stimme 
 3. Ein Satz zum Klang: Schlagzeug, Gesang, Idol-Rufe und Rap-Teil und, wenn ausprobiert, DiffSinger, KI-Begleitung und
    Mix pro Instrument. Für 1.4: Klingen die Songs jetzt verschieden genug, und was stört dich an der Stimme noch am
    meisten (rau, nasal, verwaschen, zu leise, zu spitz)? Am besten mit einem kurzen Ausschnitt von `vocals.wav`.
+   Für 1.5: Passt das Video zum Song, und welche Szene gefällt dir am wenigsten?

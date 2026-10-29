@@ -9,7 +9,8 @@ from dataclasses import dataclass, field
 from settings import SongSettings
 
 FRESH = {"seed": None, "variations": {}, "melody_edits": {}, "melody_lengths": {}, "phrase_fixes": {},
-         "custom_chords": {}, "section_bars": {}, "remix_from": "", "remix_bpm": 0, "melody_midi": ""}
+         "custom_chords": {}, "section_bars": {}, "remix_from": "", "remix_bpm": 0, "melody_midi": "",
+         "taste_snapshot": []}
 
 
 @dataclass(frozen=True)
@@ -132,6 +133,59 @@ RECIPES = (
         "[Chorus]\nレイニーデイ ここにいて\nしずかなじかん ふたりきり\nレイニーデイ あしたはきっと\n"
         "はれるといいね",
         {"lofi_texture": True}),
+    # 1.5.0: die drei neuen Stile, mit deutscher Übersetzung unter jeder Zeile („> …“) fürs Musikvideo
+    Recipe(
+        "Kirschblütenklinge (Wafuu-Rock)",
+        "Wafuu-Rock mit 162 BPM in d-Moll: Shamisen, Koto und Shakuhachi zur Rockband, Taiko im Refrain, die "
+        "Melodie in der japanischen Fünftonleiter.",
+        {"style": "Wafuu-Rock", "bpm": 162, "key": "D", "scale": "minor", "meter": "4/4",
+         "active_sections": ["Intro", "Verse", "PreChorus", "Chorus", "Interlude", "Verse", "PreChorus", "Chorus",
+                             "Bridge", "Chorus", "Outro"]},
+        "[Verse]\nはなびらが まうよるに\n> In der Nacht, in der Blütenblätter tanzen\n"
+        "かたなのような つきがでる\n> geht ein Mond auf wie ein Schwert\n"
+        "とおいまつりの たいこのおと\n> die Trommeln eines fernen Festes\n"
+        "むねのおくで ひびいてる\n> hallen tief in meiner Brust\n"
+        "[PreChorus]\nいまこそ かぜをきれ\n> Jetzt zerschneide den Wind\n"
+        "[Chorus]\nさくら さくら まいあがれ\n> Kirschblüten, steigt auf\n"
+        "このいのち もやしつくせ\n> verbrenn dieses Leben ganz\n"
+        "さくら さくら ちりゆけど\n> Kirschblüten, auch wenn ihr fallt\n"
+        "こころは いつまでも\n> das Herz bleibt für immer\n"
+        "[Bridge]\nしずかに めをとじて\n> Ich schließe still die Augen\n"
+        "あなたを おもう\n> und denke an dich"),
+    Recipe(
+        "Grammophon-Tanz (Electro-Swing)",
+        "Electro-Swing mit 124 BPM in g-Moll: Walking Bass, Bläser und Ragtime-Klavier im Swing über der "
+        "durchgehenden Bassdrum, die erste Zeile klingt wie aus dem Grammophon.",
+        {"style": "Electro-Swing", "bpm": 124, "key": "G", "scale": "minor", "meter": "4/4",
+         "active_sections": ["Intro", "Verse", "PreChorus", "Chorus", "Verse", "PreChorus", "Chorus", "Drop",
+                             "Chorus", "Outro"]},
+        "[Verse]\nふるいレコード まわりだす\n> Die alte Platte fängt an, sich zu drehen\n"
+        "ぼうしをかぶって ステップふむ\n> Hut auf und die ersten Schritte\n"
+        "きんいろのよる シャンデリア\n> eine goldene Nacht, Kronleuchter\n"
+        "だれもかれもが おどってる\n> und alle, alle tanzen\n"
+        "[PreChorus]\nほら スイング スイング\n> Komm, Swing, Swing\n"
+        "[Chorus]\nダンス ダンス とまらない\n> Tanzen, tanzen, wir hören nicht auf\n"
+        "ひだりみぎ くるりとまわれ\n> links, rechts, einmal herumgedreht\n"
+        "ダンス ダンス あさまでずっと\n> tanzen, tanzen, bis zum Morgen\n"
+        "このリズムに のって\n> auf diesem Rhythmus"),
+    Recipe(
+        "Glitzer-Overload (Hyperpop)",
+        "Hyperpop mit 168 BPM in E-Dur: Chip-Leads, Supersaws, verzerrter Bass und Wirbel-Hi-Hats, die Stimme hart "
+        "auf die Töne gezogen; alles absichtlich zu viel.",
+        {"style": "Hyperpop", "bpm": 168, "key": "E", "scale": "major", "meter": "4/4",
+         "active_sections": ["Intro", "Verse", "PreChorus", "Chorus", "Verse", "PreChorus", "Chorus", "Bridge",
+                             "Drop", "Chorus", "Outro"]},
+        "[Verse]\nきらきら ピクセル はじけとぶ\n> Glitzernde Pixel platzen auseinander\n"
+        "ボリュームは いつも マックスで\n> die Lautstärke immer auf Maximum\n"
+        "ネオンの あめが ふりそそぐ\n> es regnet Neon\n"
+        "スクリーンの むこうへ ジャンプ\n> Sprung hinter den Bildschirm\n"
+        "[PreChorus]\nもっと もっと はやく\n> Mehr, mehr, schneller\n"
+        "[Chorus]\nグリッチ ハート ばくはつしそう\n> Glitch-Herz, gleich explodiert es\n"
+        "ぜんぶ ぜんぶ ひかりになれ\n> alles, alles, werde Licht\n"
+        "グリッチ ハート とまらないで\n> Glitch-Herz, hör nicht auf\n"
+        "せかいを ぬりかえて\n> mal die Welt neu an\n"
+        "[Bridge]\nちいさなこえで ないてた\n> Mit leiser Stimme hab ich geweint\n"
+        "でも もう だいじょうぶ\n> aber jetzt ist alles gut"),
 )
 
 

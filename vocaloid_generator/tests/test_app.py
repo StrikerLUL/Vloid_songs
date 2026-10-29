@@ -237,6 +237,21 @@ async def test_library_names_finds_and_deletes_songs(user, tmp_path):
     assert [e.settings.seed for e in history.entries(out)] == [11]
 
 
+async def test_thumbs_in_the_library_are_saved(user, tmp_path):
+    out = str(tmp_path / "out")
+    history.record(write_song(str(tmp_path / "a"), 11).mix_wav, SongSettings(style="Rock", seed=11), out)
+    await user.open("/")
+    user.find(marker="tab-Verlauf").click()
+    await until(lambda: len(user.find(marker="history-play").elements) == 1)
+    user.find(marker="history-thumbs-1").click()
+    user.find(marker="thumb-up-klang-1").click()
+    await until(lambda: history.entries(out)[0].thumbs == {"klang": 1})
+    user.find(marker="thumb-down-groove-1").click()
+    await until(lambda: history.entries(out)[0].thumbs == {"klang": 1, "groove": -1})
+    user.find(marker="thumb-up-klang-1").click()               # noch einmal: der Daumen geht weg
+    await until(lambda: history.entries(out)[0].thumbs == {"groove": -1})
+
+
 async def test_album_overnight_from_the_app(user, fake_generation, tmp_path):
     await user.open("/")
     user.find(marker="album").click()
@@ -608,7 +623,7 @@ async def test_lyrics_to_read_along_and_the_switch_to_hide_them(user, sung_gener
 async def test_lyric_video_is_made_for_the_current_song(user, fake_generation, monkeypatch, tmp_path):
     made = []
 
-    def fake_video(result, path=None):
+    def fake_video(result, path=None, label="", preview=False, progress=None):
         made.append(result.seed)
         path = str(tmp_path / "lyric_video.mp4")
         open(path, "wb").close()
@@ -622,7 +637,7 @@ async def test_lyric_video_is_made_for_the_current_song(user, fake_generation, m
     await user.should_see("Lyric-Video gespeichert", retries=50)
     assert made == [1000]
 
-    def no_ffmpeg(result, path=None):
+    def no_ffmpeg(result, path=None, label="", preview=False, progress=None):
         raise RuntimeError("Für das Lyric-Video fehlt ffmpeg")
 
     monkeypatch.setattr(pipeline, "lyric_video", no_ffmpeg)
@@ -993,7 +1008,7 @@ async def test_the_setup_wizard_shows_and_frees_space(user, monkeypatch, tmp_pat
     await user.should_see("Aufgeräumt:", retries=50)
 
 
-async def test_every_new_feature_of_130_and_140_has_its_switch_in_the_app(user):
+async def test_every_new_feature_since_130_has_its_switch_in_the_app(user):
     import main
     await user.open("/")
     found = set()
@@ -1004,11 +1019,11 @@ async def test_every_new_feature_of_130_and_140_has_its_switch_in_the_app(user):
         except AssertionError:          # find meldet ein fehlendes Element als Fehler
             return False
     others = ("switch-ai_melody", "group-vocals", "spoken-sound")      # KI-Melodie, Gruppe, Klang von „Sprechen“
-    for tab in ("Song", "Text", "Band", "Gesang", "Mix", "Pfade"):
+    for tab in ("Song", "Text", "Band", "Gesang", "Mix", "Video", "Pfade"):
         user.find(marker=f"tab-{tab}").click()
-        found |= {name for name, _, _ in main.OFF_130 + main.OFF_140 if there(f"switch-{name}") or there(f"slider-{name}")}
+        found |= {name for name, _, _ in main.OFF_ALL if there(f"switch-{name}") or there(f"slider-{name}")}
         found |= {marker for marker in others if there(marker)}
-    assert found == {name for name, _, _ in main.OFF_130 + main.OFF_140} | set(others)
+    assert found == {name for name, _, _ in main.OFF_ALL} | set(others)
     user.find(marker="tab-Band").click()
     user.find(marker="switch-surge_sounds").elements.pop().set_value(False)
     user.find(marker="switch-amp_models").elements.pop().set_value(False)

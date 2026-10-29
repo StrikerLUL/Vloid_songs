@@ -45,7 +45,7 @@ VOCAL_FIELDS = ("bpm", "meter", "seed", "rap_voice", "rap_speaker", "singer", "v
                 "vocal_comping", "phrase_expression", "long_vowel_mark", "breath_marks", "fast_diphthongs",
                 "english_kana", "section_style", "verse_style_shift", "chorus_style_shift", "even_takes",
                 "harmony_variety", "harmony_double", "sung_pads", "adlibs", "idol_calls", "syllable_dynamics",
-                "recorded_breaths", "psola_reshape", "own_vocal", "own_vocal_align", "phrase_fixes", "style",
+                "recorded_breaths", "text_expression", "note_swells", "psola_reshape", "own_vocal", "own_vocal_align", "phrase_fixes", "style",
                 "telephone_fx", "stutter_fx", "hard_tune", "formant_fx", "vocal_swing", "breathiness", "shimmer",
                 "intonation", "ornaments", "vocal_pocket", "group_vocals", "diffsinger_expression", "spoken_sound",
                 "voice_comfort", "gentle_reshape")
@@ -338,6 +338,10 @@ def _liven(settings: SongSettings, tracks: dict, out: str, vocals_wav: str, sung
         notes = voice_fx.timeline(tracks["melody_data"], settings.bpm)
         if voice_fx.express(vocals_wav, notes, sections_in_seconds(tracks["plan"])):
             log.info("Ausdruck pro Phrase: zum Höhepunkt lauter, am Ende weicher")
+    if settings.text_expression or settings.note_swells:
+        done = voice_fx.text_and_swells(vocals_wav, voice_fx.timeline(tracks["melody_data"], settings.bpm),
+                                        tracks["silben"], settings.text_expression, settings.note_swells)
+        log.info("Ausdruck aus dem Text: %d Zeilen, %d gehaltene Töne schwellen an", done["text"], done["swells"])
     choir = os.path.join(out, "vocals_chor.wav")
     window = final_chorus(tracks.get("plan"))
     if settings.final_choir and window and not os.path.exists(choir):
@@ -405,7 +409,8 @@ def _vocal_swing(settings: SongSettings, tracks: dict, out: str) -> None:
 
 
 # G4 (1.3.0): Millisekunden, die der Gesang je Stil hinter (plus) oder vor (minus) dem Schlag liegt
-VOCAL_POCKET_MS = {"City Pop": 18.0, "Lo-Fi": 24.0, "Ballade": 20.0, "Rock": -10.0, "Drum and Bass": -12.0}
+VOCAL_POCKET_MS = {"City Pop": 18.0, "Lo-Fi": 24.0, "Ballade": 20.0, "Rock": -10.0, "Drum and Bass": -12.0,
+                   "Electro-Swing": 15.0, "Wafuu-Rock": -8.0, "Hyperpop": -6.0}
 
 
 def vocal_pocket_ms(settings: SongSettings) -> float:

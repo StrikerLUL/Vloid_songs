@@ -132,6 +132,12 @@ uv run pytest -m "not slow"   # ohne den Test, der echtes Audio rendert
 | `project.py`, `tags.py` | den Gesang eines Songs aufheben und wieder öffnen; Titel, Liedtext und Titelbild in der MP3 |
 | `album.py` | Album über Nacht |
 | `youtube.py` | „Fertig für YouTube“: Ordner mit MP3, Video, Titelbild und Beschreibung |
+| `songkarte.py`, `musikvideo.py`, `video_szenen.py`, `textmotive.py` | das Musikvideo (1.5): was im Song wann passiert, Bilder im Takt mit Kanji, Romaji und Übersetzung, eine Szene pro Stil, Bilder aus Wörtern im Text |
+| `bilder.py`, `bilder_worker.py`, `setup_bilder.py` | KI-Hintergründe fürs Musikvideo (LCM Dreamshaper v7, eigene Umgebung), und diese einrichten |
+| `hoercheck.py`, `hoercheck_worker.py`, `setup_hoercheck.py` | Hör-Check: eine Spracherkennung (faster-whisper) prüft, ob man den Text versteht |
+| `vorbild_ablauf.py` | „Wie dieser Song“: Ablauf, Takte und Akkorde eines Vorbilds als Vorlage |
+| `chorus_lift.py` | Refrains steigern sich vom ersten bis zum letzten |
+| `produzent.py`, `geschmack.py` | dein Produzentenstil (Name, Tag, Erkennungsklang, Akkordwendung); Geschmack aus den Daumen im Verlauf |
 | `lyrics.py`, `readings.py` | Liedtext in Silben: Kanji-Lesung, Romaji, Partikel; Zahlwörter und は, へ, を auch in Kana richtig lesen |
 | `drum_kit.py`, `setup_drums.py` | echtes Schlagzeug aus dem DRS Kit, und dessen Download |
 | `band_library.py`, `setup_band.py` | Flügel, E-Bass und E-Gitarre aus Aufnahmen, und deren Download |

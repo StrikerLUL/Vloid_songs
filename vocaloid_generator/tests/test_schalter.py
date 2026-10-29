@@ -106,6 +106,32 @@ ELSEWHERE = {
     "voice_comfort": "test_stimme_140.py::test_the_voice_comfort_names_better_voices_and_sings_in_one_piece",
     "gentle_reshape": "test_stimme_140.py::test_gentle_reshape_only_touches_what_changes",
     "soft_vocal_chain": "test_stimme_140.py::test_the_soft_chain_lets_the_attacks_through",
+    # 1.5.0
+    "music_video": "test_video_150.py::test_the_music_video_replaces_the_lyric_video_only_with_the_switch",
+    "video_kanji": "test_video_150.py::test_each_part_of_the_video_has_its_switch",
+    "video_romaji": "test_video_150.py::test_each_part_of_the_video_has_its_switch",
+    "video_german": "test_video_150.py::test_each_part_of_the_video_has_its_switch",
+    "video_chords": "test_video_150.py::test_each_part_of_the_video_has_its_switch",
+    "video_melody_line": "test_video_150.py::test_each_part_of_the_video_has_its_switch",
+    "video_spectrum": "test_video_150.py::test_each_part_of_the_video_has_its_switch",
+    "video_words": "test_video_150.py::test_each_part_of_the_video_has_its_switch",
+    "video_titles": "test_video_150.py::test_each_part_of_the_video_has_its_switch",
+    "video_hud": "test_video_150.py::test_each_part_of_the_video_has_its_switch",
+    "youtube_chapters": "test_video_150.py::test_the_description_lists_chapters_only_with_the_switch",
+    "ai_backgrounds": "test_video_150.py::test_ai_pictures_are_painted_once_per_section_kind_and_reused",
+    "ref_structure": "test_lieder_150.py::test_from_references_takes_structure_and_chords_only_with_the_switch",
+    "key_words": "test_lieder_150.py::test_the_best_melody_puts_key_words_up_and_is_catchier_with_the_switches",
+    "catchy_chorus": "test_lieder_150.py::test_the_best_melody_puts_key_words_up_and_is_catchier_with_the_switches",
+    "chorus_lift": "test_lieder_150.py::test_the_first_chorus_is_leaner_and_the_last_has_everything",
+    "text_expression": "test_stimme_150.py::test_text_expression_and_swells_shape_the_sung_track_only_with_their_switches",
+    "note_swells": "test_stimme_150.py::test_text_expression_and_swells_shape_the_sung_track_only_with_their_switches",
+    "living_double": "test_stimme_150.py::test_the_living_double_wanders_like_a_second_take",
+    "hearing_check": "test_stimme_150.py::test_the_hearing_check_runs_after_singing_only_with_its_switch",
+    "jpop_idol_split": "test_charakter_150.py::test_jpop_and_idol_go_separate_ways",
+    "producer_profile": "test_charakter_150.py::test_the_producer_profile_signs_every_song",
+    "producer_tag": "test_charakter_150.py::test_the_producer_profile_signs_every_song",
+    "taste_learning": "test_charakter_150.py::test_thumbs_in_the_history_teach_the_dice",
+    "style_blend": "test_charakter_150.py::test_two_styles_blend_with_a_share",
 }
 # Bedienung der App, ändert den Song nicht
 APP = ("show_karaoke", "reuse_steps", "log_file", "update_check", "setup_wizard", "done_notice", "lyric_hints",
@@ -147,7 +173,8 @@ def test_every_switch_is_read_by_the_program():
 def test_settings_the_voice_hears_are_in_the_vocal_fingerprint():
     # Ein Gesangs-Schalter, der im Fingerabdruck fehlt, wirkt erst, wenn sich sonst etwas ändert: bis dahin kommt der
     # alte Gesang wieder (singing._vocal_key). Nur Schalter, die nicht den Klang ändern, dürfen fehlen.
-    not_sound = {"reuse_steps", "channels", "swing", "style_singer", "style_singers"}   # swing: _swing_amount
+    not_sound = {"reuse_steps", "channels", "swing", "style_singer", "style_singers",   # swing: _swing_amount
+                 "producer_profile", "producer_singer", "taste_learning"}   # wählen nur die Stimme (casting.favorite)
     fields = set(SongSettings.model_fields)
     used = set()
     for name in singing.VOCAL_CODE + ("casting.py", "own_vocal.py", "style_fx.py"):
@@ -221,6 +248,8 @@ def test_switching_off_changes_the_finished_vocal(song, name, monkeypatch, tmp_p
     monkeypatch.setattr(voice_fx, "choir_from_lead", lambda *a, **k: calls.append("final_choir"))
     monkeypatch.setattr(voice_fx, "add_breaths", lambda *a, recorded=False, **k: calls.append(("breaths", recorded))
                         or 0)
+    monkeypatch.setattr(voice_fx, "text_and_swells", lambda *a, **k: calls.append(("text", a[3:])) or {"text": 0,
+                                                                                                    "swells": 0})
     singing._liven(s, tracks, str(tmp_path), str(tmp_path / "vocals.wav"))
     on, calls[:] = list(calls), []
     singing._liven(s.with_updates(**{name: False}), tracks, str(tmp_path), str(tmp_path / "vocals.wav"))

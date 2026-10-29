@@ -86,7 +86,13 @@ def pads(plan) -> list:
             a, b = max(slot.start, start), min(slot.start + slot.dur, sec.end)
             if b - a < 0.5:
                 continue
-            previous = voice_chord(slot.chord, lo, lo + PAD_RANGE, PAD_VOICES, previous, include_extensions=False)
+            for extra in (0, 1, 2):
+                # passt kein Griff in die Lage (E-Dur in a-Moll), darf er ein bis zwei Halbtöne höher reichen
+                voicing = voice_chord(slot.chord, lo, lo + PAD_RANGE + extra, PAD_VOICES, previous,
+                                      include_extensions=False)
+                if lo <= min(voicing) and max(voicing) <= lo + PAD_RANGE + extra:
+                    break
+            previous = voicing
             for line, pitch in zip(lines, sorted(previous)):
                 line.append(MelNote(a, b - a, pitch, syllable))
     return lines

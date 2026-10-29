@@ -70,6 +70,10 @@ Lizenz. Was mit „lädt die App“ markiert ist, kommt erst über den Einrichte
 | Demucs mit dem Modell htdemucs (lädt die App) | Meta | MIT |
 | Anticipatory Music Transformer (lädt die App, Versuch) | John Thickstun, David Hall, Chris Donahue, Percy Liang (Stanford CRFM) | Apache-2.0 |
 | PyTorch, Transformers (in den eigenen Umgebungen der Modelle) | PyTorch-Team, Hugging Face | BSD-3, Apache-2.0 |
+| LCM Dreamshaper v7 (lädt die App, KI-Bilder fürs Video, 1.5) | Simian Luo u. a. (Latent Consistency Models), Lykon (Dreamshaper) | MIT |
+| diffusers (in der Umgebung der KI-Bilder) | Hugging Face | Apache-2.0 |
+| faster-whisper mit CTranslate2 (lädt die App, Hör-Check, 1.5) | SYSTRAN, OpenNMT | MIT |
+| Whisper small (Modell des Hör-Checks, als faster-whisper-small) | OpenAI | MIT |
 
 ## Oberfläche und Werkzeuge
 

@@ -7,7 +7,7 @@ from nicegui import run, ui
 
 import vorlagen
 from gui import labels
-from lyrics import _HEADER, options as lyric_options, syllables
+from lyrics import _HEADER, is_translation, options as lyric_options, syllables
 from settings import KEYS, MASTER_TARGETS, STYLE_OPTIONS, SongSettings
 from styles import STYLES
 
@@ -48,6 +48,16 @@ def song_panel(s: SongSettings, pick: PickFn, apply_template: Callable[[SongSett
         ui.select(labels.METERS, label="Takt").bind_value(s, "meter").mark("meter") \
             .tooltip("3/4: Bum-Tschak-Tschak wie ein Walzer. 6/8: wiegend, das Tempo zählt dann die punktierten Viertel "
                      "(zwei pro Takt, eine Ballade hat etwa 50 bis 70). 4/4 = wie bisher.")
+    # 1.5.0 (C4): ein zweiter Stil mit Anteil
+    with ui.row().classes("w-full items-center no-wrap gap-4"):
+        ui.switch("Mischen mit").bind_value(s, "style_blend").props("dense").mark("switch-style_blend") \
+            .tooltip("Ein Teil der Instrumente spielt mit Klang und Spielweise des zweiten Stils, ein Teil der "
+                     "Sektionen mit seinem Groove, ein Teil der Akkordfolgen kommt aus ihm, z. B. Rock mit 30 % "
+                     "Kawaii Chiptune. Gesang, Melodie und Klangbild bleiben beim ersten Stil")
+        ui.select({"": "keinem zweiten Stil", **{n: n for n in STYLES}}).bind_value(s, "blend_style") \
+            .props("dense").classes("col").mark("blend-style")
+        ui.slider(min=0.1, max=0.5, step=0.05).bind_value(s, "blend_share").props("label dense") \
+            .classes("w-32").mark("blend-share").tooltip("Anteil des zweiten Stils")
     with ui.row().classes("w-full items-center gap-4"):
         ui.label("Swing").classes("w-24")
         ui.slider(min=0, max=0.5, step=0.01).bind_value(s, "swing").props("label").classes("col")
@@ -112,6 +122,11 @@ VOICE_SWITCHES = (
                                                   "statt mit 6:1 in 1 ms jeden Einsatz zu quetschen; die Präsenz ist "
                                                   "breiter und sitzt höher, der Glanz bei 12 kHz. Die Stimme klingt "
                                                   "runder und weniger spitz"),
+    # 1.5.0
+    ("hearing_check", "Hör-Check für den Text", "Nach dem Singen hört eine japanische Spracherkennung ab, ohne den "
+                                                "Text zu kennen; Zeilen, die man kaum versteht, stehen unter dem "
+                                                "Player und in hoer_check.txt, mit den Lesungen der Wörter. Erst "
+                                                "nach Einrichten › Hör-Check"),
 )
 # (Einstellung, Text, von, bis, Schritt, Erklärung), 0 = aus
 VOICE_SLIDERS = (
@@ -165,6 +180,19 @@ BAND_SWITCHES = (
                                              "eigenes Intro (leise, nur Schlagzeug, mit der Hook) und einen eigenen "
                                              "Schluss (ausklingen, harter Stopp, ausblenden). Zwei Songs eines Stils "
                                              "klingen so nicht mehr gleich"),
+    # 1.5.0
+    ("chorus_lift", "Refrains steigern sich", "Der erste Refrain ist schlanker (Antwort-Melodie und Glocken erst ab "
+                                              "der Hälfte, keine Oktav-Schicht), der letzte spielt mit allem: Oktave "
+                                              "über den ganzen Refrain und ein Becken alle vier Takte"),
+    ("jpop_idol_split", "J-Pop und Idol getrennt", "J-Pop Energy wird zur Anison-Band: Gitarrenriff in der Strophe, "
+                                                   "Powerchords im Refrain, Rock-Grooves und Akkorde ohne die "
+                                                   "„Royal Road“ (vi–IV–V–I, bVI–bVII vor dem Refrain). Idol-Pop "
+                                                   "bleibt Tanz-Pop mit Royal Road, jetzt mit Synth-Bläsern und Rufen "
+                                                   "wie aus dem Publikum vor dem Refrain"),
+    ("taste_learning", "Geschmack lernen", "Gib Songs im Verlauf Daumen für Klang, Melodie, Stimme und Groove: die "
+                                           "App würfelt Klänge, Grooves, Spielweisen und Akkordfolgen danach öfter, "
+                                           "was dir gefiel, und seltener, was nicht. Ist für einen Stil keine "
+                                           "Stimme gemerkt, singt die mit den meisten Daumen hoch"),
 )
 
 # Melodie 1.3.0 und 1.4.0, jede Neuerung mit Schalter
@@ -196,6 +224,14 @@ MELODY_SWITCHES = (
                                                       "mit Quart-Sprüngen, City Pop synkopisch, Lo-Fi flach und "
                                                       "zurückgelehnt. Auch die Punkte von „Beste Melodie suchen“ "
                                                       "richten sich nach dem Stil"),
+    # 1.5.0
+    ("key_words", "Wichtige Wörter betonen", "„Beste Melodie suchen“ nimmt lieber die Fassung, in der das Kernwort des "
+                                             "Refrains (das Wort, das am öftesten wiederkommt) hoch oder lang auf der "
+                                             "betonten Zeit liegt und Gefühlswörter wie 好き, 涙, さよなら lange Töne "
+                                             "bekommen"),
+    ("catchy_chorus", "Ohrwurm-Wertung", "„Beste Melodie suchen“ nimmt im Refrain lieber die Fassung, deren erste "
+                                         "Phrase mit kleiner Veränderung wiederkommt und deren Anfangsmotiv "
+                                         "zurückkehrt"),
 )
 # (Einstellung, Text, von, bis, Schritt, Erklärung): Regler der Neuerungen aus 1.3.0, 0 = aus
 MELODY_SLIDERS = (
@@ -387,6 +423,9 @@ REFERENCE_SWITCHES = (
                                                        "Vorbilder, höchstens 4 dB je Band; braucht Demucs"),
     ("ref_tempo_key", "Tempo und Tonart vorschlagen", "Ein Klick übernimmt Tempo und Tonart der Vorbilder"),
     ("ref_style", "Stil vorschlagen", "Ein Klick übernimmt den Stil, der am besten zu den Vorbildern passt"),
+    ("ref_structure", "Ablauf und Akkorde vorschlagen (wie dieser Song)",
+     "Ein Klick misst das Vorbild mit dem größten Gewicht ganz durch und übernimmt Ablauf (Intro, Strophe, Refrain …), "
+     "Takte und Akkorde als Stufen; alles steht danach in den Feldern und lässt sich ändern"),
 )
 
 
@@ -465,11 +504,26 @@ def reference_editor(s: SongSettings, pick: PickFn, apply_template: Callable[[So
                 ui.button(f"Stil {summary.style} übernehmen", icon="style",
                           on_click=lambda: take(style=summary.style)) \
                     .props("outline dense no-caps").mark("reference-take-style")
+            if s.ref_structure:
+                ui.button("Ablauf und Akkorde übernehmen", icon="view_timeline", on_click=take_structure) \
+                    .props("outline dense no-caps").mark("reference-take-structure") \
+                    .tooltip("Wie dieser Song: misst das wichtigste Vorbild ganz durch (dauert ein paar Sekunden)")
 
     def take(**values) -> None:
         apply_template(s.with_updates(**values))
         summary_box.refresh()
         ui.notify("Vom Vorbild übernommen: " + ", ".join(str(v) for v in values.values()), type="positive")
+
+    async def take_structure() -> None:
+        import vorbild_ablauf
+        refs = [r.model_copy() for r in s.reference_tracks]
+        template = await run.io_bound(vorbild_ablauf.for_references, refs)
+        if template is None:
+            ui.notify("Ablauf des Vorbilds nicht messbar (zu kurz oder keine Schläge erkannt)", type="warning")
+            return
+        apply_template(s.with_updates(**template.updates(s)))
+        summary_box.refresh()
+        ui.notify(f"Ablauf vom Vorbild übernommen: {template.describe()}", type="positive", multi_line=True)
 
     async def measure() -> None:
         if not reference.active(s.reference_tracks):
@@ -589,7 +643,7 @@ def text_panel(s: SongSettings) -> Callable[[], None]:
             header = _HEADER.match(line)
             if header:
                 rows.append(("header", header.group(1)))
-            elif line:
+            elif line and not is_translation(line):
                 sylls = syllables(line, **lyric_options(s))
                 count += len(sylls)
                 rows.append(("line", " ".join(sylls)))
@@ -689,8 +743,31 @@ def band_panel(s: SongSettings) -> None:
                  "Schlussakkord klingt länger aus. Nur im Stil Ballade und wenn der Song mit einem Outro endet")
     hint("Echtes Schlagzeug und Grooves echter Schlagzeuger schaltest du unter Pfade ein oder aus, sobald sie "
          "eingerichtet sind.")
+    producer_editor(s)
     section_title("Klänge aus dem VST-Instrument")
     vst_editor(s)
+
+
+def producer_editor(s: SongSettings) -> None:
+    """1.5.0 (C2): das Produzenten-Profil, das über alle Songs gleich bleibt."""
+    import produzent
+    section_title("Dein Produzentenstil")
+    ui.switch("Produzenten-Profil").bind_value(s, "producer_profile").mark("switch-producer_profile") \
+        .tooltip("Name, Producer-Tag, Erkennungsklang, Akkordwendung und Lieblingsstimme gelten für jeden Song, "
+                 "auch im Album über Nacht. Ohne Namen und Auswahl ändert sich nichts")
+    ui.input("Dein Produzentenname").bind_value(s, "producer_name").props("dense clearable").classes("w-full") \
+        .mark("producer-name")
+    hint("Steht im Abspann des Videos, in der YouTube-Beschreibung und als Künstler der MP3 („Name feat. MERROW“).")
+    ui.switch("Producer-Tag am Anfang").bind_value(s, "producer_tag").props("dense").mark("switch-producer_tag") \
+        .tooltip("Vier Töne aus deinem Namen am Anfang jedes Songs, im Erkennungsklang: in jedem Song dieselbe "
+                 "Melodie, nur in dessen Tonart. Nur mit Namen")
+    ui.select({"": "aus dem Namen", **{n: n for n in produzent.SOUNDS}}, label="Erkennungsklang") \
+        .bind_value(s, "producer_sound").classes("w-full").mark("producer-sound") \
+        .tooltip("Klang des Tags und der Glocken in jedem Song")
+    ui.select({"": "keine", **{n: n for n in produzent.TURNS}}, label="Typische Akkordwendung im Refrain") \
+        .bind_value(s, "producer_turn").classes("w-full").mark("producer-turn") \
+        .tooltip("Der Refrain spielt sie in zwei von drei Songs, mit dem Schluss des Stils")
+    hint("Die Lieblingsstimme für alle Stile wählst du im Tab Gesang.")
 
 
 def vst_editor(s: SongSettings) -> None:
@@ -762,6 +839,15 @@ LIVELY_SWITCHES = (
                                                 "Sättigung"),
     ("airwindows", "Airwindows-Effekte", "Mit Airwindows Consolidated (Hilfe › Einrichten): Bandsättigung ToTape9 auf "
                                          "dem Gesang und das Mischpult Console7 auf jeder Spur und der Summe"),
+    # 1.5.0
+    ("text_expression", "Ausdruck aus dem Text", "Zeilen mit leisen Gefühlswörtern (涙, ごめん, さよなら) singt die "
+                                                 "Stimme etwas leiser und dunkler, Zeilen mit lauten (叫べ, 走れ, "
+                                                 "もっと) kräftiger und heller"),
+    ("note_swells", "Lange Töne leben", "Gehaltene Töne mitten in einer Zeile schwellen leicht an, wie ein Sänger "
+                                        "sie hält"),
+    ("living_double", "Lebendige Doppelung", "Ohne zweite Fassung wandert der Abstand der Doppelung im Refrain "
+                                             "langsam, wie bei einem zweimal eingesungenen Take, statt fest zu "
+                                             "bleiben"),
 )
 
 # Stil-Effekte auf dem Gesang (style_fx.py), jeweils nur in den Stilen, zu denen sie gehören
@@ -831,6 +917,10 @@ def voice_panel(s: SongSettings, singers: list, pick: PickFn | None = None) -> t
     ui.switch("Zweite Stimme im Refrain").bind_value(s, "harmonies")
     ui.switch("Lieblingsstimme je Stil").bind_value(s, "style_singer").props("dense").mark("switch-style_singer") \
         .tooltip("Beim Wechsel des Stils wählt die App die Stimme, die du im Stimmen-Casting für ihn gemerkt hast")
+    ui.select({"": "keine", **{n: n for n in sorted(set(singers) | ({s.producer_singer} - {""}))}},
+              label="Lieblingsstimme für alle Stile (Produzenten-Profil)").bind_value(s, "producer_singer") \
+        .classes("w-full").mark("producer-singer") \
+        .tooltip("Beim Wechsel des Stils singt sie, wenn für den Stil keine eigene Stimme gemerkt ist")
     with ui.row().classes("w-full items-center gap-4"):
         ui.label("StyleShift").classes("w-28")
         ui.slider(min=-6, max=6, step=1).bind_value(s, "style_shift").props("label markers").classes("col")
@@ -896,6 +986,8 @@ def voice_panel(s: SongSettings, singers: list, pick: PickFn | None = None) -> t
     section_title("Gesang wie produziert")
     for attr, text, tip in VOICE_SWITCHES:
         ui.switch(text).bind_value(s, attr).props("dense").tooltip(tip).mark(f"switch-{attr}")
+    import hoercheck
+    hint(hoercheck.status())
     sliders(s, VOICE_SLIDERS)
     section_title("Lebendiger Gesang")
     for attr, text, tip in LIVELY_SWITCHES:
@@ -1039,6 +1131,59 @@ def mix_panel(s: SongSettings) -> None:
             .bind_value(s, "polish_caption").classes("w-full").props("dense stack-label").mark("polish-caption")
         hint("ACE-Step spielt die Band neu ein, Takt, Akkorde und Melodie bleiben, der Gesang wird nicht verändert. "
              "Das Ergebnis ist eine zweite Fassung neben dem normalen Song („Veredelt“ im Player).")
+
+
+# ── Video (1.5.0) ───────────────────────────────────────────────────────────────
+VIDEO_SWITCHES = (
+    ("video_kanji", "Text mit Kanji, Wort für Wort eingefärbt",
+     "Wie du ihn geschrieben hast. Aus: in Hiragana Silbe für Silbe wie gesungen."),
+    ("video_romaji", "Romaji unter der Zeile", "Die gesungenen Silben in lateinischen Buchstaben: ame no machi o"),
+    ("video_german", "Deine Übersetzung unter der Zeile",
+     "Schreib im Text-Tab unter eine Zeile eine mit „>“ davor, z. B. „> Durch die Stadt im Regen“. Sie wird nicht "
+     "gesungen."),
+    ("video_chords", "Akkord unten links, mit dem nächsten", "Wechselt genau mit dem Akkord im Song"),
+    ("video_melody_line", "Gesangsmelodie als Notenlinie", "Die Töne ziehen durchs Bild, der gerade gesungene leuchtet"),
+    ("video_spectrum", "Spektrum des Songs", "Balken, Kreis oder Pegel je nach Szene, aus dem fertigen Mix"),
+    ("video_words", "Bilder aus dem Text",
+     "Regen bei 雨, Schnee bei 雪, Sterne bei 星, Blüten bei 桜, eine Chat-Blase bei 既読 … nur was im Text steht"),
+    ("video_titles", "Titelkarte am Anfang, Abspann am Ende",
+     "Der Titel, solange das Intro ohne Text läuft; im Outro Stimme und Musik"),
+    ("video_hud", "Ablaufleiste mit den Sektionen", "Oben rechts: wo im Song du gerade bist, Refrains hervorgehoben"),
+    ("youtube_chapters", "Kapitel in der YouTube-Beschreibung", "0:00 Intro, 0:15 Strophe 1, 0:59 Refrain 1 …"),
+)
+
+
+def video_panel(s: SongSettings, pick: PickFn) -> None:
+    import bilder
+    import video_szenen
+    ui.switch("Musikvideo: das Bild folgt dem Song").bind_value(s, "music_video").mark("switch-music_video") \
+        .tooltip("Szene passend zum Stil; Strophe ruhig, Refrain hell und voll, Bewegung auf Kick und Snare, Akkorde, "
+                 "Melodie und Spektrum. Aus: das Lyric-Video wie bis 1.4.")
+    with ui.column().classes("w-full gap-1").bind_visibility_from(s, "music_video"):
+        with ui.grid(columns=2).classes("w-full gap-x-4"):
+            ui.select(video_szenen.CHOICES, label="Szene").bind_value(s, "video_scene").mark("video-scene") \
+                .tooltip("Wie der Stil oder eine andere Szene; „Textkunst“ ist alles aus Zeichen wie ein altes Spiel, "
+                         "der Zeichenregen besteht aus deinem eigenen Text")
+            ui.select({"Stil": "wie der Stil", "ruhig": "ruhig und elegant", "lebhaft": "viel Bewegung"},
+                      label="Bewegung").bind_value(s, "video_motion").mark("video-motion") \
+                .tooltip("Ruhig: sanftes Wiegen statt Zoom und Wackeln. Blitze gibt es nie öfter als dreimal pro "
+                         "Sekunde und nie grell.")
+        for attr, text, tip in VIDEO_SWITCHES:
+            ui.switch(text).bind_value(s, attr).props("dense").tooltip(tip).mark(f"switch-{attr}")
+        ui.switch("KI-Bild pro Sektion (setup_bilder.py)").bind_value(s, "ai_backgrounds").props("dense") \
+            .mark("switch-ai_backgrounds") \
+            .tooltip("Ein gemaltes Bild für jede Sektion passend zu Stil und Text; nur wenn unter Hilfe › Einrichten "
+                     "„KI-Bilder fürs Video“ eingerichtet ist, sonst die gezeichnete Szene")
+        hint(bilder.status())
+        section_title("Eigene Figur (optional)")
+        for text, attr in (("Figur, Mund zu (PNG mit durchsichtigem Hintergrund)", "video_figure"),
+                           ("Dieselbe Figur mit offenem Mund (optional)", "video_figure_open")):
+            with ui.row().classes("w-full items-center no-wrap"):
+                ui.input(text, placeholder="leer = keine Figur").bind_value(s, attr).classes("col") \
+                    .props("dense stack-label").mark(f"path-{attr}")
+                pick_button(pick, s, attr, file_types=("Bild (*.png)",))
+        hint("Die Figur steht rechts, hüpft im Takt und öffnet den Mund, solange gesungen wird.")
+    hint("Hintergrundbild und Farben des Lyric-Videos ohne Musikvideo stellst du unter Pfade ein.")
 
 
 # ── Pfade ───────────────────────────────────────────────────────────────────────

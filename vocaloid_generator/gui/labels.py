@@ -44,7 +44,8 @@ PLAYING = {
     "answer": "antwortet dem Gesang", "guide": "begleitet den Gesang", "solo": "Solo", "shaker": "Shaker",
     "claps": "Claps", "tambourine": "Tamburin", "congas": "Congas", "cowbell": "Kuhglocke",
     "harp": "Harfe", "timpani": "Pauken", "horns": "Hörner",
-    "rolling": "rollend (Drum and Bass)", "fb_chords": "Future-Bass-Akkorde",
+    "rolling": "rollend (Drum and Bass)", "fb_chords": "Future-Bass-Akkorde", "walking": "Walking Bass",
+    "taiko": "Taiko",
     "soundfont": "SoundFont-Schlagzeug", "808": "Drum-Machine 808", "909": "Drum-Machine 909",
 }
 # Farben der Spuren in der Piano-Roll

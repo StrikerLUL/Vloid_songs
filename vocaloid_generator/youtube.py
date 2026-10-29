@@ -33,6 +33,9 @@ PALETTES = {
     "Drum and Bass": ("#141e30", "#000000", "#00f5d4"),
     "Lo-Fi": ("#c9a27e", "#3e3a4f", "#f2e8cf"),
     "Idol-Pop": ("#fbc2eb", "#a18cd1", "#ffffff"),
+    "Wafuu-Rock": ("#7a1022", "#140a1e", "#ffb000"),
+    "Electro-Swing": ("#3a2f1c", "#0b0a12", "#d4af37"),
+    "Hyperpop": ("#ff3cac", "#2b86c5", "#f6ff00"),
 }
 DEFAULT_PALETTE = ("#6a3093", "#1a1030", "#ff4f8b")
 # Schriften mit japanischen Zeichen zuerst (Windows, dann Linux), sonst die eingebaute von Pillow
@@ -68,7 +71,6 @@ def title_for(result, label: str = "") -> str:
 
 def make(result, label: str = "", progress: Optional[ProgressFn] = None) -> Package:
     """Legt den Ordner an. Wirft RuntimeError, wenn der Song fehlt; alles andere landet in Package.problems."""
-    import karaoke
     report = progress or (lambda fraction, message: None)
     source = result.mp3 or result.mix_wav
     if not source or not os.path.exists(source):
@@ -94,6 +96,30 @@ def make(result, label: str = "", progress: Optional[ProgressFn] = None) -> Pack
                                 s.style if s else "", result.mix_wav)
 
     report(0.25, "YouTube: Video...")
+    if s is not None and s.music_video:
+        import musikvideo
+        try:
+            package.video = musikvideo.for_song(result, os.path.join(folder, name + ".mp4"), title,
+                                                audio=package.audio,
+                                                progress=lambda f, m: report(0.25 + 0.7 * f, m))
+        except RuntimeError as e:
+            package.problems.append(f"kein Video: {e}")
+    else:
+        _lyric_video(result, package, folder, name, title, subtitle)
+
+    report(0.95, "YouTube: Beschreibung...")
+    package.description = os.path.join(folder, "Beschreibung.txt")
+    with open(package.description, "w", encoding="utf-8") as f:
+        f.write(description(result, title))
+    report(1.0, "YouTube-Ordner fertig")
+    log.info("YouTube: %s", package.describe())
+    return package
+
+
+def _lyric_video(result, package: Package, folder: str, name: str, title: str, subtitle: str) -> None:
+    """Das Lyric-Video wie bis 1.4: Text vor dem Titelbild mit der Wellenform."""
+    import karaoke
+    s = result.settings
     found = karaoke.load(os.path.join(result.output_dir, karaoke.FILE))
     own = s.video_background if s and s.video_background and os.path.exists(s.video_background) else ""
     with tempfile.TemporaryDirectory() as temp:
@@ -109,14 +135,6 @@ def make(result, label: str = "", progress: Optional[ProgressFn] = None) -> Pack
     subtitles = os.path.join(folder, name + ".ass")       # die Untertitel stecken im Video
     if os.path.exists(subtitles):
         os.remove(subtitles)
-
-    report(0.95, "YouTube: Beschreibung...")
-    package.description = os.path.join(folder, "Beschreibung.txt")
-    with open(package.description, "w", encoding="utf-8") as f:
-        f.write(description(result, title))
-    report(1.0, "YouTube-Ordner fertig")
-    log.info("YouTube: %s", package.describe())
-    return package
 
 
 def _mp3(source: str, target: str) -> Optional[str]:
@@ -135,17 +153,52 @@ def details(result) -> list:
     return [s.style, f"{s.bpm} BPM", f"{s.key} {labels.SCALES.get(s.scale, s.scale)}"]
 
 
+def singers(result) -> list:
+    """Wer singt, wie es eine Veröffentlichung nennen muss (Beschreibung und Abspann im Video)."""
+    s = result.settings
+    if not s or not s.channels["vocals"].enabled or s.draft:
+        return []
+    if s.vocal_engine == "VOICEVOX":
+        return ["Gesang: VOICEVOX:<Name der Figur> (bitte eintragen, VOICEVOX verlangt diesen Hinweis)"]
+    if s.vocal_engine == "NEUTRINO":
+        names = " und ".join(x for x in (s.singer, s.duet_singer) if x)
+        return [f"Gesang: NEUTRINO, Stimme {names}",
+                "(Die Nutzungsbedingungen der Stimme stehen in ihrer Readme im NEUTRINO-Ordner model.)"]
+    return []
+
+
+def producer(result) -> list:
+    """1.5.0: „Produziert von …“ aus dem Produzenten-Profil; leer ohne Namen."""
+    import produzent
+    found = produzent.name(result.settings)
+    return [f"Produziert von {found}"] if found else []
+
+
+def credits(result) -> list:
+    """Abspann des Musikvideos: Stimme, wer produziert und wer komponiert hat."""
+    sung = [line for line in singers(result) if not line.startswith("(")]
+    sung = [line.split(" (bitte")[0] for line in sung]
+    return sung + producer(result) + ["Musik, Melodie und Arrangement: Vloid Songs"]
+
+
+def chapters(result) -> list:
+    """YouTube-Kapitel („0:00 Intro“) aus der Songkarte (1.5.0); leer bei älteren Songs oder ausgeschaltet."""
+    s = result.settings
+    if s is None or not s.youtube_chapters:
+        return []
+    import songkarte
+    found = songkarte.load(os.path.join(result.output_dir, songkarte.FILE))
+    return [f"{songkarte.timestamp(at)} {name}" for at, name in songkarte.chapters(found)] if found else []
+
+
 def description(result, title: str) -> str:
     """Text für das Beschreibungsfeld: worum es geht und was genannt werden muss."""
-    s = result.settings
     lines = [title, "", " · ".join(details(result)), ""]
-    if s and s.channels["vocals"].enabled and not s.draft:
-        if s.vocal_engine == "VOICEVOX":
-            lines.append("Gesang: VOICEVOX:<Name der Figur> (bitte eintragen, VOICEVOX verlangt diesen Hinweis)")
-        elif s.vocal_engine == "NEUTRINO":
-            singers = " und ".join(x for x in (s.singer, s.duet_singer) if x)
-            lines.append(f"Gesang: NEUTRINO, Stimme {singers}")
-            lines.append("(Die Nutzungsbedingungen der Stimme stehen in ihrer Readme im NEUTRINO-Ordner model.)")
+    marks = chapters(result)
+    if marks:
+        lines += marks + [""]
+    lines += singers(result)
+    lines += producer(result)
     lines += ["Musik, Melodie und Arrangement: komponiert mit Vloid Songs", ""]
     lines.append(f"Seed {result.seed}")
     return "\n".join(lines) + "\n"

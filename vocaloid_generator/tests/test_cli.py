@@ -110,7 +110,7 @@ def test_chorus_choices_from_the_command_line(monkeypatch, tmp_path, caplog):
 
 
 def test_every_new_feature_can_be_switched_off(captured):
-    for name, flag, _ in main.OFF_130 + main.OFF_140:
+    for name, flag, _ in main.OFF_ALL:
         assert main.main([flag]) == 0
         assert not getattr(captured["settings"], name), flag
         assert main.main([]) == 0

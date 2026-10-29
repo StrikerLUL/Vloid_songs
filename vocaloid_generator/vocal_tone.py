@@ -50,6 +50,9 @@ STYLES = {
     "Future Bass": {"air_db": 1.0},
     "Kawaii Chiptune": {"air_db": 1.0},
     "Drum and Bass": {"presence_db": 0.5},
+    "Wafuu-Rock": {"presence_db": 0.5, "drive_db": 5.0, "drive_mix": 0.25},
+    "Electro-Swing": {"mud_db": 0.5, "air_db": -1.0, "drive_mix": 0.25},
+    "Hyperpop": {"air_db": 1.5, "drive_db": 6.0, "drive_mix": 0.3},
 }
 ADDED = ("mud_db", "presence_db", "air_db")
 

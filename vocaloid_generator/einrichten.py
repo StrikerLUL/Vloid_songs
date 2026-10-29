@@ -82,6 +82,16 @@ def _accompaniment() -> bool:
     return accompaniment.available()
 
 
+def _bilder() -> bool:
+    import bilder
+    return bilder.available()
+
+
+def _hoercheck() -> bool:
+    import hoercheck
+    return hoercheck.available()
+
+
 def _ace_step() -> bool:
     import polish
     return polish.available()
@@ -130,6 +140,12 @@ COMPONENTS = (
     Component("begleitung", "KI-Begleitung (Versuch)", "Der Anticipatory Music Transformer schreibt Klavier, Gitarre, "
               "Streicher und Synths zu deiner Melodie; einschalten unter Pfade", "etwa 4 GB, mit NVIDIA-Grafikkarte "
               "deutlich schneller", "setup_begleitung.py", _accompaniment, recommended=False),
+    Component("bilder", "KI-Bilder fürs Video", "Das Musikvideo bekommt für jede Sektion ein eigenes gemaltes Bild "
+              "passend zu Stil und Text (LCM Dreamshaper)", "etwa 4 GB, mit NVIDIA-Grafikkarte deutlich schneller",
+              "setup_bilder.py", _bilder, recommended=False),
+    Component("hoercheck", "Hör-Check für den Text", "Nach dem Singen hört eine japanische Spracherkennung "
+              "(faster-whisper) ab, ob man jede Zeile versteht, und markiert undeutliche", "etwa 500 MB",
+              "setup_hoercheck.py", _hoercheck, recommended=False),
     Component("ace_step", "Klang-Veredler ACE-Step (Versuch)", "Eine zweite Fassung jedes Songs mit neu "
               "eingespielter Band", "etwa 20 GB, braucht eine NVIDIA-Grafikkarte", "setup_ace_step.py", _ace_step,
               recommended=False, gpu=True),

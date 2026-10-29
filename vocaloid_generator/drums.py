@@ -66,6 +66,17 @@ GROOVES = {
                     HAT: [(s, 0.6) for s in range(0, 16, 4)], OPEN_HAT: [(s, 0.75) for s in range(2, 16, 4)]},
     "tom_verse":   {KICK: [(0, 1.0), (8, 0.9), (10, 0.7)], SNARE: [(4, 0.95), (12, 0.95)],
                     TOMS[-1]: [(s, 0.7 if s % 4 == 0 else 0.55) for s in range(0, 16, 2)]},
+    # Electro-Swing (1.5.0): Bassdrum auf jedem Schlag, Clap auf 2 und 4, Ride und offene Hi-Hat im Swing
+    "swing_floor": {KICK: [(s, 1.0 if s % 8 == 0 else 0.9) for s in range(0, 16, 4)], CLAP: [(4, 0.9), (12, 0.9)],
+                    SNARE: [(4, 0.55), (12, 0.55)], RIDE: [(s, 0.75 if s % 4 == 0 else 0.55) for s in range(0, 16, 2)],
+                    OPEN_HAT: [(6, 0.5), (14, 0.5)]},
+    "swing_verse": {KICK: [(0, 1.0), (8, 0.85)], SNARE: [(4, 0.7), (12, 0.7)],
+                    RIDE: [(s, 0.65 if s % 4 == 0 else 0.45) for s in range(0, 16, 2)], PEDAL_HAT: [(4, 0.5), (12, 0.5)]},
+    # Hyperpop (1.5.0): harte Bassdrum mit Synkopen, Clap auf 2 und 4, Sechzehntel-Hi-Hats mit Wirbel am Taktende
+    "hyper":       {KICK: [(0, 1.0), (3, 0.8), (6, 0.75), (10, 0.9)], CLAP: [(4, 1.0), (12, 1.0)],
+                    SNARE: [(4, 0.7), (12, 0.7)], HAT: [(s, 0.7 if s % 4 == 0 else 0.5) for s in range(14)] +
+                    [(14, 0.45), (14.5, 0.5), (15, 0.55), (15.5, 0.6)]},
+    "hyper_verse": {KICK: [(0, 1.0), (7, 0.7), (10, 0.85)], CLAP: [(8, 0.95)], HAT: _sixteenths(0.6, 0.45, 0.3)},
 }
 
 

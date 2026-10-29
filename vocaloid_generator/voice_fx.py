@@ -340,7 +340,7 @@ SHAKURI_LEAP = 3             # Halbtöne aufwärts, ab denen der Ton von unten k
 # Wie stark je Stil: Ballade mehr, Chiptune gar nicht (die Stimme klingt dort wie ein Instrument)
 STYLE_ORNAMENTS = {"Ballade": 1.6, "City Pop": 1.2, "Lo-Fi": 1.1, "Rock": 0.9, "Dark Vocaloid": 0.8,
                    "J-Pop Energy": 0.8, "Idol-Pop": 0.6, "Future Bass": 0.6, "Drum and Bass": 0.5,
-                   "Kawaii Chiptune": 0.0}
+                   "Kawaii Chiptune": 0.0, "Wafuu-Rock": 1.4, "Electro-Swing": 0.9, "Hyperpop": 0.0}
 
 
 def ornament_amount(strength: float, style: str) -> float:
@@ -880,6 +880,94 @@ def express(path: str, notes: list, sections: list, amount: float = 1.0) -> bool
     shaped = audio * gain[:, None] + highs * ((gain - 1) * BRIGHT)[:, None]
     sf.write(path, shaped.astype(np.float32), rate, subtype="FLOAT")
     return True
+
+
+# ── Ausdruck aus dem Text (1.5.0, St2) und lange Töne, die leben (St3) ─────────────
+# Zeilen mit leisen Gefühlswörtern singt die Stimme etwas leiser und dunkler, Zeilen mit lauten Wörtern kräftiger und
+# heller; erkannt in den gesungenen Kana. Gehaltene Töne mitten in der Phrase schwellen an, wie ein Sänger sie hält
+# (das weiche Ende der Phrase macht schon „Ausdruck pro Phrase“).
+SOFT_WORDS = ("なみだ", "ごめん", "さよなら", "さみしい", "さびしい", "かなしい", "ひとり", "ないて", "なかない", "きえ",
+              "わすれ", "いたい", "こわい", "しずか", "ねむ", "そっと", "ささやく", "おやすみ")
+LOUD_WORDS = ("さけ", "はしれ", "はしって", "とべ", "とんで", "いこう", "もっと", "つよく", "たたかえ", "まけない",
+              "かがやけ", "うたえ", "ぜったい", "とどけ", "こえを", "せかいじゅう", "いまだ")
+TEXT_DB = 1.5                # so viel leiser oder lauter singt eine Zeile mit diesen Wörtern
+TEXT_RAMP = 0.08             # Sekunden Übergang an den Zeilengrenzen
+SWELL_DB = 2.0               # so viel lauter wird ein gehaltener Ton bis kurz vor seinem Ende
+SWELL_MIN = 0.6              # Sekunden: ab dieser Länge schwillt ein Ton an
+
+
+def _kana_line(syllables: list) -> str:
+    return "".join(chr(ord(c) - 0x60) if "\u30a1" <= c <= "\u30f6" else c for c in "".join(map(str, syllables)))
+
+
+def text_mood(syllables: list) -> int:
+    """+1 laut (叫べ, 走れ), -1 leise (涙, ごめん), 0 neutral: aus den gesungenen Kana einer Phrase."""
+    line = _kana_line(syllables)
+    loud = sum(line.count(w) for w in LOUD_WORDS)
+    soft = sum(line.count(w) for w in SOFT_WORDS)
+    return (loud > soft) - (soft > loud)
+
+
+def text_curve(notes: list, silben: list, length: int, rate: int) -> np.ndarray:
+    """St2: Pegel in dB je Phrase aus ihren Wörtern; notes aus timeline(), silben in derselben Reihenfolge."""
+    curve = np.zeros(length, dtype=np.float32)
+    i = 0
+    for group in phrases(notes):
+        mood = text_mood(silben[i:i + len(group)])
+        i += len(group)
+        if mood:
+            a = int(max(group[0].start - TEXT_RAMP, 0) * rate)
+            z = int((group[-1].end + TEXT_RAMP) * rate)
+            curve[a:z] = mood * TEXT_DB
+    return smooth(curve, int(TEXT_RAMP * rate))
+
+
+def swell_curve(notes: list, length: int, rate: int) -> np.ndarray:
+    """St3: Pegel in dB, gehaltene Töne mitten in der Phrase schwellen an und gehen am Ende zurück."""
+    curve = np.zeros(length, dtype=np.float32)
+    for group in phrases(notes):
+        for n in group[:-1]:
+            if n.end - n.start < SWELL_MIN:
+                continue
+            a, z = int(n.start * rate), int(n.end * rate)
+            peak = a + int(0.85 * (z - a))
+            rise, fall = np.linspace(0.0, SWELL_DB, peak - a), np.linspace(SWELL_DB, 0.0, z - peak)
+            part = curve[a:z]              # eine Spur, die kürzer ist als die Noten, endet einfach früher
+            part[:] = np.concatenate([rise, fall])[:len(part)]
+    return smooth(curve, int(0.02 * rate))
+
+
+def shape_level(path: str, db: np.ndarray) -> None:
+    """Einen Pegelverlauf in dB auf die Spur legen; lauter klingt dabei auch heller (wie express)."""
+    from scipy.signal import butter, sosfilt
+    audio, rate = sf.read(path, dtype="float32", always_2d=True)
+    db = db[:len(audio)] if len(db) >= len(audio) else np.pad(db, (0, len(audio) - len(db)))
+    gain = 10 ** (db / 20)
+    highs = sosfilt(butter(2, 2500, "highpass", fs=rate, output="sos"), audio, axis=0)
+    shaped = audio * gain[:, None] + highs * ((gain - 1) * BRIGHT)[:, None]
+    sf.write(path, shaped.astype(np.float32), rate, subtype="FLOAT")
+
+
+def text_and_swells(path: str, notes: list, silben: list, text: bool = True, swells: bool = True) -> dict:
+    """St2 und St3 auf eine fertige Gesangsspur. Rückgabe: {"text": Zeilen mit Ausdruck, "swells": Töne}."""
+    info = sf.info(path)
+    length, rate = info.frames, info.samplerate
+    db = np.zeros(length, dtype=np.float32)
+    done = {"text": 0, "swells": 0}
+    if text:
+        i = 0
+        for group in phrases(notes):
+            done["text"] += bool(text_mood(silben[i:i + len(group)]))
+            i += len(group)
+        if done["text"]:
+            db += text_curve(notes, silben, length, rate)
+    if swells:
+        done["swells"] = sum(1 for g in phrases(notes) for n in g[:-1] if n.end - n.start >= SWELL_MIN)
+        if done["swells"]:
+            db += swell_curve(notes, length, rate)
+    if done["text"] or done["swells"]:
+        shape_level(path, db)
+    return done
 
 
 # ── Lautstärke pro Silbe (C2) ──────────────────────────────────────────────────

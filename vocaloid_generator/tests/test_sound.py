@@ -24,7 +24,7 @@ from preset_manager import PRESETS
 from settings import SongSettings
 from styles import STYLES, get_style
 
-NEW_STYLES = ("Future Bass", "Drum and Bass", "Lo-Fi", "Idol-Pop")
+NEW_STYLES = ("Future Bass", "Drum and Bass", "Lo-Fi", "Idol-Pop", "Wafuu-Rock", "Electro-Swing", "Hyperpop")
 SR = 44100
 
 

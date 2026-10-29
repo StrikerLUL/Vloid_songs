@@ -128,6 +128,108 @@ nichts geändert (z. B. nur der Mix), singt NEUTRINO nicht noch einmal.
 **Updates.** Einmal am Tag sieht die App nach, ob es eine neue Version gibt; dann steht oben „Update da“. „Update
 holen“ lädt die neue Setup.exe und startet sie, deine Daten bleiben. Danach zeigt „Was ist neu“, was sich geändert hat.
 
+## Neu in 1.5
+
+1.5 macht aus dem Lyric-Video ein Musikvideo, das dem Song folgt, bringt drei neue Stile, bessere Melodien und
+Abläufe, eine Stimme, die mit dem Text atmet, und deinen eigenen Produzentenstil. Alles ist ab Werk an und hat einen
+eigenen Schalter; ausgeschaltet klingt und sieht alles aus wie in 1.4.
+
+**Musikvideo** (Tab Video). „Lyric-Video (MP4)“ und „Fertig für YouTube“ bauen jetzt ein Video, in dem das Bild dem
+Song folgt: jede Sektion ist ein eigener Akt (die Strophe ruhig, der Refrain hell und voll), die Szene bewegt sich
+auf Kick und Snare, und alles, was zu sehen ist, kommt aus dem Song selbst. Dafür schreibt die App zu jedem Song eine
+Songkarte (`songkarte.json`) mit Sektionen, Schlägen, Akkorden, Schlagzeug und Melodie.
+
+- *Szene:* jeder Stil hat seine eigene: Anime-Opening (J-Pop), Glitch (Dark), Textkunst aus Zeichen wie ein altes
+  Spiel (Kawaii; der Zeichenregen besteht aus deinem Text), Bühne (Rock), Fenster bei Nacht (Ballade), 80er (City
+  Pop), Kreis (Future Bass), Tunnel (Drum and Bass), Zimmer (Lo-Fi), Bühne mit Leuchtstäben (Idol), Wafuu, Art déco
+  und Hyperpop. Unter „Szene“ nimmst du für jeden Stil jede andere.
+- *Bewegung:* „wie der Stil“, „ruhig und elegant“ (sanftes Wiegen) oder „viel Bewegung“ (Zoom und Wackeln auf den
+  Schlägen). Blitze gibt es nie öfter als dreimal pro Sekunde und nie grell.
+- *Text:* so, wie du ihn geschrieben hast, mit Kanji und Wort für Wort eingefärbt, darunter die Romaji und deine
+  Übersetzung. Die Übersetzung schreibst du im Tab Text unter die japanische Zeile, mit „>“ davor:
+
+  ```
+  雨の街を歩いた
+  > Ich ging durch die Stadt im Regen
+  ```
+
+  Diese Zeile wird nicht gesungen.
+- *Im Bild:* der Akkord und der nächste, die Gesangsmelodie als Notenlinie, das Spektrum des Songs, eine
+  Ablaufleiste mit den Sektionen, eine Titelkarte, solange das Intro ohne Text läuft, und im Outro der Abspann. Bilder
+  aus deinem Text: Regen bei 雨, Schnee bei 雪, Sterne bei 星, Blüten bei 桜, eine Chat-Blase bei 既読; nur was im
+  Text steht, damit nichts Unpassendes im Bild ist. Jedes davon schaltest du einzeln ab.
+- *Eigene Figur* (optional): ein PNG mit durchsichtigem Hintergrund, das im Takt hüpft und den Mund öffnet, solange
+  gesungen wird; mit einem zweiten Bild (Mund offen) sieht es aus, als sänge sie.
+- *KI-Bild pro Sektion* (optional): unter Hilfe › Einrichten „KI-Bilder fürs Video“ einrichten (etwa 4 GB, mit
+  NVIDIA-Grafikkarte deutlich schneller). Dann malt LCM Dreamshaper für jede Sektion ein Bild passend zu Stil und Text,
+  einmal pro Song.
+- *Video-Vorschau (10 s)* unter dem Player zeigt den ersten Refrain in Sekunden statt Minuten.
+- *YouTube-Kapitel:* die Beschreibung bekommt „0:00 Intro, 0:15 Strophe 1 …“.
+
+**Neue Stile.** **Wafuu-Rock**: Rockband mit Shamisen, Koto und Shakuhachi, Taiko-Toms und einer Melodie in der
+japanischen Fünftonleiter. **Electro-Swing**: Walking Bass, Swing, Bläser und Four-on-the-Floor. **Hyperpop**: 808,
+wirbelnde Hi-Hats, Chip-Leads, Reese-Bass und große Sprünge.
+
+**Wie dieser Song** (Tab Song, bei den Vorbildern). Die App misst dein wichtigstes Vorbild ganz durch: Tempo, Tonart,
+Ablauf (Intro, Strophe, Pre-Chorus, Refrain, Bridge …), wie viele Takte jeder Teil hat und welche Akkorde er spielt,
+als Stufen, damit sie in jeder Tonart passen. „Ablauf und Akkorde übernehmen“ setzt das alles für deinen Song;
+`--vom-vorbild` übernimmt es mit. Die Melodie bleibt deine eigene.
+
+**Bessere Melodien** (Tab Song). Mit „Beste Melodie suchen“ zählt jetzt auch, ob das Kernwort des Refrains (das Wort,
+das am öftesten wiederkommt) hoch oder lang auf der betonten Zeit liegt und Gefühlswörter wie 好き, 涙 und さよなら
+lange Töne bekommen (*Wichtige Wörter betonen*), und ob die erste Phrase des Refrains leicht verändert wiederkommt
+und sein Anfangsmotiv zurückkehrt (*Ohrwurm-Wertung*).
+
+**Refrains steigern sich** (Tab Band). Der erste Refrain ist schlanker (Antwort-Melodie und Glocken erst ab der
+Hälfte), der letzte spielt mit allem: Oktave über den ganzen Refrain und ein Becken alle vier Takte.
+
+**Stimme** (Tab Gesang).
+
+- *Ausdruck aus dem Text:* Zeilen mit traurigen Wörtern (涙, さよなら …) singt sie etwas leiser und dunkler, Zeilen mit
+  lauten Wörtern (走れ, 叫ぶ …) kräftiger und heller.
+- *Lange Töne leben:* gehaltene Töne mitten in der Phrase schwellen an.
+- *Lebendige Doppelung:* die Doppelung im Refrain liegt nicht mehr mit festem Abstand daneben, sondern wandert wie ein
+  zweiter Take.
+- *Hör-Check* (optional, Hilfe › Einrichten „Hör-Check für den Text“, etwa 500 MB): nach dem Singen hört eine
+  japanische Spracherkennung den Gesang ab, ohne den Text zu kennen. Unter dem Player steht, welche Zeilen man kaum
+  versteht und welche Wörter die App vielleicht falsch liest („Lesung prüfen: 既読=きよみ“); trag sie dann im Tab Text
+  unter „Eigene Lesungen“ ein. Alles steht auch in `hoer_check.txt` im Songordner.
+
+Für die Stimme bringt weiter eine aktuelle NEUTRINO-Ausgabe am meisten (ab 3.2.2 mit neuem Vocoder). Hilfe ›
+Einrichten zeigt, welche du hast.
+
+**J-Pop und Idol getrennt** (Tab Band). Bis 1.4 spielten beide die „Royal Road“ und klangen sich am ähnlichsten.
+J-Pop Energy ist jetzt eine Anison-Band: Gitarrenriff in der Strophe, Powerchords im Refrain, die Hook auf der
+Lead-Gitarre, Rock-Grooves und Akkorde wie vi–IV–V–I und I–V–vi–IV mit dem Anlauf bVI–bVII vor dem Refrain.
+Idol-Pop bleibt Tanz-Pop mit Royal Road und Four-on-the-Floor, jetzt mit Synth-Bläsern, Disco-Oktaven im Bass und
+Rufen wie aus dem Publikum („Hai! Hai!“) vor dem Refrain.
+
+**Dein Produzentenstil** (Tab Band, unten). Ein Profil, das über alle Songs gleich bleibt, auch im Album über Nacht:
+
+- *Name:* steht im Abspann des Videos, in der YouTube-Beschreibung („Produziert von …“) und als Künstler der MP3
+  („Name feat. MERROW“).
+- *Producer-Tag:* jeder Song beginnt mit vier Tönen, die aus deinem Namen entstehen; in jedem Song dieselbe Melodie,
+  nur in dessen Tonart.
+- *Erkennungsklang:* der Klang des Tags und der Glocken in jedem Song (Glockenspiel, Spieluhr, Vibraphon …); ohne
+  Auswahl entsteht er aus dem Namen.
+- *Typische Akkordwendung:* der Refrain spielt sie in zwei von drei Songs (Royal Road, Komuro, Kanon, Marusa …).
+- *Lieblingsstimme für alle Stile* (Tab Gesang): singt in jedem Stil, für den im Stimmen-Casting keine eigene gemerkt
+  ist.
+
+Ohne Namen und Auswahl ändert sich nichts.
+
+**Geschmack lernen** (Tab Verlauf). Neben dem Stern hat jeder Song einen Daumen: Klang, Melodie, Stimme und Groove
+bekommen je Daumen hoch oder runter. Die App würfelt danach öfter, was dir gefiel, und seltener, was nicht: Klang =
+die Klänge und Synth-Stimmen, Groove = Grooves, Spielweisen, Intro und Schluss, Melodie = die Akkordfolgen, Stimme =
+die NEUTRINO-Stimme (für Stile ohne gemerkte Stimme). Nichts wird verboten, nur seltener. Fällt ein Song aus dem
+Verlauf, bleibt sein Geschmack. Jeder Song merkt sich den Geschmack, mit dem er entstand: derselbe Seed bleibt
+derselbe Song, auch wenn neue Daumen dazukommen.
+
+**Stile mischen** (Tab Song, unter dem Stil). „Mischen mit“ einem zweiten Stil und einem Anteil von 10 bis 50 %, etwa
+Rock mit 30 % Kawaii Chiptune: ein Teil der Instrumente spielt mit Klang und Spielweise des zweiten Stils, ein Teil der
+Sektionen mit seinem Groove, ein Teil der Akkordfolgen kommt aus ihm. Gesang, Melodie und Klangbild bleiben beim
+ersten Stil. Welche Teile es trifft, entscheidet der Seed; im Protokoll steht „Stil-Mischung“.
+
 ## Neu in 1.4
 
 1.4 gibt jedem Stil und jedem Song seinen eigenen Charakter und macht die Stimme schöner. Bis 1.3 teilten sich alle
@@ -307,6 +409,11 @@ löscht ihn (neu einrichten geht jederzeit). Darunter: wie groß Songs und aufge
 | Arrangement je Stil, Charakter pro Song (1.4) | Tab Band |
 | Wohlfühlbereich der Stimme, Sanfte Nachbearbeitung, Weichere Gesangskette (1.4) | Tab Gesang |
 | Klangbild je Stil (1.4) | Tab Mix |
+| Musikvideo und jeder seiner Teile, YouTube-Kapitel, KI-Bilder (1.5) | Tab Video |
+| Wie dieser Song (1.5) | Tab Song, unter den Vorbildern |
+| Wichtige Wörter, Ohrwurm-Wertung, Stile mischen (1.5) | Tab Song |
+| Refrains steigern sich, J-Pop und Idol getrennt, Geschmack lernen, Produzenten-Profil, Producer-Tag (1.5) | Tab Band |
+| Ausdruck aus dem Text, lange Töne, lebendige Doppelung, Hör-Check (1.5) | Tab Gesang |
 
 ## Wo was liegt
 
@@ -531,6 +638,9 @@ Für die MP3 braucht `pydub` das Programm ffmpeg (`winget install Gyan.FFmpeg`).
 
 ## Lyric-Video
 
+Seit 1.5 ist das Video ein Musikvideo, das dem Song folgt (siehe [Neu in 1.5](#neu-in-15), Einstellungen im Tab
+„Video“). Mit dem Schalter „Musikvideo“ aus (`--ohne-musikvideo`) ist es das Lyric-Video, wie es hier beschrieben ist.
+
 „Lyric-Video (MP4)“ unter dem Player (oder `--lyric-video`) macht aus dem Song ein Video in 1920×1080, zum Beispiel für YouTube: der Farbverlauf des Stils (wie beim Titelbild), unten die Wellenform des Songs und in der Mitte der Text, Silbe für Silbe in der Farbe des Stils eingefärbt, darunter schon die nächste Zeile. Ein eigenes Bild als Hintergrund wählst du im Tab „Pfade“ („Hintergrundbild des Lyric-Videos“, `--video-hintergrund BILD`); es wird auf 16:9 zugeschnitten. Mit dem Schalter „Lyric-Video in den Farben des Stils“ aus (`--ohne-stilfarben`) ist es dunkel mit pinkem Text wie bis 1.1. Die Zeiten kommen aus der Gesangsmelodie, der Text steht also genau dann da, wenn er gesungen wird; die Zeilen sind die Zeilen aus dem Tab „Text“. Das Video baut ffmpeg (dasselbe wie für die MP3, die Version von Gyan hat alles dabei) und landet als `lyric_video.mp4` im Ausgabeordner. Ein Song ohne Gesang hat keinen Text zum Mitlesen und damit auch kein Lyric-Video.
 
 ## Die Oberfläche
@@ -600,10 +710,14 @@ Jeder Stil bringt eigene Instrumente, Spielweisen, Schlagzeug-Grooves und Akkord
 | Drum and Bass | 174 BPM, Two-Step mit Ghost-Notes, rollender Reese-Bass, Rhodes-Arpeggien mit Septakkorden, Flächen, Flöten-Antworten |
 | Lo-Fi | Rhodes mit Jazz-Akkorden, gemütlicher Boom-Bap mit Swing, Jazz-Gitarre, Vibraphon; die Band klingt wie von einer alten Bandmaschine, und eine Schallplatte knistert (Schalter im Tab „Band“) |
 | Idol-Pop | 180 BPM in Dur, Funk-Gitarre, Bläser-Stabs, Oktav-Bass, Four-on-the-Floor im Refrain, Claps und Tamburin, der letzte Refrain steigt fast immer |
+| Wafuu-Rock (1.5) | Rockband mit Shamisen, Koto und Shakuhachi, Taiko-Toms, Melodie in der japanischen Fünftonleiter |
+| Electro-Swing (1.5) | Walking Bass mit Halbton-Annäherung, Swing, Bläser, Four-on-the-Floor, Jazz-Akkorde |
+| Hyperpop (1.5) | 808, wirbelnde Hi-Hats, Chip-Leads, Reese-Bass, große Sprünge zwischen den Stufen |
 
 Seit 1.4 hat jeder Stil auch eigene Akkordfolgen und Kadenzen, einen eigenen Melodie-Charakter, eine eigene Besetzung
 der Sektionen und ein eigenes Klangbild, und jeder Song würfelt aus seinem Seed eigene Klänge, Grooves, Intro und
-Schluss (siehe [Neu in 1.4](#neu-in-14)).
+Schluss (siehe [Neu in 1.4](#neu-in-14)). Seit 1.5 ist J-Pop Energy eine Anison-Band mit Gitarrenriffs und ohne
+„Royal Road“, und zwei Stile lassen sich mischen (siehe [Neu in 1.5](#neu-in-15)).
 
 Keine Sektion klingt zweimal gleich: Die zweite Strophe bekommt eine Gegenstimme, der letzte Refrain Chor und Glockenspiel in der Oktave der Hook, und im Refrain spielen mehrere Synth-Schichten zusammen.
 
@@ -694,7 +808,7 @@ uv run vocaloid_generator\main.py --style Rock --bpm 140 --key E --scale minor -
 | `--veredler-staerke 0.6` | wie viel ACE-Step am Klang der Band ändert (0.1 bis 0.9, Standard 0.4) |
 | `--veredler-klang "TEXT"` | eigene Klangbeschreibung für ACE-Step auf Englisch |
 | `--vorbild DATEI` | Vorbild-Song für diesen Lauf, mehrfach möglich |
-| `--vom-vorbild` | Tempo, Tonart und Stil der Vorbilder übernehmen |
+| `--vom-vorbild` | Tempo, Tonart und Stil der Vorbilder übernehmen, seit 1.5 auch Ablauf, Takte und Akkorde des wichtigsten |
 | `--lautheit LUFS` | Lautheit des Masters, z. B. `-14` für YouTube |
 | `--takte SEKTION=N` | Länge einer Sektion in Takten, z. B. `Chorus=8`; mehrfach möglich |
 | `--lyric-video [DATEI]` | nach dem Song ein Lyric-Video als MP4 bauen (Standard: `lyric_video.mp4` im Ausgabeordner) |
@@ -715,7 +829,14 @@ uv run vocaloid_generator\main.py --style Rock --bpm 140 --key E --scale minor -
 | `--ohne-kime`, `--ohne-band-groove`, `--ohne-bass-laeufe`, `--ohne-laeufe`, `--ohne-anison-grooves`, `--ohne-aufbau` | Band 1.3 einzeln abschalten |
 | `--ohne-surge-klaenge`, `--ohne-verstaerker-modelle`, `--ohne-druck` | eigene Synths statt Surge XT, eingebauter Verzerrer statt Verstärker-Modell, Mix ohne Parallel-, Bus- und Mehrband-Kompression |
 | `--ohne-stil-akkorde`, `--ohne-melodie-charakter`, `--ohne-stil-arrangement`, `--ohne-song-charakter`, `--ohne-klangbild` | Charakter 1.4 einzeln abschalten: Akkorde, Melodie, Besetzung, Klänge und Grooves pro Song, Hall und Klang wie bis 1.3 |
+| `--ohne-musikvideo`, `--ohne-video-kanji`, `--ohne-video-romaji`, `--ohne-video-uebersetzung`, `--ohne-video-akkorde`, `--ohne-video-notenlinie`, `--ohne-video-spektrum`, `--ohne-video-textbilder`, `--ohne-video-titel`, `--ohne-video-ablauf`, `--ohne-kapitel`, `--ohne-ki-bilder` | Video 1.5 einzeln abschalten; ganz aus ist es das Lyric-Video wie bis 1.4 |
+| `--video-szene NAME`, `--video-bewegung Stil\|ruhig\|lebhaft`, `--video-figur BILD`, `--video-figur-offen BILD`, `--video-vorschau [DATEI]` | Szene (ein Stilname oder `Textkunst`), Bewegung, eigene Figur, 10 Sekunden Vorschau ab dem ersten Refrain |
+| `--ohne-vorbild-ablauf`, `--ohne-schluesselwoerter`, `--ohne-ohrwurm`, `--ohne-refrain-steigerung` | Songs 1.5 einzeln abschalten: `--vom-vorbild` ohne Ablauf und Akkorde, Melodie ohne Kernwort- und Ohrwurm-Wertung, alle Refrains gleich voll |
+| `--ohne-text-ausdruck`, `--ohne-schwellen`, `--ohne-lebendige-doppelung`, `--ohne-hoercheck` | Stimme 1.5 einzeln abschalten |
+| `--ohne-jpop-idol-trennung`, `--ohne-produzent`, `--ohne-producer-tag`, `--ohne-geschmack`, `--ohne-stil-mischung` | Charakter 1.5 einzeln abschalten |
+| `--produzent NAME`, `--erkennungsklang KLANG`, `--akkordwendung WENDUNG` | Produzenten-Profil für diesen Lauf (`--help` zeigt die Klänge und Wendungen) |
+| `--mische STIL`, `--mischanteil 0.3` | zweiter Stil für eine Mischung und sein Anteil (0.1 bis 0.5) |
 | `--ohne-wohlfuehlbereich`, `--ohne-sanfte-nachbearbeitung`, `--ohne-weiche-gesangskette` | Stimme 1.4 einzeln abschalten: kein Tempo-Hinweis und StyleShift pro Sektion zerlegt immer, jede Phrase ganz neu gerechnet, die Gesangskette mit 6:1 wie bis 1.3 |
 | `-v` | alle Details ausgeben |
 
-Die fertigen Dateien landen in `Songs` im Datenordner (oder im Ordner aus den Einstellungen): `final_song.mp3`, `final_mix.wav`, `final_song_offvocal.mp3` (ohne Gesang), `final_song_acappella.mp3` (nur Gesang), die einzelnen Spuren als WAV und MIDI, `vocals.xml` für NEUTRINO, die `.ust`-Dateien für OpenUtau und `liedtext.json` mit der Zeit jeder Silbe (für das Mitlesen und das Lyric-Video).
+Die fertigen Dateien landen in `Songs` im Datenordner (oder im Ordner aus den Einstellungen): `final_song.mp3`, `final_mix.wav`, `final_song_offvocal.mp3` (ohne Gesang), `final_song_acappella.mp3` (nur Gesang), die einzelnen Spuren als WAV und MIDI, `vocals.xml` für NEUTRINO, die `.ust`-Dateien für OpenUtau `liedtext.json` mit der Zeit jeder Silbe (für das Mitlesen und das Lyric-Video), `songkarte.json` mit Sektionen, Schlägen und Akkorden fürs Musikvideo und nach dem Hör-Check `hoer_check.txt`.

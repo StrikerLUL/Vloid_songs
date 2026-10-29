@@ -163,6 +163,50 @@ PROGRESSIONS = {
             "Chorus": ["bVI | bVII | i | i", "bVI | bVII | V | i"],
         },
     },
+    # 1.5.0: Wafuu-Rock in Moll mit bVI-bVII-i und dem „Senbonzakura“-Gang, Electro-Swing mit Jazz-Wendungen,
+    # Hyperpop hell und mit großen Sprüngen zwischen den Stufen
+    "Wafuu-Rock": {
+        "minor": {
+            "Verse": ["i | bVII | bVI | bVII", "i | iv | bVII | bIII", "i | bVI | bVII | i", "i | i | iv | v"],
+            "PreChorus": ["bVI | bVII | bIII | bVI", "iv | v | bVI | bVII", "bVI | bVII | V | V"],
+            "Chorus": ["bVI | bVII | v | i", "bVImaj7 | bVII | v7 | i", "i | bVII | bVI | bVII i",
+                       "bVI | bVII | i | i"],
+            "Bridge": ["iv | i | bVII | bIII", "bVI | bIII | bVII | V"],
+        },
+        "major": {
+            "Verse": ["vi | IV | V | vi", "I | V | vi | iii"],
+            "PreChorus": ["IV | V | iii | vi"],
+            "Chorus": ["IV | V | iii | vi", "IVmaj7 | V | iii7 | vi"],
+            "Bridge": ["vi | IV | I | V"],
+        },
+    },
+    "Electro-Swing": {
+        "minor": {
+            "Verse": ["i | i | iv | V7", "i | bVI7 | V7 | i", "i7 | iv7 | V7 | i7"],
+            "PreChorus": ["iv7 | i | bVI7 | V7", "iv | iv | V7 | V7"],
+            "Chorus": ["i | iv | V7 | i", "i | bVI7 | V7 | i", "iv7 | V7 | i7 | VI7"],
+            "Bridge": ["bVImaj7 | V7 | i | i", "iv7 | bVII7 | bIIImaj7 | V7"],
+        },
+        "major": {
+            "Verse": ["I | VI7 | ii7 | V7", "Imaj7 | vi7 | ii7 | V7", "I | I7 | IV | iv"],
+            "PreChorus": ["ii7 | V7 | iii7 | VI7", "IV | iv | I | V7"],
+            "Chorus": ["I | VI7 | II7 | V7", "Imaj7 | VI7 | ii7 | V7", "IV | iv | I | VI7"],
+            "Bridge": ["III7 | VI7 | II7 | V7"],
+        },
+    },
+    "Hyperpop": {
+        "major": {
+            "Verse": ["I | V | vi | IV", "vi | IV | I | V", "I | iii | vi | IV"],
+            "PreChorus": ["IV | V | vi | vi", "IV | IV | V | V"],
+            "Chorus": ["I | V | vi | IV", "IV | V | vi | I", "I V | vi IV | I V | IV V"],
+            "Bridge": ["vi | IV | ii | V", "bVI | bVII | I | I"],
+        },
+        "minor": {
+            "Verse": ["i | bVI | bIII | bVII", "i | bVII | bVI | bVII"],
+            "Chorus": ["bVI | bVII | i | i", "i | bVI | bIII | bVII"],
+            "Bridge": ["bVI | bIII | bVII | V"],
+        },
+    },
 }
 
 # Schluss des Refrains und Akkord vor dem Refrain je Stil (wie styles.CADENCES)
@@ -187,18 +231,49 @@ CADENCES = {
               "minor": {"to_chorus": "V7", "end": ("iim7b5 V7", "i9")}},
     "Idol-Pop": {"major": {"to_chorus": "V7", "end": ("ii V7", "I")},
                  "minor": {"to_chorus": "V7", "end": ("iv V7", "i")}},
+    "Wafuu-Rock": {"minor": {"to_chorus": "bVI bVII", "end": ("bVI bVII", "i")},
+                   "major": {"to_chorus": "IV V", "end": ("IV V", "vi")}},
+    "Electro-Swing": {"minor": {"to_chorus": "V7", "end": ("iim7b5 V7", "i")},
+                      "major": {"to_chorus": "V7", "end": ("ii7 V7", "I")}},
+    "Hyperpop": {"major": {"to_chorus": "IV V", "end": ("IV V", "I")},
+                 "minor": {"to_chorus": "bVII", "end": ("bVI bVII", "i")}},
 }
 
 
-def progressions(style: str, mode_class: str, section: str) -> Optional[list]:
-    """Die eigenen Akkordfolgen des Stils für eine Sektion (Intro, Outro und Drop wie der Refrain), sonst None."""
-    bank = PROGRESSIONS.get(style, {}).get(mode_class, {})
+# 1.5.0 (C1): J-Pop Energy als Anison-Band ohne die „Royal Road“ IV–V–iii–vi, die bis 1.4 auch Idol-Pop spielte:
+# Komuro-Folge vi–IV–V–I, I–V–vi–IV, IV–V–vi und vor dem Refrain der Anlauf bVI–bVII
+SPLIT_PROGRESSIONS = {
+    "J-Pop Energy": {
+        "major": {
+            "Verse": ["vi | IV | V | I", "vi | V | IV | V", "I | V | vi | IV", "I | V/3 | vi | V"],
+            "PreChorus": ["IV | V | vi | vi", "ii | iii | IV | V", "IV | IV | V | V", "bVI | bVII | V | V"],
+            "Chorus": ["vi | IV | V | I", "I | V | vi | IV", "IV | V | vi | I", "vi | IV | V | V"],
+            "Bridge": ["vi | V | IV | V", "bVI | bVII | I | I", "ii | V | vi | vi"],
+        },
+        "minor": {
+            "Verse": ["i | bVI | bVII | i", "i | bVII | bVI | bVII", "i | i | bVI | bVII"],
+            "PreChorus": ["bVI | bVII | V | V", "iv | bVI | bVII | bVII"],
+            "Chorus": ["i | bVI | bIII | bVII", "bVI | bVII | i | i", "i | bVII | bVI | V", "i | bVI | bVII | i"],
+            "Bridge": ["bVI | bVII | V | V", "iv | bVI | bVII | bVII"],
+        },
+    },
+}
+SPLIT_CADENCES = {
+    "J-Pop Energy": {"major": {"to_chorus": "bVI bVII", "end": ("bVI bVII", "I")},
+                     "minor": {"to_chorus": "V", "end": ("bVI bVII", "i")}},
+}
+
+
+def progressions(style: str, mode_class: str, section: str, split: bool = False) -> Optional[list]:
+    """Die eigenen Akkordfolgen des Stils für eine Sektion (Intro, Outro und Drop wie der Refrain), sonst None.
+    split: J-Pop Energy als Anison-Band (SPLIT_PROGRESSIONS)."""
+    bank = ((split and SPLIT_PROGRESSIONS.get(style)) or PROGRESSIONS.get(style, {})).get(mode_class, {})
     return bank.get(section) or bank.get("Chorus" if section in ("Intro", "Outro", "Drop") else "Verse") or None
 
 
-def cadences(style: str, mode_class: str) -> Optional[dict]:
+def cadences(style: str, mode_class: str, split: bool = False) -> Optional[dict]:
     """Die eigene Kadenz des Stils ({"to_chorus", "end"}), sonst None."""
-    return CADENCES.get(style, {}).get(mode_class)
+    return ((split and SPLIT_CADENCES.get(style)) or CADENCES.get(style, {})).get(mode_class)
 
 
 # ── Melodie-Charakter ───────────────────────────────────────────────────────────
@@ -215,6 +290,9 @@ class MelodyCharacter:
     staccato: float = 0.0          # so viele Achtel (mitten in der Phrase) werden kurz und abgesetzt gesungen
     gestures: dict = field(default_factory=dict)   # Sektionsart → Gewichte der Gesten (melody_writer.GESTURES)
     score: dict = field(default_factory=dict)      # was die Bewertung der besten Melodie im Stil anders sieht
+    # 1.5.0: Stufen (Halbtöne über dem Grundton), die die Melodie meidet: {"major": …, "minor": …}; Wafuu-Rock
+    # singt so in der japanischen Fünftonleiter (Yonanuki: ohne vierte und siebte Stufe, in Moll ohne zweite und sechste)
+    avoid: dict = field(default_factory=dict)
 
 
 # Die Rhythmen, die jeder Stil zusätzlich kennt (Einsätze in Sechzehnteln, wie melody_writer.BODY_RHYTHMS)
@@ -274,6 +352,23 @@ CHARACTERS = {
                                 contour=1.1, staccato=0.35,
                                 score={"repeats": (0.1, 0.36), "motif_weight": 1.6}),
 }
+# 1.5.0
+CHARACTERS.update({
+    # Fünftonleiter, weite Bögen mit Quarten und Quinten, lange Töne am Phrasenende
+    "Wafuu-Rock": MelodyCharacter(density=1.0, rhythm="driving", rhythm_pull=1.2, leap_cost=0.85,
+                                  favorite_leaps=(5, 7), contour=1.25, staccato=0.05,
+                                  avoid={"major": (5, 11), "minor": (2, 8)},
+                                  gestures={"Chorus": {"arch": 3, "leap_fall": 2, "fall": 1}},
+                                  score={"range": {"Chorus": (10, 15)}}),
+    # Swing: synkopiert und abgehackt wie eine Bläser-Phrase, Terzen und Sexten
+    "Electro-Swing": MelodyCharacter(density=1.0, rhythm="syncopated", rhythm_pull=1.8, leap_cost=0.9,
+                                     favorite_leaps=(3, 4, 9), repeat_bonus=0.3, contour=1.0, staccato=0.35,
+                                     score={"repeats": (0.1, 0.38)}),
+    # alles zu viel: dicht, hoch, Oktavsprünge, kurz abgesetzt
+    "Hyperpop": MelodyCharacter(density=1.2, rhythm="even", rhythm_pull=1.4, step_cost=1.1, leap_cost=0.75,
+                                favorite_leaps=(5, 7, 12), repeat_bonus=0.4, contour=1.35, staccato=0.45,
+                                score={"leaps": (0.18, 0.42), "range": {"Chorus": (11, 16)}}),
+})
 NEUTRAL = MelodyCharacter()
 
 
@@ -363,6 +458,16 @@ ARRANGEMENT = {
         "Bridge": {"synth": None},
         "Verse:2": {"perc": "claps+tambourine"},
     },
+    "Wafuu-Rock": {
+        "Verse:2": {"perc": "taiko"},
+        "Bridge": {"guitar": None, "perc": None},
+    },
+    "Electro-Swing": {
+        "Chorus:2": {"strings": "pizzicato"},
+    },
+    "Hyperpop": {
+        "Bridge": {"guitar": None, "counter": None},
+    },
 }
 
 
@@ -379,6 +484,91 @@ def arranged(parts: dict, style: str) -> dict:
         for inst, pattern in insts.items():
             target[inst] = pattern            # None nimmt es auch dann heraus, wenn „Verse:2“ es sonst ergänzt
     return out
+
+
+# ── J-Pop Energy und Idol-Pop getrennt (1.5.0, C1) ──────────────────────────────
+# Bis 1.4 lagen die beiden in der Messung am nächsten beieinander. Mit dem Schalter ist J-Pop Energy die Anison-Band:
+# Gitarrenriff in der Strophe, Powerchords in Intro, Refrain und Outro, die Hook auf der Lead-Gitarre, Rock-Grooves,
+# kein Klavier außer in der Bridge, keine Glitzer-Glocken und eigene Akkorde (SPLIT_PROGRESSIONS). Idol-Pop bleibt
+# Tanz-Pop mit Royal Road und Four-on-the-floor, jetzt mit Disco-Oktaven im Bass, Synth-Bläsern und Rufen wie aus
+# dem Publikum („Hai! Hai!“) vor dem Refrain.
+SPLIT_PARTS = {
+    "J-Pop Energy": {
+        "Intro": {"guitar": "power_chords", "piano": None, "bells": None},
+        "Verse": {"guitar": "riff", "piano": None},
+        "Verse:2": {"guitar": "riff"},
+        "PreChorus": {"guitar": "palm_mute", "piano": None, "choir": None},
+        "Chorus": {"guitar": "power_chords", "piano": None, "bells": None, "synth": "supersaw"},
+        "Outro": {"guitar": "power_chords", "piano": None, "bells": None},
+        "Bridge": {"guitar": "chill_riff"},
+    },
+    "Idol-Pop": {
+        "PreChorus": {"choir": "calls"},
+        "Chorus": {"bass": "octaves"},                  # Disco-Oktaven zum Four-on-the-floor
+        "Chorus:last": {"choir": "aahs+calls"},
+    },
+}
+SPLIT_GROOVES = {
+    "J-Pop Energy": {"Intro": "rock_chorus", "Verse": "rock_verse", "Chorus": "rock_chorus", "Outro": "rock_chorus"},
+}
+SPLIT_PROGRAMS = {"J-Pop Energy": {"melody": 30}, "Idol-Pop": {"brass": 62}}    # Lead-Gitarre, Synth-Bläser
+SPLIT_WITHOUT_VOICES = {"J-Pop Energy": ("melody",)}  # die Hook spielt die Gitarre, nicht der Synth-Lead
+
+
+def split(profile):
+    """Das StyleProfile mit der Trennung von J-Pop Energy und Idol-Pop; andere Stile bleiben, wie sie sind."""
+    from dataclasses import replace
+    name = profile.name
+    if name not in SPLIT_PARTS:
+        return profile
+    parts = {section: dict(p) for section, p in profile.parts.items()}
+    for section, insts in SPLIT_PARTS[name].items():
+        parts.setdefault(section, {}).update(insts)      # None nimmt ein Instrument heraus (StyleProfile.part)
+    voices = {inst: v for inst, v in profile.voices.items() if inst not in SPLIT_WITHOUT_VOICES.get(name, ())}
+    return replace(profile, parts=parts, grooves={**profile.grooves, **SPLIT_GROOVES.get(name, {})},
+                   programs={**profile.programs, **SPLIT_PROGRAMS.get(name, {})}, voices=voices)
+
+
+# ── Zwei Stile mischen (1.5.0, C4) ──────────────────────────────────────────────
+# Etwa 70 % Rock und 30 % Kawaii Chiptune: ein Teil der Instrumente spielt mit Klang und Spielweisen des zweiten
+# Stils, ein Teil der Sektionen mit seinem Groove, und ein Teil der Akkordfolgen kommt aus ihm (song_plan.build_plan).
+# Wie viele, entscheidet der Anteil; welche, der Seed des Songs. Gesang, Melodie und Klangbild bleiben beim ersten Stil.
+BLEND_PARTS = ("piano", "guitar", "strings", "synth", "brass", "bells", "choir", "counter", "melody", "bass", "perc")
+
+
+def blend(profile, other, share: float, seed: str):
+    """profile mit share Anteil von other (beides StyleProfile). Rückgabe: (StyleProfile, [Instrumente aus other],
+    [Sektionen mit dem Groove von other])."""
+    import random
+    from dataclasses import replace
+    rng = random.Random(f"{seed}:blend:{other.name}")
+    # Kandidaten: was der zweite Stil im Refrain spielt; mindestens ein Instrument kommt immer aus ihm
+    played = [inst for inst in BLEND_PARTS if other.parts.get("Chorus", {}).get(inst)]
+    count = max(1, round(share * len(BLEND_PARTS)))
+    taken = sorted(rng.sample(played, min(count, len(played))), key=BLEND_PARTS.index)
+    parts = {section: dict(p) for section, p in profile.parts.items()}
+    for section in set(parts) | set(other.parts):
+        target = parts.setdefault(section, {} if ":" in section or section == "breakdown"
+                                  else dict(profile.parts.get("Verse", {})))
+        theirs = other.parts.get(section)
+        if theirs is None and ":" not in section and section != "breakdown":
+            theirs = other.parts.get("Verse", {})          # eine Sektion ohne eigene Besetzung spielt wie die Strophe
+        for inst in taken:
+            if theirs is not None and inst in theirs:
+                target[inst] = theirs[inst]
+            elif ":" in section:
+                target.pop(inst, None)                     # die Ergänzung des ersten Stils gilt nicht mehr
+            else:
+                target[inst] = None
+    programs = {**profile.programs, **{inst: other.programs[inst] for inst in taken if inst in other.programs}}
+    voices = {inst: v for inst, v in profile.voices.items() if inst not in taken}
+    voices.update({inst: dict(other.voices[inst]) for inst in taken if inst in other.voices})
+    grooves = dict(profile.grooves)
+    moved = [section for section in sorted(set(profile.grooves) | set(other.grooves))
+             if other.grooves.get(section) and rng.random() < share]
+    for section in moved:
+        grooves[section] = other.grooves[section]
+    return replace(profile, parts=parts, programs=programs, voices=voices, grooves=grooves), taken, moved
 
 
 # ── Klangbild ───────────────────────────────────────────────────────────────────
@@ -435,6 +625,15 @@ STYLE_SOUNDS = {
     "Idol-Pop": Sound(room=0.72, damping=0.25, hall_lowpass=12000.0, predelay=0.015, delay_beats=0.5,
                       delay_feedback=0.25, delay_lowpass=8000.0, low_db=1.0, mid_db=-0.5, mid_hz=700.0, high_db=2.0,
                       width=1.25, describe_as="poliert und strahlend"),
+    "Wafuu-Rock": Sound(room=0.66, damping=0.45, hall_lowpass=9000.0, predelay=0.02, delay_beats=0.75,
+                        delay_feedback=0.3, low_db=1.0, mid_db=1.0, mid_hz=2200.0, high_db=0.5, width=1.1, drive=0.35,
+                        describe_as="Halle eines Schreins, Gitarren vorn"),
+    "Electro-Swing": Sound(room=0.5, damping=0.5, hall_lowpass=8500.0, predelay=0.01, hall_gain=0.85,
+                           delay_beats=0.5, delay_feedback=0.25, delay_lowpass=5000.0, low_db=2.0, mid_db=1.0,
+                           mid_hz=1000.0, high_db=-0.5, width=0.95, drive=0.25, describe_as="Shellack-Mitten, Club-Bass"),
+    "Hyperpop": Sound(room=0.6, damping=0.2, hall_lowpass=13000.0, hall_gain=0.8, delay_beats=0.5,
+                      delay_feedback=0.35, delay_lowpass=10000.0, low_db=2.5, mid_db=0.5, mid_hz=3000.0, high_db=2.5,
+                      width=1.35, drive=0.45, describe_as="zu laut, zu hell, zu breit (Absicht)"),
 }
 
 SOUNDS = STYLE_SOUNDS            # die Tests schalten es hier ab (conftest.py)

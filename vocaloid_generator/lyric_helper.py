@@ -8,7 +8,8 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import config
-from lyrics import _HEADER, _KANJI, changes, kind_of, normalize_section, options, syllables, vowel
+from lyrics import (_HEADER, _KANJI, changes, is_translation, kind_of, normalize_section, options, syllables,
+                    vowel)
 from melody_writer import SINGING_SHARE, SYLLABLES_PER_SECOND, max_syllables, phrase_bars_for
 from song_plan import SLOW_BPM
 
@@ -110,7 +111,7 @@ def check(settings, text: Optional[str] = None) -> list:
             current = Section(name, kind, _bars(settings, kind))
             out.append(current)
             continue
-        if not line:
+        if not line or is_translation(line):          # Übersetzung fürs Video, wird nicht gesungen
             continue
         if current is None:
             current = Section("", "")

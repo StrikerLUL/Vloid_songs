@@ -33,6 +33,9 @@ STYLE_TO_GENRE = {
     "Drum and Bass": "EDM",
     "Lo-Fi": "Lo-Fi",
     "Idol-Pop": "J-Pop",
+    "Wafuu-Rock": "Rock",
+    "Electro-Swing": "EDM",
+    "Hyperpop": "EDM",
 }
 
 ProgressFn = Callable[[float, str], None]
@@ -43,7 +46,10 @@ NEW_COMPOSITION = ("best_melody", "melody_pickups", "intro_riff", "kime", "melod
                    "section_buildup")
 # Neuerungen aus 1.4.0, die die Noten ändern (Charakter je Stil und Song)
 NEW_140 = ("style_chords", "melody_character", "style_arrangement", "song_character")
-COMPOSITION_EXTRAS = NEW_COMPOSITION + NEW_140     # die Tests schalten sie hier ab (conftest.py)
+# Neuerungen aus 1.5.0, die die Noten ändern (wichtige Wörter, Ohrwurm, Refrain-Steigerung)
+NEW_150 = ("key_words", "catchy_chorus", "chorus_lift", "jpop_idol_split", "producer_profile", "taste_learning",
+           "style_blend")
+COMPOSITION_EXTRAS = NEW_COMPOSITION + NEW_140 + NEW_150     # die Tests schalten sie hier ab (conftest.py)
 
 
 @dataclass
@@ -63,6 +69,7 @@ class SongResult:
     polished_wav: Optional[str] = None         # zweite Fassung mit der vom Klang-Veredler neu eingespielten Band
     polished_mp3: Optional[str] = None
     versions: dict = field(default_factory=dict)   # {"offvocal" / "acappella": MP3, ohne ffmpeg WAV} (v6 Nr. 4)
+    hearing: list = field(default_factory=list)    # hoercheck.Line je Zeile, wenn der Hör-Check lief (1.5.0 St4)
 
     @property
     def audio(self) -> Optional[str]:
@@ -91,8 +98,42 @@ def sung_lyrics(settings: SongSettings) -> dict:
 
 
 def composition_extras(settings: SongSettings) -> dict:
-    """{Schalter: Wert} der eingeschalteten Neuerungen aus 1.3.0 und 1.4.0, die die Noten ändern (0 und aus fehlen)."""
-    return {name: getattr(settings, name) for name in COMPOSITION_EXTRAS if getattr(settings, name)}
+    """{Schalter: Wert} der eingeschalteten Neuerungen ab 1.3.0, die die Noten ändern (0 und aus fehlen); dazu
+    "producer": das Produzenten-Profil (produzent.Profile), wenn eins gilt."""
+    extras = {name: getattr(settings, name) for name in COMPOSITION_EXTRAS if getattr(settings, name)}
+    if extras.pop("producer_profile", False):
+        import produzent
+        found = produzent.profile(settings)
+        if found:
+            extras["producer"] = found
+    from styles import STYLES
+    if extras.pop("style_blend", False) and settings.blend_style in STYLES and settings.blend_style != settings.style:
+        extras["blend"] = (settings.blend_style, settings.blend_share)
+    if extras.pop("taste_learning", False) and settings.taste_snapshot:
+        import geschmack
+        extras["taste"] = geschmack.from_snapshot(settings.taste_snapshot)
+    return extras
+
+
+def with_taste(settings: SongSettings, seed: Optional[int] = None) -> SongSettings:
+    """C3 (1.5.0): ein neuer Song (ohne Seed) merkt sich den Geschmack aus dem Verlauf, mit dem er entsteht; ein Song
+    mit Seed behält seinen, damit derselbe Seed derselbe Song bleibt, auch wenn neue Daumen dazukommen."""
+    if settings.seed is not None or seed is not None or not settings.taste_learning:
+        return settings
+    import geschmack
+    return settings.with_updates(taste_snapshot=geschmack.snapshot(settings))
+
+
+def song_character(tracks: dict) -> dict:
+    """Was der Song gewürfelt hat (Charakter und Akkordfolgen), für die Daumen im Verlauf (geschmack.py)."""
+    from dataclasses import asdict
+    character = tracks.get("character")
+    out = asdict(character) if character is not None else {}
+    plan = tracks.get("plan")
+    if plan is not None:
+        out["chords"] = {kind: p for kind, p in plan.progressions.items()
+                         if kind in ("Verse", "PreChorus", "Chorus", "Bridge")}
+    return out
 
 
 def compose(settings: SongSettings, seed: Optional[int] = None):
@@ -230,6 +271,7 @@ def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None,
     os.makedirs(out, exist_ok=True)
 
     report(0.05, "Komponiere Song...")
+    settings = with_taste(settings, seed)
     tracks, seed = compose(settings, seed)
     log.info("Seed: %d (mit diesem Seed entsteht derselbe Song noch einmal)", seed)
     settings = settings.with_updates(seed=seed)
@@ -256,6 +298,7 @@ def _produce(settings: SongSettings, tracks: dict, out: str, report: ProgressFn,
     _write_karaoke(settings, tracks, out)
     report(0.30, "Synthetisiere Gesang...")
     result.vocals_wav = singing._synthesize_vocals(settings, tracks, out)
+    _hearing_check(settings, result, report)
     lead_sings = result.vocals_wav is None and settings.channels["melody"].enabled
     if lead_sings:
         _lead_sings_melody(tracks, out)
@@ -300,13 +343,23 @@ def _produce(settings: SongSettings, tracks: dict, out: str, report: ProgressFn,
 
     if keep_history:
         import history
-        entry = history.record(result.audio, settings, out, keep=settings.history_keep)
+        entry = history.record(result.audio, settings, out, keep=settings.history_keep,
+                               character=song_character(tracks))
         result.history = entry.audio if entry else None
         if entry and settings.keep_projects:
             import project
             report(0.98, "Hebe den Gesang als Projekt auf...")
             project.save(out, tracks, entry.audio)
     return result
+
+
+def _hearing_check(settings: SongSettings, result: SongResult, report: ProgressFn) -> None:
+    """St4 (1.5.0): die Spracherkennung hört den fertigen Gesang ab (nicht im Entwurf und nicht die eigene Spur);
+    ohne Schalter oder Erkennung verschwindet nur ein altes Ergebnis aus dem Songordner."""
+    import hoercheck
+    wanted = settings.hearing_check and not settings.draft and not settings.own_vocal
+    result.hearing = hoercheck.check_song(result.output_dir, result.vocals_wav if wanted else None,
+                                          lambda fraction, message: report(0.52, message))
 
 
 # Off-Vocal und A-cappella (v6 Nr. 4): (WAV, MP3, Zusatz zum Titel in den Tags)
@@ -428,7 +481,14 @@ def from_references(settings: SongSettings) -> SongSettings:
     if settings.ref_style:
         updates["style"] = summary.style
     log.info("Vom Vorbild übernommen: %s", summary.describe())
-    return settings.with_updates(**updates)
+    settings = settings.with_updates(**updates)
+    if settings.ref_structure:
+        import vorbild_ablauf
+        template = vorbild_ablauf.for_references(settings.reference_tracks)
+        if template is not None:
+            log.info("Ablauf und Akkorde vom Vorbild: %s", template.describe())
+            settings = settings.with_updates(**template.updates(settings))
+    return settings
 
 
 def generate_variants(settings: SongSettings, count: int, parts: tuple = (),
@@ -516,13 +576,21 @@ def best(results: list):
     return results[-1] if results else None
 
 
-def lyric_video(result: SongResult, path: Optional[str] = None) -> str:
-    """Lyric-Video (MP4) des Songs mit dem Text zum Mitlesen; Standard: lyric_video.mp4 neben dem Song."""
+def lyric_video(result: SongResult, path: Optional[str] = None, label: str = "", preview: bool = False,
+                progress=None) -> str:
+    """Video (MP4) des Songs mit dem Text zum Mitlesen; Standard: lyric_video.mp4 neben dem Song. Mit music_video das
+    Musikvideo, dessen Bild dem Song folgt (musikvideo.py), sonst das Lyric-Video wie bis 1.4. preview: nur 10
+    Sekunden ab dem ersten Refrain als video_vorschau.mp4 (V11)."""
     import karaoke
     if not result.audio or not os.path.exists(result.audio):
         raise RuntimeError("Der Song fehlt, erst einen Song erzeugen.")
-    found = karaoke.load(os.path.join(result.output_dir, karaoke.FILE))
     s = result.settings
+    if s is not None and s.music_video:
+        import musikvideo
+        name = "video_vorschau.mp4" if preview else "lyric_video.mp4"
+        return musikvideo.for_song(result, path or os.path.join(result.output_dir, name), label, preview=preview,
+                                   progress=progress)
+    found = karaoke.load(os.path.join(result.output_dir, karaoke.FILE))
     title = f"{s.style} · {s.bpm} BPM" if s else ""
     return karaoke.video(result.audio, found, path or os.path.join(result.output_dir, "lyric_video.mp4"), title,
                          background=(s.video_background or None) if s else None,
@@ -612,17 +680,21 @@ UST_FILES = ("vocals.ust", "vocals_harmony.ust", "vocals_duett_1.ust", "vocals_d
 def _write_karaoke(settings: SongSettings, tracks: dict, out: str) -> None:
     """Der Liedtext mit der Zeit jeder Silbe, zum Mitlesen im Player und fürs Lyric-Video."""
     import karaoke
-    from lyrics import section_lines
+    import songkarte
+    from lyrics import sung_lines
     from settings import DEFAULT_LYRICS, DEFAULT_RAP_LYRICS
-    own = section_lines(settings.lyrics, **lyric_options(settings))
-    lengths = {kind: [len(line) for line in text_lines]
-               for kind, text_lines in {**section_lines(DEFAULT_LYRICS + DEFAULT_RAP_LYRICS),
-                                        **(own if settings.numbered_lyrics else shared_only(own))}.items()}
-    found = karaoke.lines(tracks["vocal_melody"], tracks["silben"], settings.bpm, tracks.get("plan"), lengths)
+    own = sung_lines(settings.lyrics, **lyric_options(settings))
+    merged = {**sung_lines(DEFAULT_LYRICS + DEFAULT_RAP_LYRICS),
+              **(own if settings.numbered_lyrics else shared_only(own))}
+    lengths = {kind: [len(sung) for _, sung, _ in text_lines] for kind, text_lines in merged.items()}
+    texts = {kind: [(written, translation) for written, _, translation in text_lines]
+             for kind, text_lines in merged.items()}
+    found = karaoke.lines(tracks["vocal_melody"], tracks["silben"], settings.bpm, tracks.get("plan"), lengths, texts)
     try:
         karaoke.save(os.path.join(out, karaoke.FILE), found)
     except OSError as e:
         log.warning("Liedtext zum Mitlesen nicht gespeichert: %s", e)
+    songkarte.write(settings, tracks, out)          # 1.5.0 V1: was wann passiert, fürs Video
 
 
 def _write_ust(settings: SongSettings, tracks: dict, out: str) -> list:

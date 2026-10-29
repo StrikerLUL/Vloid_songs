@@ -15,6 +15,7 @@ import album
 import cancel
 import casting
 import einrichten
+import geschmack
 import history
 import laufzeit
 import meter
@@ -208,6 +209,7 @@ def build() -> None:
                         .tooltip("Der Song bleibt, auch wenn du Mix, Gesang oder Text änderst.")
                 player = WavePlayer().classes("w-full").mark("player")
                 sung_label = ui.label().classes("text-caption text-grey-5").mark("sung-by")
+                hearing_label = ui.label().classes("text-caption text-grey-5").mark("hearing-check")
                 lyrics_view = Karaoke().classes("w-full").mark("karaoke") \
                     .bind_visibility_from(settings, "show_karaoke")
                 stem_row = ui.row().classes("gap-1 q-mt-sm")
@@ -274,7 +276,13 @@ def build() -> None:
                                  "Die bearbeitete Aufnahme kommt unter Gesang als eigene Gesangsspur zurück.")
                     video_button = ui.button("Lyric-Video (MP4)", icon="movie", on_click=lambda: make_video()) \
                         .props("flat no-caps").mark("video") \
-                        .tooltip("Der Song mit dem Text zum Mitlesen als Video, z. B. für YouTube (braucht ffmpeg)")
+                        .tooltip("Der Song mit dem Text zum Mitlesen als Video, z. B. für YouTube (braucht ffmpeg). "
+                                 "Wie es aussieht, stellst du im Tab „Video“ ein.")
+                    preview_button = ui.button("Video-Vorschau (10 s)", icon="preview",
+                                               on_click=lambda: make_video(preview=True)) \
+                        .props("flat no-caps").mark("video-preview").bind_visibility_from(settings, "music_video") \
+                        .tooltip("Zehn Sekunden ab dem ersten Refrain, in wenigen Sekunden fertig: so siehst du "
+                                 "Szene, Text und Bewegung, bevor das ganze Video entsteht")
                     youtube_button = ui.button("Fertig für YouTube", icon="smart_display",
                                                on_click=lambda: make_youtube()).props("flat no-caps").mark("youtube") \
                         .tooltip("MP3, Video, Titelbild und Beschreibung zusammen in einem Ordner (ohne KI)")
@@ -291,8 +299,8 @@ def build() -> None:
         with ui.card().classes("bg-grey-9").style("flex: 2; min-width: 440px"):
             with ui.tabs().props("dense no-caps align=left").classes("w-full") as tabs:
                 for name, icon in (("Song", "music_note"), ("Text", "notes"), ("Band", "piano"),
-                                   ("Gesang", "mic"), ("Mix", "tune"), ("Verlauf", "history"),
-                                   ("Pfade", "folder")):
+                                   ("Gesang", "mic"), ("Mix", "tune"), ("Video", "movie"),
+                                   ("Verlauf", "history"), ("Pfade", "folder")):
                     ui.tab(name, icon=icon).mark(f"tab-{name}")
             tabs.on_value_change(lambda e: refresh_text() if e.value == "Text" else None)
             with ui.tab_panels(tabs, value="Song").classes("w-full bg-transparent") as panel_box:
@@ -306,6 +314,8 @@ def build() -> None:
                     singer_select, duet_select, support_select = panels.voice_panel(settings, _singers(settings), picker)
                 with ui.tab_panel("Mix"):
                     panels.mix_panel(settings)
+                with ui.tab_panel("Video"):
+                    panels.video_panel(settings, picker)
                 with ui.tab_panel("Verlauf"):
                     with ui.row().classes("w-full items-center no-wrap gap-2"):
                         library_search = ui.input(placeholder="Suchen: Name, Notiz, Stil, Seed, Datum") \
@@ -343,7 +353,8 @@ def build() -> None:
             if result is None:
                 ui.notify("Erst einen Song erzeugen, dann einzelne Teile neu würfeln.", type="warning")
                 return
-            current = current.with_updates(seed=result.seed, variations=result.settings.variations)
+            current = current.with_updates(seed=result.seed, variations=result.settings.variations,
+                                           taste_snapshot=result.settings.taste_snapshot)
         elif current.seed is None:
             current = current.with_updates(variations={}, melody_edits={}, melody_lengths={}, phrase_fixes={},
                                            remix_from="", remix_bpm=0)
@@ -465,7 +476,8 @@ def build() -> None:
         current = settings.model_copy(deep=True)
         result = state["result"]
         if result is not None:
-            current = current.with_updates(seed=result.seed, variations=result.settings.variations)
+            current = current.with_updates(seed=result.seed, variations=result.settings.variations,
+                                           taste_snapshot=result.settings.taste_snapshot)
         job.start()
         set_busy(True)
         try:
@@ -518,7 +530,8 @@ def build() -> None:
         current = settings.model_copy(deep=True)
         result = state["result"]
         if result is not None:
-            current = current.with_updates(seed=result.seed, variations=result.settings.variations)
+            current = current.with_updates(seed=result.seed, variations=result.settings.variations,
+                                           taste_snapshot=result.settings.taste_snapshot)
         job.start()
         set_busy(True)
         try:
@@ -709,16 +722,18 @@ def build() -> None:
     ui.keyboard(on_key=on_key).mark("shortcuts")
 
     # ── Lyric-Video und Vergleich ─────────────────────────────────────────────────
-    async def make_video() -> None:
+    async def make_video(preview: bool = False) -> None:
         result = state["result"]
         if result is None or job.running:
             ui.notify("Erst einen Song erzeugen.", type="warning")
             return
+        entry = next((e for e in history.entries(settings.output_dir()) if e.audio == result.history), None)
         job.start()
-        job.report(0.1, "Baue Lyric-Video...")
+        job.report(0.1, "Baue Video-Vorschau..." if preview else "Baue Lyric-Video...")
         set_busy(True)
         try:
-            path = await run.io_bound(pipeline.lyric_video, result)
+            path = await run.io_bound(pipeline.lyric_video, result, None, entry.label if entry else "", preview,
+                                      job.report)
         except RuntimeError as e:
             ui.notify(str(e), type="warning", multi_line=True)
             path = None
@@ -729,7 +744,9 @@ def build() -> None:
             job.report(1.0, "Fertig")
             job.running = False
             set_busy(False)
-        if path:
+        if path and preview:
+            media.open_folder(path)          # öffnet die Datei im Videoplayer
+        elif path:
             ui.notify(f"Lyric-Video gespeichert: {path}", type="positive", multi_line=True)
             ui.download.file(path)
 
@@ -788,6 +805,10 @@ def build() -> None:
         sung_label.set_text(text)
         sung_label.set_visibility(bool(text))
         sung_label.classes(replace="text-caption " + ("text-negative text-weight-bold" if warn else "text-grey-5"))
+        text, warn = media.hearing(result)
+        hearing_label.set_text(text)
+        hearing_label.set_visibility(bool(text))
+        hearing_label.classes(replace="text-caption " + ("text-warning" if warn else "text-grey-5"))
         found = media.stems(result)
         stem_row.clear()
         with stem_row:
@@ -836,6 +857,7 @@ def build() -> None:
             return
         settings.seed = result.seed
         settings.variations = result.settings.variations
+        settings.taste_snapshot = result.settings.taste_snapshot      # derselbe Song: mit demselben Geschmack
         ui.notify(f"Seed {result.seed} festgehalten: „Song erzeugen“ macht jetzt diesen Song mit deinen Änderungen")
 
     async def export_zip() -> None:
@@ -876,7 +898,7 @@ def build() -> None:
         if not busy:
             cancel.reset()
         for button in (generate_button, draft_button, full_button, album_button, zip_button, notes_button, video_button,
-                       youtube_button, hooks_button, cast_button, remix_button, *reroll_buttons.values()):
+                       preview_button, youtube_button, hooks_button, cast_button, remix_button, *reroll_buttons.values()):
             button.set_enabled(not busy)
         resing_button.set_enabled(not busy and _edited(settings) > 0)
         preview_button.set_enabled(not busy and _edited(settings) > 0)
@@ -944,7 +966,8 @@ def build() -> None:
                 return
             kept = f"Die {settings.history_keep} neuesten Songs bleiben" if settings.history_keep else "Alle Songs bleiben"
             panels.hint(f"{kept}; mit Stern markierte, benannte und Album-Songs immer. "
-                        "✎ gibt einem Song Namen und Notiz, ↺ übernimmt die Einstellungen samt Seed.")
+                        "✎ gibt einem Song Namen und Notiz, ↺ übernimmt die Einstellungen samt Seed, mit dem Daumen "
+                        "lernt die App, welcher Klang, welche Melodie, Stimme und welcher Groove dir gefallen.")
             if not entries:
                 ui.label("Nichts gefunden.").classes("text-grey-5").mark("library-empty")
                 return
@@ -975,6 +998,7 @@ def build() -> None:
                         ui.button(icon="star" if entry.favorite else "star_border",
                                   on_click=lambda _, e=entry: favorite(e)).props("flat round dense color=amber") \
                             .mark("history-favorite")
+                        thumbs_menu(entry, nr)
                         ui.button(icon="settings_backup_restore", on_click=lambda _, e=entry: restore(e)) \
                             .props("flat round dense").tooltip("Einstellungen dieses Songs übernehmen") \
                             .mark("history-restore")
@@ -989,6 +1013,46 @@ def build() -> None:
     def favorite(entry) -> None:
         history.set_favorite(entry, not entry.favorite)
         show_history()
+
+    def thumbs_menu(entry, nr: int) -> None:
+        """1.5.0 (C3): Daumen für Klang, Melodie, Stimme und Groove; die Würfel lernen daraus (geschmack.py). Das Menü
+        bleibt offen, bis alle Daumen gesetzt sind."""
+        buttons = {}
+
+        def look() -> tuple:
+            thumbs = entry.thumbs or {}
+            up, down = sum(v > 0 for v in thumbs.values()), sum(v < 0 for v in thumbs.values())
+            if up and up >= down:
+                return "thumb_up", "green"
+            return ("thumb_down", "red") if down else ("thumbs_up_down", "grey")
+
+        def paint() -> None:
+            icon, color = look()
+            main.props(f"icon={icon} color={color}")
+            for aspect, (up, down) in buttons.items():
+                vote = (entry.thumbs or {}).get(aspect, 0)
+                up.props("color=" + ("green" if vote > 0 else "grey"))
+                down.props("color=" + ("red" if vote < 0 else "grey"))
+
+        def thumb(aspect: str, direction: int) -> None:
+            vote = (entry.thumbs or {}).get(aspect, 0)
+            history.set_thumb(entry, aspect, 0 if vote == direction else direction)
+            paint()
+
+        icon, color = look()
+        with ui.button(icon=icon).props(f"flat round dense color={color}").mark(f"history-thumbs-{nr}") \
+                .tooltip("Daumen für Klang, Melodie, Stimme und Groove") as main:
+            with ui.menu().props("auto-close=false"), ui.column().classes("q-pa-sm gap-1"):
+                panels.hint("Was dir gefällt, würfelt die App öfter, was nicht, seltener.")
+                for aspect, text in geschmack.ASPECTS.items():
+                    with ui.row().classes("items-center no-wrap gap-1"):
+                        ui.label(text).classes("w-20")
+                        buttons[aspect] = (
+                            ui.button(icon="thumb_up", on_click=lambda _, a=aspect: thumb(a, 1))
+                            .props("flat round dense").mark(f"thumb-up-{aspect}-{nr}"),
+                            ui.button(icon="thumb_down", on_click=lambda _, a=aspect: thumb(a, -1))
+                            .props("flat round dense").mark(f"thumb-down-{aspect}-{nr}"))
+        paint()
 
     def restore(entry) -> None:
         assign(settings, entry.restore(settings))
@@ -1099,7 +1163,8 @@ def build() -> None:
 
 def describe(s: SongSettings) -> str:
     rerolled = ", ".join(f"{_part_name(p)} {n}×" for p, n in sorted(s.variations.items()))
-    return (f"{s.style} · {s.bpm} BPM · {s.key} {labels.SCALES.get(s.scale, s.scale)} · Seed {s.seed}"
+    blended = f" + {round(s.blend_share * 100)} % {s.blend_style}" if s.style_blend and s.blend_style else ""
+    return (f"{s.style}{blended} · {s.bpm} BPM · {s.key} {labels.SCALES.get(s.scale, s.scale)} · Seed {s.seed}"
             + (f" · neu gewürfelt: {rerolled}" if rerolled else "")
             + (f" · {_edits(s)}" if _edited(s) else ""))
 

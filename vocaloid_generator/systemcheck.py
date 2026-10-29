@@ -248,6 +248,22 @@ def check_polish(settings, folder: str) -> tuple:
     return True, f"ACE-Step läuft auf {found.get('name', 'der Grafikkarte')}"
 
 
+def check_pictures(settings, folder: str) -> tuple:
+    import bilder
+    if not bilder.available():
+        return None, "KI-Bilder fürs Video nicht eingerichtet"
+    found = bilder.probe(os.path.join(folder, "bilder"))
+    return (True, f"Probebild gemalt: {found}") if found else (False, bilder.problem())
+
+
+def check_hearing(settings, folder: str) -> tuple:
+    import hoercheck
+    if not hoercheck.available():
+        return None, "Hör-Check nicht eingerichtet"
+    return (True, "Spracherkennung läuft") if hoercheck.probe(os.path.join(folder, "hoercheck")) else \
+        (False, hoercheck.problem())
+
+
 def check_gpu(settings, folder: str) -> tuple:
     from fehlerbericht import gpu
     found = gpu()
@@ -287,6 +303,8 @@ CHECKS = (
     ("demucs", "Mix wie die Vorbilder", check_demucs, False),
     ("accompaniment", "KI-Begleitung", check_accompaniment, True),    # lädt das Modell: nur bei „gründlich“
     ("polish", "Klang-Veredler", check_polish, True),         # lädt ACE-Step: nur bei „gründlich“
+    ("pictures", "KI-Bilder fürs Video", check_pictures, True),     # lädt das Bildmodell: nur bei „gründlich“
+    ("hearing", "Hör-Check", check_hearing, True),                  # lädt die Spracherkennung: nur bei „gründlich“
     ("song", "Ganzer Song", check_song, False),
 )
 

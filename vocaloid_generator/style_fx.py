@@ -22,6 +22,8 @@ STYLES = {
     "J-Pop Energy": {"stutter": True},
     "Idol-Pop": {"formant": 1.04},
     "Lo-Fi": {"telephone": True},
+    "Electro-Swing": {"telephone": True},                       # die erste Zeile wie aus einem alten Grammophon
+    "Hyperpop": {"stutter": True, "hard_tune": True, "formant": 1.1},
 }
 TELEPHONE_BAND = (300.0, 3400.0)     # Hz, wie eine Telefonleitung
 STUTTER_REPEATS = 4                  # so oft wiederholt sich die Silbe im letzten Schlag vor dem Refrain

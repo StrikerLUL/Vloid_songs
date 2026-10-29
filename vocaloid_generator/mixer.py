@@ -34,6 +34,9 @@ DEFAULT_REVERB = {"drums": 0.06, "bass": 0.0, "piano": 0.16, "guitar": 0.12, "st
                   "double": 0.18, "band": 0.03, "chops": 0.25}
 # Gesangsdoppelung im Refrain: zwei leicht verstimmte, verzögerte Kopien links und rechts
 DOUBLE_CENTS, DOUBLE_DELAYS, DOUBLE_DB = 12, (0.017, 0.026), -9.0
+# St5 (1.5.0): eine Doppelung, die lebt wie ein zweimal gesungener Take: der Abstand zur Hauptstimme wandert langsam
+# um so viele Sekunden (je Seite eigene Schwankung), die Verstimmung ist kleiner, weil das Wandern sie mitbringt
+LIVING_SWAY, LIVING_PERIODS, LIVING_CENTS = 0.006, (3.7, 5.3, 7.9), 7
 # Echte Doppelung (zweitbeste Fassung im Refrain, vocals_double.wav): so viel leiser als die Hauptstimme, rechts später
 REAL_DOUBLE_DB, REAL_DOUBLE_DELAY = -8.0, 0.012
 # Gesangsspuren: Hauptstimme, zweite Stimme, der Chor im letzten Refrain („gang“) und die Doppelung; sie hören auf
@@ -379,21 +382,34 @@ def _window_mask(length: int, windows: list, fade: float = 0.04) -> np.ndarray:
     return mask
 
 
-def _double(audio: np.ndarray, windows: list) -> np.ndarray:
-    """Doppelt eingesungen klingender Gesang in den Refrains."""
+def _double(audio: np.ndarray, windows: list, living: bool = False) -> np.ndarray:
+    """Doppelt eingesungen klingender Gesang in den Refrains. living: der Abstand wandert wie bei einem echten zweiten
+    Take (St5), statt fest zu bleiben."""
     from pedalboard import PitchShift
     mask = _window_mask(audio.shape[1], windows)
     if not mask.any():
         return audio
     mono = audio.mean(axis=0, keepdims=True)
     out = audio.copy()
-    for ch, (cents, delay) in enumerate(zip((DOUBLE_CENTS, -DOUBLE_CENTS), DOUBLE_DELAYS)):
+    cents_each = LIVING_CENTS if living else DOUBLE_CENTS
+    for ch, (cents, delay) in enumerate(zip((cents_each, -cents_each), DOUBLE_DELAYS)):
         copy = PitchShift(semitones=cents / 100)(mono, SAMPLE_RATE)[0]
-        d = int(delay * SAMPLE_RATE)
-        shifted = np.zeros_like(copy)
-        shifted[d:] = copy[:len(copy) - d]
+        if living:
+            shifted = _sway(copy, delay, ch)
+        else:
+            d = int(delay * SAMPLE_RATE)
+            shifted = np.zeros_like(copy)
+            shifted[d:] = copy[:len(copy) - d]
         out[ch] += shifted * mask * 10 ** (DOUBLE_DB / 20)
     return out
+
+
+def _sway(audio: np.ndarray, delay: float, side: int) -> np.ndarray:
+    """Um delay Sekunden verzögert, der Abstand wandert langsam um LIVING_SWAY (je Seite mit anderer Phase)."""
+    t = np.arange(len(audio)) / SAMPLE_RATE
+    wander = sum(np.sin(2 * np.pi * t / period + side * 1.9 + k) for k, period in enumerate(LIVING_PERIODS))
+    lag = (delay + LIVING_SWAY * wander / len(LIVING_PERIODS)) * SAMPLE_RATE
+    return np.interp(np.arange(len(audio)) - lag, np.arange(len(audio)), audio, left=0.0).astype(audio.dtype)
 
 
 def _saturate(audio: np.ndarray, drive_db: float = SATURATION_DB, share: float = SATURATION_MIX) -> np.ndarray:
@@ -529,6 +545,7 @@ def mische_spuren(
     tame: bool = False,
     punch: bool = False,
     sound=None,
+    living_double: bool = False,
 ) -> Optional["Level"]:
     """
     Mischt die Spuren zu einem Stereo-Master:
@@ -550,6 +567,7 @@ def mische_spuren(
     Effekten, so laut wie diese zusammen.
     vocal_chain: Studio-Kette für den Gesang: leichte Sättigung, eine echte Doppelung (vocals_double.wav) statt der
     verstimmten Kopie und, mit vocal_space [(Start, Ende in Sekunden, Sektionsart)], eigener Hall und Delay je Sektion.
+    living_double: ohne echte Doppelung wandert der Abstand der verstimmten Kopie wie bei einem zweiten Take (St5).
     unmask: die Band wird in den Frequenzen leiser, in denen der Gesang gerade laut ist (vocal_mix.unmask).
     ride: der Gesang wird nachgeführt, damit er gleich weit über der Band steht (vocal_mix.ride_gain).
     sung_pads: Zeitbereiche (Sekunden), in denen gesungene Flächen den Keyboard-Chor (choir) ersetzen.
@@ -620,7 +638,7 @@ def mische_spuren(
         if console is not None:
             audio = console(audio, SAMPLE_RATE)
         if key == "vocals" and double_windows and not real_double:
-            audio = _double(audio, double_windows)
+            audio = _double(audio, double_windows, living_double)
         elif key == "harmony" and mono:
             audio = _widen(audio)          # eine gedoppelte Harmonie (links und rechts) ist schon breit
         elif key == "double":

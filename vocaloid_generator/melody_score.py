@@ -5,6 +5,9 @@
 # weit ist, ein klarer Höhepunkt auf einem langen oder betonten Ton, Schritte und Sprünge gemischt, wenige
 # Tonwiederholungen am Stück, Takte, deren Motiv wiederkommt, Sprünge, nach denen die Melodie zurückgeht, lange Töne
 # nur auf Silben, die man halten kann, und ein Refrain, der höher hinausgeht als die Strophe.
+# 1.5.0 (jeweils mit eigenem Schalter): S2 das Kernwort des Refrains liegt hoch oder lang auf der betonten Zeit, und
+# Gefühlswörter (涙, 好き, さよなら) bekommen lange Töne; S3 der Refrain ist ein Ohrwurm: seine erste Phrase kommt mit
+# kleiner Veränderung wieder, und sein Anfangsmotiv kehrt zurück.
 import logging
 from typing import Optional
 
@@ -24,25 +27,35 @@ HOLD_BEATS = 1.0             # ab dieser Länge muss die Silbe ein Vokal sein, d
 UNHELD = ("ん", "っ")
 HIGH_SHARE = 0.25            # so viel der Zeit darf die Stimme ganz oben (die oberen zwei Halbtöne) singen
 WEIGHTS = {"range": 1.0, "peak": 1.0, "moves": 1.5, "runs": 0.8, "motif": 1.0, "text": 1.0, "recovery": 0.6,
-           "contrast": 1.0, "high": 0.6}
+           "contrast": 1.0, "high": 0.6, "words": 1.2, "catchy": 1.2}
+# S2: Gefühlswörter, wie sie gesungen werden (Kana); das Wort darf Partikel dahinter haben (なみだが)
+FEELING_WORDS = ("すき", "だいすき", "なみだ", "さよなら", "あいして", "あいたい", "ごめん", "ありがとう", "こころ", "ゆめ",
+                 "なきたい", "わすれない", "いかないで", "さみしい", "かなしい", "うれしい", "えがお", "やくそく",
+                 "えいえん", "きせき", "ひかり", "いのち", "おもいで", "まって", "ずっと", "ひとり")
+KEY_WORD_MORAE = 2           # kürzere Wörter sind kein Kernwort
+KEY_HIGH = 2                 # Halbtöne unter dem höchsten Ton der Sektion zählen noch als „oben“
+KEY_LONG = 1.0               # Schläge: so lang ist ein langer Ton für das Kernwort
+FEELING_LONG = 1.5           # so viel länger als der typische Ton klingt das Ende eines Gefühlsworts
 
 
 def score(notes: list, kind: str, below: Optional[list] = None, top: Optional[int] = None,
-          bar_beats: float = 4, targets: Optional[dict] = None) -> float:
+          bar_beats: float = 4, targets: Optional[dict] = None, extras=()) -> float:
     """
     Punkte einer Sektion (MelNotes), mehr ist besser. below: die schon geschriebenen Töne der Sektionen vor dem
     Refrain (der Refrain soll höher hinaus), top: höchster Ton der Stimme, bar_beats: Schläge pro Takt.
     targets: was im Stil anders gut ist (1.4.0, style_dna.MelodyCharacter.score): "steps", "leaps", "repeats" als
     (von, bis), "range" als {Sektionsart: (von, bis)}, "motif_weight" als Gewicht der Motive.
+    extras: eingeschaltete Neuerungen; "key_words" (S2) und "catchy_chorus" (S3) zählen nur mit ihnen.
     """
     weights = dict(WEIGHTS)
     if targets and "motif_weight" in targets:
         weights["motif"] = targets["motif_weight"]
-    return sum(weights[name] * value for name, value in parts(notes, kind, below, top, bar_beats, targets).items())
+    return sum(weights[name] * value
+               for name, value in parts(notes, kind, below, top, bar_beats, targets, extras).items())
 
 
 def parts(notes: list, kind: str, below: Optional[list] = None, top: Optional[int] = None,
-          bar_beats: float = 4, targets: Optional[dict] = None) -> dict:
+          bar_beats: float = 4, targets: Optional[dict] = None, extras=()) -> dict:
     """Die einzelnen Punkte (jeweils etwa -1 bis 1), zum Nachsehen und für die Tests."""
     sung = sorted((n for n in notes if not getattr(n.syllable, "melisma", False)), key=lambda n: n.start)
     if len(sung) < 2:
@@ -59,6 +72,8 @@ def parts(notes: list, kind: str, below: Optional[list] = None, top: Optional[in
         "recovery": _recovery(moves),
         "contrast": _contrast(sung, kind, below),
         "high": _high(sung, top),
+        "words": _key_words(notes, kind) if "key_words" in extras else 0.0,
+        "catchy": _catchy(sung) if "catchy_chorus" in extras and kind == "Chorus" else 0.0,
     }
 
 
@@ -155,9 +170,102 @@ def _high(sung: list, top: Optional[int]) -> float:
     return -max(high - HIGH_SHARE, 0.0) * 4
 
 
+# ── 1.5.0: wichtige Wörter (S2) und Ohrwurm (S3) ─────────────────────────────────
+def _hiragana(text: str) -> str:
+    return "".join(chr(ord(c) - 0x60) if "\u30a1" <= c <= "\u30f6" else c for c in text)
+
+
+def words(notes: list) -> list:
+    """[(Wort in Hiragana, [Töne])] in der gesungenen Reihenfolge; Partikel und Melisma gehören zum Wort davor."""
+    out = []
+    for n in sorted(notes, key=lambda n: n.start):
+        syllable = n.syllable
+        if syllable is None:
+            continue
+        if getattr(syllable, "melisma", False):
+            if out:
+                out[-1][1].append(n)
+            continue
+        if getattr(syllable, "word_start", False) or not out:
+            out.append(["", []])
+        out[-1][0] += _hiragana(str(syllable))
+        out[-1][1].append(n)
+    return [(text, ns) for text, ns in out]
+
+
+def key_word(found: list) -> Optional[str]:
+    """Das Kernwort: das häufigste Wort ab zwei Moren, das wiederkommt; sonst das erste (der Anfang der Hook)."""
+    texts = [text for text, ns in found if sum(not getattr(n.syllable, "melisma", False) for n in ns) >= KEY_WORD_MORAE]
+    if not texts:
+        return None
+    counts = {t: texts.count(t) for t in texts}
+    best = max(texts, key=lambda t: (counts[t], len(t), -texts.index(t)))
+    return best if counts[best] >= 2 else texts[0]
+
+
+def _key_words(notes: list, kind: str) -> float:
+    """S2: das Kernwort des Refrains hoch oder lang und auf der betonten Zeit, Gefühlswörter enden auf langen Tönen."""
+    found = words(notes)
+    sung = [n for n in notes if n.syllable is not None]
+    if not found or not sung:
+        return 0.0
+    values = []
+    if kind == "Chorus":
+        key = key_word(found)
+        top = max(n.pitch for n in sung)
+        for text, ns in found:
+            if text == key:
+                lifted = any(n.pitch >= top - KEY_HIGH for n in ns) or max(n.dur for n in ns) >= KEY_LONG
+                values.append(0.5 * lifted + 0.5 * bool(ns[0].strong))
+    typical = sorted(n.dur for n in sung)[len(sung) // 2]
+    for text, ns in found:
+        if any(text.startswith(w) for w in FEELING_WORDS):
+            values.append(float(ns[-1].dur >= FEELING_LONG * typical))
+    return 2 * sum(values) / len(values) - 1 if values else 0.0
+
+
+def phrases(sung: list) -> list:
+    """Die Phrasen einer Sektion: Töne bis zur nächsten Pause ab PHRASE_GAP Schlägen."""
+    out = []
+    for n in sung:
+        if out and n.start - (out[-1][-1].start + out[-1][-1].dur) < PHRASE_GAP:
+            out[-1].append(n)
+        else:
+            out.append([n])
+    return out
+
+
+def _likeness(a: list, b: list) -> float:
+    """Wie sehr Phrase b wie Phrase a klingt: Rhythmus (Einsätze ab Phrasenanfang) und Richtung jeder Bewegung."""
+    onsets_a = {round(n.start - a[0].start, 2) for n in a}
+    onsets_b = {round(n.start - b[0].start, 2) for n in b}
+    rhythm = len(onsets_a & onsets_b) / max(len(onsets_a | onsets_b), 1)
+    sign = lambda x: (x > 0) - (x < 0)          # noqa: E731
+    dirs_a = [sign(y.pitch - x.pitch) for x, y in zip(a, a[1:])]
+    dirs_b = [sign(y.pitch - x.pitch) for x, y in zip(b, b[1:])]
+    length = max(len(dirs_a), len(dirs_b), 1)
+    contour = sum(x == y for x, y in zip(dirs_a, dirs_b)) / length
+    return (rhythm + contour) / 2
+
+
+def _catchy(sung: list) -> float:
+    """S3: die erste Phrase kommt mit kleiner Veränderung wieder (ganz gleich ist gut, leicht verändert besser), und
+    das Anfangsmotiv (die ersten vier Bewegungen) kehrt in derselben Gestalt zurück, gern auf anderer Höhe."""
+    found = [p for p in phrases(sung) if len(p) >= 3]
+    if len(found) < 2:
+        return 0.0
+    best = max(_likeness(found[0], p) for p in found[1:])
+    phrase = 1.0 if 0.6 <= best < 0.999 else 0.6 if best >= 0.999 else 0.0 if best >= 0.4 else -0.5
+    opening = [b.pitch - a.pitch for a, b in zip(sung[:5], sung[1:5])]
+    moves = [b.pitch - a.pitch for a, b in zip(sung, sung[1:])]
+    later = range(len(found[0]), len(moves) - len(opening) + 1)
+    hook = 1.0 if len(opening) == 4 and any(moves[i:i + 4] == opening for i in later) else 0.0
+    return 0.7 * phrase + 0.3 * hook
+
+
 def pick(candidates: list, kind: str, below: Optional[list] = None, top: Optional[int] = None,
-         bar_beats: float = 4, targets: Optional[dict] = None) -> tuple:
+         bar_beats: float = 4, targets: Optional[dict] = None, extras=()) -> tuple:
     """Die beste Fassung: (Index, Punkte, Schnitt aller Fassungen). candidates: Listen von MelNotes."""
-    scores = [score(c, kind, below, top, bar_beats, targets) for c in candidates]
+    scores = [score(c, kind, below, top, bar_beats, targets, extras) for c in candidates]
     best = max(range(len(scores)), key=lambda i: (scores[i], -i))
     return best, scores[best], sum(scores) / len(scores)

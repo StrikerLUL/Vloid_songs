@@ -21,7 +21,7 @@ CHANNEL_FIELDS = ("volume", "pan", "enabled", "mute", "solo")
 # Wählbare Spielweisen pro Instrument; "default" nimmt das Muster des Genres
 STYLE_OPTIONS = {
     "piano": ("default", "chords", "eighths", "stabs", "arpeggio", "arpeggio16", "ballad_arp", "jazz_ch"),
-    "bass": ("default", "root", "driving", "sync", "octaves", "wobble", "sub_pulse", "lazy", "rolling"),
+    "bass": ("default", "root", "driving", "sync", "octaves", "wobble", "sub_pulse", "lazy", "rolling", "walking"),
     "guitar": ("default", "chill_riff", "strummed", "palm_mute", "power_chords", "cutting"),
     "strings": ("default", "legato", "build", "pizzicato", "staccato", "harp"),
     "synth": ("default", "pad", "riser", "staccato_pluck", "wide_saw", "pluck", "arp", "supersaw", "fb_chords"),
@@ -29,7 +29,7 @@ STYLE_OPTIONS = {
     "bells": ("default", "sparkle", "sparkle16", "hook_octave", "accents", "music_box"),
     "choir": ("default", "aahs", "oohs"),
     "counter": ("default", "answer", "guide", "solo"),
-    "perc": ("default", "shaker", "claps", "tambourine", "congas", "cowbell"),
+    "perc": ("default", "shaker", "claps", "tambourine", "congas", "cowbell", "taiko"),
     # Drums spielen die Grooves des Stils; wählbar ist der Klang: SoundFont-Kit oder Drum-Machine 808/909.
     # Die Lead-Stimme spielt den Refrain-Hook im Intro und Outro
     "drums": ("default", "soundfont", "808", "909"),
@@ -195,6 +195,10 @@ class SongSettings(BaseModel):
     vocal_comping: bool = True         # bei mehreren Fassungen jede Phrase aus der saubersten (voice_fx.comp)
     phrase_expression: bool = True     # Ausdruck pro Phrase: zum Höhepunkt lauter und heller, am Ende weicher
     syllable_dynamics: bool = True     # Lautstärke pro Silbe: Betonungen lauter, weicher Einsatz, Anlauf leiser
+    text_expression: bool = True       # St2 (1.5.0): Zeilen mit 涙/ごめん leiser und dunkler, mit 叫べ/走れ kräftiger
+    note_swells: bool = True           # St3 (1.5.0): gehaltene Töne mitten in der Phrase schwellen an
+    living_double: bool = True         # St5 (1.5.0): die Doppelung im Refrain schwankt in Zeit und Tonhöhe wie gesungen
+    hearing_check: bool = True         # St4 (1.5.0): nach dem Singen hört eine Spracherkennung ab (setup_hoercheck.py)
     vocal_chain: bool = True           # Studio-Kette: Sättigung, Hall und Delay je Sektion, echte Doppelung
     vocal_tone: bool = True            # Kette pro Stimme und Stil: EQ und Sättigung für helle/tiefe Stimmen, Ballade, Rock
     airwindows: bool = True            # Airwindows Consolidated (setup_airwindows.py): Band auf dem Gesang, Console7
@@ -256,6 +260,27 @@ class SongSettings(BaseModel):
     ref_vocal_curve: bool = True       # die Klangkurve des Gesangs (Terzbänder, ±4 dB) wie im Vorbild-Gesang
     ref_tempo_key: bool = True         # Tempo und Tonart der Vorbilder vorschlagen
     ref_style: bool = True             # passenden Stil vorschlagen
+    ref_structure: bool = True         # S1 (1.5.0): Ablauf, Takte und Akkorde des Vorbilds vorschlagen (vorbild_ablauf)
+    # Songs 1.5.0, jedes mit Schalter
+    key_words: bool = True             # S2: Kernwort des Refrains hoch oder lang, Gefühlswörter lang (Beste Melodie)
+    catchy_chorus: bool = True         # S3: Ohrwurm-Wertung des Refrains bei „Beste Melodie suchen“
+    chorus_lift: bool = True           # S5: erster Refrain schlanker, letzter mit allem
+    # Charakter 1.5.0, jedes mit Schalter
+    jpop_idol_split: bool = True       # C1: J-Pop Energy als Anison-Band ohne Royal Road, Idol-Pop mit Rufen
+    # C2: Produzenten-Profil (produzent.py), gilt für alle Songs; ohne Namen und Auswahl ändert sich nichts
+    producer_profile: bool = True
+    producer_name: str = ""            # Abspann, YouTube-Beschreibung, MP3-Künstler, Tag
+    producer_tag: bool = True          # vier Töne aus dem Namen am Anfang jedes Songs
+    producer_sound: str = ""           # Erkennungsklang (produzent.SOUNDS); leer = aus dem Namen
+    producer_turn: str = ""            # typische Akkordwendung im Refrain (produzent.TURNS); leer = keine
+    producer_singer: str = ""          # Lieblingsstimme für alle Stile ohne eigene gemerkte Stimme
+    taste_learning: bool = True        # C3: Daumen im Verlauf lenken die Würfel (geschmack.py)
+    # der Geschmack, mit dem der Song entstand ([[Schlüssel], Daumen]), damit derselbe Seed derselbe Song bleibt
+    taste_snapshot: list = Field(default_factory=list)
+    # C4: zwei Stile mischen (style_dna.blend); ohne zweiten Stil ändert sich nichts
+    style_blend: bool = True
+    blend_style: str = ""              # der zweite Stil
+    blend_share: float = Field(0.3, ge=0.1, le=0.5)   # sein Anteil an Instrumenten, Grooves und Akkorden
     vst_path: str = ""
     vst_sounds: dict[str, str] = Field(default_factory=dict)   # Spur → gespeicherter Klang des VST-Instruments
     sound_library: bool = True         # bessere Klänge aus tools/soundfonts (setup_soundfonts.py), wenn vorhanden
@@ -300,6 +325,23 @@ class SongSettings(BaseModel):
     shortcuts: bool = True             # Leertaste spielt, Strg+Enter erzeugt, Strg+Z nimmt die letzte Notenänderung zurück
     video_colors: bool = True          # Lyric-Video im Farbverlauf des Stils, Text und Wellenform in seinen Farben
     video_background: str = ""         # eigenes Bild als Hintergrund des Lyric-Videos; leer = Farbverlauf des Stils
+    # Musikvideo 1.5.0 (musikvideo.py, Tab Video); jedes hat einen Schalter, aus = Lyric-Video wie bisher
+    music_video: bool = True           # das Bild folgt dem Song: Szene je Stil, Sektionen, Takt, Akkorde, Spektrum
+    video_scene: str = ""              # leer = passend zum Stil, sonst ein Stilname oder „Textkunst“
+    video_motion: Literal["Stil", "ruhig", "lebhaft"] = "Stil"
+    video_kanji: bool = True           # Text wie geschrieben (Kanji), Wort für Wort eingefärbt, statt Hiragana
+    video_romaji: bool = True          # Romaji unter der Zeile
+    video_german: bool = True          # deine Übersetzung („> …“ unter der Zeile) im Video
+    video_chords: bool = True          # Akkord unten links, mit dem nächsten
+    video_melody_line: bool = True     # die Gesangsmelodie als Notenlinie
+    video_spectrum: bool = True        # Spektrum des fertigen Mixes
+    video_words: bool = True           # Bilder aus dem Text: Regen bei 雨, Sterne bei 星, Chat bei 既読
+    video_titles: bool = True          # Titelkarte am Anfang, Abspann mit Stimme am Ende
+    video_hud: bool = True             # Ablaufleiste mit den Sektionen und Schläge
+    video_figure: str = ""             # eigene Figur (PNG mit Transparenz), Mund zu
+    video_figure_open: str = ""        # dieselbe Figur mit offenem Mund; leer = nur das eine Bild
+    youtube_chapters: bool = True      # Kapitel (Strophe, Refrain …) mit Zeitmarken in der YouTube-Beschreibung
+    ai_backgrounds: bool = True        # V13: ein KI-Bild pro Sektion (setup_bilder.py), wenn eingerichtet
     # Verlässlichkeit (1.0.0); jedes hat einen Schalter
     reuse_steps: bool = True           # fertigen Gesang wiederverwenden, nach einem Absturz weitermachen (resume.py)
     log_file: bool = True              # Protokoll in Protokolle\vloid_songs.log im Datenordner (applog.py)
@@ -344,6 +386,14 @@ class SongSettings(BaseModel):
         value = _FLAT_TO_SHARP.get(value, value)
         if value not in KEYS:
             raise ValueError(f"Unbekannte Tonart: {value}")
+        return value
+
+    @field_validator("video_scene")
+    @classmethod
+    def _check_scene(cls, value: str) -> str:
+        from video_szenen import CHOICES
+        if value not in CHOICES:
+            raise ValueError(f"Unbekannte Szene: {value} (möglich: {', '.join(c for c in CHOICES if c)})")
         return value
 
     @field_validator("active_sections")

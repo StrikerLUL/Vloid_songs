@@ -109,11 +109,22 @@ def without_polish(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def without_ai_pictures(tmp_path, monkeypatch):
+    """Eingerichtete KI-Bilder (setup_bilder.py) malen in den Tests nicht mit, der Hör-Check hört nicht ab."""
+    import bilder
+    import hoercheck
+    monkeypatch.setattr(bilder, "FOLDER", str(tmp_path / "bilder"))
+    monkeypatch.setattr(hoercheck, "FOLDER", str(tmp_path / "hoercheck"))
+
+
+@pytest.fixture(autouse=True)
 def isolated_references(tmp_path, monkeypatch):
     """Vorbild-Bibliothek und Messungen liegen im Testordner, nie bei den echten Songs."""
     import reference
+    import vorbild_ablauf
     monkeypatch.setattr(reference, "LIBRARY", str(tmp_path / "vorbilder"))
     monkeypatch.setattr(reference, "CACHE", str(tmp_path / "vorbild_messungen.json"))
+    monkeypatch.setattr(vorbild_ablauf, "CACHE", str(tmp_path / "vorbild_ablauf.json"))
 
 
 @pytest.fixture(autouse=True)
@@ -298,4 +309,13 @@ def new_140(monkeypatch):
     import pipeline
     import style_dna
     monkeypatch.setattr(pipeline, "COMPOSITION_EXTRAS", pipeline.NEW_COMPOSITION + pipeline.NEW_140)
+    monkeypatch.setattr(style_dna, "SOUNDS", style_dna.STYLE_SOUNDS)
+
+
+@pytest.fixture
+def new_150(monkeypatch):
+    """Alle Neuerungen in den Noten an, auch die aus 1.5.0 (wichtige Wörter, Ohrwurm, Refrain-Steigerung)."""
+    import pipeline
+    import style_dna
+    monkeypatch.setattr(pipeline, "COMPOSITION_EXTRAS", pipeline.NEW_COMPOSITION + pipeline.NEW_140 + pipeline.NEW_150)
     monkeypatch.setattr(style_dna, "SOUNDS", style_dna.STYLE_SOUNDS)

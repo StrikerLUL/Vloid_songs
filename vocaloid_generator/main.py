@@ -56,6 +56,21 @@ OFF_140 = (
                                                         "auch kleine Formant-Verschiebungen"),
     ("soft_vocal_chain", "--ohne-weiche-gesangskette", "die Gesangskette mit dem schnellen 6:1-Kompressor wie bis 1.3"),
 )
+OFF_150 = (
+    ("music_video", "--ohne-musikvideo", "das Lyric-Video wie bis 1.4: Text vor einem stehenden Bild"),
+    ("video_kanji", "--ohne-video-kanji", "im Video Hiragana Silbe für Silbe statt des Texts mit Kanji"),
+    ("video_romaji", "--ohne-video-romaji", "keine Romaji unter der Zeile"),
+    ("video_german", "--ohne-video-uebersetzung", "deine Übersetzung („> …“) nicht im Video zeigen"),
+    ("video_chords", "--ohne-video-akkorde", "keine Akkorde im Video"),
+    ("video_melody_line", "--ohne-video-notenlinie", "keine Notenlinie der Gesangsmelodie im Video"),
+    ("video_spectrum", "--ohne-video-spektrum", "kein Spektrum im Video"),
+    ("video_words", "--ohne-video-textbilder", "keine Bilder aus dem Text (Regen bei 雨 …)"),
+    ("video_titles", "--ohne-video-titel", "keine Titelkarte und kein Abspann im Video"),
+    ("video_hud", "--ohne-video-ablauf", "keine Ablaufleiste im Video"),
+    ("youtube_chapters", "--ohne-kapitel", "keine Kapitel in der YouTube-Beschreibung"),
+    ("ai_backgrounds", "--ohne-ki-bilder", "keine KI-Bilder im Video, auch wenn setup_bilder.py gelaufen ist"),
+)
+OFF_ALL = OFF_130 + OFF_140 + OFF_150
 
 
 def _off(name: str):
@@ -283,6 +298,13 @@ def parse_args(argv=None):
                    help="eigenes Bild als Hintergrund des Lyric-Videos ('' = Farbverlauf des Stils)")
     p.add_argument("--ohne-stilfarben", action="store_true",
                    help="Lyric-Video einfarbig dunkel mit pinkem Text wie bis 1.1 statt in den Farben des Stils")
+    p.add_argument("--video-vorschau", nargs="?", const="", metavar="DATEI",
+                   help="zehn Sekunden Musikvideo ab dem ersten Refrain; ohne DATEI video_vorschau.mp4 neben dem Song")
+    p.add_argument("--video-szene", metavar="NAME",
+                   help="Szene des Musikvideos: ein Stilname (z. B. 'Lo-Fi') oder 'Textkunst'; sonst wie der Stil")
+    p.add_argument("--video-bewegung", choices=("Stil", "ruhig", "lebhaft"), help="wie viel sich im Video bewegt")
+    p.add_argument("--video-figur", metavar="BILD", help="eigene Figur im Video (PNG mit Transparenz, Mund zu)")
+    p.add_argument("--video-figur-offen", metavar="BILD", help="dieselbe Figur mit offenem Mund")
     p.add_argument("--melodie-sektion", metavar="SEKTION", help="dort singt die eigene Melodie (Standard: Chorus)")
     p.add_argument("--motive", metavar="ORDNER", help="Rhythmen und Gesten aus den MIDI-Melodien in diesem Ordner lernen")
     p.add_argument("--ohne-motive", action="store_true",
@@ -302,7 +324,7 @@ def parse_args(argv=None):
                    help="Protokolle, Einstellungen und Systeminfo als ZIP speichern (ohne Songs) und beenden")
     p.add_argument("--einrichten", metavar="TEILE",
                    help="Klänge und Modelle laden: 'alles' (was noch fehlt) oder z. B. 'soundfonts,samples'")
-    for name, flag, text in OFF_130 + OFF_140:
+    for name, flag, text in OFF_ALL:
         p.add_argument(flag, action="store_true", dest=f"off_{name}", help=text)
     p.add_argument("-v", "--verbose", action="store_true", help="alle Details ausgeben")
     return p.parse_args(argv)
@@ -412,9 +434,11 @@ def main(argv=None) -> int:
                  "own_vocal": args.eigener_gesang, "own_vocal_align": False if args.ohne_ausrichten else None,
                  "motif_folder": args.motive, "video_background": args.video_hintergrund,
                  "video_colors": False if args.ohne_stilfarben else None,
+                 "video_scene": args.video_szene, "video_motion": args.video_bewegung,
+                 "video_figure": args.video_figur, "video_figure_open": args.video_figur_offen,
                  "more_motifs": False if args.ohne_motive else None,
                  "learned_motifs": False if args.ohne_motive else None}
-    overrides.update({name: _off(name) for name, _, _ in OFF_130 + OFF_140 if getattr(args, f"off_{name}")})
+    overrides.update({name: _off(name) for name, _, _ in OFF_ALL if getattr(args, f"off_{name}")})
     if args.akkorde:
         overrides["custom_chords"] = {**settings.custom_chords, **dict(args.akkorde)}
     if args.takte:
@@ -481,6 +505,12 @@ def main(argv=None) -> int:
     if args.lyric_video is not None:
         try:
             log.info("Lyric-Video: %s", lyric_video(chosen, args.lyric_video or None))
+        except RuntimeError as e:
+            log.error("%s", e)
+            return 1
+    if args.video_vorschau is not None:
+        try:
+            log.info("Video-Vorschau: %s", lyric_video(chosen, args.video_vorschau or None, preview=True))
         except RuntimeError as e:
             log.error("%s", e)
             return 1

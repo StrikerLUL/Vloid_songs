@@ -516,13 +516,21 @@ def best(results: list):
     return results[-1] if results else None
 
 
-def lyric_video(result: SongResult, path: Optional[str] = None) -> str:
-    """Lyric-Video (MP4) des Songs mit dem Text zum Mitlesen; Standard: lyric_video.mp4 neben dem Song."""
+def lyric_video(result: SongResult, path: Optional[str] = None, label: str = "", preview: bool = False,
+                progress=None) -> str:
+    """Video (MP4) des Songs mit dem Text zum Mitlesen; Standard: lyric_video.mp4 neben dem Song. Mit music_video das
+    Musikvideo, dessen Bild dem Song folgt (musikvideo.py), sonst das Lyric-Video wie bis 1.4. preview: nur 10
+    Sekunden ab dem ersten Refrain als video_vorschau.mp4 (V11)."""
     import karaoke
     if not result.audio or not os.path.exists(result.audio):
         raise RuntimeError("Der Song fehlt, erst einen Song erzeugen.")
-    found = karaoke.load(os.path.join(result.output_dir, karaoke.FILE))
     s = result.settings
+    if s is not None and s.music_video:
+        import musikvideo
+        name = "video_vorschau.mp4" if preview else "lyric_video.mp4"
+        return musikvideo.for_song(result, path or os.path.join(result.output_dir, name), label, preview=preview,
+                                   progress=progress)
+    found = karaoke.load(os.path.join(result.output_dir, karaoke.FILE))
     title = f"{s.style} · {s.bpm} BPM" if s else ""
     return karaoke.video(result.audio, found, path or os.path.join(result.output_dir, "lyric_video.mp4"), title,
                          background=(s.video_background or None) if s else None,
@@ -612,17 +620,21 @@ UST_FILES = ("vocals.ust", "vocals_harmony.ust", "vocals_duett_1.ust", "vocals_d
 def _write_karaoke(settings: SongSettings, tracks: dict, out: str) -> None:
     """Der Liedtext mit der Zeit jeder Silbe, zum Mitlesen im Player und fürs Lyric-Video."""
     import karaoke
-    from lyrics import section_lines
+    import songkarte
+    from lyrics import sung_lines
     from settings import DEFAULT_LYRICS, DEFAULT_RAP_LYRICS
-    own = section_lines(settings.lyrics, **lyric_options(settings))
-    lengths = {kind: [len(line) for line in text_lines]
-               for kind, text_lines in {**section_lines(DEFAULT_LYRICS + DEFAULT_RAP_LYRICS),
-                                        **(own if settings.numbered_lyrics else shared_only(own))}.items()}
-    found = karaoke.lines(tracks["vocal_melody"], tracks["silben"], settings.bpm, tracks.get("plan"), lengths)
+    own = sung_lines(settings.lyrics, **lyric_options(settings))
+    merged = {**sung_lines(DEFAULT_LYRICS + DEFAULT_RAP_LYRICS),
+              **(own if settings.numbered_lyrics else shared_only(own))}
+    lengths = {kind: [len(sung) for _, sung, _ in text_lines] for kind, text_lines in merged.items()}
+    texts = {kind: [(written, translation) for written, _, translation in text_lines]
+             for kind, text_lines in merged.items()}
+    found = karaoke.lines(tracks["vocal_melody"], tracks["silben"], settings.bpm, tracks.get("plan"), lengths, texts)
     try:
         karaoke.save(os.path.join(out, karaoke.FILE), found)
     except OSError as e:
         log.warning("Liedtext zum Mitlesen nicht gespeichert: %s", e)
+    songkarte.write(settings, tracks, out)          # 1.5.0 V1: was wann passiert, fürs Video
 
 
 def _write_ust(settings: SongSettings, tracks: dict, out: str) -> list:

@@ -109,6 +109,13 @@ def without_polish(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def without_ai_pictures(tmp_path, monkeypatch):
+    """Eingerichtete KI-Bilder (setup_bilder.py) malen in den Tests nicht mit."""
+    import bilder
+    monkeypatch.setattr(bilder, "FOLDER", str(tmp_path / "bilder"))
+
+
+@pytest.fixture(autouse=True)
 def isolated_references(tmp_path, monkeypatch):
     """Vorbild-Bibliothek und Messungen liegen im Testordner, nie bei den echten Songs."""
     import reference

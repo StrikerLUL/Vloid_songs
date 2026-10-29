@@ -19,6 +19,7 @@ LINE_GAP_BEATS = 1.0      # so lange Pause beginnt eine neue Zeile
 MAX_SYLLABLES = 18        # längere Zeilen werden an der größten Pause geteilt
 LEAD_SECONDS = 1.0        # so früh erscheint eine Zeile vor ihrer ersten Silbe
 HOLD_SECONDS = 0.8        # so lange bleibt sie nach der letzten stehen
+SPACE_BONUS = 0.15        # geteilt wird lieber an einem Leerzeichen, wenn es höchstens so viel weiter weg liegt
 
 VIDEO_SIZE = (1920, 1080)
 VIDEO_FPS = 30
@@ -28,7 +29,8 @@ PLAIN = ("#ff4f8b", "#ff4f8b", "#1a1a30")      # (gesungen, Wellenform, Rand) oh
 LIGHT = 0.8               # hellere Farben gehen neben dem weißen, noch nicht gesungenen Text unter
 
 
-def lines(notes: list, syllables: list, bpm: float, plan=None, line_lengths: Optional[dict] = None) -> list:
+def lines(notes: list, syllables: list, bpm: float, plan=None, line_lengths: Optional[dict] = None,
+          line_texts: Optional[dict] = None) -> list:
     """
     Zeilen zum Mitlesen: [{"start", "end", "syllables": [[start, ende, text]]}], Zeiten in Sekunden ab Songanfang.
     notes: die Töne der Gesangsmelodie (pretty_midi.Note), syllables: die Silben dazu in zeitlicher Reihenfolge
@@ -36,6 +38,8 @@ def lines(notes: list, syllables: list, bpm: float, plan=None, line_lengths: Opt
     line_lengths {Sektionsart: [Silben pro Zeile]} (aus lyrics.section_lines): die Zeilen wie im Liedtext, auch
     wenn der Text in der Sektion wiederholt wird; "Verse#2" für ein Vorkommen mit eigenem Text („[Verse 2]“). Ohne
     sie beginnt eine neue Zeile nach einer Pause ab einem Schlag. Jede Sektion beginnt mit einer neuen Zeile.
+    line_texts {Sektionsart: [(Zeile wie geschrieben, Übersetzung)]} parallel zu line_lengths (1.5.0 V2): jede Zeile
+    bekommt dazu "text" (wie geschrieben, mit Kanji), "romaji" und "de" (die Übersetzung, sonst leer).
     """
     spb = 60.0 / bpm
     sections = []
@@ -50,12 +54,27 @@ def lines(notes: list, syllables: list, bpm: float, plan=None, line_lengths: Opt
         sections[-1][1].append([note.start, note.end, str(syllable), bool(getattr(syllable, "word_start", False))])
     found = []
     for (_, kind, occurrence), sung in sections:
-        own = (line_lengths or {}).get(f"{kind}{OCCURRENCE}{occurrence}") if occurrence > 1 else None
+        name = f"{kind}{OCCURRENCE}{occurrence}"
+        own = (line_lengths or {}).get(name) if occurrence > 1 else None
         lengths = [n for n in own or (line_lengths or {}).get(kind, []) if n > 0]
-        for line in _by_lengths(sung, lengths) if lengths else _by_pauses(sung, LINE_GAP_BEATS * spb):
-            found += _split(line)
-    return [{"start": round(line[0][0], 3), "end": round(line[-1][1], 3),
-             "syllables": [[round(s[0], 3), round(s[1], 3), s[2]] for s in line]} for line in found]
+        texts = ((line_texts or {}).get(name) if own else None) or (line_texts or {}).get(kind) or []
+        if lengths:
+            for k, line in enumerate(_by_lengths(sung, lengths)):
+                written = texts[k % len(texts)] if texts and len(texts) == len(lengths) else None
+                found += _split(line, written)
+        else:
+            for line in _by_pauses(sung, LINE_GAP_BEATS * spb):
+                found += _split(line)
+    out = []
+    for line, written in found:
+        entry = {"start": round(line[0][0], 3), "end": round(line[-1][1], 3),
+                 "syllables": [[round(s[0], 3), round(s[1], 3), s[2]] for s in line]}
+        if line_texts is not None:
+            entry["romaji"] = romaji(line, written[0] if written else "")
+            if written:
+                entry["text"], entry["de"] = written
+        out.append(entry)
+    return out
 
 
 def _by_lengths(sung: list, lengths: list) -> list:
@@ -77,14 +96,92 @@ def _by_pauses(sung: list, gap: float) -> list:
     return out
 
 
-def _split(line: list) -> list:
-    """Zu lange Zeilen an der größten Pause in ihrer Mitte teilen, bei gleicher Pause an einem Wortanfang."""
+def _split(line: list, written: Optional[tuple] = None) -> list:
+    """Zu lange Zeilen an der größten Pause in ihrer Mitte teilen, bei gleicher Pause an einem Wortanfang.
+    written (Zeile wie geschrieben, Übersetzung) wird an derselben Stelle geteilt; die Übersetzung bleibt vorn."""
     if len(line) <= MAX_SYLLABLES:
-        return [line]
+        return [(line, written)]
     quarter = len(line) // 4
     cut = max(range(max(quarter, 1), len(line) - quarter),
               key=lambda i: (round(line[i][0] - line[i - 1][1], 3), line[i][3], -abs(i - len(line) / 2)))
-    return _split(line[:cut]) + _split(line[cut:])
+    first = second = None
+    if written:
+        head, tail = _cut_text(written[0], cut / len(line))
+        first, second = (head, written[1]), (tail, "")
+    return _split(line[:cut], first) + _split(line[cut:], second)
+
+
+def _cut_text(text: str, share: float) -> tuple:
+    """Die Zeile wie geschrieben an der Wortgrenze, die share ihrer Moren am nächsten liegt."""
+    from lyrics import shown_parts
+    parts = shown_parts(text)
+    total = sum(n for _, n in parts) or 1.0
+    before = [sum(n for _, n in parts[:i]) for i in range(len(parts) + 1)]
+    inner = [i for i in range(1, len(parts)) if parts[i][1] > 0 or parts[i][0].isspace()]
+    if not inner:
+        return text, ""
+    # an einem Leerzeichen trennen, wenn es nicht viel weiter weg liegt
+    at = min(inner, key=lambda i: abs(before[i] / total - share)
+             - (SPACE_BONUS if parts[i][0].isspace() or parts[i - 1][0].isspace() else 0.0))
+    head = "".join(p for p, _ in parts[:at]).strip()
+    tail = "".join(p for p, _ in parts[at:]).strip()
+    return (head, tail) if head and tail else (text, "")
+
+
+# Romaji der gesungenen Silben (V2); jaconv kennt einige Lautverbindungen nicht
+_DIGRAPHS = {"てぃ": "ti", "でぃ": "di", "とぅ": "tu", "どぅ": "du", "ふぁ": "fa", "ふぃ": "fi", "ふぇ": "fe",
+             "ふぉ": "fo", "うぃ": "wi", "うぇ": "we", "うぉ": "wo", "ゔぁ": "va", "ゔぃ": "vi", "ゔぇ": "ve",
+             "ゔぉ": "vo", "しぇ": "she", "じぇ": "je", "ちぇ": "che", "てゅ": "tyu", "でゅ": "dyu"}
+
+
+def romaji(line: list, written: str = "") -> str:
+    """Die gesungenen Silben einer Zeile in lateinischen Buchstaben, Wörter getrennt: „ame no machi o kimi o“.
+    Gesungen heißt wie gesprochen: das Partikel は steht als wa, を als o. Die Wörter kommen aus der Zeile wie
+    geschrieben (written, auch die Partikel einzeln), sonst aus den Wortanfängen der Silben."""
+    words = _words_of(line, written) if written else []
+    if not words:
+        for item in line:
+            if not words or (len(item) > 3 and item[3]):
+                words.append("")
+            words[-1] += item[2]
+    return " ".join(w for w in (_kana_romaji(w) for w in words) if w)
+
+
+def _words_of(line: list, written: str) -> list:
+    """Die gesungenen Silben nach den Wörtern der geschriebenen Zeile gruppiert (lyrics.shown_parts); passen die
+    Moren nicht genau, verteilt sie der Anteil jedes Worts."""
+    from lyrics import shown_parts
+    parts = [n for _, n in shown_parts(written) if n > 0]
+    total = sum(parts)
+    if not parts or not total:
+        return []
+    out, done, taken = [], 0.0, 0
+    for n in parts:
+        done += n
+        until = len(line) if done >= total else round(done / total * len(line))
+        if until > taken:
+            out.append("".join(item[2] for item in line[taken:until]))
+            taken = until
+    return out
+
+
+def _kana_romaji(kana: str) -> str:
+    try:
+        import jaconv
+    except ImportError:                     # gehört zur App; ohne bleibt die Zeile, wie sie gesungen wird
+        return kana
+    text = jaconv.kata2hira(kana).replace("を", "お")     # gesungen wie o
+    for digraph, latin in _DIGRAPHS.items():
+        text = text.replace(digraph, latin)
+    text = jaconv.kana2alphabet(text)
+    out = ""
+    for c in text:
+        if c == "-":                        # ー: der Vokal davor klingt weiter
+            vowel = next((v for v in reversed(out) if v in "aiueo"), "")
+            out += vowel
+        else:
+            out += c
+    return out
 
 
 def text(line: dict) -> str:
@@ -237,7 +334,8 @@ def _render(exe: str, audio: str, out: str, folder: str, subtitles: str, backgro
         source = ["-f", "lavfi", "-i", f"color=c={BACKGROUND}:s={width}x{height}:r={VIDEO_FPS}"]
         picture = "[0:v]null[bg];"
     # Die Untertitel liegen im selben Ordner wie das Video: so braucht der Filter keinen Pfad mit Laufwerk
-    graph = (f"{picture}[1:a]showwaves=s={width}x{wave_height}:mode=cline:rate={VIDEO_FPS}:"
+    # draw=full: mit dem Standard (scale) liefen die Farben über, die Wellenform wurde türkis statt in der Stilfarbe
+    graph = (f"{picture}[1:a]showwaves=s={width}x{wave_height}:mode=cline:rate={VIDEO_FPS}:draw=full:"
              f"colors=0x{wave.lstrip('#')}@0.5[wave];"
              f"[bg][wave]overlay=0:{height - wave_height}:shortest=1{f',ass={subtitles}' if subtitles else ''}[video]")
     command = [exe, "-y", "-hide_banner", "-loglevel", "error", *source, "-i", os.path.abspath(audio),

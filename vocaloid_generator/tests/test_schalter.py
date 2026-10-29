@@ -106,6 +106,19 @@ ELSEWHERE = {
     "voice_comfort": "test_stimme_140.py::test_the_voice_comfort_names_better_voices_and_sings_in_one_piece",
     "gentle_reshape": "test_stimme_140.py::test_gentle_reshape_only_touches_what_changes",
     "soft_vocal_chain": "test_stimme_140.py::test_the_soft_chain_lets_the_attacks_through",
+    # 1.5.0
+    "music_video": "test_video_150.py::test_the_music_video_replaces_the_lyric_video_only_with_the_switch",
+    "video_kanji": "test_video_150.py::test_each_part_of_the_video_has_its_switch",
+    "video_romaji": "test_video_150.py::test_each_part_of_the_video_has_its_switch",
+    "video_german": "test_video_150.py::test_each_part_of_the_video_has_its_switch",
+    "video_chords": "test_video_150.py::test_each_part_of_the_video_has_its_switch",
+    "video_melody_line": "test_video_150.py::test_each_part_of_the_video_has_its_switch",
+    "video_spectrum": "test_video_150.py::test_each_part_of_the_video_has_its_switch",
+    "video_words": "test_video_150.py::test_each_part_of_the_video_has_its_switch",
+    "video_titles": "test_video_150.py::test_each_part_of_the_video_has_its_switch",
+    "video_hud": "test_video_150.py::test_each_part_of_the_video_has_its_switch",
+    "youtube_chapters": "test_video_150.py::test_the_description_lists_chapters_only_with_the_switch",
+    "ai_backgrounds": "test_video_150.py::test_ai_pictures_are_painted_once_per_section_kind_and_reused",
 }
 # Bedienung der App, ändert den Song nicht
 APP = ("show_karaoke", "reuse_steps", "log_file", "update_check", "setup_wizard", "done_notice", "lyric_hints",

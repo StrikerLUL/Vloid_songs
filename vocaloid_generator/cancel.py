@@ -2,6 +2,7 @@
 #
 # Die Oberfläche ruft request(); der Ablauf (pipeline.py) prüft bei jedem Fortschrittsschritt mit check() und hört
 # mit Cancelled auf. Externe Programme starten über run(): ein Abbruch beendet sie sofort, statt auf sie zu warten.
+import contextlib
 import logging
 import subprocess
 import threading
@@ -93,6 +94,18 @@ def run(cmd: list, timeout: Optional[float] = None, input_bytes: Optional[bytes]
         with _lock:
             _running.discard(process)
     return subprocess.CompletedProcess(cmd, process.returncode, result.get("out"), result.get("err"))
+
+
+@contextlib.contextmanager
+def watched(process: subprocess.Popen):
+    """Ein selbst gestartetes Programm (z. B. ffmpeg, das Bilder bekommt) beim Abbrechen mit beenden."""
+    with _lock:
+        _running.add(process)
+    try:
+        yield process
+    finally:
+        with _lock:
+            _running.discard(process)
 
 
 def stream(cmd: list, on_line, timeout: Optional[float] = None, **kwargs) -> int:

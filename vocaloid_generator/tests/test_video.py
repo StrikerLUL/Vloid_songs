@@ -48,8 +48,9 @@ def test_the_video_takes_the_colors_of_the_style_only_with_the_switch(tmp_path, 
     seen = []
     monkeypatch.setattr(karaoke, "video", lambda audio, lines, path, title="", background=None, style="":
                         seen.append((background, style)) or path)
-    for s in (SongSettings(style="Rock"), SongSettings(style="Rock", video_colors=False),
-              SongSettings(style="Rock", video_background=str(tmp_path / "bild.png"))):
+    for s in (SongSettings(style="Rock", music_video=False),
+              SongSettings(style="Rock", video_colors=False, music_video=False),
+              SongSettings(style="Rock", video_background=str(tmp_path / "bild.png"), music_video=False)):
         pipeline.lyric_video(SongResult(seed=1, output_dir=str(out), mp3=str(mp3), settings=s))
     assert seen == [(None, "Rock"), (None, ""), (str(tmp_path / "bild.png"), "Rock")]
 

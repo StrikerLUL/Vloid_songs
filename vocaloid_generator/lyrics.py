@@ -39,6 +39,8 @@ _SECTION_ALIASES = {
 }
 
 _HEADER = re.compile(r"^\[(.+)\]$")
+# Übersetzung zum Mitlesen im Video (1.5.0 V2): eine Zeile mit > darunter, wird nicht gesungen
+TRANSLATION = re.compile(r"^\s*[>＞]\s?(.*)$")
 # „[Verse 2]“, „[Chorus 3]“, „[2. Strophe]“: der Text nur für dieses Vorkommen der Sektion (Schlüssel „Verse#2“)
 _NUMBER_AFTER = re.compile(r"^(.*\D)\s*(\d+)$")
 _NUMBER_BEFORE = re.compile(r"^(\d+)\.?\s*(\D.*)$")
@@ -133,19 +135,95 @@ def parse_lyrics(text: str, romaji: bool = True, english: bool = False, smart: b
 def section_lines(text: str, romaji: bool = True, english: bool = False, smart: bool = False,
                   own: dict = None) -> dict:
     """{Sektion: [[Silben einer Zeile], ...]}: wie parse_lyrics, aber Zeile für Zeile (für den Text zum Mitlesen)."""
+    return {name: [sung for _, sung, _ in lines]
+            for name, lines in sung_lines(text, romaji, english, smart, own).items()}
+
+
+def sung_lines(text: str, romaji: bool = True, english: bool = False, smart: bool = False,
+               own: dict = None) -> dict:
+    """{Sektion: [(Zeile wie geschrieben, [Silben], Übersetzung oder "")]}: die gesungenen Zeilen mit ihrem Text fürs
+    Video. Eine Zeile mit > direkt darunter ist ihre Übersetzung; sie wird nicht gesungen."""
     sections = {}
     current = None
     for raw_line in (text or "").splitlines():
         line = raw_line.strip()
         header = _HEADER.match(line)
+        translated = TRANSLATION.match(line)
         if header:
             current = normalize_section(header.group(1))
             sections.setdefault(current, [])
+        elif translated:
+            if current and sections[current] and not sections[current][-1][2]:
+                written, sung, _ = sections[current][-1]
+                sections[current][-1] = (written, sung, translated.group(1).strip())
         elif current and line:
             sung = syllables(line, romaji, english, smart, own)
             if sung:
-                sections[current].append(sung)
+                sections[current].append((line, sung, ""))
     return {name: lines for name, lines in sections.items() if lines}
+
+
+def is_translation(line: str) -> bool:
+    return bool(TRANSLATION.match(line))
+
+
+def shown(line: str) -> str:
+    """Eine Zeile so, wie sie im Video steht: ohne Lesungen von Hand (君[きみ] → 君), Kana mit Leerzeichen zwischen
+    den Silben (よ る の) zusammengezogen, Wörter mit einem Leerzeichen getrennt."""
+    line = _FURIGANA.sub(lambda m: m.group(1), line.strip())
+    tokens = line.split()
+    if len(tokens) > 2 and all(len(morae(t)) == 1 and _JAPANESE.search(t) for t in tokens):
+        return "".join(tokens)
+    return " ".join(tokens)
+
+
+def shown_parts(line: str) -> list:
+    """[(Stück, Moren)]: die Zeile wie im Video (shown) in Wörtern, jedes mit so vielen Moren, wie es gesungen
+    ungefähr dauert. Das Video färbt danach Wort für Wort im Takt der Silben. Ohne Wörterbuch zählt jedes Zeichen:
+    Kana eine More (kleine keine), Kanji zwei, lateinische Buchstaben eine halbe."""
+    text = shown(line)
+    tagger = _tagger()
+    parts = []
+    if tagger is not None and _JAPANESE.search(text):
+        pos = 0
+        for word in tagger(text):
+            at = text.find(word.surface, pos)
+            if at < 0:
+                continue
+            if at > pos:                                    # Leerzeichen und Zeichen, die das Wörterbuch überspringt
+                parts.append((text[pos:at], 0.0))
+            reading = getattr(word.feature, "kana", None)
+            if not reading or reading == "*" or not _KANJI.search(word.surface):
+                reading = word.surface
+            weight = float(_weight(_hiragana(reading)))
+            pos1, pos2 = getattr(word.feature, "pos1", ""), getattr(word.feature, "pos2", "")
+            # Hilfsverben, Endungen und て/たら gehören zum Wort davor: wasureta, oikakete, hashitteta
+            joined = pos1 in ("助動詞", "接尾辞") or (pos1 == "助詞" and pos2 == "接続助詞") or \
+                (parts and parts[-1][0].endswith(("っ", "ッ")))
+            if joined and at == pos and parts and parts[-1][1] > 0:
+                parts[-1] = (parts[-1][0] + word.surface, parts[-1][1] + weight)
+            else:
+                parts.append((word.surface, weight))
+            pos = at + len(word.surface)
+        if pos < len(text):
+            parts.append((text[pos:], 0.0))
+        if sum(n for _, n in parts) > 0:
+            return parts
+    return [(c, _weight(c)) for c in text]
+
+
+def _weight(text: str) -> float:
+    total = 0.0
+    for c in text:
+        if c in _SMALL:
+            continue
+        if _KANJI.search(c):
+            total += 2.0
+        elif _JAPANESE.search(c) or c == "ー":
+            total += 1.0
+        elif c.isalnum():
+            total += 0.5
+    return total
 
 
 def syllables(line: str, romaji: bool = True, english: bool = False, smart: bool = False,

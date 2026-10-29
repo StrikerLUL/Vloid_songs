@@ -14,11 +14,13 @@ APP = "Vloid Songs"
 # Überschriften wie [Verse 2] und Lesungen von Hand wie 君[きみ]
 _HEADER = re.compile(r"^\s*\[[^\]]*\]\s*$")
 _READING = re.compile(r"[\[［][^\]］]*[\]］]")
+_TRANSLATION = re.compile(r"^\s*[>＞]")       # Übersetzung fürs Video (lyrics.TRANSLATION)
 
 
 def lyric_text(lyrics: str) -> str:
     """Der Liedtext zum Mitlesen: ohne Überschriften, ohne Lesungen von Hand, ohne Leerzeilen am Rand."""
-    lines = [_READING.sub("", line).rstrip() for line in (lyrics or "").splitlines() if not _HEADER.match(line)]
+    lines = [_READING.sub("", line).rstrip() for line in (lyrics or "").splitlines()
+             if not _HEADER.match(line) and not _TRANSLATION.match(line)]
     return "\n".join(lines).strip()
 
 

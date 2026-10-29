@@ -7,7 +7,7 @@ from nicegui import run, ui
 
 import vorlagen
 from gui import labels
-from lyrics import _HEADER, options as lyric_options, syllables
+from lyrics import _HEADER, is_translation, options as lyric_options, syllables
 from settings import KEYS, MASTER_TARGETS, STYLE_OPTIONS, SongSettings
 from styles import STYLES
 
@@ -589,7 +589,7 @@ def text_panel(s: SongSettings) -> Callable[[], None]:
             header = _HEADER.match(line)
             if header:
                 rows.append(("header", header.group(1)))
-            elif line:
+            elif line and not is_translation(line):
                 sylls = syllables(line, **lyric_options(s))
                 count += len(sylls)
                 rows.append(("line", " ".join(sylls)))
@@ -1039,6 +1039,59 @@ def mix_panel(s: SongSettings) -> None:
             .bind_value(s, "polish_caption").classes("w-full").props("dense stack-label").mark("polish-caption")
         hint("ACE-Step spielt die Band neu ein, Takt, Akkorde und Melodie bleiben, der Gesang wird nicht verändert. "
              "Das Ergebnis ist eine zweite Fassung neben dem normalen Song („Veredelt“ im Player).")
+
+
+# ── Video (1.5.0) ───────────────────────────────────────────────────────────────
+VIDEO_SWITCHES = (
+    ("video_kanji", "Text mit Kanji, Wort für Wort eingefärbt",
+     "Wie du ihn geschrieben hast. Aus: in Hiragana Silbe für Silbe wie gesungen."),
+    ("video_romaji", "Romaji unter der Zeile", "Die gesungenen Silben in lateinischen Buchstaben: ame no machi o"),
+    ("video_german", "Deine Übersetzung unter der Zeile",
+     "Schreib im Text-Tab unter eine Zeile eine mit „>“ davor, z. B. „> Durch die Stadt im Regen“. Sie wird nicht "
+     "gesungen."),
+    ("video_chords", "Akkord unten links, mit dem nächsten", "Wechselt genau mit dem Akkord im Song"),
+    ("video_melody_line", "Gesangsmelodie als Notenlinie", "Die Töne ziehen durchs Bild, der gerade gesungene leuchtet"),
+    ("video_spectrum", "Spektrum des Songs", "Balken, Kreis oder Pegel je nach Szene, aus dem fertigen Mix"),
+    ("video_words", "Bilder aus dem Text",
+     "Regen bei 雨, Schnee bei 雪, Sterne bei 星, Blüten bei 桜, eine Chat-Blase bei 既読 … nur was im Text steht"),
+    ("video_titles", "Titelkarte am Anfang, Abspann am Ende",
+     "Der Titel, solange das Intro ohne Text läuft; im Outro Stimme und Musik"),
+    ("video_hud", "Ablaufleiste mit den Sektionen", "Oben rechts: wo im Song du gerade bist, Refrains hervorgehoben"),
+    ("youtube_chapters", "Kapitel in der YouTube-Beschreibung", "0:00 Intro, 0:15 Strophe 1, 0:59 Refrain 1 …"),
+)
+
+
+def video_panel(s: SongSettings, pick: PickFn) -> None:
+    import bilder
+    import video_szenen
+    ui.switch("Musikvideo: das Bild folgt dem Song").bind_value(s, "music_video").mark("switch-music_video") \
+        .tooltip("Szene passend zum Stil; Strophe ruhig, Refrain hell und voll, Bewegung auf Kick und Snare, Akkorde, "
+                 "Melodie und Spektrum. Aus: das Lyric-Video wie bis 1.4.")
+    with ui.column().classes("w-full gap-1").bind_visibility_from(s, "music_video"):
+        with ui.grid(columns=2).classes("w-full gap-x-4"):
+            ui.select(video_szenen.CHOICES, label="Szene").bind_value(s, "video_scene").mark("video-scene") \
+                .tooltip("Wie der Stil oder eine andere Szene; „Textkunst“ ist alles aus Zeichen wie ein altes Spiel, "
+                         "der Zeichenregen besteht aus deinem eigenen Text")
+            ui.select({"Stil": "wie der Stil", "ruhig": "ruhig und elegant", "lebhaft": "viel Bewegung"},
+                      label="Bewegung").bind_value(s, "video_motion").mark("video-motion") \
+                .tooltip("Ruhig: sanftes Wiegen statt Zoom und Wackeln. Blitze gibt es nie öfter als dreimal pro "
+                         "Sekunde und nie grell.")
+        for attr, text, tip in VIDEO_SWITCHES:
+            ui.switch(text).bind_value(s, attr).props("dense").tooltip(tip).mark(f"switch-{attr}")
+        ui.switch("KI-Bild pro Sektion (setup_bilder.py)").bind_value(s, "ai_backgrounds").props("dense") \
+            .mark("switch-ai_backgrounds") \
+            .tooltip("Ein gemaltes Bild für jede Sektion passend zu Stil und Text; nur wenn unter Hilfe › Einrichten "
+                     "„KI-Bilder fürs Video“ eingerichtet ist, sonst die gezeichnete Szene")
+        hint(bilder.status())
+        section_title("Eigene Figur (optional)")
+        for text, attr in (("Figur, Mund zu (PNG mit durchsichtigem Hintergrund)", "video_figure"),
+                           ("Dieselbe Figur mit offenem Mund (optional)", "video_figure_open")):
+            with ui.row().classes("w-full items-center no-wrap"):
+                ui.input(text, placeholder="leer = keine Figur").bind_value(s, attr).classes("col") \
+                    .props("dense stack-label").mark(f"path-{attr}")
+                pick_button(pick, s, attr, file_types=("Bild (*.png)",))
+        hint("Die Figur steht rechts, hüpft im Takt und öffnet den Mund, solange gesungen wird.")
+    hint("Hintergrundbild und Farben des Lyric-Videos ohne Musikvideo stellst du unter Pfade ein.")
 
 
 # ── Pfade ───────────────────────────────────────────────────────────────────────

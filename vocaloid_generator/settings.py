@@ -300,6 +300,23 @@ class SongSettings(BaseModel):
     shortcuts: bool = True             # Leertaste spielt, Strg+Enter erzeugt, Strg+Z nimmt die letzte Notenänderung zurück
     video_colors: bool = True          # Lyric-Video im Farbverlauf des Stils, Text und Wellenform in seinen Farben
     video_background: str = ""         # eigenes Bild als Hintergrund des Lyric-Videos; leer = Farbverlauf des Stils
+    # Musikvideo 1.5.0 (musikvideo.py, Tab Video); jedes hat einen Schalter, aus = Lyric-Video wie bisher
+    music_video: bool = True           # das Bild folgt dem Song: Szene je Stil, Sektionen, Takt, Akkorde, Spektrum
+    video_scene: str = ""              # leer = passend zum Stil, sonst ein Stilname oder „Textkunst“
+    video_motion: Literal["Stil", "ruhig", "lebhaft"] = "Stil"
+    video_kanji: bool = True           # Text wie geschrieben (Kanji), Wort für Wort eingefärbt, statt Hiragana
+    video_romaji: bool = True          # Romaji unter der Zeile
+    video_german: bool = True          # deine Übersetzung („> …“ unter der Zeile) im Video
+    video_chords: bool = True          # Akkord unten links, mit dem nächsten
+    video_melody_line: bool = True     # die Gesangsmelodie als Notenlinie
+    video_spectrum: bool = True        # Spektrum des fertigen Mixes
+    video_words: bool = True           # Bilder aus dem Text: Regen bei 雨, Sterne bei 星, Chat bei 既読
+    video_titles: bool = True          # Titelkarte am Anfang, Abspann mit Stimme am Ende
+    video_hud: bool = True             # Ablaufleiste mit den Sektionen und Schläge
+    video_figure: str = ""             # eigene Figur (PNG mit Transparenz), Mund zu
+    video_figure_open: str = ""        # dieselbe Figur mit offenem Mund; leer = nur das eine Bild
+    youtube_chapters: bool = True      # Kapitel (Strophe, Refrain …) mit Zeitmarken in der YouTube-Beschreibung
+    ai_backgrounds: bool = True        # V13: ein KI-Bild pro Sektion (setup_bilder.py), wenn eingerichtet
     # Verlässlichkeit (1.0.0); jedes hat einen Schalter
     reuse_steps: bool = True           # fertigen Gesang wiederverwenden, nach einem Absturz weitermachen (resume.py)
     log_file: bool = True              # Protokoll in Protokolle\vloid_songs.log im Datenordner (applog.py)
@@ -344,6 +361,14 @@ class SongSettings(BaseModel):
         value = _FLAT_TO_SHARP.get(value, value)
         if value not in KEYS:
             raise ValueError(f"Unbekannte Tonart: {value}")
+        return value
+
+    @field_validator("video_scene")
+    @classmethod
+    def _check_scene(cls, value: str) -> str:
+        from video_szenen import CHOICES
+        if value not in CHOICES:
+            raise ValueError(f"Unbekannte Szene: {value} (möglich: {', '.join(c for c in CHOICES if c)})")
         return value
 
     @field_validator("active_sections")

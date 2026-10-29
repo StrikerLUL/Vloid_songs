@@ -274,7 +274,13 @@ def build() -> None:
                                  "Die bearbeitete Aufnahme kommt unter Gesang als eigene Gesangsspur zurück.")
                     video_button = ui.button("Lyric-Video (MP4)", icon="movie", on_click=lambda: make_video()) \
                         .props("flat no-caps").mark("video") \
-                        .tooltip("Der Song mit dem Text zum Mitlesen als Video, z. B. für YouTube (braucht ffmpeg)")
+                        .tooltip("Der Song mit dem Text zum Mitlesen als Video, z. B. für YouTube (braucht ffmpeg). "
+                                 "Wie es aussieht, stellst du im Tab „Video“ ein.")
+                    preview_button = ui.button("Video-Vorschau (10 s)", icon="preview",
+                                               on_click=lambda: make_video(preview=True)) \
+                        .props("flat no-caps").mark("video-preview").bind_visibility_from(settings, "music_video") \
+                        .tooltip("Zehn Sekunden ab dem ersten Refrain, in wenigen Sekunden fertig: so siehst du "
+                                 "Szene, Text und Bewegung, bevor das ganze Video entsteht")
                     youtube_button = ui.button("Fertig für YouTube", icon="smart_display",
                                                on_click=lambda: make_youtube()).props("flat no-caps").mark("youtube") \
                         .tooltip("MP3, Video, Titelbild und Beschreibung zusammen in einem Ordner (ohne KI)")
@@ -291,8 +297,8 @@ def build() -> None:
         with ui.card().classes("bg-grey-9").style("flex: 2; min-width: 440px"):
             with ui.tabs().props("dense no-caps align=left").classes("w-full") as tabs:
                 for name, icon in (("Song", "music_note"), ("Text", "notes"), ("Band", "piano"),
-                                   ("Gesang", "mic"), ("Mix", "tune"), ("Verlauf", "history"),
-                                   ("Pfade", "folder")):
+                                   ("Gesang", "mic"), ("Mix", "tune"), ("Video", "movie"),
+                                   ("Verlauf", "history"), ("Pfade", "folder")):
                     ui.tab(name, icon=icon).mark(f"tab-{name}")
             tabs.on_value_change(lambda e: refresh_text() if e.value == "Text" else None)
             with ui.tab_panels(tabs, value="Song").classes("w-full bg-transparent") as panel_box:
@@ -306,6 +312,8 @@ def build() -> None:
                     singer_select, duet_select, support_select = panels.voice_panel(settings, _singers(settings), picker)
                 with ui.tab_panel("Mix"):
                     panels.mix_panel(settings)
+                with ui.tab_panel("Video"):
+                    panels.video_panel(settings, picker)
                 with ui.tab_panel("Verlauf"):
                     with ui.row().classes("w-full items-center no-wrap gap-2"):
                         library_search = ui.input(placeholder="Suchen: Name, Notiz, Stil, Seed, Datum") \
@@ -709,16 +717,18 @@ def build() -> None:
     ui.keyboard(on_key=on_key).mark("shortcuts")
 
     # ── Lyric-Video und Vergleich ─────────────────────────────────────────────────
-    async def make_video() -> None:
+    async def make_video(preview: bool = False) -> None:
         result = state["result"]
         if result is None or job.running:
             ui.notify("Erst einen Song erzeugen.", type="warning")
             return
+        entry = next((e for e in history.entries(settings.output_dir()) if e.audio == result.history), None)
         job.start()
-        job.report(0.1, "Baue Lyric-Video...")
+        job.report(0.1, "Baue Video-Vorschau..." if preview else "Baue Lyric-Video...")
         set_busy(True)
         try:
-            path = await run.io_bound(pipeline.lyric_video, result)
+            path = await run.io_bound(pipeline.lyric_video, result, None, entry.label if entry else "", preview,
+                                      job.report)
         except RuntimeError as e:
             ui.notify(str(e), type="warning", multi_line=True)
             path = None
@@ -729,7 +739,9 @@ def build() -> None:
             job.report(1.0, "Fertig")
             job.running = False
             set_busy(False)
-        if path:
+        if path and preview:
+            media.open_folder(path)          # öffnet die Datei im Videoplayer
+        elif path:
             ui.notify(f"Lyric-Video gespeichert: {path}", type="positive", multi_line=True)
             ui.download.file(path)
 
@@ -876,7 +888,7 @@ def build() -> None:
         if not busy:
             cancel.reset()
         for button in (generate_button, draft_button, full_button, album_button, zip_button, notes_button, video_button,
-                       youtube_button, hooks_button, cast_button, remix_button, *reroll_buttons.values()):
+                       preview_button, youtube_button, hooks_button, cast_button, remix_button, *reroll_buttons.values()):
             button.set_enabled(not busy)
         resing_button.set_enabled(not busy and _edited(settings) > 0)
         preview_button.set_enabled(not busy and _edited(settings) > 0)

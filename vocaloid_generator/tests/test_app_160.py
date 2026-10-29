@@ -171,3 +171,25 @@ def test_a_quality_only_turns_slow_things_off_and_never_on():
     assert not fast.best_melody and not fast.hearing_check and fast.vocal_takes == 1
     assert qualitaet.apply(SongSettings(vocal_takes=1), "Beste").vocal_takes == 2
     assert not qualitaet.apply(s, "Beste").best_melody
+
+
+async def test_the_text_kit_builds_swaps_and_takes_a_text(simple_user):
+    await simple_user.open("/")
+    simple_user.find(marker="simple-build-text").click()
+    await simple_user.should_see(marker="text-build")
+    simple_user.find(marker="text-theme").elements.pop().value = "winter"
+    simple_user.find(marker="text-word").elements.pop().value = "粉雪"
+    simple_user.find(marker="text-build").click()
+    await simple_user.should_see("Titelwort: 粉雪 (こなゆき) – Pulverschnee")
+    first = marked(simple_user, "text-line-0-0")[0].text
+    simple_user.find(marker="text-swap-0-0").click()
+    await until(lambda: marked(simple_user, "text-line-0-0")[0].text != first)
+    simple_user.find(marker="text-word").elements.pop().value = "eigenes"
+    simple_user.find(marker="text-own-word").type("Banane")
+    simple_user.find(marker="text-build").click()
+    await simple_user.should_see("Das Wort kenne ich nicht")
+    simple_user.find(marker="text-apply").click()
+    await until(lambda: "> " in SongSettings.load().lyrics)
+    lyrics = SongSettings.load().lyrics
+    assert lyrics.startswith("[Verse]") and "粉雪" in lyrics and first not in lyrics.split("[Pre-Chorus]")[0]
+    assert marked(simple_user, "simple-lyrics")[0].value == lyrics

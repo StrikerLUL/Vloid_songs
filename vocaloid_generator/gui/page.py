@@ -325,6 +325,9 @@ def build() -> None:
                 with ui.tab_panel("Song"):
                     panels.song_panel(settings, picker, lambda new: assign(settings, new))
                 with ui.tab_panel("Text"):
+                    ui.button("Text-Baukasten", icon="edit_note", on_click=lambda: open_text_builder()) \
+                        .props("outline dense no-caps").mark("text-builder-open") \
+                        .tooltip("Japanischen Text aus fertigen Zeilen zusammensetzen: Thema, Stimmung, Titelwort")
                     refresh_text = panels.text_panel(settings)
                 with ui.tab_panel("Band"):
                     panels.band_panel(settings)

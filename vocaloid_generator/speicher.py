@@ -29,8 +29,10 @@ def _folders() -> dict:
     import airwindows
     import amp_models
     import band_library
+    import bilder
     import drum_kit
     import grooves
+    import hoercheck
     import polish
     import rating
     import renderer
@@ -42,7 +44,8 @@ def _folders() -> dict:
             "samples": sample_library.FOLDER, "band": band_library.FOLDER, "drums": drum_kit.FOLDER,
             "grooves": grooves.FOLDER, "airwindows": airwindows.FOLDER, "surge": surge_sounds.FOLDER,
             "nam": amp_models.FOLDER, "rating": rating.FOLDER, "demucs": separation.FOLDER,
-            "begleitung": accompaniment.FOLDER, "ace_step": polish.FOLDER}
+            "begleitung": accompaniment.FOLDER, "ace_step": polish.FOLDER, "bilder": bilder.FOLDER,
+            "hoercheck": hoercheck.FOLDER}
 
 
 def size(path: str) -> int:

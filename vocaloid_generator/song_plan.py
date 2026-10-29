@@ -235,14 +235,10 @@ def build_plan(style: StyleProfile, bpm: float, structure: list, key: str, mode:
             bars *= 2
         counts[kind] = counts.get(kind, 0) + 1
         sec_tonic = tonic + (modulation if (modulation and idx >= last_chorus_idx) else 0)
-        energy = SECTION_ENERGY.get(kind, 0.6)
-        if kind == "Verse" and counts[kind] > 1:
-            energy += 0.05
-        if kind == "Chorus" and idx == last_chorus_idx and n_chorus > 1:
-            energy = 1.0
+        energy = default_energy(kind, counts[kind], kind == "Chorus" and idx == last_chorus_idx and n_chorus > 1)
         sec = Section(
             kind=kind, occurrence=counts[kind], index=idx, start=beat, bars=bars,
-            tonic=sec_tonic % 12, mode=mode, energy=min(energy, 1.0),
+            tonic=sec_tonic % 12, mode=mode, energy=energy,
             has_vocals=bool(cfg.get("has_vocals", True)),
             next_kind=structure[idx + 1] if idx + 1 < len(structure) else None,
             prev_kind=structure[idx - 1] if idx > 0 else None,
@@ -281,6 +277,17 @@ def build_plan(style: StyleProfile, bpm: float, structure: list, key: str, mode:
     arrange(sections, style, rng)
     return SongPlan(bpm=bpm, style=style, tonic=tonic, mode=mode, sections=sections, progressions=progressions,
                     key_change=modulation, meter=meter)
+
+
+def default_energy(kind: str, occurrence: int, last_chorus: bool) -> float:
+    """Die Energie einer Sektion, wie der Song sie ohne Spannungskurve hat: die zweite Strophe etwas mehr, der letzte
+    von mehreren Refrains am meisten."""
+    energy = SECTION_ENERGY.get(kind, 0.6)
+    if kind == "Verse" and occurrence > 1:
+        energy += 0.05
+    if last_chorus:
+        energy = 1.0
+    return min(energy, 1.0)
 
 
 def _own_chords(custom_chords: dict) -> dict:

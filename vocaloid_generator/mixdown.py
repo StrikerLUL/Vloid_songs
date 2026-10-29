@@ -4,6 +4,7 @@ import logging
 import os
 from typing import Optional
 
+import spannung
 from settings import CHANNELS, SongSettings
 from song_plan import chorus_windows, sections_in_seconds
 
@@ -51,6 +52,7 @@ def mix_arguments(settings: SongSettings, tracks: dict, out: str, has_vocals: bo
         sung_pads=chorus_windows(plan) if has_vocals and os.path.exists(
             os.path.join(out, "vocals_flaechen.wav")) else None,
         vocal_space=sections_in_seconds(plan) if plan is not None else None,
+        tension=spannung.rides(settings, plan),
         **({} if settings.draft else _reference_targets(settings, tracks, out, has_vocals=has_vocals)),
     )
 

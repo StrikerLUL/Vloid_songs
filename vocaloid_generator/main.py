@@ -85,7 +85,14 @@ OFF_150 = (
     ("living_double", "--ohne-lebendige-doppelung", "die Doppelung im Refrain mit festem Abstand wie bis 1.4"),
     ("hearing_check", "--ohne-hoercheck", "nach dem Singen nicht prüfen, ob man den Text versteht"),
 )
-OFF_ALL = OFF_130 + OFF_140 + OFF_150
+# Neuerungen aus 1.6.0
+OFF_160 = (
+    ("tension_curve", "--ohne-spannungskurve", "jede Sektion mit der Energie des Stils, ohne gezeichnete Kurve und "
+                                               "Stimmung"),
+    ("local_cache", "--arbeit-im-ausgabeordner", "Zwischenspeicher und Projekte bleiben im Ausgabeordner, auch in "
+                                                 "OneDrive"),
+)
+OFF_ALL = OFF_130 + OFF_140 + OFF_150 + OFF_160
 
 
 def _off(name: str):

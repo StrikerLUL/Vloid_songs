@@ -12,6 +12,7 @@ import anison
 import produzent
 import riff as riffs
 import ritardando as rits
+import spannung
 import style_dna
 from drums import CRASH, GROOVES, KICK, OPEN_HAT, HAT, PEDAL_HAT, RIDE, TAMBOURINE, TOMS, drum_section, lead_in
 from lyrics import kind_of, parse_lyrics
@@ -133,6 +134,9 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
                       blend=(*extras["blend"], dice.label("blend")) if extras.get("blend") else ())
     if vocal_range:
         plan.vocal_range = tuple(vocal_range)
+    tension = spannung.apply(plan, extras.get("tension"))       # 1.6.0: die gezeichnete Spannungskurve
+    if extras.get("tension"):
+        log.info("Spannungskurve: %s", spannung.describe(tension))
     real = m.plan(plan)          # Sektionen und Akkorde an ihren Plätzen im Takt
     melody = write_vocal_melody(real if m.native else plan, sung, dice.part("melody"),
                                 rerolls=dice.rerolled_kinds("melody"), imported=imported_melody, motifs=motifs,
@@ -214,6 +218,9 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
         done = band_runs.apply(plan, events, vocal_notes, dice.label("piano"))
         log.info("Läufe: %d Klavierläufe, %d Glissandi, %d Streicherläufe, %d Refrains mit Klavier-Hook",
                  done["runs"], done["glissandi"], done["strings"], done["hooks"])
+    if tension["thin"]:
+        log.info("Spannungskurve: %d Töne der Schmuck-Instrumente fallen in leisen Sektionen weg",
+                 spannung.thin(events, tension["thin"]))
     _final_chord(plan, events)
     if character is not None:
         import song_character

@@ -215,3 +215,21 @@ async def test_a_video_link_is_only_there_with_its_switch_and_gives_tempo_and_st
     user.find(marker="reference-link-structure").click()
     await until(lambda: SongSettings.load().bpm == 132 and SongSettings.load().active_sections == ["Verse", "Chorus"])
     assert SongSettings.load().custom_chords["Chorus"] == "IV | V"
+
+
+async def test_the_tension_curve_has_a_slider_per_section_and_goes_back_to_the_style(user):
+    await user.open("/")
+    sliders = marked(user, "tension-Chorus#2")
+    assert len(sliders) == 1 and sliders[0].value == 0.9
+    points = [e for e in marked(user, "tension-box")[0].descendants() if any("#" in m for m in e._markers)]
+    assert len(points) == len(SongSettings.load().active_sections)
+    sliders[0].value = 0.4
+    await until(lambda: SongSettings.load().tension == {"Chorus#2": 0.4})
+    assert "deep-purple-4" in sliders[0].props["color"]
+    marked(user, "tension-Bridge#1")[0].value = 0.15
+    await until(lambda: SongSettings.load().tension == {"Chorus#2": 0.4, "Bridge#1": 0.15})
+    user.find(marker="tension-reset").click()
+    await until(lambda: SongSettings.load().tension == {})
+    assert marked(user, "tension-Chorus#2")[0].value == 0.9
+    marked(user, "switch-tension_curve")[0].value = False
+    await until(lambda: not SongSettings.load().tension_curve)

@@ -256,6 +256,7 @@ def sliders(s: SongSettings, rows: tuple) -> None:
 def structure_editor(s: SongSettings) -> None:
     import config
     dragged = {"from": None}
+    opened = {"tension": False}
 
     @ui.refreshable
     def chips() -> None:
@@ -285,6 +286,7 @@ def structure_editor(s: SongSettings) -> None:
             for text, parts in labels.STRUCTURES.items():
                 ui.button(text, on_click=lambda _, p=parts: set_all(p)).props("outline dense no-caps") \
                     .mark(f"structure-{text}")
+        tension_editor(s, opened, chips.refresh)
 
     def remove(i: int) -> None:
         if len(s.active_sections) > 1:
@@ -315,6 +317,46 @@ def structure_editor(s: SongSettings) -> None:
         chips.refresh()
 
     chips()
+
+
+def tension_editor(s: SongSettings, opened: dict, refresh: Callable[[], None]) -> None:
+    """Die Spannungskurve (1.6.0, spannung.py): ein senkrechter Regler je Sektion des Ablaufs."""
+    import spannung
+    with ui.expansion("Spannungskurve", icon="show_chart", value=opened["tension"],
+                      on_value_change=lambda e: opened.update(tension=e.value)).classes("w-full").mark("tension-box"):
+        ui.switch("Die Spannungskurve lenkt Schlagzeug, Besetzung und Mix").bind_value(s, "tension_curve") \
+            .props("dense").mark("switch-tension_curve") \
+            .tooltip("Aus: jede Sektion hat die Energie, die der Stil ihr gibt, die Stimmung wirkt nicht")
+        hint("Wie viel Energie jeder Teil hat. Höher: kräftigeres Schlagzeug, mehr Fills und Becken, die Band spielt "
+             "voller und im Mix lauter. Tiefer: weicher, Bläser, Glocken und Percussion setzen aus; ganz unten spielt "
+             "die erste Hälfte als Breakdown ohne Schlagzeug. Grau steht ein Regler, wo der Stil (mit der Stimmung) "
+             "ihn hinlegt; was du ziehst, wird lila.")
+
+        def color(slider, point) -> None:
+            slider.props(f"color={'deep-purple-4' if point.drawn else 'grey-6'}")
+
+        def moved(point, slider, value) -> None:
+            s.tension = spannung.draw(s, point.key, value)
+            point.value = s.tension.get(point.key, point.normal)
+            color(slider, point)
+
+        def reset() -> None:
+            s.tension = {}
+            refresh()
+
+        with ui.row().classes("w-full no-wrap items-end gap-1 q-pt-md").style("overflow-x: auto") \
+                .bind_visibility_from(s, "tension_curve"):
+            for point in spannung.points(s):
+                name = labels.SECTIONS.get(point.kind, point.kind)
+                with ui.column().classes("items-center gap-1").style("min-width: 3.4rem"):
+                    slider = ui.slider(min=0.1, max=1.0, step=0.05, value=point.value) \
+                        .props("vertical reverse label dense").style("height: 7rem").mark(f"tension-{point.key}")
+                    slider.on_value_change(lambda e, p=point, sl=slider: moved(p, sl, e.value))
+                    color(slider, point)
+                    ui.label(f"{name} {point.occurrence}" if point.occurrence > 1 else name) \
+                        .classes("text-caption text-center").style("line-height: 1.1")
+        ui.button("Wie der Stil", icon="restart_alt", on_click=reset).props("flat dense no-caps") \
+            .mark("tension-reset").bind_visibility_from(s, "tension_curve")
 
 
 CHORD_KINDS = ("Verse", "PreChorus", "Chorus", "Bridge")

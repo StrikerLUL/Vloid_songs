@@ -46,6 +46,7 @@ WIRED = ("shimmer", "own_vocal_align")
 # Braucht eine Stimme, Aufnahmen oder ein Werkzeug: der Nachweis steht in diesem Test
 ELSEWHERE = {
     "local_cache": "test_speicher_160.py::test_with_local_cache_the_work_moves_out_of_onedrive_and_the_old_history_stays",
+    "tension_curve": "test_spannung_160.py::test_with_the_tension_curve_drums_band_and_mix_follow_the_drawing",
     "learned_motifs": "test_motifs.py::test_the_melody_sings_learned_rhythms",
     "singable_melody": "test_singbarkeit.py::test_composed_songs_are_singable_and_the_check_has_a_switch",
     "harmonies": "test_sektions_stil.py::test_harmony_and_choir_sing_like_the_chorus",

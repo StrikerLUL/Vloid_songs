@@ -99,7 +99,8 @@ def sung_lyrics(settings: SongSettings) -> dict:
 
 def composition_extras(settings: SongSettings) -> dict:
     """{Schalter: Wert} der eingeschalteten Neuerungen ab 1.3.0, die die Noten ändern (0 und aus fehlen); dazu
-    "producer": das Produzenten-Profil (produzent.Profile), wenn eins gilt."""
+    "producer": das Produzenten-Profil (produzent.Profile), wenn eins gilt, und "tension": die Spannungskurve
+    (spannung.extras), wenn eine gezeichnet ist oder die Stimmung nicht in der Mitte steht."""
     extras = {name: getattr(settings, name) for name in COMPOSITION_EXTRAS if getattr(settings, name)}
     if extras.pop("producer_profile", False):
         import produzent
@@ -112,6 +113,10 @@ def composition_extras(settings: SongSettings) -> dict:
     if extras.pop("taste_learning", False) and settings.taste_snapshot:
         import geschmack
         extras["taste"] = geschmack.from_snapshot(settings.taste_snapshot)
+    import spannung
+    tension = spannung.extras(settings)
+    if tension:
+        extras["tension"] = tension
     return extras
 
 

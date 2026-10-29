@@ -5,7 +5,7 @@ In fünf Schritten zum ersten Song. Alles Weitere steht darunter; wenn etwas nic
 
 ## 1. Installieren
 
-`VloidSongs-Setup-1.2.0.exe` starten. Sie braucht keine Adminrechte, legt „Vloid Songs“ ins Startmenü (auf Wunsch
+Die Setup.exe von der Release-Seite starten (`VloidSongs-Setup-<Version>.exe`). Sie braucht keine Adminrechte, legt „Vloid Songs“ ins Startmenü (auf Wunsch
 auch auf den Desktop) und lädt beim ersten Mal alle Bibliotheken; das dauert ein paar Minuten. Danach
 startet die App über das Startmenü.
 
@@ -29,6 +29,10 @@ eingerichtet, ✗ hat ein Problem (Fehlerbehebung). Zum Schluss entsteht ein kur
 „Gründlich“ probiert auch den Klang-Veredler und die KI-Begleitung aus; das dauert länger.
 
 ## 4. Der erste Song
+
+Am schnellsten in der **einfachen Ansicht** (oben „Einfach“, ab Werk an): Stil, Stimmung, Stimme, Länge und Qualität
+wählen, einen Text eintragen oder mit **Text bauen** zusammensetzen lassen, **Song machen**. Alles Weitere steht in
+der Profi-Ansicht (oben „Profi“) in Tabs:
 
 - Tab **Song**: Stil, Tempo und Tonart wählen, oder unter „Song-Rezepte“ ein fertiges Rezept mit Beispieltext
   laden.
@@ -127,6 +131,89 @@ nichts geändert (z. B. nur der Mix), singt NEUTRINO nicht noch einmal.
 
 **Updates.** Einmal am Tag sieht die App nach, ob es eine neue Version gibt; dann steht oben „Update da“. „Update
 holen“ lädt die neue Setup.exe und startet sie, deine Daten bleiben. Danach zeigt „Was ist neu“, was sich geändert hat.
+
+## Neu in 1.6
+
+1.6 macht die App einfacher und fragt mehr dein Ohr. Ohne Zeichnung, mit der Stimmung in der Mitte und in der
+Profi-Ansicht klingt jeder Song wie in 1.5.
+
+**Einfache Ansicht** (oben „Einfach“ und „Profi“). Einfach zeigt nur Stil, Stimmung (ruhig bis wild), Stimme, Länge
+(Kurz, Standard, Lang), Qualität und den Text, dazu „Song machen“ und „Hör-Duell“. Alle anderen Einstellungen bleiben,
+wie sie in der Profi-Ansicht stehen; wechselst du zurück, ist alles noch da.
+
+- *Qualität:* **Schnell** lässt weg, was lange dauert (Suche nach der besten Melodie, Verstärker-Modelle, Hör-Check),
+  **Gut** nimmt alles, was an ist, und lässt die Stimme einmal singen, **Beste** lässt sie zweimal singen und nimmt aus
+  jeder Phrase die sauberste Fassung. Eine Stufe schaltet nur ab, nie etwas ein, das du ausgeschaltet hast. Darunter
+  steht, wie lange der letzte Song mit dieser Stufe gedauert hat.
+- *Stimmung:* ruhig macht alle Teile weicher (weniger Fills, schlankere Besetzung), wild kräftiger. Sie wirkt über die
+  Spannungskurve (siehe unten).
+- *Was steckt in diesem Song?* Im Tab Verlauf hat jeder Song ein ⓘ: Stil, Tempo, Tonart, Stimme, was die App
+  gewürfelt hat (Klänge, Grooves, Akkorde), welche Schalter an und aus waren und was heute anders eingestellt ist.
+
+**Hör-Duell** (unter dem Player und in der einfachen Ansicht). Fast alle Schalter sind an, weil sie beim Bauen besser
+klangen, nicht weil du sie gehört hast. Das Duell fragt dein Ohr: der Refrain deines Songs entsteht zweimal, einmal
+mit und einmal ohne eine Funktion, gleich laut. Welche Fassung A und welche B ist, lost die App aus. Du sagst „A
+besser“, „B besser“ oder „gleich“, am Ende übernimmt die App die Gewinner. Zur Wahl stehen 40 Funktionen aus Stimme,
+Melodie, Klang und Mix; Funktionen, die in deinem Stil nichts ändern, überspringt sie. Beim ersten Duell singt NEUTRINO
+den Refrain, danach geht es meist schneller.
+
+- *Aufgeräumt* (Pfade › App): was im Duell „gleich“ klang, ist danach aus und sein Schalter verschwindet aus den Tabs.
+  Ausschalten zeigt wieder alle.
+
+**Text-Baukasten** (Tab Text „Text-Baukasten“, in der einfachen Ansicht „Text bauen“). Setzt ohne KI einen
+japanischen Liedtext aus 600 von Hand geschriebenen Bausteinen zusammen. Du wählst ein Thema (Liebe, Abschied, Sommer,
+Nacht, Traum, Online, Kampf, Winter), eine Stimmung (hell, bittersüß, traurig) und ein Titelwort aus der Liste oder
+ein eigenes (japanisch, z. B. 星屑, mit deutscher Bedeutung fürs Video).
+
+- Der Text passt zu deinem Ablauf und Tempo: so viele Zeilen, wie die Melodie Phrasen singt, so viele Silben, wie
+  bequem hineinpassen, Reime am Zeilenende, das Titelwort am Anfang und Ende des Refrains, eigener Text für jede
+  Strophe (`[Verse 2]`) und unter jeder Zeile die Übersetzung (`> …`) fürs Video.
+- Jede Zeile hat einen Knopf zum Tauschen gegen eine andere, die genauso gut passt. „Zusammensetzen“ noch einmal macht
+  einen neuen Text mit denselben Wünschen; „Übernehmen“ ersetzt den Text im Tab Text.
+- Jeder Baustein ist geprüft: die App singt ihn so, wie er gemeint ist (Partikel, Lesungen), mit und ohne „Partikel
+  erkennen“.
+
+**Spannungskurve** (Tab Song, unter dem Ablauf). Ein senkrechter Regler pro Sektion, auch pro Wiederholung: der
+zweite Refrain kann ruhiger sein als der erste, die Bridge ganz leise. Grau steht ein Regler dort, wo der Stil ihn
+hinlegt; was du ziehst, wird lila. „Wie der Stil“ setzt alle zurück.
+
+- Höher: kräftigeres Schlagzeug, mehr Fills und Becken, die Band spielt voller (Oktaven, Anschlag) und ist im Mix
+  bis 2 dB lauter.
+- Tiefer: weicher, Bläser, Glocken, Gegenstimme und Percussion setzen aus, im Mix bis 4 dB leiser. Ganz unten (unter
+  0,3) spielt die erste Hälfte als Breakdown ohne Schlagzeug.
+- Laut gezogen fällt ein gewürfelter Breakdown in dieser Sektion weg. Mit Vorbild-Songs bestimmen die den
+  Lautstärke-Verlauf, gemessen an deiner Kurve.
+
+**Video-Link als Vorbild** (Tab Song, bei den Vorbildern, Schalter „Video-Links als Vorbild“, ab Werk aus). Statt
+einer Datei ein Link von YouTube, Niconico, SoundCloud oder Bilibili: die App lädt nur den Ton (höchstens 15 Minuten)
+in einen temporären Ordner, misst Tempo, Tonart, Stil, Ablauf und Akkorde und löscht ihn wieder. Es bleiben nur die
+Zahlen (`vorbild_links.json`). „Messen“ zeigt sie, darunter übernehmen drei Knöpfe Tempo und Tonart, den Stil
+oder Ablauf und Akkorde für deinen Song.
+Fürs Mastering nach Vorbild braucht die App weiter die Datei selbst. YouTube erlaubt das Herunterladen in seinen
+Nutzungsbedingungen nur, wo es selbst einen Knopf dafür anbietet; gedacht ist es für eigene Videos und solche, deren
+Rechteinhaber zustimmt.
+
+**Nicht mehr in OneDrive** (Pfade › App, „Arbeitsdateien außerhalb von OneDrive“). Windows legt `Dokumente` gern in
+OneDrive. Dann lud OneDrive bei jedem Song ein paar GB Spuren und Zwischenspeicher hoch oder lagerte sie aus, und sie
+fehlten beim Lesen. Jetzt arbeitet die App in `%LOCALAPPDATA%\Vloid Songs` auf diesem PC: Spuren, Gesang zum
+Wiederverwenden, Verlauf und Projekte. Der alte Verlauf bleibt, wo er ist, und erscheint weiter im Tab Verlauf; jede
+fertige MP3 kommt zusätzlich in den Unterordner `MP3` deines Ausgabeordners, damit sie wie bisher aufs Handy kommt.
+Unter 5 GB freiem Platz warnt die App vor dem Erzeugen und in System prüfen.
+
+**Handy als Fernbedienung** (Hilfe › Handy als Fernbedienung, ab Werk aus). Einschalten, die App schließen und neu
+öffnen; Windows fragt einmal, ob die App ins Netzwerk darf („Private Netzwerke“ erlauben). Danach zeigt derselbe
+Eintrag einen QR-Code, die Adresse (z. B. `http://192.168.1.20:8090/`) und den Zugangscode.
+
+- Mit der Kamera des Handys scannen (Handy und PC im selben WLAN). Im Browser des Handys steht dieselbe App,
+  untereinander: oben die Einstellungen, darunter der Player. Text tippen, Song erzeugen, anhören, mit **MP3 aufs
+  Handy** herunterladen. Vorbilder, Summen und eine eigene Gesangsspur lädt man hoch („Hochladen“) statt am PC zu
+  wählen.
+- Jedes andere Gerät als der PC braucht den sechsstelligen Zugangscode; im QR-Code steckt er schon, sonst fragt die
+  App danach. Der Browser merkt sich den Zugang 30 Tage. Nach acht falschen Codes wartet ein Gerät eine Minute.
+  **Neuen Code würfeln** sperrt alle Geräte wieder aus.
+- Gerechnet wird weiter am PC. Solange ein Song entsteht, schläft er nicht ein (auch beim Album über Nacht); der
+  Bildschirm darf ausgehen. Geht der Bildschirm des Handys aus, wartet die Seite zehn Minuten auf es; ist der Song
+  inzwischen fertig, steht er im Verlauf.
 
 ## Neu in 1.5
 
@@ -414,6 +501,10 @@ löscht ihn (neu einrichten geht jederzeit). Darunter: wie groß Songs und aufge
 | Wichtige Wörter, Ohrwurm-Wertung, Stile mischen (1.5) | Tab Song |
 | Refrains steigern sich, J-Pop und Idol getrennt, Geschmack lernen, Produzenten-Profil, Producer-Tag (1.5) | Tab Band |
 | Ausdruck aus dem Text, lange Töne, lebendige Doppelung, Hör-Check (1.5) | Tab Gesang |
+| Spannungskurve (1.6) | Tab Song, unter dem Ablauf |
+| Video-Links als Vorbild (1.6, ab Werk aus) | Tab Song, unter den Vorbildern |
+| Einfache Ansicht, Aufgeräumt, Arbeitsdateien außerhalb von OneDrive (1.6) | oben „Einfach“ und „Profi“; Pfade › App |
+| Handy als Fernbedienung (1.6, ab Werk aus) | Hilfe › Handy als Fernbedienung |
 
 ## Wo was liegt
 
@@ -425,6 +516,10 @@ löscht ihn (neu einrichten geht jederzeit). Darunter: wie groß Songs und aufge
 | `Fehlerberichte` | ZIPs von „Fehlerbericht speichern“ |
 | `Atmer`, `Hall`, `DiffSinger` | wenn du sie anlegst: eigene Atem-Aufnahmen, Räume für den Gesang und DiffSinger-Stimmen |
 | `Einstellungen.json` | alle Einstellungen |
+| `hoer_duell.json`, `vorbild_links.json`, `fernbedienung.json` | was du im Hör-Duell gesagt hast, gemessene Video-Links, Zugangscode fürs Handy |
+
+Liegt der Ausgabeordner in OneDrive, arbeitet die App in `%LOCALAPPDATA%\Vloid Songs` (1.6): Spuren, Verlauf und
+Projekte; die fertigen MP3 kommen zusätzlich nach `MP3` im Ausgabeordner.
 
 Klänge und Modelle liegen im Programmordner unter `tools`, weil sie groß sind und zur App gehören.
 
@@ -656,7 +751,8 @@ Seit 1.5 ist das Video ein Musikvideo, das dem Song folgt (siehe [Neu in 1.5](#n
 - **Seed festhalten:** Danach macht „Song erzeugen“ wieder diesen Song, mit allem, was du inzwischen geändert hast (Mix, Gesang, Text). Das Seed-Feld im Tab „Song“ leeren, dann gibt es wieder jedes Mal einen neuen Song.
 - **Als ZIP für die DAW:** alle Spuren als WAV und MIDI, siehe unten. **Lyric-Video (MP4):** siehe oben.
 - **Vergleichen:** Im Verlauf hat jeder Song die Knöpfe A und B. Wähl zwei Songs, dann stehen unter dem Player A und B; ein Klick wechselt an derselben Stelle im Song, so hörst du direkt, welcher Refrain oder welcher Mix besser ist.
-- **Ablauf:** Im Tab „Song“ ziehst du die Sektionen in eine andere Reihenfolge, ein Klick auf eine Sektion wählt ihre Länge in Takten (gilt für alle Sektionen dieser Art, zum Beispiel ein kurzer Refrain mit 8 Takten).
+- **Ablauf:** Im Tab „Song“ ziehst du die Sektionen in eine andere Reihenfolge, ein Klick auf eine Sektion wählt ihre Länge in Takten (gilt für alle Sektionen dieser Art, zum Beispiel ein kurzer Refrain mit 8 Takten). Darunter legt die **Spannungskurve** fest, wie viel Energie jede Sektion hat.
+- **Einfach und Profi** (oben): die einfache Ansicht mit dem Wichtigsten oder alle Einstellungen in Tabs, siehe „Neu in 1.6“.
 - **Entwurf** (oben): ein Song in etwa einer Minute ohne NEUTRINO, die Lead-Stimme spielt die Melodie; er landet in `Songs\Entwurf` und nicht im Verlauf. **Richtig machen** macht danach genau diesen Song mit Gesang (`--entwurf`).
 - **Album** (oben): bis zu 30 Songs am Stück, Stile reihum, auf Wunsch je eine `.txt` mit Liedtext pro Song; morgens nummeriert in `Songs\Alben\<Datum> <Name>` mit Wiedergabeliste und Titelliste, nach Note sortiert, wenn die Bewertung eingerichtet ist (`album.py`, `--album 10 --album-stile "Rock,Ballade"`).
 - **Fertig für YouTube** (unter dem Player): MP3, Video, Titelbild (1280×720, mit Pillow gemalt) und Beschreibung in `Songs\YouTube\<Datum> <Titel>` (`youtube.py`, `--youtube [TITEL]`).
@@ -836,6 +932,7 @@ uv run vocaloid_generator\main.py --style Rock --bpm 140 --key E --scale minor -
 | `--ohne-jpop-idol-trennung`, `--ohne-produzent`, `--ohne-producer-tag`, `--ohne-geschmack`, `--ohne-stil-mischung` | Charakter 1.5 einzeln abschalten |
 | `--produzent NAME`, `--erkennungsklang KLANG`, `--akkordwendung WENDUNG` | Produzenten-Profil für diesen Lauf (`--help` zeigt die Klänge und Wendungen) |
 | `--mische STIL`, `--mischanteil 0.3` | zweiter Stil für eine Mischung und sein Anteil (0.1 bis 0.5) |
+| `--ohne-spannungskurve`, `--arbeit-im-ausgabeordner` | 1.6 einzeln abschalten: jede Sektion mit der Energie des Stils; Arbeitsdateien im Ausgabeordner, auch in OneDrive |
 | `--ohne-wohlfuehlbereich`, `--ohne-sanfte-nachbearbeitung`, `--ohne-weiche-gesangskette` | Stimme 1.4 einzeln abschalten: kein Tempo-Hinweis und StyleShift pro Sektion zerlegt immer, jede Phrase ganz neu gerechnet, die Gesangskette mit 6:1 wie bis 1.3 |
 | `-v` | alle Details ausgeben |
 

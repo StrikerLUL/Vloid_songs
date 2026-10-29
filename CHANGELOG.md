@@ -2,6 +2,77 @@
 
 Jede Version hat hier einen Abschnitt. Die App zeigt ihn einmal nach einem Update (Hilfe › Was ist neu).
 
+## 1.6.0
+
+Diese Version macht die App einfacher und fragt mehr dein Ohr: eine einfache Ansicht mit drei Qualitätsstufen, ein
+Hör-Duell, das blind vergleicht, ein Text-Baukasten ohne KI, eine Spannungskurve für den Ablauf, Video-Links als
+Vorbild und das Handy als Fernbedienung. Dazu arbeitet die App nicht mehr in OneDrive. Ohne Zeichnung, mit der
+Stimmung in der Mitte und in der Profi-Ansicht klingt jeder Song wie in 1.5.
+
+**Einfach anfangen** (oben „Einfach“ und „Profi“)
+
+- **Einfache Ansicht** (ab Werk an): Stil, Stimmung (ruhig bis wild), Stimme, Länge, Qualität, Text und „Song
+  machen“. Alles andere bleibt, wie es in der Profi-Ansicht (den Tabs) steht.
+- **Qualität:** Schnell (ohne Melodiesuche, Verstärker-Modelle und Hör-Check), Gut (alles, was an ist, die Stimme
+  singt einmal) oder Beste (die Stimme singt zweimal, aus jeder Phrase zählt die sauberste Fassung). Eine Stufe schaltet
+  nur ab, nie etwas ein, das du ausgeschaltet hast. Unter der Stufe steht, wie lange der letzte Song damit dauerte.
+- **Was steckt in diesem Song?** (Tab Verlauf, ⓘ bei jedem Song): Stil, Tempo, Tonart, Stimme, gewürfelter Charakter,
+  Akkorde, welche Schalter an und aus waren und was anders ist als jetzt.
+
+**Hör-Duell** (unter dem Player und in der einfachen Ansicht)
+
+- Der Refrain deines Songs entsteht zweimal, einmal mit und einmal ohne eine Funktion, gleich laut und blind (A und B
+  werden ausgelost). Du sagst „A besser“, „B besser“ oder „gleich“; am Ende übernimmt die App die Gewinner. 40
+  Funktionen aus Stimme, Melodie, Klang und Mix stehen zur Wahl.
+- **Aufgeräumt** (Pfade › App, „Schalter ausblenden, die im Hör-Duell keinen Unterschied machten“): was im Duell
+  „gleich“ klang, ist aus und verschwindet aus den Tabs.
+
+**Text-Baukasten** (Tab Text „Text-Baukasten“, in der einfachen Ansicht „Text bauen“)
+
+- Setzt einen japanischen Liedtext aus 600 von Hand geschriebenen Bausteinen zusammen, ohne KI: acht Themen (Liebe,
+  Abschied, Sommer, Nacht, Traum, Online, Kampf, Winter), drei Stimmungen und ein Titelwort aus der Liste oder ein
+  eigenes.
+- Passend zu Ablauf und Tempo: so viele Zeilen, wie die Melodie Phrasen singt, so viele Silben, wie bequem
+  hineinpassen, Reime am Zeilenende, das Titelwort am Anfang und Ende des Refrains, eigener Text für die zweite
+  Strophe und unter jeder Zeile die deutsche Übersetzung fürs Video. Jede Zeile lässt sich einzeln tauschen.
+- Jede Zeile ist geprüft: die App singt sie so, wie sie gemeint ist, mit und ohne „Partikel erkennen“.
+
+**Spannungskurve** (Tab Song, unter dem Ablauf, `--ohne-spannungskurve`)
+
+- Ein Regler pro Sektion, auch pro Wiederholung (der zweite Refrain anders als der erste). Höher: kräftigeres
+  Schlagzeug, mehr Fills und Becken, die Band voller und im Mix lauter. Tiefer: weicher, Bläser, Glocken, Gegenstimme
+  und Percussion setzen aus, im Mix leiser; ganz unten spielt die erste Hälfte als Breakdown ohne Schlagzeug.
+- Die **Stimmung** der einfachen Ansicht verschiebt alle Sektionen, die du nicht gezogen hast.
+
+**Video-Link als Vorbild** (Tab Song, bei den Vorbildern, ab Werk aus)
+
+- Statt einer Datei ein Link (YouTube, Niconico, SoundCloud, Bilibili …): die App lädt nur den Ton in einen
+  temporären Ordner, misst Tempo, Tonart, Stil, Ablauf und Akkorde und löscht ihn wieder. Drei Knöpfe übernehmen
+  Tempo und Tonart, den Stil oder Ablauf und Akkorde für deinen Song. Mastering nach Vorbild braucht weiter die Datei.
+- YouTube erlaubt das Herunterladen nur, wo es selbst einen Knopf dafür anbietet: gedacht für eigene Videos und solche,
+  deren Rechteinhaber zustimmt.
+
+**Speicher**
+
+- **Nicht mehr in OneDrive** (Pfade › App, `--arbeit-im-ausgabeordner` schaltet es ab): liegt der Ausgabeordner in
+  OneDrive, arbeitet die App in `%LOCALAPPDATA%\Vloid Songs` (Spuren, Gesang zum Wiederverwenden, Verlauf, Projekte).
+  Der alte Verlauf bleibt sichtbar, jede fertige MP3 kommt zusätzlich in den Unterordner `MP3` im OneDrive-Ordner.
+- **Warnung bei wenig Platz:** unter 5 GB frei warnt die App vor dem Erzeugen und im Systemcheck.
+
+**Handy als Fernbedienung** (Hilfe › Handy als Fernbedienung, ab Werk aus)
+
+- Die App ist im WLAN erreichbar (Port 8090). Handy oder Tablet scannen den QR-Code und bedienen sie im Browser: Text
+  tippen, Song erzeugen, anhören, mit „MP3 aufs Handy“ herunterladen. Dateien (Vorbilder, Summen, eigene Gesangsspur)
+  lädt man hoch. Die Seite steht auf dem Handy untereinander, erst die Einstellungen, darunter der Player.
+- Jedes andere Gerät als der PC braucht einen sechsstelligen Zugangscode (im QR-Code schon drin; der Browser merkt
+  sich den Zugang 30 Tage). Nach acht falschen Codes wartet ein Gerät eine Minute. „Neuen Code würfeln“ sperrt alle
+  Geräte wieder aus.
+- Solange ein Song entsteht, schläft der PC nicht ein (auch beim Album über Nacht); der Bildschirm darf ausgehen.
+
+**Behoben**
+
+- README nennt die aktuelle Version, Anleitung und Testliste keine alte Setup-Datei und kein altes Update mehr.
+
 ## 1.5.0
 
 Diese Version macht aus dem Lyric-Video ein Musikvideo, das dem Song folgt, bringt drei neue Stile, bessere Melodien

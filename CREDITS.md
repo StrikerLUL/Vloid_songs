@@ -84,6 +84,8 @@ Lizenz. Was mit „lädt die App“ markiert ist, kommt erst über den Einrichte
 | wavesurfer.js | katspaugh | BSD-3 |
 | Pillow (Titelbilder, Hintergrund des Lyric-Videos) | Jeffrey A. Clark und Mitwirkende | MIT-CMU |
 | mutagen (Titel, Liedtext und Titelbild in der MP3) | Joe Wreschnig, Michael Urman, Christoph Reiter und Mitwirkende | GPL-2.0 oder später |
+| yt-dlp (Ton eines Video-Links zum Messen, 1.6) | yt-dlp-Team | Unlicense |
+| segno (QR-Code fürs Handy, 1.6) | Lars Heuer | BSD-3 |
 | uv | Astral | MIT / Apache-2.0 |
 | Python (bringt die Setup.exe mit, aus python-build-standalone) | Python Software Foundation, Astral | PSF-2.0, MPL-2.0 |
 | Inno Setup (baut die Setup.exe) | Jordan Russell, Martijn Laan | eigene, freie Lizenz |

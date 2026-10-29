@@ -112,6 +112,11 @@ VOICE_SWITCHES = (
                                                   "statt mit 6:1 in 1 ms jeden Einsatz zu quetschen; die Präsenz ist "
                                                   "breiter und sitzt höher, der Glanz bei 12 kHz. Die Stimme klingt "
                                                   "runder und weniger spitz"),
+    # 1.5.0
+    ("hearing_check", "Hör-Check für den Text", "Nach dem Singen hört eine japanische Spracherkennung ab, ohne den "
+                                                "Text zu kennen; Zeilen, die man kaum versteht, stehen unter dem "
+                                                "Player und in hoer_check.txt, mit den Lesungen der Wörter. Erst "
+                                                "nach Einrichten › Hör-Check"),
 )
 # (Einstellung, Text, von, bis, Schritt, Erklärung), 0 = aus
 VOICE_SLIDERS = (
@@ -792,6 +797,15 @@ LIVELY_SWITCHES = (
                                                 "Sättigung"),
     ("airwindows", "Airwindows-Effekte", "Mit Airwindows Consolidated (Hilfe › Einrichten): Bandsättigung ToTape9 auf "
                                          "dem Gesang und das Mischpult Console7 auf jeder Spur und der Summe"),
+    # 1.5.0
+    ("text_expression", "Ausdruck aus dem Text", "Zeilen mit leisen Gefühlswörtern (涙, ごめん, さよなら) singt die "
+                                                 "Stimme etwas leiser und dunkler, Zeilen mit lauten (叫べ, 走れ, "
+                                                 "もっと) kräftiger und heller"),
+    ("note_swells", "Lange Töne leben", "Gehaltene Töne mitten in einer Zeile schwellen leicht an, wie ein Sänger "
+                                        "sie hält"),
+    ("living_double", "Lebendige Doppelung", "Ohne zweite Fassung wandert der Abstand der Doppelung im Refrain "
+                                             "langsam, wie bei einem zweimal eingesungenen Take, statt fest zu "
+                                             "bleiben"),
 )
 
 # Stil-Effekte auf dem Gesang (style_fx.py), jeweils nur in den Stilen, zu denen sie gehören
@@ -926,6 +940,8 @@ def voice_panel(s: SongSettings, singers: list, pick: PickFn | None = None) -> t
     section_title("Gesang wie produziert")
     for attr, text, tip in VOICE_SWITCHES:
         ui.switch(text).bind_value(s, attr).props("dense").tooltip(tip).mark(f"switch-{attr}")
+    import hoercheck
+    hint(hoercheck.status())
     sliders(s, VOICE_SLIDERS)
     section_title("Lebendiger Gesang")
     for attr, text, tip in LIVELY_SWITCHES:

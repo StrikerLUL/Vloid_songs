@@ -110,9 +110,11 @@ def without_polish(tmp_path, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def without_ai_pictures(tmp_path, monkeypatch):
-    """Eingerichtete KI-Bilder (setup_bilder.py) malen in den Tests nicht mit."""
+    """Eingerichtete KI-Bilder (setup_bilder.py) malen in den Tests nicht mit, der Hör-Check hört nicht ab."""
     import bilder
+    import hoercheck
     monkeypatch.setattr(bilder, "FOLDER", str(tmp_path / "bilder"))
+    monkeypatch.setattr(hoercheck, "FOLDER", str(tmp_path / "hoercheck"))
 
 
 @pytest.fixture(autouse=True)

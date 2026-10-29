@@ -208,6 +208,7 @@ def build() -> None:
                         .tooltip("Der Song bleibt, auch wenn du Mix, Gesang oder Text änderst.")
                 player = WavePlayer().classes("w-full").mark("player")
                 sung_label = ui.label().classes("text-caption text-grey-5").mark("sung-by")
+                hearing_label = ui.label().classes("text-caption text-grey-5").mark("hearing-check")
                 lyrics_view = Karaoke().classes("w-full").mark("karaoke") \
                     .bind_visibility_from(settings, "show_karaoke")
                 stem_row = ui.row().classes("gap-1 q-mt-sm")
@@ -800,6 +801,10 @@ def build() -> None:
         sung_label.set_text(text)
         sung_label.set_visibility(bool(text))
         sung_label.classes(replace="text-caption " + ("text-negative text-weight-bold" if warn else "text-grey-5"))
+        text, warn = media.hearing(result)
+        hearing_label.set_text(text)
+        hearing_label.set_visibility(bool(text))
+        hearing_label.classes(replace="text-caption " + ("text-warning" if warn else "text-grey-5"))
         found = media.stems(result)
         stem_row.clear()
         with stem_row:

@@ -68,6 +68,7 @@ class SongResult:
     polished_wav: Optional[str] = None         # zweite Fassung mit der vom Klang-Veredler neu eingespielten Band
     polished_mp3: Optional[str] = None
     versions: dict = field(default_factory=dict)   # {"offvocal" / "acappella": MP3, ohne ffmpeg WAV} (v6 Nr. 4)
+    hearing: list = field(default_factory=list)    # hoercheck.Line je Zeile, wenn der Hör-Check lief (1.5.0 St4)
 
     @property
     def audio(self) -> Optional[str]:
@@ -261,6 +262,7 @@ def _produce(settings: SongSettings, tracks: dict, out: str, report: ProgressFn,
     _write_karaoke(settings, tracks, out)
     report(0.30, "Synthetisiere Gesang...")
     result.vocals_wav = singing._synthesize_vocals(settings, tracks, out)
+    _hearing_check(settings, result, report)
     lead_sings = result.vocals_wav is None and settings.channels["melody"].enabled
     if lead_sings:
         _lead_sings_melody(tracks, out)
@@ -312,6 +314,15 @@ def _produce(settings: SongSettings, tracks: dict, out: str, report: ProgressFn,
             report(0.98, "Hebe den Gesang als Projekt auf...")
             project.save(out, tracks, entry.audio)
     return result
+
+
+def _hearing_check(settings: SongSettings, result: SongResult, report: ProgressFn) -> None:
+    """St4 (1.5.0): die Spracherkennung hört den fertigen Gesang ab (nicht im Entwurf und nicht die eigene Spur);
+    ohne Schalter oder Erkennung verschwindet nur ein altes Ergebnis aus dem Songordner."""
+    import hoercheck
+    wanted = settings.hearing_check and not settings.draft and not settings.own_vocal
+    result.hearing = hoercheck.check_song(result.output_dir, result.vocals_wav if wanted else None,
+                                          lambda fraction, message: report(0.52, message))
 
 
 # Off-Vocal und A-cappella (v6 Nr. 4): (WAV, MP3, Zusatz zum Titel in den Tags)

@@ -195,6 +195,10 @@ class SongSettings(BaseModel):
     vocal_comping: bool = True         # bei mehreren Fassungen jede Phrase aus der saubersten (voice_fx.comp)
     phrase_expression: bool = True     # Ausdruck pro Phrase: zum Höhepunkt lauter und heller, am Ende weicher
     syllable_dynamics: bool = True     # Lautstärke pro Silbe: Betonungen lauter, weicher Einsatz, Anlauf leiser
+    text_expression: bool = True       # St2 (1.5.0): Zeilen mit 涙/ごめん leiser und dunkler, mit 叫べ/走れ kräftiger
+    note_swells: bool = True           # St3 (1.5.0): gehaltene Töne mitten in der Phrase schwellen an
+    living_double: bool = True         # St5 (1.5.0): die Doppelung im Refrain schwankt in Zeit und Tonhöhe wie gesungen
+    hearing_check: bool = True         # St4 (1.5.0): nach dem Singen hört eine Spracherkennung ab (setup_hoercheck.py)
     vocal_chain: bool = True           # Studio-Kette: Sättigung, Hall und Delay je Sektion, echte Doppelung
     vocal_tone: bool = True            # Kette pro Stimme und Stil: EQ und Sättigung für helle/tiefe Stimmen, Ballade, Rock
     airwindows: bool = True            # Airwindows Consolidated (setup_airwindows.py): Band auf dem Gesang, Console7

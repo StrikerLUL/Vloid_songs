@@ -123,6 +123,10 @@ ELSEWHERE = {
     "key_words": "test_lieder_150.py::test_the_best_melody_puts_key_words_up_and_is_catchier_with_the_switches",
     "catchy_chorus": "test_lieder_150.py::test_the_best_melody_puts_key_words_up_and_is_catchier_with_the_switches",
     "chorus_lift": "test_lieder_150.py::test_the_first_chorus_is_leaner_and_the_last_has_everything",
+    "text_expression": "test_stimme_150.py::test_text_expression_and_swells_shape_the_sung_track_only_with_their_switches",
+    "note_swells": "test_stimme_150.py::test_text_expression_and_swells_shape_the_sung_track_only_with_their_switches",
+    "living_double": "test_stimme_150.py::test_the_living_double_wanders_like_a_second_take",
+    "hearing_check": "test_stimme_150.py::test_the_hearing_check_runs_after_singing_only_with_its_switch",
 }
 # Bedienung der App, ändert den Song nicht
 APP = ("show_karaoke", "reuse_steps", "log_file", "update_check", "setup_wizard", "done_notice", "lyric_hints",
@@ -238,6 +242,8 @@ def test_switching_off_changes_the_finished_vocal(song, name, monkeypatch, tmp_p
     monkeypatch.setattr(voice_fx, "choir_from_lead", lambda *a, **k: calls.append("final_choir"))
     monkeypatch.setattr(voice_fx, "add_breaths", lambda *a, recorded=False, **k: calls.append(("breaths", recorded))
                         or 0)
+    monkeypatch.setattr(voice_fx, "text_and_swells", lambda *a, **k: calls.append(("text", a[3:])) or {"text": 0,
+                                                                                                    "swells": 0})
     singing._liven(s, tracks, str(tmp_path), str(tmp_path / "vocals.wav"))
     on, calls[:] = list(calls), []
     singing._liven(s.with_updates(**{name: False}), tracks, str(tmp_path), str(tmp_path / "vocals.wav"))

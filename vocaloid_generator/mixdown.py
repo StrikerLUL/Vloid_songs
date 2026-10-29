@@ -37,6 +37,7 @@ def mix_arguments(settings: SongSettings, tracks: dict, out: str, has_vocals: bo
         texture=profile.texture if settings.lofi_texture else "",
         movement=_movement(plan) if settings.mix_movement else None,
         vocal_chain=settings.vocal_chain,
+        living_double=settings.living_double,
         unmask=settings.vocal_unmask,
         ride=settings.vocal_ride,
         convolution=settings.convolution_reverb,

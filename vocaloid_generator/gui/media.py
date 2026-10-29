@@ -130,6 +130,14 @@ def sung_by(result) -> tuple:
     return vocal_check.describe(vocal_check.read(result.output_dir))
 
 
+def hearing(result) -> tuple:
+    """(Zeile unter dem Player, Warnung?): was der Hör-Check verstanden hat (hoercheck.py, 1.5.0)."""
+    import hoercheck
+    if result is None or not result.vocals_wav:
+        return "", False
+    return hoercheck.describe(hoercheck.load(result.output_dir))
+
+
 def open_folder(path: str) -> bool:
     """Öffnet einen Ordner im Explorer (oder im Dateimanager), oder eine Datei mit ihrem Programm."""
     if not os.path.exists(path):

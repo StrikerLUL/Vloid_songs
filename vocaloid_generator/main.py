@@ -73,6 +73,10 @@ OFF_150 = (
     ("key_words", "--ohne-schluesselwoerter", "Kernwort und Gefühlswörter zählen bei der besten Melodie nicht"),
     ("catchy_chorus", "--ohne-ohrwurm", "keine Ohrwurm-Wertung des Refrains bei der besten Melodie"),
     ("chorus_lift", "--ohne-refrain-steigerung", "alle Refrains gleich voll wie bis 1.4"),
+    ("text_expression", "--ohne-text-ausdruck", "Zeilen mit Gefühlswörtern nicht leiser oder kräftiger singen"),
+    ("note_swells", "--ohne-schwellen", "gehaltene Töne nicht anschwellen lassen"),
+    ("living_double", "--ohne-lebendige-doppelung", "die Doppelung im Refrain mit festem Abstand wie bis 1.4"),
+    ("hearing_check", "--ohne-hoercheck", "nach dem Singen nicht prüfen, ob man den Text versteht"),
 )
 OFF_ALL = OFF_130 + OFF_140 + OFF_150
 

@@ -10,7 +10,7 @@ import logging
 import os
 import re
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 
@@ -40,6 +40,8 @@ class Entry:
     label: str = ""                    # eigener Name
     note: str = ""
     album: str = ""                    # aus „Album über Nacht“ (album.py)
+    thumbs: dict = field(default_factory=dict)     # 1.5.0: {Aspekt (geschmack.ASPECTS): +1 oder -1}
+    character: dict = field(default_factory=dict)  # 1.5.0: was der Song gewürfelt hat (pipeline.song_character)
 
     @property
     def title(self) -> str:
@@ -73,9 +75,10 @@ def folder(output_dir: str) -> str:
     return os.path.join(output_dir, FOLDER)
 
 
-def record(audio_path: str, settings: SongSettings, output_dir: str, keep: int = KEEP) -> Optional[Entry]:
+def record(audio_path: str, settings: SongSettings, output_dir: str, keep: int = KEEP,
+           character: Optional[dict] = None) -> Optional[Entry]:
     """Legt den Song im Verlauf ab. settings muss den benutzten Seed enthalten. keep=0 behält alle.
-    Fehler kosten nur den Eintrag."""
+    character: was der Song gewürfelt hat (pipeline.song_character), für die Daumen. Fehler kosten nur den Eintrag."""
     if not audio_path or not os.path.exists(audio_path):
         return None
     target = folder(output_dir)
@@ -86,13 +89,16 @@ def record(audio_path: str, settings: SongSettings, output_dir: str, keep: int =
         audio = os.path.join(target, name + os.path.splitext(audio_path)[1].lower())
         shutil.copyfile(audio_path, audio)
         info = os.path.join(target, name + ".json")
-        _write(info, settings, {"erstellt": now.isoformat(timespec="seconds"), "favorit": False})
+        meta = {"erstellt": now.isoformat(timespec="seconds"), "favorit": False}
+        if character:
+            meta["charakter"] = character
+        _write(info, settings, meta)
     except OSError as e:
         log.warning("Song konnte nicht im Verlauf gespeichert werden: %s", e)
         return None
     _prune(output_dir, keep)
     log.info("Im Verlauf gespeichert: %s", audio)
-    return Entry(name, audio, info, now.replace(microsecond=0), False, settings)
+    return Entry(name, audio, info, now.replace(microsecond=0), False, settings, character=character or {})
 
 
 def entries(output_dir: str) -> list:
@@ -114,6 +120,16 @@ def set_favorite(entry: Entry, favorite: bool) -> Entry:
     """Favoriten fallen nie aus dem Verlauf."""
     _update(entry.info, favorit=bool(favorite))
     entry.favorite = bool(favorite)
+    return entry
+
+
+def set_thumb(entry: Entry, aspect: str, vote: int) -> Entry:
+    """Daumen hoch (+1), runter (-1) oder keiner (0) für Klang, Melodie, Stimme oder Groove (geschmack.py)."""
+    thumbs = {k: v for k, v in (entry.thumbs or {}).items() if k != aspect}
+    if vote:
+        thumbs[aspect] = 1 if vote > 0 else -1
+    _update(entry.info, daumen=thumbs)
+    entry.thumbs = thumbs
     return entry
 
 
@@ -203,8 +219,11 @@ def _read(info: str) -> Optional[Entry]:
         log.warning("Verlaufseintrag %s nicht lesbar: %s", info, e)
         return None
     rating = meta.get("bewertung") if isinstance(meta.get("bewertung"), dict) else None
+    thumbs = meta.get("daumen") if isinstance(meta.get("daumen"), dict) else {}
+    character = meta.get("charakter") if isinstance(meta.get("charakter"), dict) else {}
     return Entry(name, audio, info, created, bool(meta.get("favorit")), SongSettings.load(info), rating,
-                 str(meta.get("name") or ""), str(meta.get("notiz") or ""), str(meta.get("album") or ""))
+                 str(meta.get("name") or ""), str(meta.get("notiz") or ""), str(meta.get("album") or ""),
+                 thumbs, character)
 
 
 def _prune(output_dir: str, keep: int) -> None:
@@ -212,6 +231,9 @@ def _prune(output_dir: str, keep: int) -> None:
         return
     removable = [e for e in entries(output_dir) if not e.kept]
     for entry in removable[keep:]:
+        if entry.thumbs:
+            import geschmack
+            geschmack.archive(output_dir, entry)        # der Geschmack bleibt, auch wenn der Song geht
         delete(entry)
 
 

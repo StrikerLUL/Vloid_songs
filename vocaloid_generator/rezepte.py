@@ -9,7 +9,8 @@ from dataclasses import dataclass, field
 from settings import SongSettings
 
 FRESH = {"seed": None, "variations": {}, "melody_edits": {}, "melody_lengths": {}, "phrase_fixes": {},
-         "custom_chords": {}, "section_bars": {}, "remix_from": "", "remix_bpm": 0, "melody_midi": ""}
+         "custom_chords": {}, "section_bars": {}, "remix_from": "", "remix_bpm": 0, "melody_midi": "",
+         "taste_snapshot": []}
 
 
 @dataclass(frozen=True)

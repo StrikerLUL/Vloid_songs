@@ -9,8 +9,10 @@ import pretty_midi
 import grooves
 import meter as meters
 import anison
+import produzent
 import riff as riffs
 import ritardando as rits
+import style_dna
 from drums import CRASH, GROOVES, KICK, OPEN_HAT, HAT, PEDAL_HAT, RIDE, TAMBOURINE, TOMS, drum_section, lead_in
 from lyrics import kind_of, parse_lyrics
 from melody_import import imported_bars
@@ -105,6 +107,7 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
             log.info("Zwischenspiel nach dem ersten Refrain (Intro-Riff)")
         structure = longer
     dice = Dice(random.getrandbits(32), variations or {})
+    producer = extras.get("producer")                    # 1.5.0: Produzenten-Profil (produzent.py) oder None
     swing = min(1.0, band.swing + (swing or 0.0))        # Stile mit eigenem Swing (Lo-Fi) legen ihn dazu
     if m.compound:
         swing = 0.0                                       # 6/8 wiegt schon von sich aus
@@ -125,7 +128,9 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
     plan = build_plan(profile, melody_bpm or bpm, structure, key, mode, section_config, dice.part("chords"), min_bars,
                       custom_chords=custom_chords, rerolls=dice.rerolled_kinds("chords"), meter=m.name,
                       spice=float(extras.get("chord_spice", 0.0)), spice_seed=dice.label("chords") + ":spice",
-                      own_chords="style_chords" in extras)
+                      own_chords="style_chords" in extras, split="jpop_idol_split" in extras,
+                      turn=produzent.turn(producer, mode, dice.label("chords")), taste=extras.get("taste"),
+                      blend=(*extras["blend"], dice.label("blend")) if extras.get("blend") else ())
     if vocal_range:
         plan.vocal_range = tuple(vocal_range)
     real = m.plan(plan)          # Sektionen und Akkorde an ihren Plätzen im Takt
@@ -133,7 +138,7 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
                                 rerolls=dice.rerolled_kinds("melody"), imported=imported_melody, motifs=motifs,
                                 singable=singable, extras=extras)
     _apply_edits(melody, melody_edits or {}, melody_lengths or {})
-    band, character = _styled_band(band, extras, dice)
+    band, character = _styled_band(band, extras, dice, producer)
     for done in {id(plan): plan, id(real): real}.values():   # ab hier spielt die Band (im Remix ein anderer Stil)
         done.style, done.bpm = band, bpm
     profile = band
@@ -218,6 +223,10 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
         import groove_feel
         moved = groove_feel.apply(events, plan.total_beats - BEATS_PER_BAR)
         log.info("Band im Groove: %d Töne mit dem Schlagzeuger verschoben", sum(moved.values()))
+    tag = produzent.tag_notes(producer, plan.tonic, plan.mode)
+    if tag:
+        events["bells"] += [Ev(at, length, pitch, vel) for at, pitch, length, vel in tag]
+        log.info("Produzent: Tag von %s am Anfang", producer.name)
     events = _into_meter(m, events, drops)
     rit = rits.window(real, profile.name) if ritardando else None
     if rit:
@@ -241,11 +250,12 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
     data, syllables = melody_data(sung_notes)
     tracks["harmony_data"], tracks["harmony_silben"] = melody_data(harmony_line(real, sung_notes))
     tracks["vocal_melody"] = vocal_track
-    if character is not None:
+    if character is not None or band.voices != get_style(band.name).voices:
         tracks["voices"] = band.voices          # die Synth-Stimmen des Songs (Charakter), für rendering.py
     tracks["melody_data"] = data
     tracks["silben"] = syllables
     tracks["plan"] = real
+    tracks["character"] = character          # 1.5.0: der Verlauf merkt ihn sich für die Daumen (geschmack.py)
     bars = sum(sec.bars for sec in plan.sections) * m.bars_per_bar
     log.info("Song: %d Takte, %.0f Sekunden", bars, real.total_beats * 60 / bpm)
     return tracks
@@ -254,19 +264,34 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
 BREAKDOWN_ENERGY = 0.4
 
 
-def _styled_band(band, extras: dict, dice: "Dice") -> tuple:
+def _styled_band(band, extras: dict, dice: "Dice", producer=None) -> tuple:
     """1.4.0: die Band mit dem Arrangement ihres Stils (style_dna) und dem eigenen Charakter des Songs
-    (song_character). Rückgabe: (StyleProfile, Charakter oder None)."""
+    (song_character); 1.5.0 mit dem Erkennungsklang des Produzenten (produzent.py). Rückgabe: (StyleProfile,
+    Charakter oder None)."""
     from dataclasses import replace as changed
     if "style_arrangement" in extras:
-        import style_dna
         band = changed(band, parts=style_dna.arranged(band.parts, band.name))
+    if "jpop_idol_split" in extras:
+        band = style_dna.split(band)
     character = None
     if "song_character" in extras:
         import song_character
-        character = song_character.choose(band.name, dice.label("character"))
+        character = song_character.choose(band.name, dice.label("character"), split="jpop_idol_split" in extras,
+                                          taste=extras.get("taste"))
         band = song_character.apply(band, character)
         log.info("Charakter: %s", character.describe())
+    if producer and producer.sound:
+        band = changed(band, programs={**band.programs, "bells": producer.sound})
+    if extras.get("blend"):
+        name, share = extras["blend"]
+        other = get_style(name)
+        if "style_arrangement" in extras:
+            other = changed(other, parts=style_dna.arranged(other.parts, other.name))
+        if "jpop_idol_split" in extras:
+            other = style_dna.split(other)
+        band, taken, moved = style_dna.blend(band, other, share, dice.label("blend"))
+        log.info("Stil-Mischung: %d %% %s, Instrumente %s, Groove in %s", round(share * 100), name, ", ".join(taken),
+                 ", ".join(moved) or "keiner Sektion")
     return band, character
 
 

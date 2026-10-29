@@ -102,8 +102,16 @@ def remember(settings, singer: str) -> None:
 
 
 def favorite(settings):
-    """Die Einstellungen mit der Lieblingsstimme des Stils, wenn eine gemerkt und installiert ist."""
+    """Die Einstellungen mit der Lieblingsstimme des Stils, wenn eine gemerkt und installiert ist; sonst (1.5.0) mit
+    der Lieblingsstimme aus dem Produzenten-Profil, sonst mit der Stimme, die im Verlauf die meisten Daumen hoch
+    bekam (geschmack.py)."""
     singer = settings.style_singers.get(settings.style) if settings.style_singer else None
+    if not singer and settings.producer_profile and settings.producer_singer:
+        singer = settings.producer_singer
+    if not singer and settings.taste_learning:
+        import geschmack
+        taste = geschmack.load(settings)
+        singer = taste.singer(settings.style) if taste else ""
     if not singer or singer == settings.singer:
         return settings
     if not os.path.isdir(os.path.join(settings.neutrino_dir(), "model", singer)):

@@ -93,6 +93,15 @@ PATTERNS = {
                  "Chorus": {"bass": ["driving", "octaves"], "piano": ["eighths", "stabs", "chords"],
                             "guitar": ["strummed", "cutting"]}},
 }
+# 1.5.0 (C1, style_dna.split): J-Pop Energy würfelt nur noch Rock-Grooves und Gitarren der Band, Idol-Pop
+# Synth-Bläser und Disco-Oktaven im Refrain
+SPLIT = {
+    "J-Pop Energy": {"programs": {"melody": [30, 29]}, "voices": {"melody": None},
+                     "grooves": {"Verse": ["rock_verse", "tom_verse"], "Chorus": ["rock_chorus", "two_beat"]},
+                     "patterns": {"Verse": {"guitar": ["riff", "palm_mute", "chill_riff"]},
+                                  "Chorus": {"guitar": ["power_chords"]}}},
+    "Idol-Pop": {"programs": {"brass": [62, 63]}, "patterns": {"Chorus": {"bass": ["octaves"]}}},
+}
 # Wie das Intro beginnt und wie der Song endet, mit Gewichten je Stil
 INTROS = ("full", "quiet", "drums", "hook")
 ENDINGS = ("ring", "stop", "fade")
@@ -111,7 +120,7 @@ SOUND_NAMES = {0: "Flügel", 1: "helles Klavier", 2: "E-Flügel", 4: "Rhodes", 5
                42: "Cello", 48: "Streicher", 49: "weiche Streicher", 56: "Trompete", 61: "Bläsersatz",
                62: "Synth-Bläser", 65: "Altsax", 66: "Tenorsax", 68: "Oboe", 71: "Klarinette", 73: "Flöte",
                81: "Saw-Lead", 89: "warme Fläche", 3: "Honky-Tonk-Klavier", 10: "Spieluhr", 46: "Harfe",
-               59: "gedämpfte Trompete", 77: "Shakuhachi", 106: "Shamisen", 107: "Koto", 108: "Kalimba"}
+               59: "gedämpfte Trompete", 63: "Synth-Bläser 2", 77: "Shakuhachi", 106: "Shamisen", 107: "Koto", 108: "Kalimba"}
 PART_NAMES = {"piano": "Klavier", "guitar": "Gitarre", "melody": "Lead", "bells": "Glocken", "counter": "Gegenstimme",
               "brass": "Bläser", "strings": "Streicher", "synth": "Synth", "bass": "Bass"}
 SECTION_NAMES = {"Verse": "Strophe", "Chorus": "Refrain"}
@@ -145,18 +154,32 @@ class Character:
         return ", ".join(bits)
 
 
-def choose(style: str, seed: str) -> Character:
-    """Der Charakter eines Songs in diesem Stil; derselbe Seed gibt denselben Charakter."""
+def choose(style: str, seed: str, split: bool = False, taste=None) -> Character:
+    """Der Charakter eines Songs in diesem Stil; derselbe Seed gibt denselben Charakter. split: J-Pop Energy und
+    Idol-Pop getrennt (SPLIT). taste: der Geschmack aus den Daumen im Verlauf (geschmack.Taste, 1.5.0); was dir
+    gefiel, kommt öfter."""
+    from geschmack import pick
     rng = random.Random(f"{seed}:{style}")
-    programs = {inst: rng.choice(pool) for inst, pool in sorted(PROGRAMS.get(style, {}).items())}
-    voices = {inst: {layer: rng.choice(pool) for layer, pool in sorted(layers.items())}
-              for inst, layers in sorted(VOICES.get(style, {}).items())}
-    grooves = {sec: rng.choice(pool) for sec, pool in sorted(GROOVES.get(style, {}).items())}
-    patterns = {sec: {inst: rng.choice(pool) for inst, pool in sorted(insts.items())}
+    own = SPLIT.get(style, {}) if split else {}
+    programs = {inst: pick(rng, pool, taste, lambda p, i=inst: ("program", i, p))
+                for inst, pool in sorted({**PROGRAMS.get(style, {}), **own.get("programs", {})}.items())}
+    voices = {inst: {layer: pick(rng, pool, taste, lambda v, i=inst, la=layer: ("voice", i, la, v))
+                     for layer, pool in sorted(layers.items())}
+              for inst, layers in sorted({**VOICES.get(style, {}), **own.get("voices", {})}.items()) if layers}
+    grooves = {sec: pick(rng, pool, taste, lambda g, s=sec: ("groove", s, g))
+               for sec, pool in sorted({**GROOVES.get(style, {}), **own.get("grooves", {})}.items())}
+    patterns = {sec: {inst: pick(rng, pool, taste, lambda p, s=sec, i=inst: ("pattern", s, i, p))
+                      for inst, pool in sorted({**insts, **own.get("patterns", {}).get(sec, {})}.items())}
                 for sec, insts in sorted(PATTERNS.get(style, {}).items())}
-    intro = rng.choices(INTROS, INTRO_WEIGHTS.get(style, DEFAULT_INTRO))[0]
-    ending = rng.choices(ENDINGS, ENDING_WEIGHTS.get(style, DEFAULT_ENDING))[0]
+    intro = rng.choices(INTROS, _tasted(INTRO_WEIGHTS.get(style, DEFAULT_INTRO), INTROS, "intro", taste))[0]
+    ending = rng.choices(ENDINGS, _tasted(ENDING_WEIGHTS.get(style, DEFAULT_ENDING), ENDINGS, "ending", taste))[0]
     return Character(programs, voices, grooves, patterns, intro, ending)
+
+
+def _tasted(weights: tuple, options: tuple, what: str, taste) -> tuple:
+    if not taste:
+        return weights
+    return tuple(w * taste.weight((what, option)) for w, option in zip(weights, options))
 
 
 def apply(profile, character: Character):

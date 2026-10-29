@@ -167,11 +167,18 @@ def singers(result) -> list:
     return []
 
 
+def producer(result) -> list:
+    """1.5.0: „Produziert von …“ aus dem Produzenten-Profil; leer ohne Namen."""
+    import produzent
+    found = produzent.name(result.settings)
+    return [f"Produziert von {found}"] if found else []
+
+
 def credits(result) -> list:
-    """Abspann des Musikvideos: Stimme und wer komponiert hat."""
+    """Abspann des Musikvideos: Stimme, wer produziert und wer komponiert hat."""
     sung = [line for line in singers(result) if not line.startswith("(")]
     sung = [line.split(" (bitte")[0] for line in sung]
-    return sung + ["Musik, Melodie und Arrangement: Vloid Songs"]
+    return sung + producer(result) + ["Musik, Melodie und Arrangement: Vloid Songs"]
 
 
 def chapters(result) -> list:
@@ -191,6 +198,7 @@ def description(result, title: str) -> str:
     if marks:
         lines += marks + [""]
     lines += singers(result)
+    lines += producer(result)
     lines += ["Musik, Melodie und Arrangement: komponiert mit Vloid Songs", ""]
     lines.append(f"Seed {result.seed}")
     return "\n".join(lines) + "\n"

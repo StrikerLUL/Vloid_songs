@@ -161,7 +161,8 @@ def _section_bars(kind: str, bars: int, progression: list, mode_class: str, next
 def build_plan(style: StyleProfile, bpm: float, structure: list, key: str, mode: str, section_config: dict,
                rng: random.Random, min_bars: Optional[dict] = None, custom_chords: Optional[dict] = None,
                rerolls: Optional[dict] = None, meter: str = "4/4", spice: float = 0.0, spice_seed: str = "",
-               own_chords: bool = False) -> SongPlan:
+               own_chords: bool = False, split: bool = False, turn: str = "", taste=None,
+               blend: tuple = ()) -> SongPlan:
     """
     Legt Tonart, Akkorde und Energie jeder Sektion fest. Gleiche Sektionsarten bekommen dieselbe
     Akkordfolge (der zweite Refrain klingt wie der erste). Der letzte Refrain kann einen oder zwei
@@ -174,31 +175,46 @@ def build_plan(style: StyleProfile, bpm: float, structure: list, key: str, mode:
     Akkord; die Zeiten bleiben in Kompositionsschlägen (meter.Meter.plan rechnet sie um).
     spice: Akkord-Würze 0 bis 1 (chord_spice.py) mit eigenem Zufall aus spice_seed; 0 = wie bis 1.2.
     own_chords: die eigenen Akkordfolgen und Kadenzen des Stils (1.4.0, style_dna.py); aus = wie bis 1.3.
+    split: J-Pop Energy als Anison-Band ohne Royal Road (1.5.0, style_dna.SPLIT_PROGRESSIONS), auch ohne own_chords.
+    turn: die Akkordwendung des Produzenten (produzent.turn): der Refrain spielt sie, mit der Kadenz des Stils.
+    taste: der Geschmack aus den Daumen für die Melodie (geschmack.Taste): beliebte Akkordfolgen kommen öfter.
+    blend: (zweiter Stil, Anteil, Seed) einer Stil-Mischung (1.5.0, style_dna.blend): so viele Akkordfolgen kommen
+    aus dem zweiten Stil.
     """
     import chord_spice
+    import geschmack
     import style_dna
     tonic = key_pc(key)
     mode_class = "minor" if is_minor(mode) else "major"
     min_bars = min_bars or {}
     custom = _own_chords(custom_chords or {})
+    split = split and style.name in style_dna.SPLIT_PROGRESSIONS
+    own_chords = own_chords or split
 
     # Intro, Outro und Drop spielen den Refrain an, der Build-up baut wie der Pre-Chorus auf
     chosen, progressions = {}, {}
     for kind in dict.fromkeys(structure):
         bank = SHARED_PROGRESSION.get(kind, kind)
         if bank not in chosen:
-            options = (own_chords and style_dna.progressions(style.name, mode_class, bank)) or \
-                progressions_for(style.name, mode_class, bank)
-            chosen[bank] = rng.choice(options)
+            source = style.name
+            if blend and random.Random(f"{blend[2]}:blend-chords:{bank}").random() < blend[1]:
+                source = blend[0]
+                log.info("Stil-Mischung: %s spielt Akkorde aus %s", bank, source)
+            options = (own_chords and style_dna.progressions(source, mode_class, bank, split)) or \
+                progressions_for(source, mode_class, bank)
+            chosen[bank] = geschmack.pick(rng, options, taste, lambda p, b=bank: ("chords", b, p))
             other = next((r for k, r in (rerolls or {}).items() if SHARED_PROGRESSION.get(k, k) == bank), None)
             if other is not None and len(options) > 1:
                 chosen[bank] = other.choice([p for p in options if p != chosen[bank]])
             if chord_spice.marusa(bank, mode_class, spice, random.Random(f"{spice_seed}:marusa")):
                 chosen[bank] = chord_spice.MARUSA
                 log.info("Akkord-Würze: der Refrain spielt die Marusa-Folge")
+            if bank == "Chorus" and turn:
+                chosen[bank] = turn
+                log.info("Produzent: der Refrain spielt deine Akkordwendung %s", turn)
         progressions[kind] = custom.get(kind, custom.get(SHARED_PROGRESSION.get(kind, kind), (chosen[bank],)))[0]
 
-    cadence = style_dna.cadences(style.name, mode_class) if own_chords else None
+    cadence = style_dna.cadences(style.name, mode_class, split) if own_chords else None
     if own_chords:
         log.info("Akkorde je Stil (%s): %s", style.name,
                  "; ".join(f"{kind} {chosen[SHARED_PROGRESSION.get(kind, kind)]}" for kind in dict.fromkeys(structure)

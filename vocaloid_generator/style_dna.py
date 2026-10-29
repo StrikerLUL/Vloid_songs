@@ -240,15 +240,40 @@ CADENCES = {
 }
 
 
-def progressions(style: str, mode_class: str, section: str) -> Optional[list]:
-    """Die eigenen Akkordfolgen des Stils für eine Sektion (Intro, Outro und Drop wie der Refrain), sonst None."""
-    bank = PROGRESSIONS.get(style, {}).get(mode_class, {})
+# 1.5.0 (C1): J-Pop Energy als Anison-Band ohne die „Royal Road“ IV–V–iii–vi, die bis 1.4 auch Idol-Pop spielte:
+# Komuro-Folge vi–IV–V–I, I–V–vi–IV, IV–V–vi und vor dem Refrain der Anlauf bVI–bVII
+SPLIT_PROGRESSIONS = {
+    "J-Pop Energy": {
+        "major": {
+            "Verse": ["vi | IV | V | I", "vi | V | IV | V", "I | V | vi | IV", "I | V/3 | vi | V"],
+            "PreChorus": ["IV | V | vi | vi", "ii | iii | IV | V", "IV | IV | V | V", "bVI | bVII | V | V"],
+            "Chorus": ["vi | IV | V | I", "I | V | vi | IV", "IV | V | vi | I", "vi | IV | V | V"],
+            "Bridge": ["vi | V | IV | V", "bVI | bVII | I | I", "ii | V | vi | vi"],
+        },
+        "minor": {
+            "Verse": ["i | bVI | bVII | i", "i | bVII | bVI | bVII", "i | i | bVI | bVII"],
+            "PreChorus": ["bVI | bVII | V | V", "iv | bVI | bVII | bVII"],
+            "Chorus": ["i | bVI | bIII | bVII", "bVI | bVII | i | i", "i | bVII | bVI | V", "i | bVI | bVII | i"],
+            "Bridge": ["bVI | bVII | V | V", "iv | bVI | bVII | bVII"],
+        },
+    },
+}
+SPLIT_CADENCES = {
+    "J-Pop Energy": {"major": {"to_chorus": "bVI bVII", "end": ("bVI bVII", "I")},
+                     "minor": {"to_chorus": "V", "end": ("bVI bVII", "i")}},
+}
+
+
+def progressions(style: str, mode_class: str, section: str, split: bool = False) -> Optional[list]:
+    """Die eigenen Akkordfolgen des Stils für eine Sektion (Intro, Outro und Drop wie der Refrain), sonst None.
+    split: J-Pop Energy als Anison-Band (SPLIT_PROGRESSIONS)."""
+    bank = ((split and SPLIT_PROGRESSIONS.get(style)) or PROGRESSIONS.get(style, {})).get(mode_class, {})
     return bank.get(section) or bank.get("Chorus" if section in ("Intro", "Outro", "Drop") else "Verse") or None
 
 
-def cadences(style: str, mode_class: str) -> Optional[dict]:
+def cadences(style: str, mode_class: str, split: bool = False) -> Optional[dict]:
     """Die eigene Kadenz des Stils ({"to_chorus", "end"}), sonst None."""
-    return CADENCES.get(style, {}).get(mode_class)
+    return ((split and SPLIT_CADENCES.get(style)) or CADENCES.get(style, {})).get(mode_class)
 
 
 # ── Melodie-Charakter ───────────────────────────────────────────────────────────
@@ -459,6 +484,91 @@ def arranged(parts: dict, style: str) -> dict:
         for inst, pattern in insts.items():
             target[inst] = pattern            # None nimmt es auch dann heraus, wenn „Verse:2“ es sonst ergänzt
     return out
+
+
+# ── J-Pop Energy und Idol-Pop getrennt (1.5.0, C1) ──────────────────────────────
+# Bis 1.4 lagen die beiden in der Messung am nächsten beieinander. Mit dem Schalter ist J-Pop Energy die Anison-Band:
+# Gitarrenriff in der Strophe, Powerchords in Intro, Refrain und Outro, die Hook auf der Lead-Gitarre, Rock-Grooves,
+# kein Klavier außer in der Bridge, keine Glitzer-Glocken und eigene Akkorde (SPLIT_PROGRESSIONS). Idol-Pop bleibt
+# Tanz-Pop mit Royal Road und Four-on-the-floor, jetzt mit Disco-Oktaven im Bass, Synth-Bläsern und Rufen wie aus
+# dem Publikum („Hai! Hai!“) vor dem Refrain.
+SPLIT_PARTS = {
+    "J-Pop Energy": {
+        "Intro": {"guitar": "power_chords", "piano": None, "bells": None},
+        "Verse": {"guitar": "riff", "piano": None},
+        "Verse:2": {"guitar": "riff"},
+        "PreChorus": {"guitar": "palm_mute", "piano": None, "choir": None},
+        "Chorus": {"guitar": "power_chords", "piano": None, "bells": None, "synth": "supersaw"},
+        "Outro": {"guitar": "power_chords", "piano": None, "bells": None},
+        "Bridge": {"guitar": "chill_riff"},
+    },
+    "Idol-Pop": {
+        "PreChorus": {"choir": "calls"},
+        "Chorus": {"bass": "octaves"},                  # Disco-Oktaven zum Four-on-the-floor
+        "Chorus:last": {"choir": "aahs+calls"},
+    },
+}
+SPLIT_GROOVES = {
+    "J-Pop Energy": {"Intro": "rock_chorus", "Verse": "rock_verse", "Chorus": "rock_chorus", "Outro": "rock_chorus"},
+}
+SPLIT_PROGRAMS = {"J-Pop Energy": {"melody": 30}, "Idol-Pop": {"brass": 62}}    # Lead-Gitarre, Synth-Bläser
+SPLIT_WITHOUT_VOICES = {"J-Pop Energy": ("melody",)}  # die Hook spielt die Gitarre, nicht der Synth-Lead
+
+
+def split(profile):
+    """Das StyleProfile mit der Trennung von J-Pop Energy und Idol-Pop; andere Stile bleiben, wie sie sind."""
+    from dataclasses import replace
+    name = profile.name
+    if name not in SPLIT_PARTS:
+        return profile
+    parts = {section: dict(p) for section, p in profile.parts.items()}
+    for section, insts in SPLIT_PARTS[name].items():
+        parts.setdefault(section, {}).update(insts)      # None nimmt ein Instrument heraus (StyleProfile.part)
+    voices = {inst: v for inst, v in profile.voices.items() if inst not in SPLIT_WITHOUT_VOICES.get(name, ())}
+    return replace(profile, parts=parts, grooves={**profile.grooves, **SPLIT_GROOVES.get(name, {})},
+                   programs={**profile.programs, **SPLIT_PROGRAMS.get(name, {})}, voices=voices)
+
+
+# ── Zwei Stile mischen (1.5.0, C4) ──────────────────────────────────────────────
+# Etwa 70 % Rock und 30 % Kawaii Chiptune: ein Teil der Instrumente spielt mit Klang und Spielweisen des zweiten
+# Stils, ein Teil der Sektionen mit seinem Groove, und ein Teil der Akkordfolgen kommt aus ihm (song_plan.build_plan).
+# Wie viele, entscheidet der Anteil; welche, der Seed des Songs. Gesang, Melodie und Klangbild bleiben beim ersten Stil.
+BLEND_PARTS = ("piano", "guitar", "strings", "synth", "brass", "bells", "choir", "counter", "melody", "bass", "perc")
+
+
+def blend(profile, other, share: float, seed: str):
+    """profile mit share Anteil von other (beides StyleProfile). Rückgabe: (StyleProfile, [Instrumente aus other],
+    [Sektionen mit dem Groove von other])."""
+    import random
+    from dataclasses import replace
+    rng = random.Random(f"{seed}:blend:{other.name}")
+    # Kandidaten: was der zweite Stil im Refrain spielt; mindestens ein Instrument kommt immer aus ihm
+    played = [inst for inst in BLEND_PARTS if other.parts.get("Chorus", {}).get(inst)]
+    count = max(1, round(share * len(BLEND_PARTS)))
+    taken = sorted(rng.sample(played, min(count, len(played))), key=BLEND_PARTS.index)
+    parts = {section: dict(p) for section, p in profile.parts.items()}
+    for section in set(parts) | set(other.parts):
+        target = parts.setdefault(section, {} if ":" in section or section == "breakdown"
+                                  else dict(profile.parts.get("Verse", {})))
+        theirs = other.parts.get(section)
+        if theirs is None and ":" not in section and section != "breakdown":
+            theirs = other.parts.get("Verse", {})          # eine Sektion ohne eigene Besetzung spielt wie die Strophe
+        for inst in taken:
+            if theirs is not None and inst in theirs:
+                target[inst] = theirs[inst]
+            elif ":" in section:
+                target.pop(inst, None)                     # die Ergänzung des ersten Stils gilt nicht mehr
+            else:
+                target[inst] = None
+    programs = {**profile.programs, **{inst: other.programs[inst] for inst in taken if inst in other.programs}}
+    voices = {inst: v for inst, v in profile.voices.items() if inst not in taken}
+    voices.update({inst: dict(other.voices[inst]) for inst in taken if inst in other.voices})
+    grooves = dict(profile.grooves)
+    moved = [section for section in sorted(set(profile.grooves) | set(other.grooves))
+             if other.grooves.get(section) and rng.random() < share]
+    for section in moved:
+        grooves[section] = other.grooves[section]
+    return replace(profile, parts=parts, programs=programs, voices=voices, grooves=grooves), taken, moved
 
 
 # ── Klangbild ───────────────────────────────────────────────────────────────────

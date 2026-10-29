@@ -305,6 +305,20 @@ def guitar(pattern: str, sec: Section, plan: SongPlan, rng: random.Random, ctx: 
                 t = bar_start + off
                 shape = _guitar_shape(_chord_for(sec, t))
                 out += [Ev(t + k * strum_gap, length, p, _vel(sec, 0.8 * accent)) for k, p in enumerate(shape[:3])]
+    elif pattern == "riff":
+        # 1.5.0: Anison-Riff: abgedämpfte Achtel auf dem Grundton, im vierten Schlag ein Lauf über die Akkordtöne
+        # (jeder zweite Takt höher)
+        licks = ([1, 2, 3, 2], [2, 3, 4, 5])
+        for b, bar_start in _bars(sec):
+            for k in range(6):
+                t = bar_start + k * 0.5
+                shape = _guitar_shape(_chord_for(sec, t))
+                out.append(Ev(t, 0.3, shape[0], _vel(sec, 0.8 if k % 2 == 0 else 0.66)))
+                if k in (0, 4):
+                    out.append(Ev(t, 0.3, shape[1], _vel(sec, 0.72)))
+            for k, idx in enumerate(licks[b % 2]):
+                t = bar_start + 3.0 + k * 0.25
+                out.append(Ev(t, 0.24, _guitar_shape(_chord_for(sec, t))[idx], _vel(sec, 0.74 if k else 0.82)))
     elif pattern == "chill_riff":
         order = [0, 2, 1, 3, 2, 4, 3, 5]
         for _, bar_start in _bars(sec):
@@ -548,6 +562,16 @@ def choir(pattern: str, sec: Section, plan: SongPlan, rng: random.Random, ctx: d
         for slot in sec.chords:
             v = _voicing(ctx, "choir", slot.chord, 57, 76, 4, ext=False)
             out += [Ev(slot.start, slot.dur, p, _vel(sec, accent), layer=layer) for p in v]
+    elif pattern == "calls":
+        # 1.5.0: Rufe wie aus dem Publikum („Hai! Hai!“) auf zwei und vier, in den letzten zwei Takten auf jedem
+        # Schlag; kurz und einstimmig auf dem Grundton mit Oktave
+        bars = list(_bars(sec))
+        for b, bar_start in bars:
+            beats = (0, 1, 2, 3) if b >= len(bars) - 2 else (1, 3)
+            for beat in beats:
+                t = bar_start + beat
+                root = pitches_in_range([_chord_for(sec, t).root], 57, 68)[0]
+                out += [Ev(t, 0.22, p, _vel(sec, 0.78)) for p in (root, root + 12)]
     return out
 
 

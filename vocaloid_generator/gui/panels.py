@@ -48,6 +48,16 @@ def song_panel(s: SongSettings, pick: PickFn, apply_template: Callable[[SongSett
         ui.select(labels.METERS, label="Takt").bind_value(s, "meter").mark("meter") \
             .tooltip("3/4: Bum-Tschak-Tschak wie ein Walzer. 6/8: wiegend, das Tempo zählt dann die punktierten Viertel "
                      "(zwei pro Takt, eine Ballade hat etwa 50 bis 70). 4/4 = wie bisher.")
+    # 1.5.0 (C4): ein zweiter Stil mit Anteil
+    with ui.row().classes("w-full items-center no-wrap gap-4"):
+        ui.switch("Mischen mit").bind_value(s, "style_blend").props("dense").mark("switch-style_blend") \
+            .tooltip("Ein Teil der Instrumente spielt mit Klang und Spielweise des zweiten Stils, ein Teil der "
+                     "Sektionen mit seinem Groove, ein Teil der Akkordfolgen kommt aus ihm, z. B. Rock mit 30 % "
+                     "Kawaii Chiptune. Gesang, Melodie und Klangbild bleiben beim ersten Stil")
+        ui.select({"": "keinem zweiten Stil", **{n: n for n in STYLES}}).bind_value(s, "blend_style") \
+            .props("dense").classes("col").mark("blend-style")
+        ui.slider(min=0.1, max=0.5, step=0.05).bind_value(s, "blend_share").props("label dense") \
+            .classes("w-32").mark("blend-share").tooltip("Anteil des zweiten Stils")
     with ui.row().classes("w-full items-center gap-4"):
         ui.label("Swing").classes("w-24")
         ui.slider(min=0, max=0.5, step=0.01).bind_value(s, "swing").props("label").classes("col")
@@ -174,6 +184,15 @@ BAND_SWITCHES = (
     ("chorus_lift", "Refrains steigern sich", "Der erste Refrain ist schlanker (Antwort-Melodie und Glocken erst ab "
                                               "der Hälfte, keine Oktav-Schicht), der letzte spielt mit allem: Oktave "
                                               "über den ganzen Refrain und ein Becken alle vier Takte"),
+    ("jpop_idol_split", "J-Pop und Idol getrennt", "J-Pop Energy wird zur Anison-Band: Gitarrenriff in der Strophe, "
+                                                   "Powerchords im Refrain, Rock-Grooves und Akkorde ohne die "
+                                                   "„Royal Road“ (vi–IV–V–I, bVI–bVII vor dem Refrain). Idol-Pop "
+                                                   "bleibt Tanz-Pop mit Royal Road, jetzt mit Synth-Bläsern und Rufen "
+                                                   "wie aus dem Publikum vor dem Refrain"),
+    ("taste_learning", "Geschmack lernen", "Gib Songs im Verlauf Daumen für Klang, Melodie, Stimme und Groove: die "
+                                           "App würfelt Klänge, Grooves, Spielweisen und Akkordfolgen danach öfter, "
+                                           "was dir gefiel, und seltener, was nicht. Ist für einen Stil keine "
+                                           "Stimme gemerkt, singt die mit den meisten Daumen hoch"),
 )
 
 # Melodie 1.3.0 und 1.4.0, jede Neuerung mit Schalter
@@ -724,8 +743,31 @@ def band_panel(s: SongSettings) -> None:
                  "Schlussakkord klingt länger aus. Nur im Stil Ballade und wenn der Song mit einem Outro endet")
     hint("Echtes Schlagzeug und Grooves echter Schlagzeuger schaltest du unter Pfade ein oder aus, sobald sie "
          "eingerichtet sind.")
+    producer_editor(s)
     section_title("Klänge aus dem VST-Instrument")
     vst_editor(s)
+
+
+def producer_editor(s: SongSettings) -> None:
+    """1.5.0 (C2): das Produzenten-Profil, das über alle Songs gleich bleibt."""
+    import produzent
+    section_title("Dein Produzentenstil")
+    ui.switch("Produzenten-Profil").bind_value(s, "producer_profile").mark("switch-producer_profile") \
+        .tooltip("Name, Producer-Tag, Erkennungsklang, Akkordwendung und Lieblingsstimme gelten für jeden Song, "
+                 "auch im Album über Nacht. Ohne Namen und Auswahl ändert sich nichts")
+    ui.input("Dein Produzentenname").bind_value(s, "producer_name").props("dense clearable").classes("w-full") \
+        .mark("producer-name")
+    hint("Steht im Abspann des Videos, in der YouTube-Beschreibung und als Künstler der MP3 („Name feat. MERROW“).")
+    ui.switch("Producer-Tag am Anfang").bind_value(s, "producer_tag").props("dense").mark("switch-producer_tag") \
+        .tooltip("Vier Töne aus deinem Namen am Anfang jedes Songs, im Erkennungsklang: in jedem Song dieselbe "
+                 "Melodie, nur in dessen Tonart. Nur mit Namen")
+    ui.select({"": "aus dem Namen", **{n: n for n in produzent.SOUNDS}}, label="Erkennungsklang") \
+        .bind_value(s, "producer_sound").classes("w-full").mark("producer-sound") \
+        .tooltip("Klang des Tags und der Glocken in jedem Song")
+    ui.select({"": "keine", **{n: n for n in produzent.TURNS}}, label="Typische Akkordwendung im Refrain") \
+        .bind_value(s, "producer_turn").classes("w-full").mark("producer-turn") \
+        .tooltip("Der Refrain spielt sie in zwei von drei Songs, mit dem Schluss des Stils")
+    hint("Die Lieblingsstimme für alle Stile wählst du im Tab Gesang.")
 
 
 def vst_editor(s: SongSettings) -> None:
@@ -875,6 +917,10 @@ def voice_panel(s: SongSettings, singers: list, pick: PickFn | None = None) -> t
     ui.switch("Zweite Stimme im Refrain").bind_value(s, "harmonies")
     ui.switch("Lieblingsstimme je Stil").bind_value(s, "style_singer").props("dense").mark("switch-style_singer") \
         .tooltip("Beim Wechsel des Stils wählt die App die Stimme, die du im Stimmen-Casting für ihn gemerkt hast")
+    ui.select({"": "keine", **{n: n for n in sorted(set(singers) | ({s.producer_singer} - {""}))}},
+              label="Lieblingsstimme für alle Stile (Produzenten-Profil)").bind_value(s, "producer_singer") \
+        .classes("w-full").mark("producer-singer") \
+        .tooltip("Beim Wechsel des Stils singt sie, wenn für den Stil keine eigene Stimme gemerkt ist")
     with ui.row().classes("w-full items-center gap-4"):
         ui.label("StyleShift").classes("w-28")
         ui.slider(min=-6, max=6, step=1).bind_value(s, "style_shift").props("label markers").classes("col")

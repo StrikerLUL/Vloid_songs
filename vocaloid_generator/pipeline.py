@@ -47,7 +47,8 @@ NEW_COMPOSITION = ("best_melody", "melody_pickups", "intro_riff", "kime", "melod
 # Neuerungen aus 1.4.0, die die Noten ändern (Charakter je Stil und Song)
 NEW_140 = ("style_chords", "melody_character", "style_arrangement", "song_character")
 # Neuerungen aus 1.5.0, die die Noten ändern (wichtige Wörter, Ohrwurm, Refrain-Steigerung)
-NEW_150 = ("key_words", "catchy_chorus", "chorus_lift")
+NEW_150 = ("key_words", "catchy_chorus", "chorus_lift", "jpop_idol_split", "producer_profile", "taste_learning",
+           "style_blend")
 COMPOSITION_EXTRAS = NEW_COMPOSITION + NEW_140 + NEW_150     # die Tests schalten sie hier ab (conftest.py)
 
 
@@ -97,8 +98,42 @@ def sung_lyrics(settings: SongSettings) -> dict:
 
 
 def composition_extras(settings: SongSettings) -> dict:
-    """{Schalter: Wert} der eingeschalteten Neuerungen aus 1.3.0 und 1.4.0, die die Noten ändern (0 und aus fehlen)."""
-    return {name: getattr(settings, name) for name in COMPOSITION_EXTRAS if getattr(settings, name)}
+    """{Schalter: Wert} der eingeschalteten Neuerungen ab 1.3.0, die die Noten ändern (0 und aus fehlen); dazu
+    "producer": das Produzenten-Profil (produzent.Profile), wenn eins gilt."""
+    extras = {name: getattr(settings, name) for name in COMPOSITION_EXTRAS if getattr(settings, name)}
+    if extras.pop("producer_profile", False):
+        import produzent
+        found = produzent.profile(settings)
+        if found:
+            extras["producer"] = found
+    from styles import STYLES
+    if extras.pop("style_blend", False) and settings.blend_style in STYLES and settings.blend_style != settings.style:
+        extras["blend"] = (settings.blend_style, settings.blend_share)
+    if extras.pop("taste_learning", False) and settings.taste_snapshot:
+        import geschmack
+        extras["taste"] = geschmack.from_snapshot(settings.taste_snapshot)
+    return extras
+
+
+def with_taste(settings: SongSettings, seed: Optional[int] = None) -> SongSettings:
+    """C3 (1.5.0): ein neuer Song (ohne Seed) merkt sich den Geschmack aus dem Verlauf, mit dem er entsteht; ein Song
+    mit Seed behält seinen, damit derselbe Seed derselbe Song bleibt, auch wenn neue Daumen dazukommen."""
+    if settings.seed is not None or seed is not None or not settings.taste_learning:
+        return settings
+    import geschmack
+    return settings.with_updates(taste_snapshot=geschmack.snapshot(settings))
+
+
+def song_character(tracks: dict) -> dict:
+    """Was der Song gewürfelt hat (Charakter und Akkordfolgen), für die Daumen im Verlauf (geschmack.py)."""
+    from dataclasses import asdict
+    character = tracks.get("character")
+    out = asdict(character) if character is not None else {}
+    plan = tracks.get("plan")
+    if plan is not None:
+        out["chords"] = {kind: p for kind, p in plan.progressions.items()
+                         if kind in ("Verse", "PreChorus", "Chorus", "Bridge")}
+    return out
 
 
 def compose(settings: SongSettings, seed: Optional[int] = None):
@@ -236,6 +271,7 @@ def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None,
     os.makedirs(out, exist_ok=True)
 
     report(0.05, "Komponiere Song...")
+    settings = with_taste(settings, seed)
     tracks, seed = compose(settings, seed)
     log.info("Seed: %d (mit diesem Seed entsteht derselbe Song noch einmal)", seed)
     settings = settings.with_updates(seed=seed)
@@ -307,7 +343,8 @@ def _produce(settings: SongSettings, tracks: dict, out: str, report: ProgressFn,
 
     if keep_history:
         import history
-        entry = history.record(result.audio, settings, out, keep=settings.history_keep)
+        entry = history.record(result.audio, settings, out, keep=settings.history_keep,
+                               character=song_character(tracks))
         result.history = entry.audio if entry else None
         if entry and settings.keep_projects:
             import project

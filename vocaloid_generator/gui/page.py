@@ -15,6 +15,7 @@ import album
 import cancel
 import casting
 import einrichten
+import geschmack
 import history
 import laufzeit
 import meter
@@ -352,7 +353,8 @@ def build() -> None:
             if result is None:
                 ui.notify("Erst einen Song erzeugen, dann einzelne Teile neu würfeln.", type="warning")
                 return
-            current = current.with_updates(seed=result.seed, variations=result.settings.variations)
+            current = current.with_updates(seed=result.seed, variations=result.settings.variations,
+                                           taste_snapshot=result.settings.taste_snapshot)
         elif current.seed is None:
             current = current.with_updates(variations={}, melody_edits={}, melody_lengths={}, phrase_fixes={},
                                            remix_from="", remix_bpm=0)
@@ -474,7 +476,8 @@ def build() -> None:
         current = settings.model_copy(deep=True)
         result = state["result"]
         if result is not None:
-            current = current.with_updates(seed=result.seed, variations=result.settings.variations)
+            current = current.with_updates(seed=result.seed, variations=result.settings.variations,
+                                           taste_snapshot=result.settings.taste_snapshot)
         job.start()
         set_busy(True)
         try:
@@ -527,7 +530,8 @@ def build() -> None:
         current = settings.model_copy(deep=True)
         result = state["result"]
         if result is not None:
-            current = current.with_updates(seed=result.seed, variations=result.settings.variations)
+            current = current.with_updates(seed=result.seed, variations=result.settings.variations,
+                                           taste_snapshot=result.settings.taste_snapshot)
         job.start()
         set_busy(True)
         try:
@@ -853,6 +857,7 @@ def build() -> None:
             return
         settings.seed = result.seed
         settings.variations = result.settings.variations
+        settings.taste_snapshot = result.settings.taste_snapshot      # derselbe Song: mit demselben Geschmack
         ui.notify(f"Seed {result.seed} festgehalten: „Song erzeugen“ macht jetzt diesen Song mit deinen Änderungen")
 
     async def export_zip() -> None:
@@ -961,7 +966,8 @@ def build() -> None:
                 return
             kept = f"Die {settings.history_keep} neuesten Songs bleiben" if settings.history_keep else "Alle Songs bleiben"
             panels.hint(f"{kept}; mit Stern markierte, benannte und Album-Songs immer. "
-                        "✎ gibt einem Song Namen und Notiz, ↺ übernimmt die Einstellungen samt Seed.")
+                        "✎ gibt einem Song Namen und Notiz, ↺ übernimmt die Einstellungen samt Seed, mit dem Daumen "
+                        "lernt die App, welcher Klang, welche Melodie, Stimme und welcher Groove dir gefallen.")
             if not entries:
                 ui.label("Nichts gefunden.").classes("text-grey-5").mark("library-empty")
                 return
@@ -992,6 +998,7 @@ def build() -> None:
                         ui.button(icon="star" if entry.favorite else "star_border",
                                   on_click=lambda _, e=entry: favorite(e)).props("flat round dense color=amber") \
                             .mark("history-favorite")
+                        thumbs_menu(entry, nr)
                         ui.button(icon="settings_backup_restore", on_click=lambda _, e=entry: restore(e)) \
                             .props("flat round dense").tooltip("Einstellungen dieses Songs übernehmen") \
                             .mark("history-restore")
@@ -1006,6 +1013,46 @@ def build() -> None:
     def favorite(entry) -> None:
         history.set_favorite(entry, not entry.favorite)
         show_history()
+
+    def thumbs_menu(entry, nr: int) -> None:
+        """1.5.0 (C3): Daumen für Klang, Melodie, Stimme und Groove; die Würfel lernen daraus (geschmack.py). Das Menü
+        bleibt offen, bis alle Daumen gesetzt sind."""
+        buttons = {}
+
+        def look() -> tuple:
+            thumbs = entry.thumbs or {}
+            up, down = sum(v > 0 for v in thumbs.values()), sum(v < 0 for v in thumbs.values())
+            if up and up >= down:
+                return "thumb_up", "green"
+            return ("thumb_down", "red") if down else ("thumbs_up_down", "grey")
+
+        def paint() -> None:
+            icon, color = look()
+            main.props(f"icon={icon} color={color}")
+            for aspect, (up, down) in buttons.items():
+                vote = (entry.thumbs or {}).get(aspect, 0)
+                up.props("color=" + ("green" if vote > 0 else "grey"))
+                down.props("color=" + ("red" if vote < 0 else "grey"))
+
+        def thumb(aspect: str, direction: int) -> None:
+            vote = (entry.thumbs or {}).get(aspect, 0)
+            history.set_thumb(entry, aspect, 0 if vote == direction else direction)
+            paint()
+
+        icon, color = look()
+        with ui.button(icon=icon).props(f"flat round dense color={color}").mark(f"history-thumbs-{nr}") \
+                .tooltip("Daumen für Klang, Melodie, Stimme und Groove") as main:
+            with ui.menu().props("auto-close=false"), ui.column().classes("q-pa-sm gap-1"):
+                panels.hint("Was dir gefällt, würfelt die App öfter, was nicht, seltener.")
+                for aspect, text in geschmack.ASPECTS.items():
+                    with ui.row().classes("items-center no-wrap gap-1"):
+                        ui.label(text).classes("w-20")
+                        buttons[aspect] = (
+                            ui.button(icon="thumb_up", on_click=lambda _, a=aspect: thumb(a, 1))
+                            .props("flat round dense").mark(f"thumb-up-{aspect}-{nr}"),
+                            ui.button(icon="thumb_down", on_click=lambda _, a=aspect: thumb(a, -1))
+                            .props("flat round dense").mark(f"thumb-down-{aspect}-{nr}"))
+        paint()
 
     def restore(entry) -> None:
         assign(settings, entry.restore(settings))
@@ -1116,7 +1163,8 @@ def build() -> None:
 
 def describe(s: SongSettings) -> str:
     rerolled = ", ".join(f"{_part_name(p)} {n}×" for p, n in sorted(s.variations.items()))
-    return (f"{s.style} · {s.bpm} BPM · {s.key} {labels.SCALES.get(s.scale, s.scale)} · Seed {s.seed}"
+    blended = f" + {round(s.blend_share * 100)} % {s.blend_style}" if s.style_blend and s.blend_style else ""
+    return (f"{s.style}{blended} · {s.bpm} BPM · {s.key} {labels.SCALES.get(s.scale, s.scale)} · Seed {s.seed}"
             + (f" · neu gewürfelt: {rerolled}" if rerolled else "")
             + (f" · {_edits(s)}" if _edited(s) else ""))
 

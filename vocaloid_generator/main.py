@@ -7,6 +7,7 @@ import sys
 
 import applog
 import history
+import produzent
 import rezepte
 import userdata
 from pipeline import (best, draft_settings, from_references, generate_song, generate_variants, hook_choices, remix,
@@ -73,6 +74,12 @@ OFF_150 = (
     ("key_words", "--ohne-schluesselwoerter", "Kernwort und Gefühlswörter zählen bei der besten Melodie nicht"),
     ("catchy_chorus", "--ohne-ohrwurm", "keine Ohrwurm-Wertung des Refrains bei der besten Melodie"),
     ("chorus_lift", "--ohne-refrain-steigerung", "alle Refrains gleich voll wie bis 1.4"),
+    ("jpop_idol_split", "--ohne-jpop-idol-trennung", "J-Pop Energy spielt wieder die Royal Road wie Idol-Pop"),
+    ("producer_profile", "--ohne-produzent", "kein Produzenten-Profil: kein Tag, kein Erkennungsklang, keine "
+                                             "Akkordwendung, kein Name im Abspann"),
+    ("producer_tag", "--ohne-producer-tag", "kein Producer-Tag am Anfang des Songs"),
+    ("taste_learning", "--ohne-geschmack", "die Daumen im Verlauf lenken die Würfel nicht"),
+    ("style_blend", "--ohne-stil-mischung", "kein zweiter Stil, auch wenn einer gewählt ist"),
     ("text_expression", "--ohne-text-ausdruck", "Zeilen mit Gefühlswörtern nicht leiser oder kräftiger singen"),
     ("note_swells", "--ohne-schwellen", "gehaltene Töne nicht anschwellen lassen"),
     ("living_double", "--ohne-lebendige-doppelung", "die Doppelung im Refrain mit festem Abstand wie bis 1.4"),
@@ -134,6 +141,14 @@ def parse_args(argv=None):
     p.add_argument("--support-stimme", metavar="NAME", help="NEUTRINO-Stimme, die als Support-Modell die Hauptstimme "
                    "färbt (Versuch, braucht Run_support_model.bat; '' = aus)")
     p.add_argument("--engine", choices=["NEUTRINO", "VOICEVOX", "DiffSinger", "Vorschau"], help="wer singt")
+    p.add_argument("--mische", metavar="STIL", choices=list(STYLES) + [""],
+                   help="zweiter Stil für eine Mischung, z. B. 'Kawaii Chiptune' ('' = keine)")
+    p.add_argument("--mischanteil", type=float, metavar="ANTEIL", help="Anteil des zweiten Stils, 0.1 bis 0.5 "
+                   "(Standard 0.3)")
+    p.add_argument("--produzent", metavar="NAME", help="dein Produzentenname (Abspann, MP3, Producer-Tag; '' = keiner)")
+    p.add_argument("--erkennungsklang", choices=list(produzent.SOUNDS), help="Klang des Tags und der Glocken")
+    p.add_argument("--akkordwendung", choices=list(produzent.TURNS), metavar="WENDUNG",
+                   help="deine typische Akkordwendung im Refrain: " + "; ".join(produzent.TURNS))
     p.add_argument("--diffsinger-stimme", metavar="ORDNER", help="DiffSinger-Stimme für OpenUtau: ihr Ordner oder Name "
                    "(Versuch; leer = die erste gefundene)")
     p.add_argument("--voicevox-stimme", type=int, metavar="ID", help="VOICEVOX-Singstimme (Stil-ID)")
@@ -380,6 +395,8 @@ def main(argv=None) -> int:
                  "meter": args.takt,
                  "singer": args.stimme, "duet_singer": args.duett, "support_singer": args.support_stimme, "master_lufs": args.lautheit,
                  "vocal_engine": args.engine, "voicevox_singer": args.voicevox_stimme,
+                 "producer_name": args.produzent, "producer_sound": args.erkennungsklang,
+                 "producer_turn": args.akkordwendung, "blend_style": args.mische, "blend_share": args.mischanteil,
                  "voicevox_dynamics": False if args.ohne_voicevox_dynamik else None,
                  "rap_speaker": args.rap_stimme, "rap_voice": False if args.ohne_rap_stimme else None,
                  "spoken_sound": args.sprechen_klang, "group_vocals": args.gruppe,

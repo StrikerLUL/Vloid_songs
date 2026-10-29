@@ -237,6 +237,21 @@ async def test_library_names_finds_and_deletes_songs(user, tmp_path):
     assert [e.settings.seed for e in history.entries(out)] == [11]
 
 
+async def test_thumbs_in_the_library_are_saved(user, tmp_path):
+    out = str(tmp_path / "out")
+    history.record(write_song(str(tmp_path / "a"), 11).mix_wav, SongSettings(style="Rock", seed=11), out)
+    await user.open("/")
+    user.find(marker="tab-Verlauf").click()
+    await until(lambda: len(user.find(marker="history-play").elements) == 1)
+    user.find(marker="history-thumbs-1").click()
+    user.find(marker="thumb-up-klang-1").click()
+    await until(lambda: history.entries(out)[0].thumbs == {"klang": 1})
+    user.find(marker="thumb-down-groove-1").click()
+    await until(lambda: history.entries(out)[0].thumbs == {"klang": 1, "groove": -1})
+    user.find(marker="thumb-up-klang-1").click()               # noch einmal: der Daumen geht weg
+    await until(lambda: history.entries(out)[0].thumbs == {"groove": -1})
+
+
 async def test_album_overnight_from_the_app(user, fake_generation, tmp_path):
     await user.open("/")
     user.find(marker="album").click()

@@ -30,10 +30,13 @@ def key_name(key: str, scale: str) -> str:
 
 
 def artist(settings) -> str:
-    """Wer singt: die NEUTRINO-Stimme (mit Duett beide), sonst die App."""
+    """Wer singt: die NEUTRINO-Stimme (mit Duett beide), sonst die App; mit Produzentenname (1.5.0) steht der vorn
+    („Name feat. MERROW“)."""
+    import produzent
+    by = produzent.name(settings) or APP
     if settings is None or not settings.channels["vocals"].enabled or settings.vocal_engine != "NEUTRINO":
-        return APP
-    return f"{APP} feat. " + " & ".join(x for x in (settings.singer, settings.duet_singer) if x)
+        return by
+    return f"{by} feat. " + " & ".join(x for x in (settings.singer, settings.duet_singer) if x)
 
 
 def write(mp3: str, result, title: str = "", version: str = "", cover: Optional[str] = None) -> Optional[str]:
@@ -47,6 +50,7 @@ def write(mp3: str, result, title: str = "", version: str = "", cover: Optional[
     except ImportError:
         log.warning("mutagen fehlt, die MP3 bekommt keine Tags")
         return None
+    import produzent
     import youtube
     from version import VERSION
     s = result.settings
@@ -58,7 +62,7 @@ def write(mp3: str, result, title: str = "", version: str = "", cover: Optional[
             tags = ID3()
         tags.delall("APIC")
         tags.add(TIT2(encoding=3, text=f"{name} ({version})" if version else name))
-        tags.add(TPE1(encoding=3, text=artist(s) if version != "Off Vocal" else APP))
+        tags.add(TPE1(encoding=3, text=artist(s) if version != "Off Vocal" else produzent.name(s) or APP))
         tags.add(TSSE(encoding=3, text=f"{APP} {VERSION}"))
         tags.add(COMM(encoding=3, lang="deu", desc="", text=f"Seed {result.seed}, komponiert mit {APP}"))
         if s is not None:

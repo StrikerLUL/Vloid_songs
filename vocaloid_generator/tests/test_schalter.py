@@ -127,6 +127,11 @@ ELSEWHERE = {
     "note_swells": "test_stimme_150.py::test_text_expression_and_swells_shape_the_sung_track_only_with_their_switches",
     "living_double": "test_stimme_150.py::test_the_living_double_wanders_like_a_second_take",
     "hearing_check": "test_stimme_150.py::test_the_hearing_check_runs_after_singing_only_with_its_switch",
+    "jpop_idol_split": "test_charakter_150.py::test_jpop_and_idol_go_separate_ways",
+    "producer_profile": "test_charakter_150.py::test_the_producer_profile_signs_every_song",
+    "producer_tag": "test_charakter_150.py::test_the_producer_profile_signs_every_song",
+    "taste_learning": "test_charakter_150.py::test_thumbs_in_the_history_teach_the_dice",
+    "style_blend": "test_charakter_150.py::test_two_styles_blend_with_a_share",
 }
 # Bedienung der App, ändert den Song nicht
 APP = ("show_karaoke", "reuse_steps", "log_file", "update_check", "setup_wizard", "done_notice", "lyric_hints",
@@ -168,7 +173,8 @@ def test_every_switch_is_read_by_the_program():
 def test_settings_the_voice_hears_are_in_the_vocal_fingerprint():
     # Ein Gesangs-Schalter, der im Fingerabdruck fehlt, wirkt erst, wenn sich sonst etwas ändert: bis dahin kommt der
     # alte Gesang wieder (singing._vocal_key). Nur Schalter, die nicht den Klang ändern, dürfen fehlen.
-    not_sound = {"reuse_steps", "channels", "swing", "style_singer", "style_singers"}   # swing: _swing_amount
+    not_sound = {"reuse_steps", "channels", "swing", "style_singer", "style_singers",   # swing: _swing_amount
+                 "producer_profile", "producer_singer", "taste_learning"}   # wählen nur die Stimme (casting.favorite)
     fields = set(SongSettings.model_fields)
     used = set()
     for name in singing.VOCAL_CODE + ("casting.py", "own_vocal.py", "style_fx.py"):

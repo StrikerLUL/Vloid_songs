@@ -265,6 +265,22 @@ class SongSettings(BaseModel):
     key_words: bool = True             # S2: Kernwort des Refrains hoch oder lang, Gefühlswörter lang (Beste Melodie)
     catchy_chorus: bool = True         # S3: Ohrwurm-Wertung des Refrains bei „Beste Melodie suchen“
     chorus_lift: bool = True           # S5: erster Refrain schlanker, letzter mit allem
+    # Charakter 1.5.0, jedes mit Schalter
+    jpop_idol_split: bool = True       # C1: J-Pop Energy als Anison-Band ohne Royal Road, Idol-Pop mit Rufen
+    # C2: Produzenten-Profil (produzent.py), gilt für alle Songs; ohne Namen und Auswahl ändert sich nichts
+    producer_profile: bool = True
+    producer_name: str = ""            # Abspann, YouTube-Beschreibung, MP3-Künstler, Tag
+    producer_tag: bool = True          # vier Töne aus dem Namen am Anfang jedes Songs
+    producer_sound: str = ""           # Erkennungsklang (produzent.SOUNDS); leer = aus dem Namen
+    producer_turn: str = ""            # typische Akkordwendung im Refrain (produzent.TURNS); leer = keine
+    producer_singer: str = ""          # Lieblingsstimme für alle Stile ohne eigene gemerkte Stimme
+    taste_learning: bool = True        # C3: Daumen im Verlauf lenken die Würfel (geschmack.py)
+    # der Geschmack, mit dem der Song entstand ([[Schlüssel], Daumen]), damit derselbe Seed derselbe Song bleibt
+    taste_snapshot: list = Field(default_factory=list)
+    # C4: zwei Stile mischen (style_dna.blend); ohne zweiten Stil ändert sich nichts
+    style_blend: bool = True
+    blend_style: str = ""              # der zweite Stil
+    blend_share: float = Field(0.3, ge=0.1, le=0.5)   # sein Anteil an Instrumenten, Grooves und Akkorden
     vst_path: str = ""
     vst_sounds: dict[str, str] = Field(default_factory=dict)   # Spur → gespeicherter Klang des VST-Instruments
     sound_library: bool = True         # bessere Klänge aus tools/soundfonts (setup_soundfonts.py), wenn vorhanden

@@ -171,7 +171,7 @@ def test_the_neutrino_version_is_found_and_old_ones_are_flagged(tmp_path):
 async def user(tmp_path):
     from gui import page
     SongSettings(output_ordner=str(tmp_path / "out"), seed=None, setup_wizard=False, update_check=False,
-                 style="Rock").save()
+                 style="Rock", simple_view=False).save()
     async with user_simulation(root=page.build) as user:
         yield user
 

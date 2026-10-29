@@ -247,7 +247,7 @@ BAR_CHOICES = (2, 4, 8, 12, 16, 24, 32)
 def sliders(s: SongSettings, rows: tuple) -> None:
     """Regler der Neuerungen aus 1.3.0 (0 = aus, 1 = 100 %)."""
     for attr, text, lo, hi, step, tip in rows:
-        with ui.row().classes("w-full items-center gap-4"):
+        with ui.row().classes("w-full items-center gap-4").mark(f"switch-{attr}"):
             ui.label(text).classes("w-28").tooltip(tip)
             ui.slider(min=lo, max=hi, step=step).bind_value(s, attr).props("label").classes("col") \
                 .tooltip(tip).mark(f"slider-{attr}")
@@ -914,7 +914,7 @@ def voice_panel(s: SongSettings, singers: list, pick: PickFn | None = None) -> t
     ui.select(GROUP_CHOICES, label="Gruppe").bind_value(s, "group_vocals").classes("w-full").mark("group-vocals")
     hint("Drei oder vier installierte NEUTRINO-Stimmen singen den Refrain zusammen (links, Mitte, rechts) und die "
          "Strophen reihum, wie eine Idol-Gruppe. Mit weniger als drei Stimmen singt die gewählte allein.")
-    ui.switch("Zweite Stimme im Refrain").bind_value(s, "harmonies")
+    ui.switch("Zweite Stimme im Refrain").bind_value(s, "harmonies").mark("switch-harmonies")
     ui.switch("Lieblingsstimme je Stil").bind_value(s, "style_singer").props("dense").mark("switch-style_singer") \
         .tooltip("Beim Wechsel des Stils wählt die App die Stimme, die du im Stimmen-Casting für ihn gemerkt hast")
     ui.select({"": "keine", **{n: n for n in sorted(set(singers) | ({s.producer_singer} - {""}))}},
@@ -1187,7 +1187,8 @@ def video_panel(s: SongSettings, pick: PickFn) -> None:
 
 
 # ── Pfade ───────────────────────────────────────────────────────────────────────
-def paths_panel(s: SongSettings, pick: PickFn, status: Callable[[], None]) -> None:
+def paths_panel(s: SongSettings, pick: PickFn, status: Callable[[], None],
+                tidy: Callable[[], None] = lambda: None) -> None:
     import config
     for text, attr, folder, types, default in (
         ("NEUTRINO-Ordner", "neutrino_pfad", True, (), config.NEUTRINO_PFAD),
@@ -1251,10 +1252,10 @@ def paths_panel(s: SongSettings, pick: PickFn, status: Callable[[], None]) -> No
         .tooltip("Dasselbe Modell schreibt zu Akkorden, Bass und Schlagzeug vier Refrain-Melodien; die App passt sie an "
                  "Silben und Stimmlage an und bewertet sie wie „Beste Melodie suchen“. Singt eine besser als die "
                  "komponierte, singen alle Refrains sie. Braucht die eingerichtete KI-Begleitung")
-    app_settings(s)
+    app_settings(s, tidy)
 
 
-def app_settings(s: SongSettings) -> None:
+def app_settings(s: SongSettings, tidy: Callable[[], None] = lambda: None) -> None:
     """Schalter für die App selbst: Wiederverwenden, Protokoll, Updates, Assistent, Verlauf, Datenordner."""
     import userdata
     section_title("App")
@@ -1273,6 +1274,10 @@ def app_settings(s: SongSettings) -> None:
     ui.switch("Melden, wenn der Song fertig ist").bind_value(s, "done_notice").mark("switch-done_notice") \
         .tooltip("Eine Windows-Benachrichtigung unten rechts, wenn ein Song, mehrere Fassungen oder ein Album "
                  "fertig sind (nur nach Läufen ab 20 Sekunden). So kannst du in der Zeit etwas anderes machen.")
+    ui.switch("Aufgeräumt: Schalter ausblenden, die im Hör-Duell keinen Unterschied machten") \
+        .bind_value(s, "tidy_switches").on_value_change(lambda: tidy()).mark("switch-tidy_switches") \
+        .tooltip("Hast du im Hör-Duell „gleich“ gesagt, ist die Funktion aus und ihr Schalter verschwindet aus den "
+                 "Tabs. Ausschalten zeigt wieder alle.")
     ui.number("So viele Songs behält der Verlauf (0 = alle)", min=0, max=1000, step=5, precision=0) \
         .bind_value(s, "history_keep", forward=lambda v: int(v or 0)).classes("w-80").mark("history-keep") \
         .tooltip("Ältere fallen heraus; Favoriten, Songs mit Namen und Album-Songs bleiben immer")

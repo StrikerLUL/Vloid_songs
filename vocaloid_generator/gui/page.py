@@ -9,7 +9,7 @@ from urllib.parse import quote
 
 from fastapi import HTTPException
 from fastapi.responses import FileResponse
-from nicegui import app, run, ui
+from nicegui import ElementFilter, app, run, ui
 
 import album
 import cancel
@@ -17,6 +17,7 @@ import casting
 import einrichten
 import geschmack
 import history
+import hoer_duell
 import laufzeit
 import meter
 import pipeline
@@ -27,7 +28,7 @@ import rating
 import resume
 import updates
 import youtube
-from gui import dialogs, labels, media, panels
+from gui import dialogs, hoerduell, labels, media, panels
 from gui.components import Karaoke, PianoRoll, WavePlayer, add_style
 from settings import ChannelSettings, SongSettings, edit_key
 from styles import STYLES
@@ -267,6 +268,10 @@ def build() -> None:
                         .tooltip("Jede installierte NEUTRINO-Stimme singt den Refrain, kurz zum Anhören. Die "
                                  "Lieblingsstimme merkt sich die App für den Stil.")
                     cast_row = ui.row().classes("items-center gap-1")
+                    duel_button = ui.button("Hör-Duell", icon="hearing", on_click=lambda: open_duel()) \
+                        .props("outline no-caps dense").mark("duel") \
+                        .tooltip("Derselbe Refrain zweimal, mit und ohne eine Funktion, blind: was dir besser "
+                                 "gefällt, übernimmt die App als deine Einstellung")
                 with ui.row().classes("gap-2 q-mt-sm"):
                     zip_button = ui.button("Als ZIP für die DAW", icon="archive", on_click=lambda: export_zip()) \
                         .props("flat no-caps").mark("zip")
@@ -328,7 +333,7 @@ def build() -> None:
                     history_box = ui.column().classes("w-full")
                 with ui.tab_panel("Pfade"):
                     paths_status = ui.column().classes("gap-0 q-mb-md")
-                    panels.paths_panel(settings, picker, lambda: show_status())
+                    panels.paths_panel(settings, picker, lambda: show_status(), lambda: tidy())
 
     # ── Song erzeugen ──────────────────────────────────────────────────────────────
     async def reroll(part: str) -> None:
@@ -527,11 +532,7 @@ def build() -> None:
     async def cast_voices() -> None:
         if job.running:
             return
-        current = settings.model_copy(deep=True)
-        result = state["result"]
-        if result is not None:
-            current = current.with_updates(seed=result.seed, variations=result.settings.variations,
-                                           taste_snapshot=result.settings.taste_snapshot)
+        current = song_now()
         job.start()
         set_busy(True)
         try:
@@ -562,6 +563,31 @@ def build() -> None:
                         .props("outline dense color=secondary").mark(f"cast-keep-{a.singer}") \
                         .tooltip(f"{a.singer} singt ab jetzt {current.style}")
         await play(auditions[0].singer, auditions[0].wav)
+
+    def song_now() -> SongSettings:
+        """Die Einstellungen mit dem Seed des Songs, der gerade da ist (fürs Casting und das Hör-Duell)."""
+        current = settings.model_copy(deep=True)
+        result = state["result"]
+        if result is not None:
+            current = current.with_updates(seed=result.seed, variations=result.settings.variations,
+                                           taste_snapshot=result.settings.taste_snapshot)
+        return current
+
+    def open_duel() -> None:
+        save_settings()
+        hoerduell.open_duel(dialog_host, settings, song_now, job, set_busy, file_url, take_duel)
+
+    def take_duel(new: SongSettings) -> None:
+        assign(settings, new)
+        save_settings()
+        tidy()
+
+    def tidy() -> None:
+        """Schalter, die im Hör-Duell keinen hörbaren Unterschied machten, ausblenden (settings.tidy_switches)."""
+        hidden = hoer_duell.inaudible() if settings.tidy_switches else set()
+        for candidate in hoer_duell.CANDIDATES:
+            for element in ElementFilter(marker=f"switch-{candidate.field}"):
+                element.set_visibility(candidate.field not in hidden)
 
     def keep_voice(singer: str) -> None:
         casting.remember(settings, singer)
@@ -898,7 +924,8 @@ def build() -> None:
         if not busy:
             cancel.reset()
         for button in (generate_button, draft_button, full_button, album_button, zip_button, notes_button, video_button,
-                       preview_button, youtube_button, hooks_button, cast_button, remix_button, *reroll_buttons.values()):
+                       preview_button, youtube_button, hooks_button, cast_button, duel_button, remix_button,
+                       *reroll_buttons.values()):
             button.set_enabled(not busy)
         resing_button.set_enabled(not busy and _edited(settings) > 0)
         preview_button.set_enabled(not busy and _edited(settings) > 0)
@@ -1157,6 +1184,7 @@ def build() -> None:
     ui.timer(0.3, tick)
     show_status()
     show_edits()
+    tidy()
     offer_resume()
     on_start()
 

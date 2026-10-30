@@ -99,7 +99,8 @@ def sung_lyrics(settings: SongSettings) -> dict:
 
 def composition_extras(settings: SongSettings) -> dict:
     """{Schalter: Wert} der eingeschalteten Neuerungen ab 1.3.0, die die Noten ändern (0 und aus fehlen); dazu
-    "producer": das Produzenten-Profil (produzent.Profile), wenn eins gilt."""
+    "producer": das Produzenten-Profil (produzent.Profile), wenn eins gilt, und "tension": die Spannungskurve
+    (spannung.extras), wenn eine gezeichnet ist oder die Stimmung nicht in der Mitte steht."""
     extras = {name: getattr(settings, name) for name in COMPOSITION_EXTRAS if getattr(settings, name)}
     if extras.pop("producer_profile", False):
         import produzent
@@ -112,6 +113,10 @@ def composition_extras(settings: SongSettings) -> dict:
     if extras.pop("taste_learning", False) and settings.taste_snapshot:
         import geschmack
         extras["taste"] = geschmack.from_snapshot(settings.taste_snapshot)
+    import spannung
+    tension = spannung.extras(settings)
+    if tension:
+        extras["tension"] = tension
     return extras
 
 
@@ -269,6 +274,9 @@ def generate_song(settings: SongSettings, progress: Optional[ProgressFn] = None,
     keep_history = keep_history and not settings.draft
     out = settings.output_dir()
     os.makedirs(out, exist_ok=True)
+    import speicher
+    if speicher.low_space(out):
+        log.warning(speicher.low_space(out))
 
     report(0.05, "Komponiere Song...")
     settings = with_taste(settings, seed)
@@ -346,6 +354,9 @@ def _produce(settings: SongSettings, tracks: dict, out: str, report: ProgressFn,
         entry = history.record(result.audio, settings, out, keep=settings.history_keep,
                                character=song_character(tracks))
         result.history = entry.audio if entry else None
+        if entry:
+            import speicher
+            speicher.cloud_copy(out, entry.audio)       # die MP3 auch nach OneDrive, wenn die App außerhalb arbeitet
         if entry and settings.keep_projects:
             import project
             report(0.98, "Hebe den Gesang als Projekt auf...")

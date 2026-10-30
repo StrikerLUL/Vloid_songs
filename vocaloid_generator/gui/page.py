@@ -9,7 +9,7 @@ from urllib.parse import quote
 
 from fastapi import HTTPException
 from fastapi.responses import FileResponse
-from nicegui import app, run, ui
+from nicegui import ElementFilter, app, run, ui
 
 import album
 import cancel
@@ -17,17 +17,19 @@ import casting
 import einrichten
 import geschmack
 import history
+import hoer_duell
 import laufzeit
 import meter
 import pipeline
 import polish
 import preview
 import project
+import qualitaet
 import rating
 import resume
 import updates
 import youtube
-from gui import dialogs, labels, media, panels
+from gui import dialogs, einfach, hoerduell, labels, media, panels
 from gui.components import Karaoke, PianoRoll, WavePlayer, add_style
 from settings import ChannelSettings, SongSettings, edit_key
 from styles import STYLES
@@ -80,6 +82,12 @@ class Job:
         """„noch etwa 3 Min.“ aus früheren Läufen derselben Art; leer, solange sich nichts sagen lässt."""
         return laufzeit.describe(laufzeit.remaining(self.past, self.fraction, self.elapsed)) if self.kind else ""
 
+    def __setattr__(self, name: str, value) -> None:
+        if name == "running" and bool(value) != bool(getattr(self, "running", False)):
+            import fernbedienung
+            fernbedienung.awake(bool(value))         # 1.6.0: solange ein Song entsteht, schläft der PC nicht ein
+        super().__setattr__(name, value)
+
     def finish(self) -> None:
         """Ein fertiger Lauf: für die nächste Schätzung merken."""
         if self.kind:
@@ -87,11 +95,15 @@ class Job:
 
 
 class Picker:
-    """Datei- und Ordnerauswahl über das native Fenster; im Browser gibt es sie nicht."""
+    """Datei- und Ordnerauswahl über das native Fenster; im Browser und auf dem Handy (remote, 1.6.0) gibt es sie
+    nicht, dort lädt man Dateien hoch."""
+
+    def __init__(self, remote: bool = False) -> None:
+        self.remote = remote
 
     @property
     def available(self) -> bool:
-        return app.native.main_window is not None
+        return not self.remote and app.native.main_window is not None
 
     async def __call__(self, folder: bool = False, file_types: tuple = ()) -> Optional[str]:
         window = app.native.main_window
@@ -151,7 +163,9 @@ def build() -> None:
     settings = SongSettings.load()
     state = {"result": None, "saved": settings.model_dump(), "compare": {"A": None, "B": None}}
     job = Job()
-    picker = Picker()
+    import fernbedienung
+    remote = fernbedienung.is_remote(ui.context.client)        # 1.6.0: diese Seite ist auf dem Handy offen
+    picker = Picker(remote)
     logs = LogQueue()
     logging.getLogger().addHandler(logs)
     ui.context.client.on_delete(lambda: logging.getLogger().removeHandler(logs))
@@ -163,10 +177,14 @@ def build() -> None:
     ui.page_title("Vloid Songs")
 
     # ── Kopfzeile: erzeugen ───────────────────────────────────────────────────────
-    with ui.header().classes("items-center gap-4 bg-grey-10 q-px-md"):
+    with ui.header().classes("items-center gap-4 bg-grey-10 q-px-md vg-header"):
         ui.image(os.path.join(os.path.dirname(__file__), "vloid.png")).classes("w-8 h-8")
-        ui.label("Vloid Songs").classes("text-h6")
+        ui.label("Vloid Songs").classes("text-h6 vg-title-text")
         ui.space()
+        ui.toggle({True: "Einfach", False: "Profi"}).bind_value(settings, "simple_view") \
+            .on_value_change(lambda: show_view()).props("no-caps dense rounded toggle-color=secondary") \
+            .mark("view-toggle").tooltip("Einfach: nur Stil, Stimmung, Stimme, Länge, Qualität und Text. Profi: alle "
+                                         "Einstellungen in Tabs")
         count = ui.select(COUNTS, value=1).props("dense outlined dark").classes("w-36").mark("count") \
             .tooltip("Mehrere Fassungen landen im Verlauf; dort hörst du sie an und behältst die beste.")
         draft_button = ui.button("Entwurf", icon="bolt", on_click=lambda: generate(draft=True)) \
@@ -188,7 +206,7 @@ def build() -> None:
         dialogs.help_menu(settings, picker, lambda: show_status())
         dialog_host = ui.element("div")
 
-    with ui.row().classes("w-full no-wrap items-start gap-4 q-pa-md"):
+    with ui.row().classes("w-full no-wrap items-start gap-4 q-pa-md vg-main"):
         # ── Links: anhören, neu würfeln, Fortschritt ───────────────────────────────
         with ui.column().classes("gap-4").style("flex: 3; min-width: 0"):
             resume_box = ui.column().classes("w-full")
@@ -214,7 +232,7 @@ def build() -> None:
                     .bind_visibility_from(settings, "show_karaoke")
                 stem_row = ui.row().classes("gap-1 q-mt-sm")
                 compare_row = ui.row().classes("items-center gap-1 q-mt-sm")
-            with ui.card().classes("w-full bg-grey-9"):
+            with ui.card().classes("w-full bg-grey-9") as notes_card:
                 with ui.row().classes("w-full items-center gap-1"):
                     ui.label("Noten").classes("text-subtitle1 q-mr-md")
                     legend = ui.row().classes("gap-1")
@@ -235,7 +253,7 @@ def build() -> None:
                         .props("unelevated dense no-caps color=secondary").mark("resing")
                     ui.button("Änderungen verwerfen", icon="undo", on_click=lambda: drop_edits()) \
                         .props("flat dense no-caps").mark("drop-edits")
-            with ui.card().classes("w-full bg-grey-9"):
+            with ui.card().classes("w-full bg-grey-9") as reroll_card:
                 with ui.row().classes("w-full items-center no-wrap"):
                     ui.label("Neu würfeln: nur dieser Teil wird neu, der Rest bleibt").classes("text-subtitle1")
                     ui.space()
@@ -267,6 +285,10 @@ def build() -> None:
                         .tooltip("Jede installierte NEUTRINO-Stimme singt den Refrain, kurz zum Anhören. Die "
                                  "Lieblingsstimme merkt sich die App für den Stil.")
                     cast_row = ui.row().classes("items-center gap-1")
+                    duel_button = ui.button("Hör-Duell", icon="hearing", on_click=lambda: open_duel()) \
+                        .props("outline no-caps dense").mark("duel") \
+                        .tooltip("Derselbe Refrain zweimal, mit und ohne eine Funktion, blind: was dir besser "
+                                 "gefällt, übernimmt die App als deine Einstellung")
                 with ui.row().classes("gap-2 q-mt-sm"):
                     zip_button = ui.button("Als ZIP für die DAW", icon="archive", on_click=lambda: export_zip()) \
                         .props("flat no-caps").mark("zip")
@@ -286,8 +308,14 @@ def build() -> None:
                     youtube_button = ui.button("Fertig für YouTube", icon="smart_display",
                                                on_click=lambda: make_youtube()).props("flat no-caps").mark("youtube") \
                         .tooltip("MP3, Video, Titelbild und Beschreibung zusammen in einem Ordner (ohne KI)")
-                    ui.button("Ausgabeordner öffnen", icon="folder",
-                              on_click=lambda: media.open_folder(settings.output_dir())).props("flat no-caps")
+                    mp3_button = ui.button("MP3 aufs Handy", icon="download", on_click=lambda: download_mp3()) \
+                        .props("flat no-caps").mark("mp3-download") \
+                        .tooltip("Lädt den Song auf dieses Gerät (Downloads)")
+                    mp3_button.set_visibility(remote)
+                    folder_button = ui.button("Ausgabeordner öffnen", icon="folder",
+                                              on_click=lambda: media.open_folder(settings.output_dir())) \
+                        .props("flat no-caps")
+                    folder_button.set_visibility(not remote)          # er ginge am PC auf, nicht auf dem Handy
             with ui.card().classes("w-full bg-grey-9"):
                 progress = ui.linear_progress(value=0, show_value=False).props("rounded color=secondary")
                 step_label = ui.label("Bereit").classes("text-caption").mark("step")
@@ -297,16 +325,27 @@ def build() -> None:
 
         # ── Rechts: Einstellungen und Verlauf ─────────────────────────────────────
         with ui.card().classes("bg-grey-9").style("flex: 2; min-width: 440px"):
+            refresh_simple = refresh_text = lambda: None       # bis die Tabs stehen (der Tab-Wechsel ruft sie)
             with ui.tabs().props("dense no-caps align=left").classes("w-full") as tabs:
-                for name, icon in (("Song", "music_note"), ("Text", "notes"), ("Band", "piano"),
-                                   ("Gesang", "mic"), ("Mix", "tune"), ("Video", "movie"),
+                tab_items = {}
+                for name, icon in (("Einfach", "auto_awesome"), ("Song", "music_note"), ("Text", "notes"),
+                                   ("Band", "piano"), ("Gesang", "mic"), ("Mix", "tune"), ("Video", "movie"),
                                    ("Verlauf", "history"), ("Pfade", "folder")):
-                    ui.tab(name, icon=icon).mark(f"tab-{name}")
-            tabs.on_value_change(lambda e: refresh_text() if e.value == "Text" else None)
-            with ui.tab_panels(tabs, value="Song").classes("w-full bg-transparent") as panel_box:
+                    tab_items[name] = ui.tab(name, icon=icon).mark(f"tab-{name}")
+            tabs.on_value_change(lambda e: refresh_text() if e.value == "Text" else
+                                 refresh_simple() if e.value == "Einfach" else None)
+            with ui.tab_panels(tabs, value="Einfach" if settings.simple_view else "Song") \
+                    .classes("w-full bg-transparent") as panel_box:
+                with ui.tab_panel("Einfach"):
+                    refresh_simple = einfach.simple_panel(settings, lambda: _singers(settings),
+                                                          lambda: generate(), lambda: open_duel(),
+                                                          lambda: open_text_builder())
                 with ui.tab_panel("Song"):
                     panels.song_panel(settings, picker, lambda new: assign(settings, new))
                 with ui.tab_panel("Text"):
+                    ui.button("Text-Baukasten", icon="edit_note", on_click=lambda: open_text_builder()) \
+                        .props("outline dense no-caps").mark("text-builder-open") \
+                        .tooltip("Japanischen Text aus fertigen Zeilen zusammensetzen: Thema, Stimmung, Titelwort")
                     refresh_text = panels.text_panel(settings)
                 with ui.tab_panel("Band"):
                     panels.band_panel(settings)
@@ -328,7 +367,7 @@ def build() -> None:
                     history_box = ui.column().classes("w-full")
                 with ui.tab_panel("Pfade"):
                     paths_status = ui.column().classes("gap-0 q-mb-md")
-                    panels.paths_panel(settings, picker, lambda: show_status())
+                    panels.paths_panel(settings, picker, lambda: show_status(), lambda: tidy())
 
     # ── Song erzeugen ──────────────────────────────────────────────────────────────
     async def reroll(part: str) -> None:
@@ -359,10 +398,18 @@ def build() -> None:
             current = current.with_updates(variations={}, melody_edits={}, melody_lengths={}, phrase_fixes={},
                                            remix_from="", remix_bpm=0)
         save_settings()
+        import speicher
+        tight = speicher.low_space(current.output_dir())
+        if tight:
+            ui.notify(tight, type="warning", timeout=10000)
+        simple = settings.simple_view
+        if simple:
+            current = qualitaet.apply(current)      # die Stufe der einfachen Ansicht; die Schalter bleiben
         if draft:
             current, n = pipeline.draft_settings(current), 1
-        n = n or int(count.value or 1)
-        job.start(laufzeit.kind(current, n if not part else 1, draft))
+        n = 1 if simple and not draft else n or int(count.value or 1)
+        job.start(einfach.run_kind(settings, settings.quality) if simple and not draft and not part else
+                  laufzeit.kind(current, n if not part else 1, draft))
         set_busy(True)
         try:
             if n > 1 or part:
@@ -527,11 +574,7 @@ def build() -> None:
     async def cast_voices() -> None:
         if job.running:
             return
-        current = settings.model_copy(deep=True)
-        result = state["result"]
-        if result is not None:
-            current = current.with_updates(seed=result.seed, variations=result.settings.variations,
-                                           taste_snapshot=result.settings.taste_snapshot)
+        current = song_now()
         job.start()
         set_busy(True)
         try:
@@ -562,6 +605,49 @@ def build() -> None:
                         .props("outline dense color=secondary").mark(f"cast-keep-{a.singer}") \
                         .tooltip(f"{a.singer} singt ab jetzt {current.style}")
         await play(auditions[0].singer, auditions[0].wav)
+
+    def song_now() -> SongSettings:
+        """Die Einstellungen mit dem Seed des Songs, der gerade da ist (fürs Casting und das Hör-Duell)."""
+        current = settings.model_copy(deep=True)
+        result = state["result"]
+        if result is not None:
+            current = current.with_updates(seed=result.seed, variations=result.settings.variations,
+                                           taste_snapshot=result.settings.taste_snapshot)
+        return current
+
+    def open_duel() -> None:
+        save_settings()
+        hoerduell.open_duel(dialog_host, settings, song_now, job, set_busy, file_url, take_duel)
+
+    def take_duel(new: SongSettings) -> None:
+        assign(settings, new)
+        save_settings()
+        tidy()
+
+    def show_view() -> None:
+        """Einfach: nur die Tabs Einfach und Verlauf, ohne Noten, Neu würfeln, Album und Fassungen. Profi: alles."""
+        simple = settings.simple_view
+        for name, tab in tab_items.items():
+            tab.set_visibility(name in ("Einfach", "Verlauf") if simple else name != "Einfach")
+        for element in (notes_card, reroll_card, album_button, count):
+            element.set_visibility(not simple)
+        if simple and panel_box.value not in ("Einfach", "Verlauf"):
+            panel_box.set_value("Einfach")
+        elif not simple and panel_box.value == "Einfach":
+            panel_box.set_value("Song")
+        if simple:
+            refresh_simple()
+
+    def open_text_builder() -> None:
+        from gui import textbau
+        textbau.open_builder(dialog_host, settings, lambda: (refresh_text(), refresh_simple()))
+
+    def tidy() -> None:
+        """Schalter, die im Hör-Duell keinen hörbaren Unterschied machten, ausblenden (settings.tidy_switches)."""
+        hidden = hoer_duell.inaudible() if settings.tidy_switches else set()
+        for candidate in hoer_duell.CANDIDATES:
+            for element in ElementFilter(marker=f"switch-{candidate.field}"):
+                element.set_visibility(candidate.field not in hidden)
 
     def keep_voice(singer: str) -> None:
         casting.remember(settings, singer)
@@ -860,6 +946,15 @@ def build() -> None:
         settings.taste_snapshot = result.settings.taste_snapshot      # derselbe Song: mit demselben Geschmack
         ui.notify(f"Seed {result.seed} festgehalten: „Song erzeugen“ macht jetzt diesen Song mit deinen Änderungen")
 
+    def download_mp3() -> None:
+        result = state["result"]
+        audio = result.audio if result is not None else None
+        if not audio or not os.path.exists(audio):
+            ui.notify("Noch kein Song zum Herunterladen.", type="warning")
+            return
+        name = f"song_{result.settings.style.replace(' ', '-')}_{result.seed}{os.path.splitext(audio)[1]}"
+        ui.download.file(audio, name)
+
     async def export_zip() -> None:
         result = state["result"]
         if result is None:
@@ -898,7 +993,8 @@ def build() -> None:
         if not busy:
             cancel.reset()
         for button in (generate_button, draft_button, full_button, album_button, zip_button, notes_button, video_button,
-                       preview_button, youtube_button, hooks_button, cast_button, remix_button, *reroll_buttons.values()):
+                       preview_button, youtube_button, hooks_button, cast_button, duel_button, remix_button,
+                       *reroll_buttons.values()):
             button.set_enabled(not busy)
         resing_button.set_enabled(not busy and _edited(settings) > 0)
         preview_button.set_enabled(not busy and _edited(settings) > 0)
@@ -999,6 +1095,9 @@ def build() -> None:
                                   on_click=lambda _, e=entry: favorite(e)).props("flat round dense color=amber") \
                             .mark("history-favorite")
                         thumbs_menu(entry, nr)
+                        ui.button(icon="info_outline", on_click=lambda _, e=entry: song_info(e)) \
+                            .props("flat round dense color=grey").mark("history-info") \
+                            .tooltip("Was steckt in diesem Song? Gewürfeltes, Schalter, was heute anders ist")
                         ui.button(icon="settings_backup_restore", on_click=lambda _, e=entry: restore(e)) \
                             .props("flat round dense").tooltip("Einstellungen dieses Songs übernehmen") \
                             .mark("history-restore")
@@ -1009,6 +1108,9 @@ def build() -> None:
                                          "lässt sich der Song weiter bearbeiten")
                         ui.button(icon="delete", on_click=lambda _, e=entry: remove(e)) \
                             .props("flat round dense color=grey").mark("history-delete")
+
+    def song_info(entry) -> None:
+        einfach.song_info(dialog_host, entry, settings, einfach.switch_names(ui.context.client))
 
     def favorite(entry) -> None:
         history.set_favorite(entry, not entry.favorite)
@@ -1157,6 +1259,8 @@ def build() -> None:
     ui.timer(0.3, tick)
     show_status()
     show_edits()
+    tidy()
+    show_view()
     offer_resume()
     on_start()
 

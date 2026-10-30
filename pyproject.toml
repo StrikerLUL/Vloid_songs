@@ -1,6 +1,6 @@
 [project]
 name = "vocaloid-generator"
-version = "1.5.0"
+version = "1.6.0"
 description = "Erzeugt komplette Vocaloid-Songs: Komposition, Gesang, Mix und MP3"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -31,11 +31,13 @@ dependencies = [
     "pyworld>=0.3.4",
     "pyyaml>=6",
     "scipy>=1.10",
+    "segno>=1.6",
     # pyworld braucht pkg_resources, das ab setuptools 81 fehlt
     "setuptools<81",
     "soundfile>=0.12",
     "tinysoundfont>=0.3.7",
     "unidic-lite>=1.0.8",
+    "yt-dlp>=2025.1",
 ]
 
 [dependency-groups]

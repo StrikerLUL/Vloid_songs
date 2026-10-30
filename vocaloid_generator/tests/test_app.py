@@ -24,7 +24,8 @@ from settings import SongSettings, edit_key
 
 @pytest_asyncio.fixture
 async def user(tmp_path):
-    SongSettings(output_ordner=str(tmp_path / "out"), seed=None, setup_wizard=False, update_check=False).save()
+    SongSettings(output_ordner=str(tmp_path / "out"), seed=None, setup_wizard=False, update_check=False,
+                 simple_view=False).save()
     async with user_simulation(root=page.build) as user:
         yield user
 
@@ -314,7 +315,7 @@ async def test_templates_keep_sound_but_not_text(user, tmp_path, monkeypatch):
 
 async def test_structure_can_be_changed(user):
     await user.open("/")
-    user.find("Kurz").click()
+    user.find(marker="structure-Kurz").click()
     await until(lambda: SongSettings.load().active_sections == ["Intro", "Verse", "PreChorus", "Chorus", "Outro"])
 
 

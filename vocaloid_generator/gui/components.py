@@ -22,6 +22,16 @@ STYLE = """
 .vg-line span.sung { color: #ff4f8b; }
 .vg-next { font-size: 16px; opacity: 0.5; min-height: 22px; }
 .vg-roll.editing { cursor: ns-resize; }
+/* 1.6.0: schmale Fenster und Handys (Fernbedienung): untereinander statt nebeneinander */
+@media (max-width: 760px) {
+  .vg-header { flex-wrap: wrap; gap: 6px !important; padding: 6px 8px !important; }
+  .vg-header .vg-title-text, .vg-phone-hide { display: none !important; }
+  .vg-main { flex-direction: column; flex-wrap: wrap !important; padding: 8px !important; gap: 8px !important; }
+  .vg-main > * { flex: 1 1 auto !important; min-width: 0 !important; width: 100% !important; }
+  .vg-main > :last-child { order: -1; }         /* erst einstellen, darunter anhören */
+  .vg-line { font-size: 20px; }
+  .q-dialog__inner > .q-card { max-width: 100vw !important; }
+}
 """
 
 

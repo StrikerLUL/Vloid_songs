@@ -100,6 +100,9 @@ def save(target: Optional[str] = None, settings=None) -> str:
         import systemcheck
         if os.path.exists(systemcheck.result_path()):
             z.write(systemcheck.result_path(), "systemcheck.json")
+        import hoer_duell
+        if os.path.exists(hoer_duell.path()):
+            z.write(hoer_duell.path(), "hoer_duell.json")      # was dir im Hör-Duell besser gefiel (1.6.0)
         for extra in _tool_logs():
             z.write(extra, os.path.join("werkzeuge", os.path.basename(os.path.dirname(extra)) + "_" +
                                         os.path.basename(extra)))

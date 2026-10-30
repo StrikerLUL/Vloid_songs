@@ -102,15 +102,16 @@ def record(audio_path: str, settings: SongSettings, output_dir: str, keep: int =
 
 
 def entries(output_dir: str) -> list:
-    """Alle Songs im Verlauf, der neueste zuerst."""
-    target = folder(output_dir)
-    if not os.path.isdir(target):
-        return []
+    """Alle Songs im Verlauf, der neueste zuerst; auch die von vor 1.6.0 aus dem Ausgabeordner in OneDrive, wenn die
+    App jetzt außerhalb arbeitet (speicher.earlier)."""
+    import speicher
+    files = []
+    for target in [folder(output_dir)] + [folder(old) for old in speicher.earlier(output_dir)]:
+        if os.path.isdir(target):
+            files += [os.path.join(target, f) for f in os.listdir(target) if f.endswith(".json")]
     found = []
-    for file in sorted(os.listdir(target), reverse=True):
-        if not file.endswith(".json"):
-            continue
-        entry = _read(os.path.join(target, file))
+    for path in sorted(files, key=os.path.basename, reverse=True):
+        entry = _read(path)
         if entry:
             found.append(entry)
     return found

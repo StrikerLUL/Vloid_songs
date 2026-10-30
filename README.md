@@ -2,15 +2,16 @@
 
 Erzeugt komplette Vocaloid-Songs auf Knopfdruck: Akkorde, Bass, Schlagzeug, Melodie und Begleitung, Gesang mit NEUTRINO oder VOICEVOX (oder einer lokalen Vorschau-Stimme), Mix mit Kompressor und Limiter und am Ende eine fertige MP3.
 
-Läuft unter Windows. Version 1.4.0: Jeder Stil und jeder Song hat jetzt seinen eigenen Charakter (eigene Akkorde,
-Melodie, Besetzung, Klangbild, Klänge und Grooves), und die Stimme klingt runder. Was neu ist, steht in der
-[Anleitung › Neu in 1.4](ANLEITUNG.md#neu-in-14).
+Läuft unter Windows. Version 1.6.0: eine einfache Ansicht mit drei Qualitätsstufen, ein Hör-Duell, das blind
+vergleicht, ein Text-Baukasten ohne KI, eine Spannungskurve für den Ablauf, Video-Links als Vorbild und das Handy als
+Fernbedienung; die Arbeitsdateien liegen nicht mehr in OneDrive. Was neu ist, steht in der
+[Anleitung › Neu in 1.6](ANLEITUNG.md#neu-in-16).
 
 | Zum Lesen | Was drinsteht |
 | --- | --- |
 | [ANLEITUNG.md](ANLEITUNG.md) | Erste Schritte, was die App kann, jeder Schalter, alle Details und die Kommandozeile (in der App: Hilfe › Erste Schritte) |
 | [FEHLERBEHEBUNG.md](FEHLERBEHEBUNG.md) | wenn etwas nicht klappt (Hilfe › Fehlerbehebung) |
-| [TESTLISTE.md](TESTLISTE.md) | der Praxistest für 1.4.0 (mit den Punkten aus 1.1 bis 1.3) |
+| [TESTLISTE.md](TESTLISTE.md) | der Praxistest für 1.6.0 (mit den Punkten aus 1.1 bis 1.5) |
 | [CHANGELOG.md](CHANGELOG.md) | was in jeder Version neu ist |
 | [CREDITS.md](CREDITS.md) | wessen Arbeit drinsteckt, mit Lizenzen |
 
@@ -55,17 +56,25 @@ uv run vocaloid_generator\main.py --style Rock --ohne-verstaerker-modelle   # sc
 
 Alle Optionen stehen in der [Anleitung unter Kommandozeile](ANLEITUNG.md#kommandozeile) und in `main.py --help`.
 
+Vom Handy aus: Hilfe › Handy als Fernbedienung einschalten, die App neu starten und den QR-Code mit dem Handy scannen
+(gleiches WLAN, mit Zugangscode).
+
 ## Was die App kann
 
+- **Einfach:** Stil, Stimmung, Stimme, Länge, Qualität (Schnell, Gut, Beste) und Text auf einer Seite; alle anderen
+  Einstellungen in der Profi-Ansicht. Das Hör-Duell vergleicht Funktionen blind und behält, was du hörst; der
+  Text-Baukasten setzt ohne KI einen passenden japanischen Text mit Übersetzung zusammen; die Spannungskurve legt fest,
+  wie viel Energie jeder Teil hat.
 - **Charakter:** jeder Stil mit eigenen Akkordfolgen und Kadenzen, eigenem Melodie-Charakter (gebunden, hüpfend,
   gerufen, zurückgelehnt), eigener Besetzung und eigenem Klangbild; jeder Song würfelt eigene Klänge, Grooves, Intro und
   Schluss, damit zwei Songs eines Stils nicht gleich klingen.
-- **Komponieren:** zehn Stile, Bauplan mit bewährten Akkordfolgen und Akkord-Würze, die eingängigste von 30 Melodien je Sektion (nach dem Wortakzent, mit Auftakten, Triolen und Höhepunkt im letzten Refrain), eigenes Intro-Riff, Begleitung mit Kime, Läufen und Aufbau, Schlagzeug mit Grooves echter Schlagzeuger und Anison-Grooves, 4/4-, 3/4- und 6/8-Takt, Rap-Teil, Solo, KI-Melodie (Versuch).
+- **Komponieren:** 13 Stile, Bauplan mit bewährten Akkordfolgen und Akkord-Würze, die eingängigste von 30 Melodien je Sektion (nach dem Wortakzent, mit Auftakten, Triolen und Höhepunkt im letzten Refrain), eigenes Intro-Riff, Begleitung mit Kime, Läufen und Aufbau, Schlagzeug mit Grooves echter Schlagzeuger und Anison-Grooves, 4/4-, 3/4- und 6/8-Takt, Rap-Teil, Solo, KI-Melodie (Versuch).
 - **Singen:** NEUTRINO (mit Fassungen und Comping, StyleShift pro Sektion, Duett, Gruppe aus drei oder vier Stimmen, Begleitstimmen, Idol-Rufen, Hinweis auf das Wohlfühl-Tempo jeder Stimme), sanfte Nachbearbeitung und weiche Gesangskette, sanft geglättete Tonhöhe, dezente Verzierungen und Gesang im Groove, VOICEVOX (auch für gesprochene Zeilen), DiffSinger (Versuch) oder eine eigene Gesangsspur.
 - **Klingen:** SoundFonts, Orchester, Flügel, Bass und Gitarre aus echten Aufnahmen, Klänge aus Surge XT, Modelle echter Verstärker, Drum-Machines, ein Mix mit Druck und Platz für den Gesang, Härte zähmen, Mastering nach Vorbild-Songs.
 - **Ändern:** Neu würfeln pro Teil und Sektion, Töne in der Piano-Roll ziehen, eine Phrase neu singen, Remix in einem anderen Stil, Wieder öffnen aus dem Verlauf.
 - **Schreiben:** Japanisch mit Kanji, Romaji und englischen Wörtern, は, へ, を und Zahlwörter richtig gelesen, eigene Lesungen, eigener Text pro Wiederholung, Text-Helfer, Song-Rezepte mit Beispieltext.
-- **Ausgeben:** MP3 mit Tags und Titelbild, Off-Vocal und A-cappella, Lyric-Video in 1080p, „Fertig für YouTube“, ZIP für die DAW, Noten für Tuning-Tools, Album über Nacht.
+- **Ausgeben:** MP3 mit Tags und Titelbild, Off-Vocal und A-cappella, Musikvideo in 1080p, „Fertig für YouTube“, ZIP für die DAW, Noten für Tuning-Tools, Album über Nacht.
+- **Von überall:** Vorbild als Datei oder Video-Link, das Handy als Fernbedienung im WLAN, Arbeitsdateien außerhalb von OneDrive.
 
 Was jede Funktion genau tut und wo ihr Schalter steht: [ANLEITUNG.md](ANLEITUNG.md).
 
@@ -90,6 +99,7 @@ uv run pytest -m "not slow"   # ohne den Test, der echtes Audio rendert
 | `style_dna.py` | was jeden Stil ausmacht (1.4): eigene Akkordfolgen und Kadenzen, Melodie-Charakter, Arrangement, Klangbild |
 | `song_character.py` | jeder Song ein eigenes Gesicht (1.4): Klänge, Synth-Stimmen, Grooves, Spielweisen, Intro und Schluss aus dem Seed |
 | `song_plan.py` | Bauplan: Sektionen, Tonarten, Akkorde und Energie |
+| `spannung.py` | die Spannungskurve (1.6): gezeichnete Energie je Sektion und die Stimmung lenken Schlagzeug, Besetzung und Mix |
 | `melody_writer.py` | Gesangsmelodie mit Motiven, Refrain-Hook, Wortakzent, Melisma und Duett-Aufteilung |
 | `melody_import.py` | eigene Melodie aus einer MIDI-Datei lesen und in eine Sektion legen |
 | `melody_score.py`, `chord_spice.py` | Punkte für eine Gesangsmelodie (die eingängigste von 30 singt); Zwischendominanten, Leihakkorde und Marusa-Folge |
@@ -136,6 +146,11 @@ uv run pytest -m "not slow"   # ohne den Test, der echtes Audio rendert
 | `bilder.py`, `bilder_worker.py`, `setup_bilder.py` | KI-Hintergründe fürs Musikvideo (LCM Dreamshaper v7, eigene Umgebung), und diese einrichten |
 | `hoercheck.py`, `hoercheck_worker.py`, `setup_hoercheck.py` | Hör-Check: eine Spracherkennung (faster-whisper) prüft, ob man den Text versteht |
 | `vorbild_ablauf.py` | „Wie dieser Song“: Ablauf, Takte und Akkorde eines Vorbilds als Vorlage |
+| `vorbild_link.py` | ein Video-Link als Vorbild (1.6): yt-dlp lädt nur den Ton zum Messen, danach ist er wieder gelöscht |
+| `hoer_duell.py`, `gui/hoerduell.py` | Hör-Duell (1.6): derselbe Refrain mit und ohne eine Funktion, blind verglichen |
+| `qualitaet.py`, `gui/einfach.py` | die einfache Ansicht (1.6): Qualitätsstufen, Stimmung, Länge und „Was steckt in diesem Song?“ |
+| `textbaukasten.py`, `textbausteine.py`, `gui/textbau.py` | Text-Baukasten ohne KI (1.6): 600 Bausteine, nach Silben, Reim und Titelwort zusammengesetzt |
+| `fernbedienung.py` | das Handy als Fernbedienung (1.6): die App im WLAN, Zugangscode, QR-Code, PC wach halten |
 | `chorus_lift.py` | Refrains steigern sich vom ersten bis zum letzten |
 | `produzent.py`, `geschmack.py` | dein Produzentenstil (Name, Tag, Erkennungsklang, Akkordwendung); Geschmack aus den Daumen im Verlauf |
 | `lyrics.py`, `readings.py` | Liedtext in Silben: Kanji-Lesung, Romaji, Partikel; Zahlwörter und は, へ, を auch in Kana richtig lesen |
@@ -151,5 +166,5 @@ uv run pytest -m "not slow"   # ohne den Test, der echtes Audio rendert
 | `app.py`, `gui/` | die Oberfläche (NiceGUI): Seite, Einstellungen, Player mit wavesurfer.js, Mitlesen, Piano-Roll zum Ändern des Gesangs |
 | `vorlagen.py`, `rezepte.py` | eigene Vorlagen speichern und laden; Song-Rezepte mit Beispieltext |
 | `lyric_helper.py` | Text-Helfer: Silben gegen Platz, Reime und Lesungen pro Zeile |
-| `laufzeit.py`, `speicher.py` | Restzeit und Meldung, wenn ein Song fertig ist; Platz auf der Festplatte |
+| `laufzeit.py`, `speicher.py` | Restzeit und Meldung, wenn ein Song fertig ist; Platz auf der Festplatte und Arbeitsdateien außerhalb von OneDrive (1.6) |
 | `main.py` | die Kommandozeile |

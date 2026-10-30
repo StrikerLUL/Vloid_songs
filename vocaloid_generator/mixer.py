@@ -546,6 +546,7 @@ def mische_spuren(
     punch: bool = False,
     sound=None,
     living_double: bool = False,
+    tension: list = None,
 ) -> Optional["Level"]:
     """
     Mischt die Spuren zu einem Stereo-Master:
@@ -583,6 +584,8 @@ def mische_spuren(
     Master.
     sound: Klangbild des Stils (1.4.0, style_dna.Sound): Raum, Delay, Klangfarbe, Breite und Sättigung; None = das
     gemeinsame Klangbild bis 1.3.
+    tension: [(Start, Ende in Sekunden, dB)] der gezeichneten Spannungskurve (spannung.rides): die Band wird dort
+    leiser oder lauter; mit dem Lautstärke-Verlauf der Vorbilder (sections) bestimmt der.
     level_of: der Pegel des ganzen Songs (der Rückgabewert seines Mixes); dann ist dieser Mix ein Teil davon
     (Off-Vocal, A-cappella) und geht mit derselben Verstärkung durch den Master, so klingt er so laut wie im Song,
     statt auf target_lufs zu kommen.
@@ -652,6 +655,8 @@ def mische_spuren(
 
     if energy_contrast_db is not None and sections:
         _shape_energy(tracks, sections, energy_contrast_db, length)
+    elif tension:
+        _ride_tension(tracks, tension, length)
     if group_targets:
         _match_groups(tracks, group_targets)
     if vocal_ratio_db is not None:
@@ -899,6 +904,21 @@ def _shape_energy(tracks: dict, sections: list, target_db: float, length: int) -
             tracks[path] = (key, audio * 10 ** (step / 20))
         total += step
     log.info("Lautstärke-Verlauf wie im Vorbild: ruhigste Sektion %+.1f dB", float(total[int(np.argmax(curve))]))
+
+
+def _ride_tension(tracks: dict, rides: list, length: int) -> None:
+    """Die Band in gezeichneten Sektionen leiser oder lauter (spannung.rides), mit 0,3 s Übergang."""
+    band = [path for path, (key, _) in tracks.items() if key not in VOCAL_KEYS]
+    if not band:
+        return
+    gain_db = np.zeros(length, dtype=np.float32)
+    for start, end, db in rides:
+        gain_db += db * _window_mask(length, [(start, end)], fade=0.3)
+    gain = (10 ** (gain_db / 20)).astype(np.float32)
+    for path in band:
+        key, audio = tracks[path]
+        tracks[path] = (key, audio * gain)
+    log.info("Spannungskurve im Mix: %s", ", ".join(f"{start:.0f} s {db:+.1f} dB" for start, _, db in rides))
 
 
 MAX_TILT_DB = 4.0            # so weit dürfen die Vorbilder die Höhen einer Gruppe heben oder senken

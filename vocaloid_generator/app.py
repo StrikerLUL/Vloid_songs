@@ -48,6 +48,11 @@ def main(argv=None) -> None:
         logging.warning("pywebview fehlt, die App öffnet sich im Browser.")
     if native:
         app.native.settings["ALLOW_DOWNLOADS"] = True
+    remote = None
+    if SongSettings.load().remote_lan:          # 1.6.0: das Handy als Fernbedienung, im WLAN mit Zugangscode
+        import fernbedienung
+        remote = fernbedienung.start(args.port)
+        app.add_middleware(fernbedienung.Zugang)
     ui.run(
         build,
         title="Vloid Songs",
@@ -57,10 +62,10 @@ def main(argv=None) -> None:
         reload=False,
         native=native,
         window_size=WINDOW_SIZE if native else None,
-        host="127.0.0.1",
-        port=None if native else args.port,
+        host="0.0.0.0" if remote else "127.0.0.1",
+        port=args.port if remote or not native else None,
         show=not native,
-        reconnect_timeout=30,
+        reconnect_timeout=fernbedienung.RECONNECT_SECONDS if remote else 30,
     )
 
 

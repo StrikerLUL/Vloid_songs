@@ -370,6 +370,17 @@ class SongSettings(BaseModel):
     vocal_versions: bool = True        # Off-Vocal (ohne Gesang) und A-cappella (nur Gesang) als eigene MP3
     id3_tags: bool = True              # Titel, Stimme, Stil, Tempo, Tonart, Liedtext und Titelbild in die MP3
 
+    # 1.6.0
+    simple_view: bool = True           # einfache Ansicht: Stil, Stimmung, Stimme, Länge, Text, ein Knopf (gui/einfach.py)
+    quality: str = "Gut"               # in der einfachen Ansicht: Schnell, Gut oder Beste (qualitaet.py)
+    tidy_switches: bool = True         # Schalter ausblenden, die im Hör-Duell keinen hörbaren Unterschied machten
+    mood: float = Field(0.5, ge=0.0, le=1.0)   # Stimmung: 0 ruhig … 1 wild, verschiebt die Spannung aller Sektionen
+    tension_curve: bool = True         # die gezeichnete Spannungskurve lenkt Schlagzeug, Besetzung und Mix (spannung.py)
+    tension: dict[str, float] = Field(default_factory=dict)   # {„Chorus#2“: 0 bis 1} je Vorkommen einer Sektion
+    local_cache: bool = True           # Zwischenspeicher und Projekte nicht in OneDrive, sondern auf dem PC (speicher.py)
+    video_links: bool = False          # Video-Links als Vorbild: yt-dlp lädt den Ton nur zum Messen (vorbild_link.py)
+    remote_lan: bool = False           # Handy als Fernbedienung: die App im WLAN, mit Zugangscode (fernbedienung.py)
+
     channels: dict[str, ChannelSettings] = Field(default_factory=_default_channels)
 
     @model_validator(mode="before")
@@ -395,6 +406,25 @@ class SongSettings(BaseModel):
         if value not in CHOICES:
             raise ValueError(f"Unbekannte Szene: {value} (möglich: {', '.join(c for c in CHOICES if c)})")
         return value
+
+    @field_validator("quality")
+    @classmethod
+    def _check_quality(cls, value: str) -> str:
+        from qualitaet import PRESETS
+        if value not in PRESETS:
+            raise ValueError(f"Unbekannte Qualität: {value} (möglich: {', '.join(PRESETS)})")
+        return value
+
+    @field_validator("tension", mode="before")
+    @classmethod
+    def _check_tension(cls, value: dict) -> dict:
+        """{„Chorus#2“: 0 bis 1}; Schlüssel ohne Nummer gelten fürs erste Vorkommen."""
+        out = {}
+        for key, level in (value or {}).items():
+            kind, _, number = str(key).partition("#")
+            if kind in config.SECTION_CONFIG and (not number or number.isdigit()):
+                out[f"{kind}#{int(number or 1)}"] = min(1.0, max(0.0, float(level)))
+        return out
 
     @field_validator("active_sections")
     @classmethod
@@ -491,12 +521,16 @@ class SongSettings(BaseModel):
             return True
 
     def output_dir(self) -> str:
+        """Wo die App Songs erzeugt. Liegt der Ausgabeordner in OneDrive, mit local_cache ein Ordner auf diesem Rechner
+        (speicher.outside_cloud, 1.6.0)."""
         configured = self.output_ordner
+        target = config.OUTPUT_ORDNER
         if configured and (os.path.isdir(configured) or os.path.isdir(os.path.dirname(configured))):
-            return configured
-        if configured:
+            target = configured
+        elif configured:
             log.warning("Output-Ordner nicht erreichbar: %s. Nutze %s", configured, config.OUTPUT_ORDNER)
-        return config.OUTPUT_ORDNER
+        import speicher
+        return speicher.work_dir(self, target)
 
     # ── Hilfen für die Pipeline ─────────────────────────────────────────────────
     def instrument_styles(self) -> dict:

@@ -103,6 +103,27 @@ und Systeminfo (keine Songs) und landet in `Dokumente\Vloid Songs\Fehlerberichte
 - **Meine alten Songs fehlen.** Sie liegen noch im alten Ordner. In Einrichten den alten Ordner wählen und
   „Übernehmen“ drücken. Hilfe › Datenordner öffnen zeigt, wo die App jetzt speichert.
 
+## Speicher, Video-Links und Handy
+
+- **OneDrive meldet ständig Uploads, oder Spuren fehlen beim Lesen.** Ab 1.6 arbeitet die App außerhalb von OneDrive
+  in `%LOCALAPPDATA%\Vloid Songs` (Pfade › App, „Arbeitsdateien außerhalb von OneDrive“, ab Werk an). Hilfe ›
+  Einrichten zeigt unter Speicherplatz, wo die Arbeit liegt. Die fertigen MP3 liegen zusätzlich in `MP3` im
+  Ausgabeordner. Soll alles woanders hin, z. B. auf ein zweites Laufwerk: die Umgebungsvariable `VLOID_ARBEIT` auf
+  diesen Ordner setzen.
+- **„Wenig Platz“ vor dem Erzeugen.** Auf dem Laufwerk sind weniger als 5 GB frei. Hilfe › Einrichten ›
+  „Projekte löschen“ und „Aufräumen“ geben Platz frei, ohne Songs zu löschen.
+- **Ein Video-Link lässt sich nicht messen.** Das Video ist privat, nur für Mitglieder, länger als 15 Minuten oder die
+  Seite hat sich geändert. Die App nutzt yt-dlp; ein Update der App bringt meist ein neues mit. Ohne ffmpeg misst die
+  App den Ton im Format des Videos, das klappt nicht mit jedem; mit ffmpeg (System prüfen) geht es sicherer. Sonst
+  den Song als Datei nehmen.
+- **Das Handy findet die App nicht.** Handy und PC im selben WLAN? Ein Gast-WLAN trennt die Geräte. Beim ersten Start
+  mit „Handy als Fernbedienung“ fragt Windows, ob die App ins Netzwerk darf: „Private Netzwerke“ erlauben. Wurde das
+  abgelehnt: Windows-Sicherheit › Firewall- und Netzwerkschutz › „Zugriff von App durch Firewall zulassen“, dort
+  Python für private Netzwerke anhaken. Ist das WLAN als „Öffentlich“ eingestellt, in den Windows-Einstellungen auf
+  „Privat“ stellen. Ist Port 8090 belegt, startet die App nicht: `"Vloid Songs starten.bat" --port 8091`.
+- **Das Handy fragt nach dem Code, der Code stimmt aber nicht.** Wurde ein neuer Code gewürfelt, gilt nur der neue
+  (Hilfe › Handy als Fernbedienung am PC). Nach acht falschen Codes wartet das Handy eine Minute.
+
 ## Alles zurück auf Anfang
 
 Die App schließen und `Einstellungen.json` in `Dokumente\Vloid Songs` umbenennen. Beim nächsten Start sind alle

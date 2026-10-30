@@ -1,8 +1,8 @@
-# Testliste für Vloid Songs 1.5.0
+# Testliste für Vloid Songs 1.6.0
 
-Etwa anderthalb Stunden auf deinem PC, davon viel Warten. 1.1 bis 1.3 sind noch nicht ganz getestet, deshalb stehen
-ihre Punkte (A bis K) weiter hier; neu in 1.5 ist Teil L, und der ist der wichtigste. Wenig Zeit: A, B, C und L. Hak ab, was klappt, und schreib zu
-allem anderen eine Zeile, was passiert ist. Am Ende **Hilfe › Fehlerbericht speichern** und das ZIP zusammen mit der
+Etwa zwei Stunden auf deinem PC, davon viel Warten. 1.1 bis 1.5 sind noch nicht ganz getestet, deshalb stehen
+ihre Punkte (A bis L) weiter hier; neu in 1.6 ist Teil M, und der ist der wichtigste. Wenig Zeit: A, B, C und M.
+Hak ab, was klappt, und schreib zu allem anderen eine Zeile, was passiert ist. Am Ende **Hilfe › Fehlerbericht speichern** und das ZIP zusammen mit der
 Liste zurückschicken.
 
 **Vergleichen:** Bei Klangfragen im Tab Song „Seed festhalten“ anhaken, den Song einmal mit und einmal mit dem
@@ -10,7 +10,7 @@ genannten Schalter aus erzeugen und im Tab Verlauf mit A und B hin- und herschal
 
 ## A. Installieren (5 Minuten)
 
-- [ ] `VloidSongs-Setup-1.2.0.exe` starten, durchklicken. Am Ende startet die App von selbst.
+- [ ] `VloidSongs-Setup-1.6.0.exe` von der Release-Seite starten, durchklicken. Am Ende startet die App von selbst.
 - [ ] Im Startmenü gibt es „Vloid Songs“, und es startet die App.
 - [ ] `Dokumente\Vloid Songs` gibt es, mit `Songs` und `Einstellungen.json`.
 - [ ] Hattest du vorher den entpackten Ordner: In Einrichten unter „Deine Daten“ den alten Ordner wählen,
@@ -57,7 +57,7 @@ genannten Schalter aus erzeugen und im Tab Verlauf mit A und B hin- und herschal
 ## G. Hilfe-Menü (1 Minute)
 
 - [ ] Hilfe › Erste Schritte, Fehlerbehebung, Was ist neu und Credits gehen auf.
-- [ ] Hilfe › Nach Update suchen meldet „Deine Version 1.2.0 ist die neueste.“ (oder zeigt eine neuere).
+- [ ] Hilfe › Nach Update suchen meldet „Deine Version 1.6.0 ist die neueste.“ (oder zeigt eine neuere).
 
 ## H. Gesang 1.1 (10 Minuten)
 
@@ -188,6 +188,38 @@ ist: den Hör-Check und die KI-Bilder. Bitte die beiden zuerst.
 - [ ] Tab Song: „Mischen mit“ Kawaii Chiptune bei 30 %, Stil Rock. Klingt es nach Kawaii-Rock? Gefällt dir die
       Mischung bei 50 % besser oder schlechter?
 
+## M. Neu in 1.6: einfach, Hör-Duell, Text, Spannung, Handy (30 Minuten)
+
+Vier Dinge konnte ich hier nicht echt ausprobieren: NEUTRINO im Hör-Duell, OneDrive, ein echtes Handy mit der Windows-
+Firewall und das Laden von YouTube. Bitte die vier zuerst.
+
+- [ ] Oben steht „Einfach“. Stil, Stimmung, Stimme, Länge und Qualität „Gut“ wählen, „Song machen“. Unter der
+      Qualität steht danach „zuletzt etwa … Min.“; stimmt das ungefähr? Ist „Schnell“ deutlich schneller, klingt
+      „Beste“ sauberer? Oben „Profi“: sind alle Tabs und Schalter wie vorher?
+- [ ] **Hör-Duell** mit NEUTRINO: drei, vier Duelle. Hörst du bei jedem einen Unterschied? Wie lange dauert das erste,
+      wie lange die weiteren? Danach „Übernehmen“: Sind die Schalter, bei denen du „B besser“ gesagt hast, aus? Sind
+      die mit „gleich“ aus den Tabs verschwunden (Pfade › App, „Aufgeräumt“)?
+- [ ] **OneDrive:** Liegt `Dokumente` bei dir in OneDrive? Dann einen Song erzeugen: Steht in Hilfe › Einrichten unter
+      Speicherplatz „Der Ausgabeordner … liegt in OneDrive“ mit einem Ordner in `AppData\Local\Vloid Songs`? Liegt die MP3 in OneDrive unter
+      `Songs\MP3`? Sind die alten Songs im Tab Verlauf noch da? Lädt OneDrive beim Erzeugen nichts mehr hoch?
+- [ ] **Handy:** Hilfe › Handy als Fernbedienung einschalten, App schließen und neu öffnen. Fragt Windows nach dem
+      Netzwerk („Private Netzwerke“ erlauben)? Zeigt derselbe Eintrag jetzt QR-Code, Adresse und Code? Mit dem Handy
+      scannen: geht die App auf? Einen Song erzeugen, das Handy dabei weglegen (Bildschirm aus), nach dem Song wieder
+      anschalten: Ist der Song da? „MP3 aufs Handy“: landet sie in den Downloads? Schläft der PC während des Songs
+      nicht ein? Ein zweites Gerät ohne Code: fragt es nach dem Code?
+- [ ] **Video-Link:** Tab Song, „Video-Links als Vorbild“ einschalten, einen Link zu einem Song auf YouTube oder
+      Niconico, „Messen“. Wie lange dauert es? Stimmen Tempo, Tonart und Ablauf ungefähr? „Ablauf und Akkorde
+      übernehmen“ und einen Song erzeugen.
+- [ ] **Text-Baukasten:** „Text bauen“, Thema Sommer, Stimmung hell, Titelwort 花火. Klingt der Text natürlich
+      (bitte jemanden fragen, der Japanisch kann, wenn möglich)? Singt die App jede Zeile richtig? Zwei Zeilen tauschen,
+      übernehmen, Song erzeugen: Passen die Zeilen in die Melodie, steht die Übersetzung im Video?
+- [ ] **Spannungskurve:** Tab Song, unter dem Ablauf „Spannungskurve“ aufklappen. Den zweiten Refrain ganz nach oben,
+      die Bridge ganz nach unten ziehen, „Seed festhalten“, Song erzeugen, dann „Wie der Stil“ und noch einmal. Hörst
+      du im Verlauf mit A und B: Bridge ohne Schlagzeug am Anfang, zweiter Refrain kräftiger?
+- [ ] **Stimmung:** in der einfachen Ansicht einmal ganz ruhig, einmal ganz wild (gleicher Seed). Klingt ruhig weicher
+      und wild kräftiger, ohne seltsam zu werden?
+- [ ] Tab Verlauf, ⓘ bei einem älteren Song: Stimmen Stil, Stimme und „Anders als jetzt“?
+
 ## Wenn du mehr Zeit hast
 
 - [ ] **DiffSinger (Versuch):** eine freie DiffSinger-Stimme in OpenUtau installieren (oder in
@@ -219,4 +251,5 @@ ist: den Hör-Check und die KI-Bilder. Bitte die beiden zuerst.
 3. Ein Satz zum Klang: Schlagzeug, Gesang, Idol-Rufe und Rap-Teil und, wenn ausprobiert, DiffSinger, KI-Begleitung und
    Mix pro Instrument. Für 1.4: Klingen die Songs jetzt verschieden genug, und was stört dich an der Stimme noch am
    meisten (rau, nasal, verwaschen, zu leise, zu spitz)? Am besten mit einem kurzen Ausschnitt von `vocals.wav`.
-   Für 1.5: Passt das Video zum Song, und welche Szene gefällt dir am wenigsten?
+   Für 1.5: Passt das Video zum Song, und welche Szene gefällt dir am wenigsten? Für 1.6: Welche Funktionen hast du
+   im Hör-Duell abgewählt, und benutzt du lieber die einfache Ansicht oder die Profi-Ansicht?

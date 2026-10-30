@@ -6,7 +6,8 @@
 # Handy laden. Rechnen tut weiter der PC; solange er rechnet, schläft er nicht ein (awake).
 # Jedes andere Gerät als dieser PC braucht den Zugangscode (sechs Ziffern): im QR-Code steckt er schon, sonst fragt
 # die App danach. Danach merkt sich der Browser den Zugang (Cookie, DAYS Tage); ein neuer Code sperrt alle Geräte
-# wieder aus. Nach MOST_TRIES falschen Codes wartet ein Gerät LOCK_SECONDS. Zugang prüft jede Anfrage: die Seite,
+# wieder aus. Nach MOST_TRIES falschen Codes wartet ein Gerät LOCK_SECONDS, jedes weitere Mal doppelt so lange (bis
+# LONGEST_LOCK), damit niemand im WLAN die sechs Ziffern durchprobieren kann. Zugang prüft jede Anfrage: die Seite,
 # die Verbindung der Oberfläche (WebSocket), die Dateien für den Player, Downloads und das Hochladen.
 # Code und Schlüssel liegen in fernbedienung.json im Datenordner, nicht in den Einstellungen (die landen im Verlauf
 # und in Vorlagen).
@@ -32,7 +33,7 @@ FILE = "fernbedienung.json"
 PORT = 8090
 COOKIE = "vloid_zugang"
 DAYS = 30
-MOST_TRIES, LOCK_SECONDS = 8, 60
+MOST_TRIES, LOCK_SECONDS, LONGEST_LOCK = 8, 60, 3600
 RECONNECT_SECONDS = 600         # so lange wartet eine Seite auf ein Handy, dessen Bildschirm aus ist
 ES_CONTINUOUS, ES_SYSTEM_REQUIRED = 0x80000000, 0x00000001
 
@@ -204,7 +205,7 @@ class Zugang:
         self.app = app
         self.current = current or (lambda: ACTIVE.code if ACTIVE is not None else code())
         self.clock = clock
-        self.tries: dict = {}          # Adresse → (Fehlversuche, gesperrt bis)
+        self.tries: dict = {}          # Adresse → (Fehlversuche, gesperrt bis, wie oft schon gesperrt)
 
     async def __call__(self, scope, receive, send) -> None:
         if scope["type"] not in ("http", "websocket"):
@@ -231,7 +232,7 @@ class Zugang:
             return
         if given and not locked:
             locked = self._failed(host)
-        message = ("<p class='bad'>Zu viele falsche Versuche: warte eine Minute.</p>" if locked else
+        message = (f"<p class='bad'>Zu viele falsche Versuche: warte {_minutes(self._left(host))}.</p>" if locked else
                    "<p class='bad'>Der Code stimmt nicht.</p>" if given else "")
         await _respond(send, 401, PAGE.format(message=message).encode(),
                        [(b"content-type", b"text/html; charset=utf-8"), (b"cache-control", b"no-store")])
@@ -246,18 +247,28 @@ class Zugang:
                     return True
         return False
 
+    def _left(self, host) -> float:
+        """Sekunden, die das Gerät noch warten muss."""
+        return max(0.0, self.tries.get(host, (0, 0.0, 0))[1] - self.clock())
+
     def _locked(self, host) -> bool:
-        return self.tries.get(host, (0, 0.0))[1] > self.clock()
+        return self._left(host) > 0
 
     def _failed(self, host) -> bool:
-        count, _ = self.tries.get(host, (0, 0.0))
+        count, _, locks = self.tries.get(host, (0, 0.0, 0))
         count += 1
         if count >= MOST_TRIES:
-            self.tries[host] = (0, self.clock() + LOCK_SECONDS)
-            log.warning("Fernbedienung: %d falsche Codes von %s, eine Minute gesperrt", count, host)
+            seconds = min(LONGEST_LOCK, LOCK_SECONDS * 2 ** locks)
+            self.tries[host] = (0, self.clock() + seconds, locks + 1)
+            log.warning("Fernbedienung: %d falsche Codes von %s, %s gesperrt", count, host, _minutes(seconds))
             return True
-        self.tries[host] = (count, 0.0)
+        self.tries[host] = (count, 0.0, locks)
         return False
+
+
+def _minutes(seconds: float) -> str:
+    minutes = max(1, round(seconds / 60))
+    return "eine Minute" if minutes == 1 else f"{minutes} Minuten"
 
 
 async def _respond(send, status: int, body: bytes, headers: list) -> None:

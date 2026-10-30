@@ -48,6 +48,8 @@ def open_duel(host, settings, current: Callable, job, set_busy: Callable, file_u
         if job.running:
             ui.notify("Es läuft schon etwas.", type="warning")
             return
+        if job.blocked():
+            return
         base = current()
         if base.seed is None:
             base = base.with_updates(seed=pipeline.new_seed())

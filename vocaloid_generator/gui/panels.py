@@ -605,8 +605,8 @@ def link_editor(s: SongSettings, take: Callable) -> None:
         try:
             found["link"] = await run.io_bound(vorbild_link.measure, url)
         except Exception as e:  # noqa: BLE001 – yt-dlp kennt viele Fehler, alle gehen nur an den Nutzer
-            ui.notify(f"Das Video ließ sich nicht messen: {str(e).splitlines()[0][:200]}", type="warning",
-                      multi_line=True)
+            first = (str(e).strip().splitlines() or [type(e).__name__])[0]
+            ui.notify(f"Das Video ließ sich nicht messen: {first[:200]}", type="warning", multi_line=True)
         finally:
             button.enable()
             status.set_text("")

@@ -36,12 +36,18 @@ if "%~1"=="--einrichten" (
         timeout /t 600
         exit /b 1
     )
-    rem Eine schon eingerichtete Bewertung bekommt Pakete, die seit dem letzten Mal dazugekommen sind, z. B. requests.
+    rem Eine schon eingerichtete Bewertung (und die KI-Bilder) bekommen Pakete, die seit dem letzten Mal dazugekommen
+    rem sind, z. B. requests.
     rem Klappt das nicht, laeuft die App trotzdem; unter Hilfe, Einrichten laesst es sich wiederholen.
     if exist "%~dp0tools\bewertung\venv\Scripts\python.exe" (
         echo.
         set "PATH=%~dp0uv;%PATH%"
         "%UV%" run --no-dev --frozen setup_bewertung.py --ergaenzen
+    )
+    if exist "%~dp0tools\bilder\venv\Scripts\python.exe" (
+        echo.
+        set "PATH=%~dp0uv;%PATH%"
+        "%UV%" run --no-dev --frozen setup_bilder.py --ergaenzen
     )
     exit /b 0
 )

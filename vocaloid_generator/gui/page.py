@@ -41,6 +41,9 @@ CANCELLED = "Abgebrochen"
 COUNTS = {1: "1 Fassung", 2: "2 Fassungen", 3: "3 Fassungen", 5: "5 Fassungen"}
 # Ordner, aus denen der Player Dateien holen darf (Ausgabeordner, auch frühere)
 SERVED_ROOTS: set = set()
+BUSY_ELSEWHERE = ("Auf einem anderen Gerät oder in einem anderen Fenster entsteht gerade ein Song. Warte, bis er "
+                  "fertig ist.")
+_running = 0            # laufende Jobs aller Seiten (PC, Handy, zweites Fenster)
 
 
 @dataclass
@@ -84,9 +87,25 @@ class Job:
 
     def __setattr__(self, name: str, value) -> None:
         if name == "running" and bool(value) != bool(getattr(self, "running", False)):
+            global _running
+            _running = max(0, _running + (1 if value else -1))
             import fernbedienung
             fernbedienung.awake(bool(value))         # 1.6.0: solange ein Song entsteht, schläft der PC nicht ein
         super().__setattr__(name, value)
+
+    def elsewhere(self) -> bool:
+        """Läuft auf einer anderen Seite (Handy, zweites Fenster) schon etwas? Alle Seiten teilen sich Ausgabeordner,
+        Zufall und Abbrechen, deshalb entsteht immer nur ein Song auf einmal."""
+        return _running > (1 if self.running else 0)
+
+    def blocked(self) -> bool:
+        """True, wenn diese Seite gerade nichts starten darf; läuft es auf einer anderen, sagt sie das."""
+        if self.running:
+            return True
+        if self.elsewhere():
+            ui.notify(BUSY_ELSEWHERE, type="warning", multi_line=True)
+            return True
+        return False
 
     def finish(self) -> None:
         """Ein fertiger Lauf: für die nächste Schätzung merken."""
@@ -382,7 +401,7 @@ def build() -> None:
                        draft: bool = False, reopened: Optional[history.Entry] = None) -> None:
         """reopened: ein Song aus dem Verlauf, dessen Gesang project.unpack zurückgelegt hat; er kommt nicht noch
         einmal in den Verlauf."""
-        if job.running:
+        if job.blocked():
             return
         current = settings.model_copy(deep=True)
         if reopened is not None:
@@ -486,7 +505,7 @@ def build() -> None:
         dialog.open()
 
     async def make_album(n: int, styles: list, texts: str, name: str) -> None:
-        if job.running:
+        if job.blocked():
             return
         save_settings()
         current = settings.model_copy(deep=True)
@@ -518,7 +537,7 @@ def build() -> None:
         ui.notify(f"Album „{made.name}“ fertig: {made.describe()}", type="positive", multi_line=True)
 
     async def hooks() -> None:
-        if job.running:
+        if job.blocked():
             return
         current = settings.model_copy(deep=True)
         result = state["result"]
@@ -561,6 +580,8 @@ def build() -> None:
         if job.running or result is None:
             ui.notify("Erst einen Song erzeugen, dann davon einen Remix machen.", type="warning")
             return
+        if job.blocked():
+            return
         if not remix_style.value:
             ui.notify("Erst den Stil für den Remix wählen.", type="warning")
             return
@@ -572,7 +593,7 @@ def build() -> None:
         settings.seed = previous        # „Song erzeugen“ macht danach wieder einen neuen Song
 
     async def cast_voices() -> None:
-        if job.running:
+        if job.blocked():
             return
         current = song_now()
         job.start()
@@ -813,6 +834,8 @@ def build() -> None:
         if result is None or job.running:
             ui.notify("Erst einen Song erzeugen.", type="warning")
             return
+        if job.blocked():
+            return
         entry = next((e for e in history.entries(settings.output_dir()) if e.audio == result.history), None)
         job.start()
         job.report(0.1, "Baue Video-Vorschau..." if preview else "Baue Lyric-Video...")
@@ -840,6 +863,8 @@ def build() -> None:
         result = state["result"]
         if result is None or job.running:
             ui.notify("Erst einen Song erzeugen.", type="warning")
+            return
+        if job.blocked():
             return
         entry = next((e for e in history.entries(settings.output_dir()) if e.audio == result.history), None)
         job.start()
@@ -1162,7 +1187,7 @@ def build() -> None:
                   type="positive")
 
     async def reopen(entry) -> None:
-        if job.running:
+        if job.blocked():
             return
         restored = entry.restore(settings)
         ok, message = await run.io_bound(project.unpack, entry.audio, restored.with_updates(reuse_steps=True),

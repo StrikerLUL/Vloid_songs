@@ -5,7 +5,8 @@
 # ruhig, Refrain hell und weit) und was im Text vorkommt (雨 → Regen, 星 → Sternenhimmel). Es läuft wie die Bewertung
 # in einer eigenen Umgebung (tools/bilder, einmal uv run setup_bilder.py), mit NVIDIA-Grafikkarte in Sekunden, sonst
 # auf dem Prozessor in etwa einer halben Minute pro Bild. Die Bilder liegen im Songordner unter bilder\ und werden
-# beim nächsten Video wiederverwendet. Fehlt die Umgebung, malt video_szenen.py die Szene wie ohne.
+# beim nächsten Video desselben Songs (gleicher Seed, gleicher Prompt) wiederverwendet; ein neuer Song im selben
+# Ausgabeordner bekommt eigene Bilder. Fehlt die Umgebung, malt video_szenen.py die Szene wie ohne.
 import json
 import logging
 import os
@@ -149,7 +150,8 @@ def _name(kind: str) -> str:
 
 
 def paint(wanted: dict, folder: str, seed: int, progress=None) -> dict:
-    """Malt die Bilder, die in folder noch fehlen oder deren Prompt sich geändert hat."""
+    """Malt die Bilder, die in folder noch fehlen oder deren Prompt oder Seed sich geändert hat. Alle Songs teilen sich
+    den Ausgabeordner: ohne den Seed bekäme ein neuer Song im selben Stil die Bilder des vorigen."""
     os.makedirs(folder, exist_ok=True)
     known_path = os.path.join(folder, PROMPTS_FILE)
     try:
@@ -157,10 +159,11 @@ def paint(wanted: dict, folder: str, seed: int, progress=None) -> dict:
             known = json.load(f)
     except (OSError, ValueError):
         known = {}
+    painted = {kind: f"{int(seed)}|{prompt}" for kind, prompt in wanted.items()}
     jobs = []
     for i, (kind, prompt) in enumerate(wanted.items()):
         path = os.path.join(folder, _name(kind))
-        if known.get(kind) != prompt or not os.path.exists(path):
+        if known.get(kind) != painted[kind] or not os.path.exists(path):
             jobs.append({"path": path, "prompt": prompt, "seed": int(seed) * 31 + i})
     if jobs:
         if progress:
@@ -168,7 +171,7 @@ def paint(wanted: dict, folder: str, seed: int, progress=None) -> dict:
         if not _run(jobs, folder):
             return {}
         with open(known_path, "w", encoding="utf-8") as f:
-            json.dump({**known, **wanted}, f, ensure_ascii=False, indent=1)
+            json.dump({**known, **painted}, f, ensure_ascii=False, indent=1)
     return {kind: os.path.join(folder, _name(kind)) for kind in wanted
             if os.path.exists(os.path.join(folder, _name(kind)))}
 

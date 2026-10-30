@@ -122,7 +122,10 @@ und Systeminfo (keine Songs) und landet in `Dokumente\Vloid Songs\Fehlerberichte
   Python für private Netzwerke anhaken. Ist das WLAN als „Öffentlich“ eingestellt, in den Windows-Einstellungen auf
   „Privat“ stellen. Ist Port 8090 belegt, startet die App nicht: `"Vloid Songs starten.bat" --port 8091`.
 - **Das Handy fragt nach dem Code, der Code stimmt aber nicht.** Wurde ein neuer Code gewürfelt, gilt nur der neue
-  (Hilfe › Handy als Fernbedienung am PC). Nach acht falschen Codes wartet das Handy eine Minute.
+  (Hilfe › Handy als Fernbedienung am PC). Nach acht falschen Codes wartet das Handy eine Minute, bei jedem weiteren
+  Mal doppelt so lange (höchstens eine Stunde).
+- **„Auf einem anderen Gerät entsteht gerade ein Song“.** PC und Handy teilen sich den Ausgabeordner, deshalb entsteht
+  immer nur ein Song auf einmal. Warte, bis der andere fertig ist, oder brich ihn dort ab, wo er gestartet wurde.
 
 ## Alles zurück auf Anfang
 

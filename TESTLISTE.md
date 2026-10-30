@@ -206,7 +206,8 @@ Firewall und das Laden von YouTube. Bitte die vier zuerst.
       Netzwerk („Private Netzwerke“ erlauben)? Zeigt derselbe Eintrag jetzt QR-Code, Adresse und Code? Mit dem Handy
       scannen: geht die App auf? Einen Song erzeugen, das Handy dabei weglegen (Bildschirm aus), nach dem Song wieder
       anschalten: Ist der Song da? „MP3 aufs Handy“: landet sie in den Downloads? Schläft der PC während des Songs
-      nicht ein? Ein zweites Gerät ohne Code: fragt es nach dem Code?
+      nicht ein? Ein zweites Gerät ohne Code: fragt es nach dem Code? Während am PC ein Song entsteht, am Handy
+      „Song machen“: Sagt es, dass auf einem anderen Gerät gerade ein Song entsteht (1.6.1)?
 - [ ] **Video-Link:** Tab Song, „Video-Links als Vorbild“ einschalten, einen Link zu einem Song auf YouTube oder
       Niconico, „Messen“. Wie lange dauert es? Stimmen Tempo, Tonart und Ablauf ungefähr? „Ablauf und Akkorde
       übernehmen“ und einen Song erzeugen.

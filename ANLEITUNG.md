@@ -209,11 +209,13 @@ Eintrag einen QR-Code, die Adresse (z. B. `http://192.168.1.20:8090/`) und den Z
   Handy** herunterladen. Vorbilder, Summen und eine eigene Gesangsspur lädt man hoch („Hochladen“) statt am PC zu
   wählen.
 - Jedes andere Gerät als der PC braucht den sechsstelligen Zugangscode; im QR-Code steckt er schon, sonst fragt die
-  App danach. Der Browser merkt sich den Zugang 30 Tage. Nach acht falschen Codes wartet ein Gerät eine Minute.
-  **Neuen Code würfeln** sperrt alle Geräte wieder aus.
+  App danach. Der Browser merkt sich den Zugang 30 Tage. Nach acht falschen Codes wartet ein Gerät eine Minute, bei
+  jedem weiteren Mal doppelt so lange (höchstens eine Stunde). **Neuen Code würfeln** sperrt alle Geräte wieder aus.
 - Gerechnet wird weiter am PC. Solange ein Song entsteht, schläft er nicht ein (auch beim Album über Nacht); der
   Bildschirm darf ausgehen. Geht der Bildschirm des Handys aus, wartet die Seite zehn Minuten auf es; ist der Song
   inzwischen fertig, steht er im Verlauf.
+- Es entsteht immer nur ein Song auf einmal: Läuft am PC schon einer, sagt das Handy das, statt einen zweiten zu
+  starten (und umgekehrt).
 
 ## Neu in 1.5
 

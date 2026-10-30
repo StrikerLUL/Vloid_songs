@@ -87,6 +87,11 @@ class Sound:
     level: np.ndarray                  # (Bilder,) 0..1
     mono: np.ndarray
     rate: int
+    peak: float = 0.0                  # lautester Wert des Songs; einmal gemessen statt in jedem Bild
+
+    def __post_init__(self) -> None:
+        if not self.peak:
+            self.peak = float(np.max(np.abs(self.mono))) if len(self.mono) else 0.0
 
     def wave(self, t: float, points: int = 160) -> np.ndarray:
         i = int(t * self.rate)
@@ -94,8 +99,7 @@ class Sound:
         if len(part) < 32:
             return np.zeros(points)
         part = part[::max(1, len(part) // points)][:points]
-        peak = float(np.max(np.abs(self.mono))) or 1.0
-        return np.clip(part / peak, -1, 1)
+        return np.clip(part / (self.peak or 1.0), -1, 1)
 
 
 def analyse(mono: np.ndarray, rate: int, frames: int, fps: int = FPS) -> Sound:

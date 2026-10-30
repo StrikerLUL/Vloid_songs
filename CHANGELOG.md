@@ -2,6 +2,27 @@
 
 Jede Version hat hier einen Abschnitt. Die App zeigt ihn einmal nach einem Update (Hilfe › Was ist neu).
 
+## 1.6.1
+
+Fehler behoben, die beim Durchsehen des ganzen Projekts nach 1.6.0 aufgefallen sind. Neue Funktionen gibt es keine, an
+deinen Einstellungen ändert sich nichts.
+
+- **Handy und PC erzeugten gleichzeitig.** Mit dem Handy als Fernbedienung (oder zwei offenen Fenstern) ließ sich auf
+  jedem Gerät ein Song starten, während der andere noch lief. Beide schrieben in denselben Ausgabeordner, also
+  überschrieben sie sich die Spuren, und „Abbrechen“ auf einem Gerät brach beide ab. Jetzt entsteht immer nur ein Song
+  auf einmal; das andere Gerät sagt „Auf einem anderen Gerät … entsteht gerade ein Song“. Das gilt für Song, Album,
+  Hooks, Stimmen-Casting, Remix, Video, YouTube-Paket, Wieder öffnen und das Hör-Duell.
+- **Zugangscode fürs Handy sicherer:** Nach acht falschen Codes wartete ein Gerät immer nur eine Minute; wer im WLAN
+  lange genug probierte, hätte die sechs Ziffern in ein paar Wochen gefunden. Jetzt dauert jede weitere Sperre doppelt
+  so lange (2, 4, 8 … Minuten, höchstens eine Stunde). Der richtige Code setzt das zurück.
+- **Musikvideo schneller:** Für die Wellenform maß jedes Bild den lautesten Moment des ganzen Songs neu. Bei einem Song
+  von vier Minuten kostete das etwa eine Minute pro Video; jetzt wird er einmal gemessen.
+- **KI-Bilder gehören zu ihrem Song:** Alle Songs teilen sich den Ausgabeordner, und ein neuer Song im selben Stil (mit
+  denselben Bildern im Text) bekam die Bilder des vorigen. Jetzt malt jeder Song seine eigenen; ein zweites Video
+  desselben Songs nimmt weiter die schon gemalten.
+- **Nach einem Update** ergänzt die Setup.exe jetzt auch die KI-Bilder um neue Pakete, wie schon die Bewertung.
+- **Video-Link messen:** Scheiterte die Messung mit einem Fehler ohne Text, blieb die Meldung aus.
+
 ## 1.6.0
 
 Diese Version macht die App einfacher und fragt mehr dein Ohr: eine einfache Ansicht mit drei Qualitätsstufen, ein

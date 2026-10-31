@@ -2,16 +2,16 @@
 
 Erzeugt komplette Vocaloid-Songs auf Knopfdruck: Akkorde, Bass, Schlagzeug, Melodie und Begleitung, Gesang mit NEUTRINO oder VOICEVOX (oder einer lokalen Vorschau-Stimme), Mix mit Kompressor und Limiter und am Ende eine fertige MP3.
 
-Läuft unter Windows. Version 1.7.0: das Musikvideo läuft im Takt der Silben und zeigt Namen, Tonart und Akkorde des
+Läuft unter Windows. Version 1.7.1 (1.7.0 mit reparierten Video-Knöpfen): das Musikvideo läuft im Takt der Silben und zeigt Namen, Tonart und Akkorde des
 fertigen Songs, das Bild ist ruhiger und schärfer; im Refrain hat die Stimme mehr Platz, lange Töne schwingen, Strophe
 und Refrain liegen in eigener Lage, und ruhige Songs haben einen Lautstärke-Bogen. Was neu ist, steht in der
-[Anleitung › Neu in 1.7](ANLEITUNG.md#neu-in-17) und im [Changelog](CHANGELOG.md).
+[Anleitung › Neu in 1.7](ANLEITUNG.md#neu-in-17), was 1.7.1 behebt im [Changelog](CHANGELOG.md).
 
 | Zum Lesen | Was drinsteht |
 | --- | --- |
 | [ANLEITUNG.md](ANLEITUNG.md) | Erste Schritte, was die App kann, jeder Schalter, alle Details und die Kommandozeile (in der App: Hilfe › Erste Schritte) |
 | [FEHLERBEHEBUNG.md](FEHLERBEHEBUNG.md) | wenn etwas nicht klappt (Hilfe › Fehlerbehebung) |
-| [TESTLISTE.md](TESTLISTE.md) | der Praxistest für 1.7.0 (mit den Punkten aus 1.1 bis 1.6) |
+| [TESTLISTE.md](TESTLISTE.md) | der Praxistest für 1.7.1 (mit den Punkten aus 1.1 bis 1.6) |
 | [CHANGELOG.md](CHANGELOG.md) | was in jeder Version neu ist |
 | [CREDITS.md](CREDITS.md) | wessen Arbeit drinsteckt, mit Lizenzen |
 

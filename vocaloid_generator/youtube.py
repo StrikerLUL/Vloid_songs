@@ -77,7 +77,8 @@ def make(result, label: str = "", progress: Optional[ProgressFn] = None) -> Pack
         raise RuntimeError("Der Song fehlt, erst einen Song erzeugen.")
     s = result.settings
     title = title_for(result, label)
-    base = os.path.join(result.output_dir, os.pardir) if s and s.draft else result.output_dir
+    home = getattr(result, "share_dir", None) or result.output_dir      # 1.7.1: ein Song aus dem Verlauf
+    base = os.path.join(home, os.pardir) if s and s.draft else home
     name = safe_name(title, "Song")
     folder = free_folder(os.path.join(os.path.abspath(base), FOLDER), f"{datetime.now():%Y-%m-%d} {name}")
     os.makedirs(folder)
@@ -105,6 +106,12 @@ def make(result, label: str = "", progress: Optional[ProgressFn] = None) -> Pack
                                                 progress=lambda f, m: report(0.25 + 0.7 * f, m))
         except RuntimeError as e:
             package.problems.append(f"kein Video: {e}")
+        except Exception as e:  # noqa: BLE001 – 1.7.1: MP3, Titelbild und Beschreibung entstehen trotzdem
+            import cancel
+            if isinstance(e, cancel.Cancelled):
+                raise
+            log.exception("YouTube: Video fehlgeschlagen: %s", e)
+            package.problems.append(f"kein Video: {type(e).__name__}: {e} (Einzelheiten im Protokoll)")
     else:
         _lyric_video(result, package, folder, name, title, subtitle)
 

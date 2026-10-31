@@ -143,7 +143,13 @@ def for_song(result, progress=None, sharp: bool = False) -> dict:
     if not wanted:
         return {}
     folder = os.path.join(result.output_dir, SONG_FOLDER)
-    return paint(wanted, folder, result.seed, progress, SHARP_SIZE if sharp else SIZE)
+    found = paint(wanted, folder, result.seed, progress, SHARP_SIZE if sharp else SIZE)
+    if not found and sharp:
+        # 1.7.1: in 1024×576 braucht das Modell mehr Grafikspeicher; reicht er nicht, lieber die Bilder wie bis 1.6
+        # als gar keine
+        log.warning("KI-Bilder in %dx%d gingen nicht, versuche %dx%d", *SHARP_SIZE, *SIZE)
+        found = paint(wanted, folder, result.seed, progress, SIZE)
+    return found
 
 
 def _name(kind: str) -> str:

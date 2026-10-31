@@ -6,6 +6,7 @@
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 from typing import Optional
@@ -203,6 +204,10 @@ def _kana_romaji(kana: str) -> str:
     for digraph, latin in _DIGRAPHS.items():
         text = text.replace(digraph, latin)
     text = jaconv.kana2alphabet(text)
+    # 1.7.1: ein kleines っ am Wortanfang (die Partikel って) ließ jaconv als „xtsu“ stehen: „suki xtsute“. Es
+    # verdoppelt den Mitlaut danach (って → tte, っち → tchi); ohne Mitlaut danach (あっ) fällt es weg
+    text = re.sub(r"xtsu(ch|[bcdfghjkmnprstvwyz])?",
+                  lambda m: ("t" if m.group(1) == "ch" else m.group(1)[0]) + m.group(1) if m.group(1) else "", text)
     out = ""
     for c in text:
         if c == "-":                        # ー: der Vokal davor klingt weiter

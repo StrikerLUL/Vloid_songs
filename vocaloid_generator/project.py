@@ -106,6 +106,41 @@ def unpack(audio: str, settings, out: str) -> tuple:
     return True, "Song wieder geöffnet: Band und Mix entstehen neu, der Gesang bleibt."
 
 
+# 1.7.1: was das Video von einem Song braucht (Zeiten der Silben, Songkarte, wer gesungen hat); ein paar KB je Song
+MAP_FILES = ("liedtext.json", "songkarte.json", "gesang.json")
+
+
+def has_map(audio: str) -> bool:
+    """Liegen Songkarte und Zeiten der Silben im Projektordner (ab 1.7.1)?"""
+    return all(os.path.isfile(os.path.join(folder(audio), name)) for name in MAP_FILES[:2])
+
+
+def keep_map(out: str, audio: str) -> bool:
+    """Legt Songkarte und Zeiten der Silben des Songs in out neben den Song audio im Verlauf, damit ein Video von ihm
+    auch dann geht, wenn im Ausgabeordner längst ein anderer liegt (pipeline.from_history). Auch ohne Gesang."""
+    if not audio or not os.path.isfile(os.path.join(out, MAP_FILES[1])):
+        return False
+    target = folder(audio)
+    try:
+        os.makedirs(target, exist_ok=True)
+        for name in MAP_FILES:
+            if os.path.isfile(os.path.join(out, name)):
+                shutil.copyfile(os.path.join(out, name), os.path.join(target, name))
+    except OSError as e:
+        log.warning("Songkarte nicht im Verlauf aufgehoben: %s", e)
+        return False
+    return True
+
+
+def notes_of(audio: str) -> Optional[str]:
+    """Der Fingerabdruck der Noten, zu denen der aufgehobene Gesang gehört; None ohne Projekt."""
+    try:
+        with open(os.path.join(folder(audio), FILE), encoding="utf-8") as f:
+            return json.load(f).get("notes")
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
 def delete(audio: str) -> None:
     shutil.rmtree(folder(audio), ignore_errors=True)
 

@@ -1,6 +1,7 @@
 # pipeline.py – Der komplette Ablauf von den Einstellungen bis zur fertigen MP3.
 # Kommandozeile (main.py) und Oberfläche (gui/page.py) rufen beide nur generate_song() auf. Den Gesang macht singing.py,
 # die Instrumente rendering.py, die Angaben zum Mischen mixdown.py.
+import json
 import logging
 import os
 import random
@@ -72,6 +73,7 @@ class SongResult:
     polished_mp3: Optional[str] = None
     versions: dict = field(default_factory=dict)   # {"offvocal" / "acappella": MP3, ohne ffmpeg WAV} (v6 Nr. 4)
     hearing: list = field(default_factory=list)    # hoercheck.Line je Zeile, wenn der Hör-Check lief (1.5.0 St4)
+    share_dir: Optional[str] = None            # 1.7.1: wohin Video und YouTube-Ordner kommen; leer = output_dir
 
     @property
     def audio(self) -> Optional[str]:
@@ -363,6 +365,9 @@ def _produce(settings: SongSettings, tracks: dict, out: str, report: ProgressFn,
             import project
             report(0.98, "Hebe den Gesang als Projekt auf...")
             project.save(out, tracks, entry.audio)
+        if entry:
+            import project
+            project.keep_map(out, entry.audio)          # 1.7.1: fürs Video aus dem Verlauf (from_history)
     return result
 
 
@@ -598,16 +603,111 @@ def lyric_video(result: SongResult, path: Optional[str] = None, label: str = "",
     if not result.audio or not os.path.exists(result.audio):
         raise RuntimeError("Der Song fehlt, erst einen Song erzeugen.")
     s = result.settings
+    folder = result.share_dir or result.output_dir
     if s is not None and s.music_video:
         import musikvideo
         name = "video_vorschau.mp4" if preview else "lyric_video.mp4"
-        return musikvideo.for_song(result, path or os.path.join(result.output_dir, name), label, preview=preview,
+        return musikvideo.for_song(result, path or os.path.join(folder, name), label, preview=preview,
                                    progress=progress)
     found = karaoke.load(os.path.join(result.output_dir, karaoke.FILE))
     title = f"{s.style} · {s.bpm} BPM" if s else ""
-    return karaoke.video(result.audio, found, path or os.path.join(result.output_dir, "lyric_video.mp4"), title,
+    return karaoke.video(result.audio, found, path or os.path.join(folder, "lyric_video.mp4"), title,
                          background=(s.video_background or None) if s else None,
                          style=s.style if s and s.video_colors else "")
+
+
+# 1.7.1: wie das Video aussieht. Das gilt so, wie es gerade im Tab Video steht, auch für einen schon fertigen Song;
+# bis 1.7.0 galten die Schalter von damals, und ein Schalter im Tab Video änderte am nächsten Video nichts
+VIDEO_LOOK = tuple(name for name in SongSettings.model_fields if name.startswith("video_")) + \
+    ("music_video", "youtube_chapters", "ai_backgrounds")
+
+
+def with_look(result: SongResult, current: Optional[SongSettings]) -> SongResult:
+    """Der Song mit dem Aussehen des Videos aus current (VIDEO_LOOK); Noten, Klang und Seed bleiben."""
+    if current is None or result.settings is None:
+        return result
+    from dataclasses import replace
+    return replace(result, settings=result.settings.with_updates(**{f: getattr(current, f) for f in VIDEO_LOOK}))
+
+
+def from_history(entry, current: Optional[SongSettings] = None, progress: Optional[ProgressFn] = None) -> SongResult:
+    """
+    1.7.1: ein Song aus dem Verlauf fürs Video und das YouTube-Paket, ohne ihn neu zu erzeugen. Bis 1.7.0 ging ein
+    Video nur vom Song, der gerade in der App geladen war; nach einem Neustart (etwa nach einem Update) gab es keinen,
+    und der Knopf sagte „Erst einen Song erzeugen“.
+
+    Das Video braucht die Zeiten der Silben (karaoke.FILE) und die Songkarte. Ab 1.7.1 liegen sie im Projektordner
+    des Songs im Verlauf (project.keep_map). Bei älteren Songs nimmt die App sie aus dem Ausgabeordner, wenn dort
+    noch dieser Song liegt (der neueste Eintrag mit Seed und Stil der Songkarte), sonst schreibt sie die Noten mit
+    dem Seed neu (rebuild_map). Video und YouTube-Ordner kommen in den Ausgabeordner (share_dir).
+    Wirft RuntimeError, wenn sich die Noten nicht mehr genau so schreiben lassen.
+    """
+    import history
+    import project
+    import songkarte
+    report = progress or (lambda fraction, message: None)
+    settings = entry.restore(current) if current is not None else entry.settings
+    if not entry.audio or not os.path.exists(entry.audio):
+        raise RuntimeError("Der Song fehlt im Verlauf.")
+    share = (current or settings).output_dir()
+    if not project.has_map(entry.audio):
+        found = songkarte.load(os.path.join(share, songkarte.FILE))
+        newest = None
+        if found is not None and found.seed is not None:
+            newest = next((e for e in history.entries(share) if e.settings.seed == found.seed
+                           and (not found.style or e.settings.style == found.style)), None)
+        if newest is not None and newest.audio == entry.audio:
+            project.keep_map(share, entry.audio)
+        else:
+            report(0.03, "Video: lese die Noten des Songs aus dem Verlauf...")
+            rebuild_map(entry, settings)
+    result = SongResult(seed=settings.seed, output_dir=project.folder(entry.audio), settings=settings,
+                        history=entry.audio, share_dir=share)
+    if entry.audio.lower().endswith(".mp3"):
+        result.mp3 = entry.audio
+    else:
+        result.mix_wav = entry.audio
+    return result
+
+
+def rebuild_map(entry, settings: SongSettings) -> None:
+    """
+    Zeiten der Silben und Songkarte eines älteren Songs aus dem Verlauf neu schreiben: derselbe Seed mit denselben
+    Einstellungen gibt dieselben Noten. Schalter, die es beim Song noch nicht gab (sie fehlen in seiner Datei im
+    Verlauf), standen damals auf aus; ohne sie probiert es die App ein zweites Mal. Liegt sein Gesang als Projekt
+    im Verlauf, gilt nur eine Fassung, deren Noten genau zu diesem Gesang passen (project.notes_print).
+    """
+    import project
+    from main import OFF_ALL, _off
+    try:
+        with open(entry.info, encoding="utf-8") as f:
+            saved = set(json.load(f))
+    except (OSError, ValueError):
+        saved = set()
+    newer = {name: _off(name) for name, _, _ in OFF_ALL if name not in saved}
+    tries = [settings] + ([settings.with_updates(**newer)] if newer else [])
+    expected = project.notes_of(entry.audio)
+    import shutil
+    import tempfile
+    scratch = tempfile.mkdtemp(prefix="vloid_noten_")       # compose schreibt MIDI-Dateien, nicht über den Song im
+    try:                                                    # Ausgabeordner
+        for attempt in tries:
+            tracks, _ = compose(attempt.with_updates(reuse_steps=True, output_ordner=scratch, local_cache=False))
+            if expected is None or project.notes_print(tracks) == expected:
+                if expected is None:
+                    log.warning("Video aus dem Verlauf: kein Gesang aufgehoben, die Noten von Seed %s sind ungeprüft",
+                                settings.seed)
+                target = project.folder(entry.audio)
+                os.makedirs(target, exist_ok=True)
+                _write_karaoke(attempt, tracks, target)
+                log.info("Video aus dem Verlauf: Noten von Seed %s neu geschrieben%s", settings.seed,
+                         "" if attempt is settings else " (ohne die Schalter, die es damals noch nicht gab)")
+                return
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+    raise RuntimeError("Diesen Song schreibt die App inzwischen anders, die Silben im Video lägen nicht mehr auf dem "
+                       "Gesang. Hol ihn im Verlauf mit „Wieder öffnen“ zurück (er wird dann neu gesungen), dann geht "
+                       "das Video.")
 
 
 HOOK_BARS = 8           # so lang ist die Vorschau einer Refrain-Melodie

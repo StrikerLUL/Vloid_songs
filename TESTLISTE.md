@@ -1,4 +1,4 @@
-# Testliste für Vloid Songs 1.7.1
+# Testliste für Vloid Songs 1.7.2
 
 Etwa zwei Stunden auf deinem PC, davon viel Warten. 1.1 bis 1.6 sind noch nicht ganz getestet, deshalb stehen
 ihre Punkte (A bis M) weiter hier; neu in 1.7 ist Teil N, und der ist der wichtigste. Wenig Zeit: A, B, C und N.
@@ -10,7 +10,7 @@ genannten Schalter aus erzeugen und im Tab Verlauf mit A und B hin- und herschal
 
 ## A. Installieren (5 Minuten)
 
-- [ ] `VloidSongs-Setup-1.7.1.exe` von der Release-Seite starten, durchklicken. Am Ende startet die App von selbst.
+- [ ] `VloidSongs-Setup-1.7.2.exe` von der Release-Seite starten, durchklicken. Am Ende startet die App von selbst.
 - [ ] Im Startmenü gibt es „Vloid Songs“, und es startet die App.
 - [ ] `Dokumente\Vloid Songs` gibt es, mit `Songs` und `Einstellungen.json`.
 - [ ] Hattest du vorher den entpackten Ordner: In Einrichten unter „Deine Daten“ den alten Ordner wählen,
@@ -230,6 +230,8 @@ Schriften unter Windows. Bitte die drei zuerst. Für den Vergleich mit 1.6 gibt 
 - [ ] **Dieselbe Ballade wie in „lyric_video 3“:** im Tab Verlauf beim Song auf das Film-Symbol klicken (1.7.1).
       Fragt die App nach dem Namen, wenn er im Verlauf fehlt? Steht der Name dann oben und in der Titelkarte statt
       „Ballade“? Kommt stattdessen eine Meldung, schreib sie ab.
+- [ ] **Video bis zum Ende (1.7.2):** Beim Lo-Fi-Song von heute (Seed 3848532) im Verlauf auf das Film-Symbol
+      klicken. Entsteht das Video jetzt ohne „IndexError“, und läuft es bis zum letzten Ton?
 - [ ] **Video-Knöpfe (1.7.1):** Die App neu starten und gleich „Lyric-Video (MP4)“ drücken: Nimmt sie den neuesten
       Song aus dem Verlauf? In der einfachen Ansicht: Stehen Lyric-Video, Video-Vorschau und „Fertig für YouTube“
       unter dem Player? Ist die Video-Vorschau nach einem Song anklickbar? Im Tab Video „Ruhiges, aufgeräumtes Video“

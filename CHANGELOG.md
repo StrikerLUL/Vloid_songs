@@ -2,6 +2,37 @@
 
 Jede Version hat hier einen Abschnitt. Die App zeigt ihn einmal nach einem Update (Hilfe › Was ist neu).
 
+## 1.7.1
+
+Die Videos gingen in 1.7.0 oft gar nicht los. Diese Version repariert das; an deinen Songs und Einstellungen ändert
+sich nichts.
+
+- **Video aus dem Verlauf.** Ein Video ging nur vom Song, der gerade in der App geladen war. Nach einem Neustart, etwa
+  nach dem Update, war keiner geladen, und „Lyric-Video“ sagte nur „Erst einen Song erzeugen“; einen Song aus dem
+  Verlauf konnte man nur über „Wieder öffnen“ holen, und das baut ihn neu. Jetzt hat jeder Song im Verlauf ein
+  Film-Symbol: Es macht sein Video, ohne ihn neu zu erzeugen. Ist kein Song geladen, nehmen „Lyric-Video“,
+  „Video-Vorschau“ und „Fertig für YouTube“ den neuesten aus dem Verlauf. Für Songs ab 1.7.1 liegen die Zeiten der
+  Silben und die Songkarte dafür im Verlauf (ein paar KB). Ältere Songs schreibt die App mit ihrem Seed noch einmal
+  in Noten, ohne die Schalter, die es damals noch nicht gab, und nimmt sie nur, wenn sie genau zum aufgehobenen Gesang
+  passen; sonst sagt sie, dass es nur über „Wieder öffnen“ geht.
+- **Video-Knöpfe in der einfachen Ansicht.** Lyric-Video, Video-Vorschau und „Fertig für YouTube“ lagen in der Karte
+  „Neu würfeln“, und die blendet die einfache Ansicht (ab Werk an) aus. Jetzt stehen sie in einer eigenen Karte unter
+  dem Player, in beiden Ansichten.
+- **Video-Vorschau ausgegraut.** Der Knopf hieß im Code wie „Vorschau“ der geänderten Töne und war deshalb immer
+  ausgegraut, solange keine Töne geändert waren. Jetzt geht er nach jedem Song.
+- **Fehler sichtbar.** Ging beim Video etwas anderes schief als ein fehlendes ffmpeg, verschwand der Fehler im
+  Hintergrund, und unter dem Fortschritt stand „Fertig“. Jetzt steht er auf dem Schirm (bleibt stehen, bis du OK
+  klickst), mit allen Einzelheiten im Protokoll, und der Fortschritt sagt „Video ging nicht“. Beim YouTube-Paket
+  entstehen MP3, Titelbild und Beschreibung trotzdem.
+- **Der Tab Video gilt sofort.** Ein Schalter im Tab Video (etwa „Ruhiges, aufgeräumtes Video“) galt erst für den
+  nächsten neuen Song, das Video des geladenen Songs blieb wie beim Erzeugen eingestellt. Jetzt nimmt jedes Video das
+  Aussehen, das gerade im Tab steht; am Song selbst ändert das nichts.
+- **„Wie heißt der Song?“** Ein Klick neben das Fenster schloss es, und das Video startete still nicht. Jetzt geht es
+  nur über seine Knöpfe zu: „Weiter“ (oder Enter), „Ohne Namen“ oder „Abbrechen“, und Abbrechen sagt es.
+- **Romaji:** Die Partikel って stand als „xtsute“ unter der Zeile, jetzt „tte“.
+- **KI-Bilder in 1024×576:** Reichte der Grafikspeicher dafür nicht, fielen alle KI-Bilder weg. Jetzt malt die App sie
+  dann in 640×360 wie bis 1.6.
+
 ## 1.7.0
 
 Diese Version macht gerade, was am Lyric-Video, am Gesang und an der Melodie krumm und schief war. Grundlage war ein

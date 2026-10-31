@@ -38,6 +38,7 @@ log = logging.getLogger(__name__)
 
 FILE_ROUTE = "/datei"
 CANCELLED = "Abgebrochen"
+VIDEO_FAILED = "Video ging nicht"      # 1.7.1: steht dann statt „Fertig“ unter dem Fortschritt
 COUNTS = {1: "1 Fassung", 2: "2 Fassungen", 3: "3 Fassungen", 5: "5 Fassungen"}
 # Ordner, aus denen der Player Dateien holen darf (Ausgabeordner, auch frühere)
 SERVED_ROOTS: set = set()
@@ -265,7 +266,9 @@ def build() -> None:
                 roll = PianoRoll().classes("w-full")
                 with ui.row().classes("items-center gap-1") as edit_row:
                     edits_label = ui.label().classes("text-caption").mark("edits")
-                    preview_button = ui.button("Vorschau", icon="hearing", on_click=lambda: listen()) \
+                    # 1.7.1: eigener Name; bis 1.7.0 hieß er wie der Knopf Video-Vorschau, der dann ohne geänderte
+                    # Töne immer ausgegraut war
+                    listen_button = ui.button("Vorschau", icon="hearing", on_click=lambda: listen()) \
                         .props("outline dense no-caps").mark("preview-edits") \
                         .tooltip("Die geänderten Stellen sofort anhören, mit einem Synth statt Gesang")
                     resing_button = ui.button("Neu singen", icon="record_voice_over", on_click=lambda: resing()) \
@@ -308,7 +311,10 @@ def build() -> None:
                         .props("outline no-caps dense").mark("duel") \
                         .tooltip("Derselbe Refrain zweimal, mit und ohne eine Funktion, blind: was dir besser "
                                  "gefällt, übernimmt die App als deine Einstellung")
-                with ui.row().classes("gap-2 q-mt-sm"):
+            # 1.7.1: Video, YouTube und MP3 in einer eigenen Karte, die auch die einfache Ansicht zeigt; bis 1.7.0 lagen
+            # sie in der Karte „Neu würfeln“, und die blendet die einfache Ansicht aus
+            with ui.card().classes("w-full bg-grey-9").mark("share-card"):
+                with ui.row().classes("gap-2"):
                     zip_button = ui.button("Als ZIP für die DAW", icon="archive", on_click=lambda: export_zip()) \
                         .props("flat no-caps").mark("zip")
                     notes_button = ui.button("Noten für Tuning-Tools", icon="queue_music",
@@ -650,7 +656,7 @@ def build() -> None:
         simple = settings.simple_view
         for name, tab in tab_items.items():
             tab.set_visibility(name in ("Einfach", "Verlauf") if simple else name != "Einfach")
-        for element in (notes_card, reroll_card, album_button, count):
+        for element in (notes_card, reroll_card, album_button, count, zip_button, notes_button):
             element.set_visibility(not simple)
         if simple and panel_box.value not in ("Einfach", "Verlauf"):
             panel_box.set_value("Einfach")
@@ -778,7 +784,7 @@ def build() -> None:
         edits_label.set_text(_edits(settings))
         edit_row.set_visibility(n > 0)
         resing_button.set_enabled(n > 0 and not job.running)
-        preview_button.set_enabled(n > 0 and not job.running)
+        listen_button.set_enabled(n > 0 and not job.running)
 
     async def listen() -> None:
         """Die geänderten Stellen sofort anhören: Synth über der Band, ohne neu zu singen."""
@@ -829,34 +835,46 @@ def build() -> None:
     ui.keyboard(on_key=on_key).mark("shortcuts")
 
     # ── Lyric-Video und Vergleich ─────────────────────────────────────────────────
-    async def song_name(result) -> Optional[str]:
+    async def song_name(result, entry=None) -> Optional[str]:
         """1.7.0: der Name für Titelkarte und YouTube. Aus dem Verlauf (auch wenn im Ausgabeordner inzwischen ein
-        anderer Song liegt, history.for_result); ohne Namen fragt ein Dialog einmal pro Song. None = abgebrochen."""
-        other = history.folder_differs(result)
-        if other is not None:
-            ui.notify(f"Im Ausgabeordner liegt inzwischen ein anderer Song (Seed {other}), das Video zeigt ihn. "
-                      "Deinen Song holst du im Verlauf mit „Wieder öffnen“ zurück.", type="warning", multi_line=True,
-                      timeout=10000)
-        entry = history.for_result(result)
+        anderer Song liegt, history.for_result); ohne Namen fragt ein Dialog einmal pro Song. None = abgebrochen.
+        1.7.1: entry = ein Song aus dem Verlauf statt des geladenen; Enter übernimmt den Namen; der Dialog geht nur
+        über seine Knöpfe zu (bis 1.7.0 schloss ein Klick daneben ihn, und das Video startete still nicht)."""
+        if entry is None:
+            other = history.folder_differs(result)
+            if other is not None:
+                ui.notify(f"Im Ausgabeordner liegt inzwischen ein anderer Song (Seed {other}), das Video zeigt ihn. "
+                          "Das Video deines Songs machst du im Verlauf mit dem Film-Symbol in seiner Zeile.",
+                          type="warning", multi_line=True, timeout=10000)
+            entry = history.for_result(result)
+            key = entry.audio if entry is not None else f"{result.output_dir}|{other or result.seed}"
+        else:
+            key = entry.audio
         if entry is not None and entry.label:
             return entry.label
         asked = state.setdefault("names", {})
-        key = entry.audio if entry is not None else f"{result.output_dir}|{other or result.seed}"
         if key in asked:
             return asked[key]
-        with dialog_host, ui.dialog() as dialog, ui.card().classes("w-96"):
+        with dialog_host, ui.dialog().props("persistent") as dialog, ui.card().classes("w-96"):
             ui.label("Wie heißt der Song?").classes("text-h6")
             name = ui.input("Name", value="").props("autofocus").classes("w-full").mark("video-name")
+            name.on("keydown.enter", lambda: dialog.submit((name.value or "").strip()))
             panels.hint("Der Name steht groß am Anfang des Videos und bleibt im Verlauf. Ohne Namen gibt es keine "
                         "Titelkarte.")
             with ui.row().classes("w-full justify-end"):
+                ui.button("Abbrechen", on_click=lambda: dialog.submit(None)).props("flat no-caps") \
+                    .mark("video-name-cancel")
                 ui.button("Ohne Namen", on_click=lambda: dialog.submit("")).props("flat no-caps") \
                     .mark("video-name-skip")
                 ui.button("Weiter", icon="check", on_click=lambda: dialog.submit((name.value or "").strip())) \
                     .props("unelevated no-caps color=secondary").mark("video-name-ok")
         answer = await dialog
-        dialog.delete()
+        try:
+            dialog.delete()
+        except ValueError:          # die Seite ist inzwischen zu (Fenster geschlossen, Handy weg)
+            pass
         if answer is None:
+            ui.notify("Abgebrochen, es entsteht kein Video.", type="info")
             return None
         asked[key] = answer
         if answer and entry is not None:
@@ -864,29 +882,67 @@ def build() -> None:
             show_history()
         return answer
 
-    async def make_video(preview: bool = False) -> None:
-        result = state["result"]
-        if result is None or job.running:
+    def video_failed(what: str, e: BaseException) -> None:
+        """1.7.1: jeder Fehler beim Video steht auf dem Schirm und mit allen Einzelheiten im Protokoll. Bis 1.7.0
+        meldete die App nur RuntimeError; alles andere verschwand im Hintergrund, und der Fortschritt sagte „Fertig“."""
+        log.exception("%s fehlgeschlagen: %s", what, e)
+        ui.notify(f"{what} ging nicht: {type(e).__name__}: {e}. Die Einzelheiten stehen im Protokoll unter dem "
+                  "Fortschritt; Hilfe › Fehlerbericht speichern packt sie zum Mitschicken ein.", type="negative",
+                  multi_line=True, timeout=0, close_button="OK")
+
+    def video_source(entry=None) -> tuple:
+        """1.7.1: (geladener Song, Eintrag im Verlauf) fürs Video. entry: ein Song aus dem Verlauf. Sonst der geladene
+        Song, und ist keiner geladen (nach dem Start der App), der neueste im Verlauf. (None, None): es gibt keinen."""
+        if entry is not None:
+            return None, entry
+        if state["result"] is not None:
+            return state["result"], None
+        newest = next(iter(history.entries(settings.output_dir())), None)
+        if newest is not None:
+            ui.notify(f"Kein Song geladen, das Video kommt vom neuesten im Verlauf: {_song_name(newest)}",
+                      type="info", multi_line=True)
+        return None, newest
+
+    async def loaded(result, entry):
+        """Der Song fürs Video mit dem Aussehen aus dem Tab Video (pipeline.with_look); ein Song aus dem Verlauf wird
+        dafür gelesen (pipeline.from_history), das kann bei älteren Songs etwas dauern."""
+        if result is None:
+            job.report(0.03, "Video: lese den Song aus dem Verlauf...")
+            result = await run.io_bound(pipeline.from_history, entry, settings.model_copy(deep=True), job.report)
+        return pipeline.with_look(result, settings)
+
+    async def make_video(preview: bool = False, entry=None) -> None:
+        if job.running:
+            ui.notify("Gerade entsteht noch etwas, das Video geht danach.", type="warning")
+            return
+        result, entry = video_source(entry)
+        if result is None and entry is None:
             ui.notify("Erst einen Song erzeugen.", type="warning")
             return
         if job.blocked():
             return
-        label = await song_name(result)
-        if label is None or job.running:
+        label = await song_name(result, entry)
+        if label is None or job.running or job.blocked():
             return
         job.start()
-        job.report(0.1, "Baue Video-Vorschau..." if preview else "Baue Lyric-Video...")
+        job.report(0.02, "Baue Video-Vorschau..." if preview else "Baue Lyric-Video...")
         set_busy(True)
+        done = "Fertig"
         try:
+            result = await loaded(result, entry)
             path = await run.io_bound(pipeline.lyric_video, result, None, label, preview, job.report)
         except RuntimeError as e:
+            log.warning("Lyric-Video: %s", e)
             ui.notify(str(e), type="warning", multi_line=True)
-            path = None
+            path, done = None, VIDEO_FAILED
         except cancel.Cancelled:
             ui.notify("Abgebrochen.", type="warning")
-            path = None
+            path, done = None, CANCELLED
+        except Exception as e:  # noqa: BLE001 – jeder Fehler gehört ins Protokoll und auf den Schirm
+            video_failed("Die Video-Vorschau" if preview else "Das Lyric-Video", e)
+            path, done = None, VIDEO_FAILED
         finally:
-            job.report(1.0, "Fertig")
+            job.report(1.0, done)
             job.running = False
             set_busy(False)
         if path and preview:
@@ -895,25 +951,33 @@ def build() -> None:
             ui.notify(f"Lyric-Video gespeichert: {path}", type="positive", multi_line=True)
             ui.download.file(path)
 
-    async def make_youtube() -> None:
-        result = state["result"]
-        if result is None or job.running:
+    async def make_youtube(entry=None) -> None:
+        if job.running:
+            ui.notify("Gerade entsteht noch etwas, das YouTube-Paket geht danach.", type="warning")
+            return
+        result, entry = video_source(entry)
+        if result is None and entry is None:
             ui.notify("Erst einen Song erzeugen.", type="warning")
             return
         if job.blocked():
             return
-        label = await song_name(result)
-        if label is None or job.running:
+        label = await song_name(result, entry)
+        if label is None or job.running or job.blocked():
             return
         job.start()
         set_busy(True)
         try:
+            result = await loaded(result, entry)
             package = await run.io_bound(youtube.make, result, label, job.report)
         except RuntimeError as e:
+            log.warning("YouTube: %s", e)
             ui.notify(str(e), type="warning", multi_line=True)
             package = None
         except cancel.Cancelled:
             ui.notify("Abgebrochen.", type="warning")
+            package = None
+        except Exception as e:  # noqa: BLE001 – jeder Fehler gehört ins Protokoll und auf den Schirm
+            video_failed("Fertig für YouTube", e)
             package = None
         finally:
             job.running = False
@@ -1060,7 +1124,7 @@ def build() -> None:
                        *reroll_buttons.values()):
             button.set_enabled(not busy)
         resing_button.set_enabled(not busy and _edited(settings) > 0)
-        preview_button.set_enabled(not busy and _edited(settings) > 0)
+        listen_button.set_enabled(not busy and _edited(settings) > 0)
         show_steps()
 
     def show_steps() -> None:
@@ -1069,7 +1133,7 @@ def build() -> None:
             left = job.remaining
             step_label.set_text(f"{job.message} ({job.elapsed:.0f} s{', ' + left if left else ''})")
         elif job.steps:
-            done = "Abgebrochen" if job.message == CANCELLED else "Fertig"
+            done = job.message if job.message in (CANCELLED, VIDEO_FAILED) else "Fertig"
             step_label.set_text(f"{done} nach {job.elapsed:.0f} s")
         steps_box.clear()
         with steps_box:
@@ -1158,6 +1222,9 @@ def build() -> None:
                                   on_click=lambda _, e=entry: favorite(e)).props("flat round dense color=amber") \
                             .mark("history-favorite")
                         thumbs_menu(entry, nr)
+                        ui.button(icon="movie", on_click=lambda _, e=entry: make_video(entry=e)) \
+                            .props("flat round dense color=grey").mark("history-video") \
+                            .tooltip("Lyric-Video von diesem Song, so wie es gerade im Tab Video eingestellt ist")
                         ui.button(icon="info_outline", on_click=lambda _, e=entry: song_info(e)) \
                             .props("flat round dense color=grey").mark("history-info") \
                             .tooltip("Was steckt in diesem Song? Gewürfeltes, Schalter, was heute anders ist")

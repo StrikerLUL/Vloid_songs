@@ -63,7 +63,8 @@ Seed und macht den ganzen Song.
 **Song-Bibliothek (Tab Verlauf).** Jeder Song mit Note, Name und Notiz. Oben suchen (Name, Notiz, Stil, Seed,
 Album, Tonart, Tempo, Datum), mit ★ nur Favoriten zeigen, sortieren nach neu, Note oder Name. Der Stift gibt einem Song einen Namen und eine
 Notiz. Favoriten, Songs mit Namen und Album-Songs bleiben immer; von den anderen behält der Verlauf die neuesten 30
-(einstellbar unter Pfade › App). ↺ holt Einstellungen und Seed eines Songs zurück.
+(einstellbar unter Pfade › App). ↺ holt Einstellungen und Seed eines Songs zurück. Das Film-Symbol macht das Lyric-Video
+eines Songs aus dem Verlauf, ohne ihn neu zu erzeugen (1.7.1), so wie es gerade im Tab Video eingestellt ist.
 
 **Album über Nacht.** Oben „Album“: wie viele Songs (bis 30), welche Stile (reihum), ein Name und auf Wunsch ein
 Ordner mit Liedtexten (jede `.txt` ein Song). Jeder Song bekommt einen neuen Seed und, wenn der Schalter an ist, eine
@@ -252,7 +253,8 @@ eigenen Schalter; ausgeschaltet klingt und sieht alles aus wie in 1.4.
 **Musikvideo** (Tab Video). „Lyric-Video (MP4)“ und „Fertig für YouTube“ bauen jetzt ein Video, in dem das Bild dem
 Song folgt: jede Sektion ist ein eigener Akt (die Strophe ruhig, der Refrain hell und voll), die Szene bewegt sich
 auf Kick und Snare, und alles, was zu sehen ist, kommt aus dem Song selbst. Dafür schreibt die App zu jedem Song eine
-Songkarte (`songkarte.json`) mit Sektionen, Schlägen, Akkorden, Schlagzeug und Melodie.
+Songkarte (`songkarte.json`) mit Sektionen, Schlägen, Akkorden, Schlagzeug und Melodie. Die Knöpfe stehen unter dem Player, auch in der einfachen
+Ansicht; ist kein Song geladen (nach dem Start der App), nehmen sie den neuesten aus dem Verlauf (1.7.1).
 
 - *Szene:* jeder Stil hat seine eigene: Anime-Opening (J-Pop), Glitch (Dark), Textkunst aus Zeichen wie ein altes
   Spiel (Kawaii; der Zeichenregen besteht aus deinem Text), Bühne (Rock), Fenster bei Nacht (Ballade), 80er (City

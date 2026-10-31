@@ -47,6 +47,7 @@ def test_the_job_shows_the_rest_and_remembers_itself():
     plain.start()
     plain.report(0.5, "Refrain")
     assert plain.remaining == ""
+    job.running = plain.running = False         # sonst zählen sie als laufend auf einer anderen Seite
 
 
 def test_windows_gets_a_notice_after_long_runs(monkeypatch):

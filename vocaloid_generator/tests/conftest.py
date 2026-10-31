@@ -24,6 +24,18 @@ def isolated_data(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def nothing_running_elsewhere(monkeypatch):
+    """page._running zählt die laufenden Jobs aller Seiten (1.6.1): ein Test, der einen Job startet und nicht
+    beendet, ließe sonst jede spätere Seite glauben, auf dem Handy entstehe gerade ein Song."""
+    page = sys.modules.get("gui.page")
+    if page is not None:
+        monkeypatch.setattr(page, "_running", 0)
+    remote = sys.modules.get("fernbedienung")
+    if remote is not None:
+        monkeypatch.setattr(remote, "_busy", 0)
+
+
+@pytest.fixture(autouse=True)
 def isolated_settings(tmp_path, monkeypatch):
     """Tests lesen und schreiben nie die echten Einstellungen der App."""
     import settings

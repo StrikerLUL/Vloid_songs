@@ -81,7 +81,8 @@ und Systeminfo (keine Songs) und landet in `Dokumente\Vloid Songs\Fehlerberichte
 - **Das Video geht nicht los.** Ab 1.7.1 steht jeder Fehler beim Video auf dem Schirm und im Protokoll (unter dem
   Fortschritt aufklappen). Schick ihn mit, am besten per Hilfe › Fehlerbericht speichern. Ein Song aus dem Verlauf
   bekommt sein Video über das Film-Symbol in seiner Zeile; sagt die App, sie schreibe ihn inzwischen anders, hol ihn
-  mit „Wieder öffnen“ zurück und mach dann das Video.
+  mit „Wieder öffnen“ zurück und mach dann das Video. Stand dort „IndexError: index … is out of bounds“: Das lag an
+  der Länge des Songs und ist ab 1.7.2 behoben.
 - **„Im Ausgabeordner liegt inzwischen ein anderer Song“.** Alle Songs teilen sich den Ausgabeordner, und das Video
   nimmt, was dort liegt (laut `songkarte.json`). Im Tab Verlauf beim Song auf das Film-Symbol klicken (ab 1.7.1),
   dann kommt sein Video, ohne dass er neu entsteht. Steht im Video ein falscher Name, ändere ihn im Verlauf beim Stift („Name und Notiz“).

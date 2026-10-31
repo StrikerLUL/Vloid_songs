@@ -2,6 +2,14 @@
 
 Jede Version hat hier einen Abschnitt. Die App zeigt ihn einmal nach einem Update (Hilfe › Was ist neu).
 
+## 1.7.2
+
+- **„IndexError: index … is out of bounds“ beim Lyric-Video.** Das Video misst vor dem ersten Bild den Klang des
+  Songs, Bild für Bild bis kurz hinter das Ende. Hinter dem Ende lag aber zu wenig Stille, und je nach Länge des Songs
+  (bei etwa jedem dritten, seit 1.5.0) las das letzte Bild darüber hinaus: Video, Video-Vorschau und das Video im
+  YouTube-Paket brachen sofort ab. Jetzt reicht die Stille immer bis zum letzten Bild; am Bild des Songs selbst ändert
+  sich nichts. Die KI-Bilder, die schon gemalt sind, nimmt das nächste Video wieder.
+
 ## 1.7.1
 
 Die Videos gingen in 1.7.0 oft gar nicht los. Diese Version repariert das; an deinen Songs und Einstellungen ändert

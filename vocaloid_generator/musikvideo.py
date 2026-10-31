@@ -137,7 +137,13 @@ def analyse(mono: np.ndarray, rate: int, frames: int, fps: int = FPS) -> Sound:
     freqs = np.fft.rfftfreq(WINDOW, 1 / rate)
     which = np.clip(np.searchsorted(edges, freqs, side="right") - 1, -1, BANDS)
     window = np.hanning(WINDOW).astype(np.float32)
-    padded = np.concatenate([np.zeros(WINDOW, np.float32), mono.astype(np.float32), np.zeros(WINDOW, np.float32)])
+    # 1.7.2: das letzte Bild liegt bis zu zwei Bilder hinter dem Ende des Songs (render rundet auf und zählt eins
+    # dazu); bei 44,1 kHz sind das bis zu 2940 Samples, dahinter lagen nur 2048 Nullen. Je nach Länge des Songs (bei
+    # etwa jedem dritten) brach das Video mit „IndexError: index … is out of bounds“ ab. Jetzt reicht die Stille
+    # hinten bis zum letzten Sample, das das letzte Bild liest.
+    end = int((frames - 1) / fps * rate) + WINDOW // 2 + WINDOW + 1
+    padded = np.zeros(max(len(mono) + 2 * WINDOW, end), np.float32)
+    padded[WINDOW:WINDOW + len(mono)] = mono
     raw = np.zeros((frames, BANDS), dtype=np.float32)
     level = np.zeros(frames, dtype=np.float32)
     for begin in range(0, frames, 512):

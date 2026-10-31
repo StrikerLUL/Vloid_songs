@@ -92,7 +92,19 @@ OFF_160 = (
     ("local_cache", "--arbeit-im-ausgabeordner", "Zwischenspeicher und Projekte bleiben im Ausgabeordner, auch in "
                                                  "OneDrive"),
 )
-OFF_ALL = OFF_130 + OFF_140 + OFF_150 + OFF_160
+# Neuerungen aus 1.7.0
+OFF_170 = (
+    ("video_tidy", "--ohne-ruhiges-video", "das Musikvideo wie bis 1.6: zwei Schriften, harte Zeilen- und "
+                                           "Bildwechsel, leere Chat-Blasen"),
+    ("video_sharp", "--ohne-scharfes-video", "KI-Bilder in 640×360 und schnelleres Kodieren wie bis 1.6"),
+    ("vocal_room", "--ohne-platz-fuer-die-stimme", "Refrain-Mix und Gegenstimme wie bis 1.6"),
+    ("long_note_vibrato", "--ohne-vibrato-auf-langen-toenen", "lange gerade Töne bleiben gerade"),
+    ("section_registers", "--ohne-lage-je-sektion", "Strophe, Refrain und Bridge in der Lage wie bis 1.6"),
+    ("soft_breaths", "--ohne-leise-ersatz-atmer", "der Ersatz-Atmer so laut und hell wie bis 1.6"),
+    ("dynamic_arc", "--ohne-lautstaerke-bogen", "kein leiser Anfang, kein größter letzter Refrain, kein Ausklingen "
+                                                "im Mix"),
+)
+OFF_ALL = OFF_130 + OFF_140 + OFF_150 + OFF_160 + OFF_170
 
 
 def _off(name: str):

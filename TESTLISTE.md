@@ -1,7 +1,7 @@
-# Testliste für Vloid Songs 1.6.0
+# Testliste für Vloid Songs 1.7.0
 
-Etwa zwei Stunden auf deinem PC, davon viel Warten. 1.1 bis 1.5 sind noch nicht ganz getestet, deshalb stehen
-ihre Punkte (A bis L) weiter hier; neu in 1.6 ist Teil M, und der ist der wichtigste. Wenig Zeit: A, B, C und M.
+Etwa zwei Stunden auf deinem PC, davon viel Warten. 1.1 bis 1.6 sind noch nicht ganz getestet, deshalb stehen
+ihre Punkte (A bis M) weiter hier; neu in 1.7 ist Teil N, und der ist der wichtigste. Wenig Zeit: A, B, C und N.
 Hak ab, was klappt, und schreib zu allem anderen eine Zeile, was passiert ist. Am Ende **Hilfe › Fehlerbericht speichern** und das ZIP zusammen mit der
 Liste zurückschicken.
 
@@ -10,7 +10,7 @@ genannten Schalter aus erzeugen und im Tab Verlauf mit A und B hin- und herschal
 
 ## A. Installieren (5 Minuten)
 
-- [ ] `VloidSongs-Setup-1.6.0.exe` von der Release-Seite starten, durchklicken. Am Ende startet die App von selbst.
+- [ ] `VloidSongs-Setup-1.7.0.exe` von der Release-Seite starten, durchklicken. Am Ende startet die App von selbst.
 - [ ] Im Startmenü gibt es „Vloid Songs“, und es startet die App.
 - [ ] `Dokumente\Vloid Songs` gibt es, mit `Songs` und `Einstellungen.json`.
 - [ ] Hattest du vorher den entpackten Ordner: In Einrichten unter „Deine Daten“ den alten Ordner wählen,
@@ -221,6 +221,34 @@ Firewall und das Laden von YouTube. Bitte die vier zuerst.
       und wild kräftiger, ohne seltsam zu werden?
 - [ ] Tab Verlauf, ⓘ bei einem älteren Song: Stimmen Stil, Stimme und „Anders als jetzt“?
 
+## N. Neu in 1.7: Video, Gesang und Melodie gerade gerückt (30 Minuten)
+
+Drei Dinge konnte ich hier nicht echt ausprobieren: NEUTRINO mit dem neuen Vibrato, die KI-Bilder in 1024×576 und die
+Schriften unter Windows. Bitte die drei zuerst. Für den Vergleich mit 1.6 gibt es zu jedem Schalter unten einen
+`--ohne-…`-Schalter in der Kommandozeile (Anleitung › Kommandozeile).
+
+- [ ] **Dieselbe Ballade wie in „lyric_video 3“:** im Tab Verlauf den Song wählen, „Lyric-Video (MP4)“. Fragt die App
+      nach dem Namen, wenn er im Verlauf fehlt? Steht der Name dann oben und in der Titelkarte statt „Ballade“?
+- [ ] Im Refrain mit パスワード: Leuchten die Silben genau dann, wenn sie gesungen werden, bis zum Ende der Zeile? Sind
+      die Romaji lesbar („pasuwaado pasuwaado ima kagayaite“)?
+- [ ] Stehen die Akkorde mit ♭ (B♭, E♭), wenn der Song in g-Moll klingt? Steht im YouTube-Paket in der Beschreibung
+      die Tonart, die man hört?
+- [ ] Unten links: liegt nichts mehr übereinander? Die Beat-Punkte sind oben neben der Ablaufleiste. Hat das Spektrum
+      unten keine Lücken mehr, und bewegt es sich mit dem Bass?
+- [ ] **Ruhiges, aufgeräumtes Video:** eine Schrift für Text und Romaji, Zeilen blenden weich, Bilder blenden beim
+      Sektionswechsel über, in den Chat-Blasen stehen Wörter aus der Zeile, das Funkeln lässt den Text frei. In der
+      Ballade keine Notenlinie. Wirkt es ruhiger, oder fehlt dir etwas?
+- [ ] **Schärferes Video** mit KI-Bildern: Sind die Bilder schärfer? Wie viel länger dauert das Video als vorher?
+- [ ] **Platz für die Stimme im Refrain:** eine neue Ballade mit „Seed festhalten“, einmal mit und einmal ohne den
+      Schalter (Tab Gesang). Hörst du die Stimme im Refrain besser, ohne dass die Band dünn klingt?
+- [ ] **Vibrato auf langen Tönen** (NEUTRINO): Schwingen lange Töne am Ende einer Zeile sanft, statt gerade zu
+      bleiben? Zu viel, zu wenig, zu früh?
+- [ ] **Lage je Sektion:** Liegt der Refrain hörbar höher als die Strophe? Ist er für die Stimme zu hoch (quietschig)?
+      Steigt die Bridge zum letzten Refrain?
+- [ ] **Atmer:** Hilfe › System prüfen, Zeile „Atmer“: Was steht da? Stören die Atmer zwischen den Zeilen noch?
+- [ ] **Lautstärke-Bogen:** Fängt die Ballade leiser an, ist der letzte Refrain am größten? Klingt sie am Ende aus,
+      statt hart aufzuhören?
+
 ## Wenn du mehr Zeit hast
 
 - [ ] **DiffSinger (Versuch):** eine freie DiffSinger-Stimme in OpenUtau installieren (oder in
@@ -253,4 +281,5 @@ Firewall und das Laden von YouTube. Bitte die vier zuerst.
    Mix pro Instrument. Für 1.4: Klingen die Songs jetzt verschieden genug, und was stört dich an der Stimme noch am
    meisten (rau, nasal, verwaschen, zu leise, zu spitz)? Am besten mit einem kurzen Ausschnitt von `vocals.wav`.
    Für 1.5: Passt das Video zum Song, und welche Szene gefällt dir am wenigsten? Für 1.6: Welche Funktionen hast du
-   im Hör-Duell abgewählt, und benutzt du lieber die einfache Ansicht oder die Profi-Ansicht?
+   im Hör-Duell abgewählt, und benutzt du lieber die einfache Ansicht oder die Profi-Ansicht? Für 1.7: Ist das Video
+   jetzt noch irgendwo krumm und schief, und klingen Strophe und Refrain verschieden genug?

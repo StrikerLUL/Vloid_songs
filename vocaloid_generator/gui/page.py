@@ -829,6 +829,41 @@ def build() -> None:
     ui.keyboard(on_key=on_key).mark("shortcuts")
 
     # ── Lyric-Video und Vergleich ─────────────────────────────────────────────────
+    async def song_name(result) -> Optional[str]:
+        """1.7.0: der Name für Titelkarte und YouTube. Aus dem Verlauf (auch wenn im Ausgabeordner inzwischen ein
+        anderer Song liegt, history.for_result); ohne Namen fragt ein Dialog einmal pro Song. None = abgebrochen."""
+        other = history.folder_differs(result)
+        if other is not None:
+            ui.notify(f"Im Ausgabeordner liegt inzwischen ein anderer Song (Seed {other}), das Video zeigt ihn. "
+                      "Deinen Song holst du im Verlauf mit „Wieder öffnen“ zurück.", type="warning", multi_line=True,
+                      timeout=10000)
+        entry = history.for_result(result)
+        if entry is not None and entry.label:
+            return entry.label
+        asked = state.setdefault("names", {})
+        key = entry.audio if entry is not None else f"{result.output_dir}|{other or result.seed}"
+        if key in asked:
+            return asked[key]
+        with dialog_host, ui.dialog() as dialog, ui.card().classes("w-96"):
+            ui.label("Wie heißt der Song?").classes("text-h6")
+            name = ui.input("Name", value="").props("autofocus").classes("w-full").mark("video-name")
+            panels.hint("Der Name steht groß am Anfang des Videos und bleibt im Verlauf. Ohne Namen gibt es keine "
+                        "Titelkarte.")
+            with ui.row().classes("w-full justify-end"):
+                ui.button("Ohne Namen", on_click=lambda: dialog.submit("")).props("flat no-caps") \
+                    .mark("video-name-skip")
+                ui.button("Weiter", icon="check", on_click=lambda: dialog.submit((name.value or "").strip())) \
+                    .props("unelevated no-caps color=secondary").mark("video-name-ok")
+        answer = await dialog
+        dialog.delete()
+        if answer is None:
+            return None
+        asked[key] = answer
+        if answer and entry is not None:
+            history.set_details(entry, label=answer)
+            show_history()
+        return answer
+
     async def make_video(preview: bool = False) -> None:
         result = state["result"]
         if result is None or job.running:
@@ -836,13 +871,14 @@ def build() -> None:
             return
         if job.blocked():
             return
-        entry = next((e for e in history.entries(settings.output_dir()) if e.audio == result.history), None)
+        label = await song_name(result)
+        if label is None or job.running:
+            return
         job.start()
         job.report(0.1, "Baue Video-Vorschau..." if preview else "Baue Lyric-Video...")
         set_busy(True)
         try:
-            path = await run.io_bound(pipeline.lyric_video, result, None, entry.label if entry else "", preview,
-                                      job.report)
+            path = await run.io_bound(pipeline.lyric_video, result, None, label, preview, job.report)
         except RuntimeError as e:
             ui.notify(str(e), type="warning", multi_line=True)
             path = None
@@ -866,11 +902,13 @@ def build() -> None:
             return
         if job.blocked():
             return
-        entry = next((e for e in history.entries(settings.output_dir()) if e.audio == result.history), None)
+        label = await song_name(result)
+        if label is None or job.running:
+            return
         job.start()
         set_busy(True)
         try:
-            package = await run.io_bound(youtube.make, result, entry.label if entry else "", job.report)
+            package = await run.io_bound(youtube.make, result, label, job.report)
         except RuntimeError as e:
             ui.notify(str(e), type="warning", multi_line=True)
             package = None

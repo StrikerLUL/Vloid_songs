@@ -181,6 +181,8 @@ class Frame:
     sections: list = field(default_factory=list)  # [(Anteil Anfang, Anteil Ende, Art)] für die Ablaufleiste
     fade: float = 1.0              # 0 = schwarz (Anfang und Ende)
     flash: float = 0.0             # gewünschter Blitz 0..1 (wird in Painter begrenzt)
+    prev_kind: str = ""            # 1.7.0: Art der Sektion davor, zum Überblenden der Bilder
+    words: tuple = ()              # 1.7.0: Wörter der laufenden Zeile (Chat-Blasen)
 
 
 class Painter:
@@ -189,7 +191,7 @@ class Painter:
     def __init__(self, scene: Scene, strength: float, seed: int = 0, lyric_chars: str = "",
                  weather: Optional[str] = None, chat: bool = False, background: Optional[str] = None,
                  pictures: Optional[dict] = None, figure: Optional[tuple] = None, roll: bool = True,
-                 spectrum: bool = True, hud: bool = True):
+                 spectrum: bool = True, hud: bool = True, tidy: bool = False, sharp: bool = False):
         self.scene = scene
         self.strength = strength
         self.rng = random.Random(seed)
@@ -197,16 +199,21 @@ class Painter:
         self.chars = "".join(dict.fromkeys(c for c in lyric_chars if not c.isspace())) or "ボカロウタ"
         self.weather = weather
         self.chat = chat
-        self.roll = roll
+        # 1.7.0 video_tidy: in ruhigen Szenen (Ballade, Lo-Fi, City Pop) keine Notenlinie und Ablaufleiste, ein
+        # kleineres, blasseres Spektrum (B7); Teilchen lassen das Textband frei (B5); Bilder blenden über (B6)
+        self.tidy = tidy
+        self.calm = tidy and strength <= CALM
+        self.roll = roll and not self.calm
         self.show_spectrum = spectrum
-        self.hud = hud
+        self.hud = hud and not self.calm
         self.font, self.kana = mono_font(16)
         self.small_font, _ = mono_font(12)
         self._last_flash = -10.0
         self._flash_times: list = []
         self._tones = self._section_tones()
-        self._own = self._load(background) if background else None
-        self._pictures = {kind: self._load(path) for kind, path in (pictures or {}).items() if path}
+        self._own = self._load(background, sharp) if background else None
+        self._pictures = {kind: self._load(path, sharp) for kind, path in (pictures or {}).items() if path}
+        self._free = self._free_mask() if tidy else None
         self._figure = self._figure_images(figure) if figure else None
         self._calm = self._calm_mask()
         self._static = {}
@@ -221,14 +228,15 @@ class Painter:
         return {"dark": dark, "full": full, "other": other}
 
     @staticmethod
-    def _load(path: str) -> Optional[Image.Image]:
+    def _load(path: str, sharp: bool = False) -> Optional[Image.Image]:
         try:
             with Image.open(path) as image:
                 picture = image.convert("RGB")
         except OSError:
             return None
         scale = max(W / picture.width, H / picture.height)
-        picture = picture.resize((max(W, int(picture.width * scale + 0.5)), max(H, int(picture.height * scale + 0.5))))
+        picture = picture.resize((max(W, int(picture.width * scale + 0.5)), max(H, int(picture.height * scale + 0.5))),
+                                 Image.LANCZOS if sharp else Image.BICUBIC)
         left, top = (picture.width - W) // 2, (picture.height - H) // 2
         return picture.crop((left, top, left + W, top + H))
 
@@ -261,6 +269,15 @@ class Painter:
         alpha = (inside[:, None] * across[None, :] * 255 * CALM_DARKEN).astype(np.uint8)
         return Image.fromarray(alpha, "L")
 
+    @staticmethod
+    def _free_mask() -> Image.Image:
+        """1.7.0: wo Teilchen fliegen dürfen: überall außer im Band hinter dem Text (weicher Rand)."""
+        y = np.linspace(0.0, 1.0, H)
+        lo, hi = TEXT_BAND
+        inside = np.clip(np.minimum((y - lo + 0.03) / 0.05, (hi + 0.03 - y) / 0.05), 0, 1)
+        alpha = np.repeat(((1.0 - inside) * 255).astype(np.uint8)[:, None], W, axis=1)
+        return Image.fromarray(alpha, "L")
+
     def _seed_particles(self, count: int) -> list:
         rng = random.Random(self.rng.random())
         return [(rng.random(), rng.random(), 0.5 + rng.random(), rng.random(), rng.random()) for _ in range(count)]
@@ -277,10 +294,24 @@ class Painter:
         if not self._picture_for(f):                    # ein eigenes Bild bleibt frei, nur Teilchen und Linien darauf
             getattr(self, "_bg_" + self.scene.background, self._bg_gradient)(image, draw, f)
         draw = ImageDraw.Draw(image, "RGBA")
-        self._weather(draw, f)
-        if self.scene.particles:
-            self._particles_of(self.scene.particles, draw, f, 0.6)
-        self._line_motifs(draw, f)
+        if self._free is not None:                      # Teilchen auf eine eigene Ebene, das Textband bleibt frei
+            layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+            spots = ImageDraw.Draw(layer)
+            self._weather(spots, f)
+            if self.scene.particles:
+                self._particles_of(self.scene.particles, spots, f, 0.3)
+            self._line_motifs(spots, f, chat=False)
+            alpha = layer.getchannel("A")
+            layer.putalpha(Image.fromarray((np.asarray(alpha, np.uint16) * np.asarray(self._free) // 255)
+                                           .astype(np.uint8), "L"))
+            image.paste(layer, (0, 0), layer)
+            draw = ImageDraw.Draw(image, "RGBA")
+            self._line_motifs(draw, f, particles=False)
+        else:
+            self._weather(draw, f)
+            if self.scene.particles:
+                self._particles_of(self.scene.particles, draw, f, 0.6)
+            self._line_motifs(draw, f)
         if self.show_spectrum:
             self._spectrum(image, draw, f)
         if self.roll and f.notes and self.scene.background != "ascii":
@@ -297,12 +328,21 @@ class Painter:
         picture = self._pictures.get(f.kind)
         return picture if picture is not None else self._own
 
+    @staticmethod
+    def _tone_of(kind: str) -> str:
+        return "full" if kind in ("Chorus", "Drop", "Solo") else "other" if kind in ("Bridge", "Spoken") else "dark"
+
     def _base(self, f: Frame) -> Image.Image:
         picture = self._picture_for(f)
+        if self.tidy and f.change > 0.02 and f.index > 0 and f.prev_kind:
+            # B6: das Bild der Sektion davor blendet in etwa einer Sekunde in das neue über, auch bei KI-Bildern
+            now = picture if picture is not None else self._tones[self._tone_of(f.kind)]
+            before = self._pictures.get(f.prev_kind, self._own)
+            before = before if before is not None else self._tones[self._tone_of(f.prev_kind)]
+            return Image.blend(now, before, min(1.0, f.change)) if before is not now else now.copy()
         if picture is not None:
             return picture.copy()
-        tone = "full" if f.chorus or f.kind in ("Drop", "Solo") else "other" if f.kind in ("Bridge", "Spoken") \
-            else "dark"
+        tone = self._tone_of(f.kind)
         image = self._tones[tone].copy()
         if f.change > 0 and f.index > 0:                 # weich in die neue Stimmung
             previous = self._tones["dark" if tone != "dark" else "full"]
@@ -648,6 +688,8 @@ class Painter:
                 x, y = x0 * W, y0 * H * 0.8
                 twinkle = 0.5 + 0.5 * math.sin(f.t * (1 + sp) + i * 1.3)
                 r = 1 + size * 2 + 2 * f.beat_pulse * twinkle * self.strength
+                if self.tidy:                             # B5: kleinere, ruhigere Funkel-Kreuze
+                    r, twinkle = r * 0.6, twinkle * 0.7
                 draw.line([x - r * 2, y, x + r * 2, y], fill=(255, 255, 230, int(200 * twinkle)), width=1)
                 draw.line([x, y - r * 2, x, y + r * 2], fill=(255, 255, 230, int(200 * twinkle)), width=1)
             elif kind in ("sparks", "fire"):
@@ -685,14 +727,44 @@ class Painter:
         draw.ellipse([x, y - r * 0.6, x + r, y + r * 0.3], fill=color)
         draw.polygon([(x - r, y - 0.1 * r), (x + r, y - 0.1 * r), (x, y + r)], fill=color)
 
-    def _line_motifs(self, draw, f: Frame) -> None:
+    def _line_motifs(self, draw, f: Frame, particles: bool = True, chat: bool = True) -> None:
         """V8: Steht in der laufenden Zeile ein Wort mit Motiv, kommt es dazu: Herzen, Sterne, Tränen, Chat-Blasen."""
-        extra = [m for m in ("hearts", "stars", "tears", "fire", "music", "petals", "snow") if m in f.motifs
-                 and m != self.weather and m != self.scene.particles]
-        for motif in extra[:2]:
-            self._particles_of(motif, draw, f, 0.25)
-        if "chat" in f.motifs or (self.chat and f.kind == "Spoken"):
-            self._chat_bubbles(draw, f)
+        if particles:
+            extra = [m for m in ("hearts", "stars", "tears", "fire", "music", "petals", "snow") if m in f.motifs
+                     and m != self.weather and m != self.scene.particles]
+            for motif in extra[:2]:
+                self._particles_of(motif, draw, f, 0.12 if self.tidy else 0.25)
+        if chat and ("chat" in f.motifs or (self.chat and f.kind == "Spoken")):
+            (self._chat_tidy if self.tidy else self._chat_bubbles)(draw, f)
+
+    CHAT_SECONDS = 2.4                # 1.7.0: so lange braucht eine Blase, bis die nächste kommt
+
+    def _chat_tidy(self, draw, f: Frame) -> None:
+        """
+        1.7.0 (B3): Chat mit Inhalt. In jeder Blase steht ein Wort der laufenden Zeile (ohne Schrift mit Kana drei
+        Tipp-Punkte), die Blasen gleiten ruhig nach oben und blenden aus, abwechselnd rechts (mit „既読“) und links,
+        immer über der Notenlinie. Bis 1.6 waren sie leer und sprangen alle zwei Sekunden.
+        """
+        words = [w for w in f.words if w.strip()] if self.kana else []
+        step = f.t / self.CHAT_SECONDS
+        for back in range(3):
+            k = int(step) - back
+            age = step - k                                # 0 = gerade gekommen, 3 = oben verschwunden
+            alpha = max(0.0, min(1.0, age * 3, (3.0 - age) * 1.2))
+            if alpha <= 0.02:
+                continue
+            mine = k % 2 == 0
+            text = words[(k + k // 2) % len(words)] if words else "…"      # nicht immer dasselbe Wort je Seite
+            box = draw.textbbox((0, 0), text, font=self.font)
+            w = box[2] - box[0] + 26
+            y = H * (ROLL_BAND[0] - 0.06) - age * H * 0.045 - 26
+            x = W - 30 - w if mine else 30
+            draw.rounded_rectangle([x, y, x + w, y + 26], radius=12,
+                                   fill=(*(self.accent if mine else (70, 70, 85)), int(170 * alpha)))
+            draw.text((x + 13 - box[0], y + 13 - (box[1] + box[3]) / 2), text, font=self.font,
+                      fill=(255, 255, 255, int(235 * alpha)))
+            if mine and self.kana:
+                draw.text((x - 34, y + 8), "既読", font=self.small_font, fill=(200, 200, 210, int(160 * alpha)))
 
     def _chat_bubbles(self, draw, f: Frame) -> None:
         """Steht 既読, スマホ oder もしもし im Text, wird es zum Chat: Blasen steigen am Rand auf, „既読“ daneben."""
@@ -716,6 +788,9 @@ class Painter:
         lo, hi = SPECTRUM_BAND
         base, top = H * hi, H * lo
         color = _mix(self.accent, self.light, 0.3)
+        if self.calm:                                   # B7: halb so hoch und blasser
+            top = base - (base - top) * 0.5
+            kind = "soft" if kind not in ("none", "radial", "scope") else kind
         if kind == "radial":
             cx, cy, r0 = W / 2, H * 0.40, 110 + 10 * f.beat_pulse * self.strength
             n = len(bands)
@@ -766,7 +841,7 @@ class Painter:
             for i, v in enumerate(bands):
                 height = 3 + float(v) * (base - top)
                 x = x0 + i * width
-                alpha = 150 if kind == "soft" else 210
+                alpha = (90 if self.calm else 150) if kind == "soft" else 210
                 if kind == "mirror":
                     mid = (base + top) / 2
                     draw.rectangle([x + 1, mid - height / 2, x + width - 1, mid + height / 2],
@@ -795,7 +870,8 @@ class Painter:
         draw.line([x_now, H * lo - 6, x_now, H * hi + 6], fill=(*self.light, 60), width=1)
 
     def _timeline(self, draw, f: Frame) -> None:
-        """Oben rechts der Ablauf des Songs mit Position, oben links Schläge des Takts (V3, V4)."""
+        """Oben rechts der Ablauf des Songs mit Position, links daneben die Schläge des Takts (V3, V4). 1.7.0: die
+        Schläge standen bis 1.6 unten links auf dem Akkord."""
         x0, x1, y = W * 0.62, W * 0.97, 10
         for start, end, kind in f.sections:
             color = self.accent if kind == "Chorus" else self.light if kind in ("Verse", "PreChorus") else \
@@ -808,9 +884,9 @@ class Painter:
         if f.beat >= 0:
             for k in range(4):
                 on = k == f.beat % 4
-                r = 4 + (3 * f.beat_pulse if on else 0)
-                cx = W * 0.03 + k * 14
-                draw.ellipse([cx - r, H * 0.94 - r, cx + r, H * 0.94 + r],
+                r = 3 + (2 * f.beat_pulse if on else 0)
+                cx = x0 - 60 + k * 12
+                draw.ellipse([cx - r, y + 2.5 - r, cx + r, y + 2.5 + r],
                              fill=(*self.accent, 230) if on else (255, 255, 255, 60))
 
     def _paste_figure(self, image, f: Frame) -> None:

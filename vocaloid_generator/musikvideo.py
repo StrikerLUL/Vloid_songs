@@ -26,6 +26,7 @@ FPS = 30
 SIZE = karaoke.VIDEO_SIZE
 BANDS = 48
 WINDOW = 2048
+LOW_HZ, HIGH_HZ = 60.0, 12000.0        # das Spektrum zeigt diesen Bereich (1.7.0: ab 60 statt 40 Hz)
 FADE_IN, FADE_OUT = 1.0, 2.5           # Sekunden schwarz → Bild und Bild → schwarz
 TITLE_MIN_GAP = 4.0                    # so lange muss bis zur ersten Zeile Platz sein, sonst kein großer Titel
 CREDITS_SECONDS = 7.0
@@ -51,6 +52,8 @@ class Options:
     figure: tuple = ()                 # V9: (Mund zu, Mund auf)
     pictures: dict = field(default_factory=dict)   # V13: {Sektionsart: Bild}
     background: str = ""               # eigenes Bild
+    tidy: bool = False                 # 1.7.0: ruhiger und aufgeräumt (eine Schrift, weiche Wechsel, Blasen mit Text)
+    sharp: bool = False                # 1.7.0: schärfer (größere KI-Bilder, Lanczos, höhere Bitrate)
 
 
 def options_from(settings) -> Options:
@@ -59,7 +62,8 @@ def options_from(settings) -> Options:
                    german=s.video_german, chords=s.video_chords, melody_line=s.video_melody_line,
                    spectrum=s.video_spectrum, words=s.video_words, titles=s.video_titles, hud=s.video_hud,
                    figure=tuple(p for p in (s.video_figure, s.video_figure_open) if p and os.path.exists(p)),
-                   background=s.video_background if s.video_background and os.path.exists(s.video_background) else "")
+                   background=s.video_background if s.video_background and os.path.exists(s.video_background) else "",
+                   tidy=s.video_tidy, sharp=s.video_sharp)
 
 
 # ── Ton: Spektrum und Lautstärke pro Bild ─────────────────────────────────────
@@ -102,12 +106,36 @@ class Sound:
         return np.clip(part / (self.peak or 1.0), -1, 1)
 
 
+def band_edges(rate: int, bands: int = BANDS, low: float = LOW_HZ, high: float = HIGH_HZ,
+               window: int = WINDOW) -> np.ndarray:
+    """
+    Grenzen der Bänder: logarithmisch von low bis high, aber keins schmaler als ein Schritt der FFT (rate/window).
+    1.7.0: bis 1.6 lagen 48 Bänder ab 40 Hz logarithmisch, unter etwa 170 Hz waren sie schmaler als die 21,5 Hz der
+    FFT; jedes zweite Band links bekam keinen Wert und blieb den ganzen Song auf null.
+    """
+    high = min(high, rate / 2 - 1)
+    step = rate / window * 1.001
+
+    def build(ratio: float) -> list:
+        edges = [low]
+        for _ in range(bands):
+            edges.append(max(edges[-1] * ratio, edges[-1] + step))
+        return edges
+
+    lo, hi = 1.0, (high / low) ** (1.0 / bands)
+    for _ in range(50):                      # das größte Verhältnis, mit dem das letzte Band bei high endet
+        mid = (lo + hi) / 2
+        lo, hi = (lo, mid) if build(mid)[-1] > high else (mid, hi)
+    return np.array(build(lo))
+
+
 def analyse(mono: np.ndarray, rate: int, frames: int, fps: int = FPS) -> Sound:
-    """Spektrum in BANDS Bändern (40 Hz bis 12 kHz, logarithmisch) und Lautstärke für jedes Bild, schnell steigend
-    und langsam fallend wie ein Pegel."""
-    edges = np.geomspace(40, min(12000, rate / 2 - 1), BANDS + 1)
+    """Spektrum in BANDS Bändern (60 Hz bis 12 kHz, logarithmisch, band_edges) und Lautstärke für jedes Bild, schnell
+    steigend und langsam fallend wie ein Pegel. 1.7.0: alle Bänder auf einer gemeinsamen, geglätteten Skala; bis 1.6
+    wurde jedes auf sein eigenes Maximum gestreckt, rechts schlugen dann alle zugleich bis oben an (eine Wand)."""
+    edges = band_edges(rate)
     freqs = np.fft.rfftfreq(WINDOW, 1 / rate)
-    which = np.clip(np.searchsorted(edges, freqs) - 1, -1, BANDS)
+    which = np.clip(np.searchsorted(edges, freqs, side="right") - 1, -1, BANDS)
     window = np.hanning(WINDOW).astype(np.float32)
     padded = np.concatenate([np.zeros(WINDOW, np.float32), mono.astype(np.float32), np.zeros(WINDOW, np.float32)])
     raw = np.zeros((frames, BANDS), dtype=np.float32)
@@ -123,7 +151,10 @@ def analyse(mono: np.ndarray, rate: int, frames: int, fps: int = FPS) -> Sound:
             if sel.any():
                 raw[idx, b] = mag[:, sel].mean(axis=1)
     raw = np.log1p(raw * 10)
-    top = np.percentile(raw, 97, axis=0) + 1e-6
+    loud = np.percentile(raw, 99, axis=0)
+    index = np.arange(BANDS)
+    tilt = np.polyval(np.polyfit(index, loud, 2), index)      # der Verlauf über die Bänder, ohne die Zacken
+    top = np.maximum(tilt, 0.25 * float(loud.max())) * 1.08 + 1e-6
     bands = np.clip(raw / top[None, :], 0, 1)
     peak = float(np.percentile(level, 99)) or 1.0
     level = np.clip(level / peak, 0, 1)
@@ -147,6 +178,7 @@ class Timeline:
         self.sound = sound
         self.length = length
         self.motifs = motifs or [set() for _ in lines]
+        self.words = [line_words(line) for line in lines]
         self.line_starts = [line["start"] - karaoke.LEAD_SECONDS for line in lines]
         self.note_starts = [n[0] for n in self.map.melody]
         pitches = [n[2] for n in self.map.melody]
@@ -172,6 +204,7 @@ class Timeline:
             f.last_chorus = f.chorus and self.last_chorus_start is not None and sec.start >= self.last_chorus_start
             f.change = math.exp(-(t - sec.start) / 0.6) if sec.start > 0 else 0.0
             f.index = self.map.sections.index(sec)
+            f.prev_kind = self.map.sections[f.index - 1].kind if f.index > 0 else ""
         beat, phase = self.map.beat_at(t)
         f.beat, f.phase = beat, phase
         f.downbeat = beat >= 0 and beat % max(1, self.map.accents) == 0
@@ -195,6 +228,7 @@ class Timeline:
         i = bisect.bisect_right(self.line_starts, t) - 1
         if 0 <= i < len(self.lines) and t <= self.lines[i]["end"] + karaoke.HOLD_SECONDS:
             f.motifs = self.motifs[i]
+            f.words = self.words[i]
         f.song_progress = min(1.0, t / max(1e-6, self.length))
         f.sections = self.sections
         f.fade = min(1.0, t / FADE_IN, max(0.0, (self.length - t) / FADE_OUT))
@@ -204,6 +238,17 @@ class Timeline:
         elif f.chorus and f.snare > 0.9:
             f.flash = 0.25
         return f
+
+
+def line_words(line: dict) -> tuple:
+    """Die Wörter einer Zeile für die Chat-Blasen (1.7.0): wie geschrieben, ohne einzelne Partikel wie が oder の."""
+    text = line.get("text") or ""
+    if text:
+        from lyrics import shown_parts
+        parts = [karaoke._clean(part).strip() for part, _ in shown_parts(text)]
+    else:
+        parts = karaoke.text(line).split()
+    return tuple(p for p in parts if len(p) >= 2 or (p and not ("\u3040" <= p <= "\u309f")))
 
 
 # ── Text (libass) ─────────────────────────────────────────────────────────────
@@ -227,11 +272,16 @@ def chunks(line: dict, kanji: bool = True) -> list:
     parts = shown_parts(line["text"])
     total = sum(n for _, n in parts) or 1.0
     n = len(sylls)
+    # 1.7.0: eine Silbe mit „ー“ aus dem Text zählt wie geschrieben doppelt (karaoke.lines "weights")
+    weights = line.get("weights") if len(line.get("weights") or ()) == n else [1] * n
+    marks = [0]
+    for w in weights:
+        marks.append(marks[-1] + w)
 
     def at(share: float) -> float:
-        x = min(n, max(0.0, share * n))
-        k = min(n - 1, int(x))
-        return bounds[k] + (bounds[k + 1] - bounds[k]) * (x - k)
+        x = min(marks[-1], max(0.0, share * marks[-1]))
+        k = min(n - 1, bisect.bisect_right(marks, x) - 1)
+        return bounds[k] + (bounds[k + 1] - bounds[k]) * min(1.0, (x - marks[k]) / weights[k])
 
     out, done = [], 0.0
     for text, weight in parts:
@@ -243,13 +293,19 @@ def chunks(line: dict, kanji: bool = True) -> list:
 def ass(lines: list, scene: szenen.Scene, opts: Options, style: str, title: str = "", subtitle: str = "",
         credits: tuple = (), found: Optional[songkarte.Map] = None, length: float = 0.0, offset: float = 0.0,
         until: Optional[float] = None, strength: float = 1.0) -> str:
-    """Untertitel fürs Musikvideo, Zeiten ab offset (Vorschau) bis until."""
+    """Untertitel fürs Musikvideo, Zeiten ab offset (Vorschau) bis until. 1.7.0: ohne Titel keine Titelkarte (bis 1.6
+    stand dort der Stil), kein Dauer-Titel unten links mehr, Akkorde mit ♭ in B-Tonarten. Mit opts.tidy eine Schrift
+    für alles, ein dünnerer Rand am Titel und die laufende Zeile blendet wie Romaji und Übersetzung weich."""
     width, height = SIZE
     look = scene.look
     sung, _, edge = karaoke.colors(style) if not look.sung else (look.sung, "", karaoke.colors(style)[2])
     light = scene.palette[3]
     big = int(height / 12 * look.size)
     bold = -1 if look.bold else 0
+    latin = look.font if opts.tidy else look.latin          # T6: eine Schriftfamilie, die auch Kana kann
+    title_edge = "2,1" if opts.tidy else "4,3"              # Rand, Schatten
+    soft = "\\fad(150,150)" if opts.tidy else ""          # T5: die Zeile wechselt weich wie Romaji und Deutsch
+    flats = songkarte.spelling(found) if found is not None and found.chords else (False, False)
     head = [
         "[Script Info]", "ScriptType: v4.00+", f"PlayResX: {width}", f"PlayResY: {height}", "WrapStyle: 2", "",
         "[V4+ Styles]",
@@ -258,19 +314,19 @@ def ass(lines: list, scene: szenen.Scene, opts: Options, style: str, title: str 
         "MarginR, MarginV, Encoding",
         f"Style: Line,{look.font},{big},{_ass_color(sung)},&H00FFFFFF,{_ass_color(edge)},&H80000000,{bold},0,0,0,"
         f"100,100,0,0,1,{look.outline:g},2,5,40,40,0,1",
-        f"Style: Romaji,{look.latin},{height // 26},&H18FFFFFF,&H18FFFFFF,{_ass_color(edge)},&H80000000,0,0,0,0,"
+        f"Style: Romaji,{latin},{height // 26},&H18FFFFFF,&H18FFFFFF,{_ass_color(edge)},&H80000000,0,0,0,0,"
         f"100,100,1,0,1,2,0,5,40,40,0,1",
-        f"Style: Deutsch,{look.latin},{height // 30},{_ass_color(light, 0x10)},{_ass_color(light, 0x10)},"
+        f"Style: Deutsch,{latin},{height // 30},{_ass_color(light, 0x10)},{_ass_color(light, 0x10)},"
         f"{_ass_color(edge)},&H80000000,0,-1,0,0,100,100,0,0,1,2,0,5,40,40,0,1",
         f"Style: Next,{look.font},{height // 26},&H70FFFFFF,&H70FFFFFF,{_ass_color(edge)},&H80000000,0,0,0,0,"
         f"100,100,0,0,1,2,0,5,40,40,0,1",
-        f"Style: Label,{look.latin},{height // 34},&H40FFFFFF,&H40FFFFFF,&H90000000,&H00000000,-1,0,0,0,100,100,1,0,"
+        f"Style: Label,{latin},{height // 34},&H40FFFFFF,&H40FFFFFF,&H90000000,&H00000000,-1,0,0,0,100,100,1,0,"
         f"1,1.5,0,7,40,40,26,1",
-        f"Style: Chord,{look.latin},{height // 24},&H10FFFFFF,&H10FFFFFF,&H90000000,&H00000000,-1,0,0,0,100,100,0,0,"
+        f"Style: Chord,{look.font},{height // 24},&H10FFFFFF,&H10FFFFFF,&H90000000,&H00000000,-1,0,0,0,100,100,0,0,"
         f"1,2,0,1,48,40,40,1",
         f"Style: Title,{look.font},{height // 9},&H00FFFFFF,&H00FFFFFF,{_ass_color(edge)},&H80000000,-1,0,0,0,100,"
-        f"100,0,0,1,4,3,5,40,40,0,1",
-        f"Style: Sub,{look.latin},{height // 26},{_ass_color(light)},{_ass_color(light)},{_ass_color(edge)},"
+        f"100,0,0,1,{title_edge},5,40,40,0,1",
+        f"Style: Sub,{latin},{height // 26},{_ass_color(light)},{_ass_color(light)},{_ass_color(edge)},"
         f"&H80000000,0,0,0,0,100,100,1,0,1,2,0,5,40,40,0,1",
         "", "[Events]", "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
     ]
@@ -293,9 +349,6 @@ def ass(lines: list, scene: szenen.Scene, opts: Options, style: str, title: str 
         if subtitle:
             event(0.8, until_card, "Sub", f"{{\\fad(500,500)\\pos({width // 2},{int(height * 0.6)})}}"
                   + karaoke._clean(subtitle), 2)
-    if title:
-        event(until_card + 0.5 if card else 0.0, length or end_all, "Label",
-              f"{{\\pos(40,{height - 96})}}" + karaoke._clean(title), 0)
     lively = strength > 0.5
     shown_until = 0.0
     for i, line in enumerate(lines):
@@ -310,7 +363,7 @@ def ass(lines: list, scene: szenen.Scene, opts: Options, style: str, title: str 
             sec.kind == "Chorus" else ""
         lead = [f"{{\\k{_cs(line['start'] - start)}}}"] if line["start"] > start else []
         body = "".join(f"{{\\kf{max(1, cs) if text.strip() else cs}}}{text}" for text, cs in chunks(line, opts.kanji))
-        event(start, end, "Line", f"{{\\pos({width // 2},{y})}}" + pop + "".join(lead) + body)
+        event(start, end, "Line", f"{{\\pos({width // 2},{y}){soft}}}" + pop + "".join(lead) + body)
         below = y + int(height * 0.085)
         if opts.romaji and line.get("romaji"):
             event(start, end, "Romaji", f"{{\\pos({width // 2},{below})\\fad(150,150)}}"
@@ -328,10 +381,16 @@ def ass(lines: list, scene: szenen.Scene, opts: Options, style: str, title: str 
             event(sec.start + 0.1, min(sec.end, sec.start + LABEL_SECONDS), "Label",
                   f"{{\\fad(250,400)\\pos(40,58)}}{karaoke._clean(found.label(sec))}", 0)
         if opts.chords:
+            from theory import spelled
+            changed = found.key_change_at if found.key_change and found.key_change_at is not None else float("inf")
+
+            def named(at: float, name: str) -> str:
+                return karaoke._clean(spelled(name, flats[1] if at >= changed - 1e-3 else flats[0]))
+
             for k, (start, end, name) in enumerate(found.chords):
-                nxt = found.chords[k + 1][2] if k + 1 < len(found.chords) else ""
-                event(start, end, "Chord", f"{{\\pos(48,{height - 30})}}{karaoke._clean(name)}"
-                      + (f"{{\\fs{height // 40}\\alpha&H80&}}  → {karaoke._clean(nxt)}" if nxt else ""), 0)
+                nxt = found.chords[k + 1] if k + 1 < len(found.chords) else None
+                event(start, end, "Chord", f"{{\\pos(48,{height - 30})}}{named(start, name)}"
+                      + (f"{{\\fs{height // 40}\\alpha&H80&}}  → {named(nxt[0], nxt[2])}" if nxt else ""), 0)
     if opts.titles and credits:
         # der Abspann läuft im Outro wie am Ende eines Animes, ohne Outro in den letzten Sekunden
         outro = next((s.start for s in found.sections if s.kind == "Outro"), None) if found else None
@@ -375,21 +434,22 @@ def render(audio: str, out: str, lines: list, found: Optional[songkarte.Map], st
     chars = "".join(line.get("text") or karaoke.text(line) for line in lines)
     timeline = Timeline(found, lines, sound, length, motifs, found.bpm if found else 120.0)
     painter = szenen.Painter(scene, strength, seed, chars, weather, chat, opts.background or None, opts.pictures,
-                             opts.figure or None, opts.melody_line, opts.spectrum, opts.hud)
+                             opts.figure or None, opts.melody_line, opts.spectrum, opts.hud, opts.tidy, opts.sharp)
     folder = os.path.dirname(os.path.abspath(out))
     os.makedirs(folder, exist_ok=True)
     stem = os.path.splitext(os.path.basename(out))[0]
     subtitles = stem + ".ass"
     with open(os.path.join(folder, subtitles), "w", encoding="utf-8") as f:
         f.write(ass(lines, scene, opts, style, title, subtitle, credits, found, length, first, last, strength))
-    flags = "neighbor" if scene.pixel else "bicubic"
+    flags = "neighbor" if scene.pixel else "lanczos" if opts.sharp else "bicubic"
+    preset, crf = ("medium", "18") if opts.sharp else ("veryfast", "20")      # B4: schärfer, etwa doppelte Bitrate
     width, height = SIZE
     audio_in = (["-ss", f"{first:.3f}"] if first > 0 else []) + (["-t", f"{last - first:.3f}"] if seconds else [])
     command = [exe, "-y", "-hide_banner", "-loglevel", "error",
                "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{szenen.W}x{szenen.H}", "-r", str(FPS), "-i", "-",
                *audio_in, "-i", os.path.abspath(audio),
                "-filter_complex", f"[0:v]scale={width}:{height}:flags={flags},ass={subtitles}[video]",
-               "-map", "[video]", "-map", "1:a", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+               "-map", "[video]", "-map", "1:a", "-c:v", "libx264", "-preset", preset, "-crf", crf,
                "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "-shortest", os.path.abspath(out)]
     log.info("Musikvideo: %s (%s, %d Bilder)", out, scene.name, frames)
     with tempfile.TemporaryFile() as errors:
@@ -434,19 +494,30 @@ def render(audio: str, out: str, lines: list, found: Optional[songkarte.Map], st
 def for_song(result, out: str, label: str = "", audio: Optional[str] = None, preview: bool = False,
              progress: Optional[ProgressFn] = None) -> str:
     """Das Musikvideo eines fertigen Songs (pipeline.SongResult): Text und Songkarte aus seinem Ordner, Titel aus
-    label (sonst der Stil), Abspann mit der Stimme. preview: nur PREVIEW_SECONDS ab dem ersten Refrain (V11)."""
+    label (sonst der Name im Verlauf), Abspann mit der Stimme. preview: nur PREVIEW_SECONDS ab dem ersten Refrain
+    (V11). 1.7.0: ohne Namen keine Titelkarte (bis 1.6 stand dort der Stil); Stil, Tempo und Tonart darunter kommen
+    aus der Songkarte, also von dem Song, der wirklich im Ordner liegt (youtube.details)."""
+    import history
     import youtube
     s = result.settings
     source = audio or result.audio
     if not source or not os.path.exists(source):
         raise RuntimeError("Der Song fehlt, erst einen Song erzeugen.")
-    lines = karaoke.load(os.path.join(result.output_dir, karaoke.FILE))
     found = songkarte.load(os.path.join(result.output_dir, songkarte.FILE))
-    style = s.style if s else ""
+    lines = karaoke.load(os.path.join(result.output_dir, karaoke.FILE),
+                         [(sec.start, sec.end) for sec in found.sections] if found else None)
+    other = history.folder_differs(result)
+    if other is not None:
+        log.warning("Im Ausgabeordner liegt Seed %s, nicht der gewählte Song (Seed %s); das Video zeigt den im Ordner",
+                    other, result.seed)
+    style = (found.style if found is not None and found.style else "") or (s.style if s else "")
     opts = options_from(s) if s else Options()
     import bilder
-    opts.pictures = bilder.for_song(result) if s and s.ai_backgrounds else {}
-    title = label.strip() or style
+    opts.pictures = bilder.for_song(result, sharp=opts.sharp) if s and s.ai_backgrounds else {}
+    if not label.strip():
+        entry = history.for_result(result)
+        label = entry.label if entry else ""
+    title = label.strip()
     subtitle = " · ".join(d for d in youtube.details(result) if d != title)
     start = preview_start(found, lines) if preview else 0.0
     return render(source, out, lines, found, style, opts, title, subtitle, tuple(youtube.credits(result)),

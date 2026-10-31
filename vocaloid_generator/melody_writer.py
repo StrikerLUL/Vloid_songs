@@ -71,8 +71,21 @@ CONTOURS = {
     "PUP":  lambda t: 1.0 + 5.0 * t,
     "R":    lambda t: 0.0,
     "R2":   lambda t: 0.0,
+    # 1.7.0 section_registers: die Bridge beginnt tief und ruhig und steigt zum letzten Refrain
+    "LOW":  lambda t: -1.5 + 1.5 * math.sin(math.pi * t),
+    "LOW2": lambda t: -0.5 + 2.0 * math.sin(math.pi * t),
+    "RISE": lambda t: 0.0 + 4.0 * t,
+    "RISEUP": lambda t: 1.5 + 5.0 * t,
 }
 KIND_OFFSET = {"Verse": -3, "PreChorus": -1, "Chorus": 2, "Bridge": -2, "Rap": -4}
+# 1.7.0 section_registers: bis 1.6 klemmte die Mitte jeder Sektion zwischen lo+7 und hi-8 des Stimmumfangs; bei einer
+# Stimme mit 17 Halbtönen (REINA) lagen dann Strophe und Refrain fast gleich hoch. Jetzt mehr Abstand, ein weiterer
+# Spielraum, und Strophe, Pre-Chorus und Bridge bleiben unter dem höchsten Ton des Refrains.
+REGISTER_OFFSET = {"Verse": -4, "PreChorus": -1, "Chorus": 3, "Bridge": -3, "Rap": -4}
+REGISTER_MARGIN = (5, 5)            # so weit bleibt die Mitte unten und oben vom Rand des Umfangs
+REGISTER_BELOW_CHORUS = 2           # so viel tiefer als der höchste Ton des Refrains bleibt der Rest
+BRIDGE_ROLES = ["LOW", "LOW2", "RISE", "RISEUP"]
+BRIDGE_REPEAT_COST = 1.0            # die Bridge wiederholt Töne seltener (bis 1.6: die Hälfte auf einem Ton)
 
 # Gesten pro Takt: Abweichung der Töne eines Takts von der Phrasenkontur (k = Töne im Takt)
 def _span(k: int) -> list:
@@ -153,8 +166,8 @@ class _Slot:
     last: bool
 
 
-def roles_for(kind: str, n_phrases: int) -> list:
-    seq = ROLE_SEQUENCES.get(kind, ROLE_SEQUENCES["Verse"])
+def roles_for(kind: str, n_phrases: int, registers: bool = False) -> list:
+    seq = BRIDGE_ROLES if registers and kind == "Bridge" else ROLE_SEQUENCES.get(kind, ROLE_SEQUENCES["Verse"])
     if n_phrases <= 1:
         return [seq[-1]]
     if n_phrases <= len(seq):
@@ -191,6 +204,20 @@ def _local_scale(tonic: int, mode: str, chord: Chord) -> set:
     return pcs
 
 
+def register_window(vocal_center: int, lo: int, hi: int, kind: str) -> tuple:
+    """1.7.0 (section_registers): (Mitte, tiefster, höchster Ton) einer Sektion. Der Refrain liegt REGISTER_OFFSET
+    höher als die Strophe und hat den höchsten Ton des Songs; die anderen bleiben REGISTER_BELOW_CHORUS darunter."""
+    def window(which: str) -> tuple:
+        center = vocal_center + REGISTER_OFFSET.get(which, 0)
+        center = max(lo + REGISTER_MARGIN[0], min(hi - REGISTER_MARGIN[1], center))
+        return center, max(lo, center - 8), min(hi, center + 8)
+    center, low, high = window(kind)
+    if kind != "Chorus":
+        top = window("Chorus")[2] - REGISTER_BELOW_CHORUS
+        high = max(center + 3, min(high, top))
+    return center, low, high
+
+
 class SectionMelodyWriter:
     def __init__(self, plan: SongPlan, section: Section, rng: random.Random, motifs=None, extras=()):
         """motifs: zusätzliche Rhythmen und Gesten (motifs.Motifs); None = nur die eingebauten.
@@ -203,10 +230,14 @@ class SectionMelodyWriter:
         # die Sektion „Sprechen“ bekommt den Rhythmus des Raps (gesprochen wird sie frei, spoken.py)
         self.kind = "Rap" if section.kind == "Spoken" else section.kind if section.kind in ROLE_SEQUENCES else "Verse"
         lo, hi = plan.vocal_range
-        center = plan.style.vocal_center + KIND_OFFSET.get(self.kind, 0)
-        self.center = max(lo + 7, min(hi - 8, center))
-        self.lo = max(lo, self.center - 7)
-        self.hi = min(hi, self.center + 8)
+        self.registers = "section_registers" in extras
+        if self.registers:
+            self.center, self.lo, self.hi = register_window(plan.style.vocal_center, lo, hi, self.kind)
+        else:
+            center = plan.style.vocal_center + KIND_OFFSET.get(self.kind, 0)
+            self.center = max(lo + 7, min(hi - 8, center))
+            self.lo = max(lo, self.center - 7)
+            self.hi = min(hi, self.center + 8)
         self.motifs = {}
         self.gestures = {}
         self.melisma = {}
@@ -394,6 +425,8 @@ class SectionMelodyWriter:
                     cost += -0.6 if slot.dur <= 1 else 0.6   # schnelle Tonwiederholungen sind typisch, lange nicht
                     if self.char is not None and slot.dur <= 1:
                         cost -= self.char.repeat_bonus
+                    if self.registers and self.kind == "Bridge":
+                        cost += BRIDGE_REPEAT_COST
                 if abs(prev_move) >= 5 and (p - prev) * prev_move > 0:
                     cost += 2.0           # nach einem Sprung in die Gegenrichtung
                 if d == 0 and len(history) >= 2 and history[-1] == history[-2] == p:
@@ -496,7 +529,7 @@ class SectionMelodyWriter:
     # ── Ganze Sektion ────────────────────────────────────────────────────────────
     def write(self, syllables: list) -> list:
         pb, chunks = self.allocate(syllables)
-        roles = roles_for(self.kind, len(chunks))
+        roles = roles_for(self.kind, len(chunks), self.registers)
         notes, prev = [], None
         written = {}
         for ph, (chunk, role) in enumerate(zip(chunks, roles)):

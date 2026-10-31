@@ -134,6 +134,14 @@ ELSEWHERE = {
     "producer_tag": "test_charakter_150.py::test_the_producer_profile_signs_every_song",
     "taste_learning": "test_charakter_150.py::test_thumbs_in_the_history_teach_the_dice",
     "style_blend": "test_charakter_150.py::test_two_styles_blend_with_a_share",
+    # 1.7.0
+    "video_tidy": "test_lyric_video_170.py::test_the_tidy_video_has_one_font_soft_lines_and_calm_ballads",
+    "video_sharp": "test_lyric_video_170.py::test_the_sharp_video_paints_bigger_pictures_and_encodes_finer",
+    "vocal_room": "test_lyric_video_170.py::test_the_voice_gets_room_in_the_chorus",
+    "long_note_vibrato": "test_lyric_video_170.py::test_long_straight_notes_get_a_late_gentle_vibrato",
+    "section_registers": "test_lyric_video_170.py::test_the_chorus_sings_higher_than_the_verse_and_the_bridge_rises",
+    "soft_breaths": "test_lyric_video_170.py::test_the_stand_in_breath_is_softer_and_darker",
+    "dynamic_arc": "test_lyric_video_170.py::test_calm_songs_start_quiet_grow_to_the_last_chorus_and_fade",
 }
 # Bedienung der App, ändert den Song nicht
 APP = ("show_karaoke", "reuse_steps", "log_file", "update_check", "setup_wizard", "done_notice", "lyric_hints",

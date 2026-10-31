@@ -380,6 +380,15 @@ class SongSettings(BaseModel):
     local_cache: bool = True           # Zwischenspeicher und Projekte nicht in OneDrive, sondern auf dem PC (speicher.py)
     video_links: bool = False          # Video-Links als Vorbild: yt-dlp lädt den Ton nur zum Messen (vorbild_link.py)
     remote_lan: bool = False           # Handy als Fernbedienung: die App im WLAN, mit Zugangscode (fernbedienung.py)
+    # 1.7.0: was am Lyric-Video, am Gesang und an der Melodie krumm und schief war; jedes hat einen Schalter
+    video_tidy: bool = True            # ruhigeres Video: eine Schrift, weiche Zeilenwechsel, Blasen mit Text, Bilder
+    #                                    blenden über, Teilchen lassen den Text frei, ruhige Stile ohne Notenlinie
+    video_sharp: bool = True           # schärferes Video: KI-Bilder 1024×576, Lanczos, etwa doppelte Bitrate
+    vocal_room: bool = True            # Platz für die Stimme im Refrain: weniger Flächen, Gegenstimme tiefer, schmaler
+    long_note_vibrato: bool = True     # lange gerade Töne bekommen ein sanftes, spät einsetzendes Vibrato
+    section_registers: bool = True     # Strophe tiefer, Refrain höher, Bridge mit eigener steigender Linie
+    soft_breaths: bool = True          # der Ersatz-Atmer ohne Aufnahmen leiser und dunkler (kein breites Rauschen)
+    dynamic_arc: bool = True           # ruhige Stile fangen leise an, der letzte Refrain ist am größten; Ballade klingt aus
 
     channels: dict[str, ChannelSettings] = Field(default_factory=_default_channels)
 

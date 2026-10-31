@@ -109,6 +109,8 @@ INTRO_WEIGHTS = {"Ballade": (1, 4, 0, 2), "Lo-Fi": (2, 3, 1, 1), "Rock": (3, 0, 
                  "Dark Vocaloid": (3, 2, 2, 2), "City Pop": (3, 1, 2, 1)}
 ENDING_WEIGHTS = {"Ballade": (4, 0, 2), "Lo-Fi": (2, 0, 3), "Rock": (2, 3, 0), "Dark Vocaloid": (2, 3, 1),
                   "Idol-Pop": (2, 3, 1), "Kawaii Chiptune": (2, 3, 1), "City Pop": (2, 1, 3)}
+# 1.7.0 dynamic_arc: eine Ballade klingt meist aus, statt im Outro laut zu bleiben und dann weg zu sein
+ARC_ENDING_WEIGHTS = {"Ballade": (1, 0, 4), "Lo-Fi": (1, 0, 4)}
 DEFAULT_INTRO, DEFAULT_ENDING = (3, 1, 1, 2), (3, 2, 1)
 INTRO_NAMES = {"full": "volle Band", "quiet": "leise", "drums": "Schlagzeug und Bass", "hook": "nur die Hook"}
 ENDING_NAMES = {"ring": "Schlussakkord klingt aus", "stop": "harter Stopp", "fade": "wird leiser"}
@@ -154,7 +156,7 @@ class Character:
         return ", ".join(bits)
 
 
-def choose(style: str, seed: str, split: bool = False, taste=None) -> Character:
+def choose(style: str, seed: str, split: bool = False, taste=None, arc: bool = False) -> Character:
     """Der Charakter eines Songs in diesem Stil; derselbe Seed gibt denselben Charakter. split: J-Pop Energy und
     Idol-Pop getrennt (SPLIT). taste: der Geschmack aus den Daumen im Verlauf (geschmack.Taste, 1.5.0); was dir
     gefiel, kommt öfter."""
@@ -172,7 +174,8 @@ def choose(style: str, seed: str, split: bool = False, taste=None) -> Character:
                       for inst, pool in sorted({**insts, **own.get("patterns", {}).get(sec, {})}.items())}
                 for sec, insts in sorted(PATTERNS.get(style, {}).items())}
     intro = rng.choices(INTROS, _tasted(INTRO_WEIGHTS.get(style, DEFAULT_INTRO), INTROS, "intro", taste))[0]
-    ending = rng.choices(ENDINGS, _tasted(ENDING_WEIGHTS.get(style, DEFAULT_ENDING), ENDINGS, "ending", taste))[0]
+    weights = (ARC_ENDING_WEIGHTS if arc and style in ARC_ENDING_WEIGHTS else ENDING_WEIGHTS).get(style, DEFAULT_ENDING)
+    ending = rng.choices(ENDINGS, _tasted(weights, ENDINGS, "ending", taste))[0]
     return Character(programs, voices, grooves, patterns, intro, ending)
 
 

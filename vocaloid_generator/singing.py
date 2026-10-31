@@ -48,7 +48,7 @@ VOCAL_FIELDS = ("bpm", "meter", "seed", "rap_voice", "rap_speaker", "singer", "v
                 "recorded_breaths", "text_expression", "note_swells", "psola_reshape", "own_vocal", "own_vocal_align", "phrase_fixes", "style",
                 "telephone_fx", "stutter_fx", "hard_tune", "formant_fx", "vocal_swing", "breathiness", "shimmer",
                 "intonation", "ornaments", "vocal_pocket", "group_vocals", "diffsinger_expression", "spoken_sound",
-                "voice_comfort", "gentle_reshape")
+                "voice_comfort", "gentle_reshape", "long_note_vibrato", "soft_breaths")
 
 
 def _vocal_key(settings: SongSettings, tracks: dict) -> str:
@@ -353,7 +353,8 @@ def _liven(settings: SongSettings, tracks: dict, out: str, vocals_wav: str, sung
             log.warning("Chor im letzten Refrain fehlgeschlagen: %s", e)
     if settings.breaths:
         count = voice_fx.add_breaths(vocals_wav, voice_fx.timeline(tracks["melody_data"], settings.bpm),
-                                     seed=settings.seed or 0, recorded=settings.recorded_breaths)
+                                     seed=settings.seed or 0, recorded=settings.recorded_breaths,
+                                     soft=settings.soft_breaths)
         log.info("%d Atmer vor den Phrasen%s", count,
                  " (aufgenommen)" if settings.recorded_breaths and voice_fx.breath_samples(48000) else "")
 
@@ -536,7 +537,8 @@ def pitch_options(settings: SongSettings) -> dict:
     und Verzierungen nach Stil (G3)."""
     import voice_fx
     return {"vibrato": settings.vibrato, "glide": settings.glide, "intonation": settings.intonation,
-            "ornaments": voice_fx.ornament_amount(settings.ornaments, settings.style), "seed": settings.seed or 0}
+            "ornaments": voice_fx.ornament_amount(settings.ornaments, settings.style), "seed": settings.seed or 0,
+            "long_vibrato": voice_fx.long_vibrato_amount(settings.long_note_vibrato, settings.style)}
 
 
 class _Part(NamedTuple):
@@ -947,7 +949,7 @@ def _sing_voicevox(settings: SongSettings, tracks: dict, out: str, vocals_wav: s
     shape = None
     pitch = pitch_options(settings)
     if abs(settings.vibrato - 1.0) > 1e-3 or abs(settings.glide - 1.0) > 1e-3 or pitch["intonation"] > 0 or \
-            pitch["ornaments"] > 0:
+            pitch["ornaments"] > 0 or pitch["long_vibrato"] > 0:
         def shape(f0, frame, offset):
             return voice_fx.shape_pitch(f0, frame, notes, offset=offset, **pitch)
     if lead:

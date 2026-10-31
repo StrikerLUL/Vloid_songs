@@ -52,9 +52,52 @@ def mix_arguments(settings: SongSettings, tracks: dict, out: str, has_vocals: bo
         sung_pads=chorus_windows(plan) if has_vocals and os.path.exists(
             os.path.join(out, "vocals_flaechen.wav")) else None,
         vocal_space=sections_in_seconds(plan) if plan is not None else None,
-        tension=spannung.rides(settings, plan),
+        tension=spannung.rides(settings, plan) + arc_rides(settings, plan),
+        vocal_room=chorus_windows(plan) if settings.vocal_room and has_vocals and plan is not None else None,
+        fade_out=fade_out(settings, tracks),
         **({} if settings.draft else _reference_targets(settings, tracks, out, has_vocals=has_vocals)),
     )
+
+
+# 1.7.0 dynamic_arc: bis 1.6 war das Intro einer Ballade so laut wie die Refrains und der letzte Refrain mit Rückung
+# nicht lauter als der erste (Lautheitsumfang 5 LU). Die Band spielt jetzt in diesen Sektionen leiser oder lauter.
+ARC_CALM = {("Intro", 1): -5.0, ("Verse", 1): -3.0, ("PreChorus", 1): -1.5}
+ARC_CALM_STYLES = ("Ballade", "Lo-Fi")
+ARC_LAST_CHORUS_DB = 1.5
+FADE_OUT_DB = -10.0          # so leise ist der Song am Ende eines Outros, das ausklingt
+
+
+def arc_rides(settings: SongSettings, plan) -> list:
+    """[(Start, Ende in Sekunden, dB)] des Lautstärke-Bogens (dynamic_arc): ruhige Stile fangen leise an, in jedem Stil
+    ist der letzte von mehreren Refrains am größten. Eine in der Spannungskurve gezeichnete Sektion behält, was du
+    gezeichnet hast; der Bogen kommt dort nicht noch dazu."""
+    if not settings.dynamic_arc or plan is None:
+        return []
+    drawn = (spannung.extras(settings) or {}).get("drawn", {})
+    spb = plan.seconds_per_beat
+    choruses = [sec for sec in plan.sections if sec.kind == "Chorus"]
+    out = []
+    for sec in plan.sections:
+        if spannung.key(sec.kind, sec.occurrence) in drawn:
+            continue
+        db = ARC_CALM.get((sec.kind, sec.occurrence), 0.0) if settings.style in ARC_CALM_STYLES else 0.0
+        if len(choruses) > 1 and sec is choruses[-1]:
+            db = ARC_LAST_CHORUS_DB
+        if db:
+            out.append((sec.start * spb, sec.end * spb, db))
+    return out
+
+
+def fade_out(settings: SongSettings, tracks: dict) -> Optional[tuple]:
+    """(Anfang, Ende in Sekunden) des Outros, über das der ganze Song leiser wird (dynamic_arc), wenn sein Charakter
+    ausklingen will (song_character „wird leiser“); sonst None."""
+    plan, character = tracks.get("plan"), tracks.get("character")
+    if not settings.dynamic_arc or plan is None or character is None or character.ending != "fade":
+        return None
+    last = plan.sections[-1] if plan.sections else None
+    if last is None or last.kind != "Outro":
+        return None
+    return last.start * plan.seconds_per_beat, last.end * plan.seconds_per_beat
 
 
 def _vocal_tone(settings: SongSettings, out: str):

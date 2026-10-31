@@ -127,6 +127,18 @@ VOICE_SWITCHES = (
                                                 "Text zu kennen; Zeilen, die man kaum versteht, stehen unter dem "
                                                 "Player und in hoer_check.txt, mit den Lesungen der Wörter. Erst "
                                                 "nach Einrichten › Hör-Check"),
+    # 1.7.0
+    ("vocal_room", "Platz für die Stimme im Refrain", "Im Refrain steht die Stimme etwas lauter, gesungene Flächen "
+                                                      "leiser, die Band macht ihr mehr Platz, Hall und Breite sind "
+                                                      "schmaler; die Gegenstimme spielt eine Oktave tiefer, in "
+                                                      "Ballade und Lo-Fi fällt der Keyboard-Chor im Refrain weg"),
+    ("long_note_vibrato", "Vibrato auf langen Tönen", "Ein Ton ab 0,6 s, den die Stimme kerzengerade singt, bekommt "
+                                                      "nach einer Viertelsekunde ein sanftes Vibrato, in Ballade und "
+                                                      "Lo-Fi etwas mehr. Auch beim Regler Vibrato auf 1"),
+    ("soft_breaths", "Leisere Ersatz-Atmer", "Liegen im Ordner Atmer keine Aufnahmen, atmet die Stimme mit "
+                                             "gefiltertem Rauschen; das ist jetzt 6 dB leiser und dunkler statt "
+                                             "eines breiten Rauschens. Ob Aufnahmen da sind, zeigt Einrichten › "
+                                             "System prüfen"),
 )
 # (Einstellung, Text, von, bis, Schritt, Erklärung), 0 = aus
 VOICE_SLIDERS = (
@@ -232,6 +244,11 @@ MELODY_SWITCHES = (
     ("catchy_chorus", "Ohrwurm-Wertung", "„Beste Melodie suchen“ nimmt im Refrain lieber die Fassung, deren erste "
                                          "Phrase mit kleiner Veränderung wiederkommt und deren Anfangsmotiv "
                                          "zurückkehrt"),
+    # 1.7.0
+    ("section_registers", "Lage je Sektion", "Die Strophe liegt tiefer, der Refrain im Schnitt 3 bis 5 Halbtöne höher "
+                                             "und hat den höchsten Ton; die Bridge beginnt tief und ruhig und steigt "
+                                             "zum letzten Refrain, mit weniger Tonwiederholungen. Bis 1.6 lagen bei "
+                                             "Stimmen mit kleinem Umfang alle Sektionen fast gleich hoch"),
 )
 # (Einstellung, Text, von, bis, Schritt, Erklärung): Regler der Neuerungen aus 1.3.0, 0 = aus
 MELODY_SLIDERS = (
@@ -1207,6 +1224,10 @@ def mix_panel(s: SongSettings) -> None:
     hint("Die Lautheit gilt immer, auch beim Mastering nach Vorbild-Songs; der Limiter hält die Spitzen unten.")
     ui.switch("Bewegung im Mix").bind_value(s, "mix_movement").mark("switch-mix_movement") \
         .tooltip("Anlauf mit Filter vor jedem Refrain, Hall je nach Sektion, breitere Refrains")
+    ui.switch("Lautstärke-Bogen").bind_value(s, "dynamic_arc").mark("switch-dynamic_arc") \
+        .tooltip("Ballade und Lo-Fi fangen leise an (Intro 5 dB, erste Strophe 3 dB leiser), der letzte Refrain ist "
+                 "in jedem Stil am größten, und ein Ende, das ausklingen soll, wird über das ganze Outro leiser. Eine "
+                 "Ballade klingt meist aus. In der Spannungskurve gezeichnete Sektionen bleiben, wie gezeichnet")
     ui.switch("Klangbild je Stil").bind_value(s, "style_sound").mark("switch-style_sound") \
         .tooltip("Jeder Stil hat seinen eigenen Raum und Klang: Ballade großer, weicher Hall, Lo-Fi kleiner dumpfer "
                  "Raum mit warmer Sättigung, Rock kurzer Raum mit Biss in den Mitten, Future Bass riesig und breit, "
@@ -1255,6 +1276,12 @@ VIDEO_SWITCHES = (
     ("video_titles", "Titelkarte am Anfang, Abspann am Ende",
      "Der Titel, solange das Intro ohne Text läuft; im Outro Stimme und Musik"),
     ("video_hud", "Ablaufleiste mit den Sektionen", "Oben rechts: wo im Song du gerade bist, Refrains hervorgehoben"),
+    ("video_tidy", "Ruhiges, aufgeräumtes Video",
+     "Eine Schrift für alles, die Zeile blendet weich, Chat-Blasen mit Wörtern aus der Zeile, Bilder blenden beim "
+     "Sektionswechsel über, Funkeln lässt den Text frei; ruhige Szenen (Ballade, Lo-Fi, City Pop) ohne Notenlinie "
+     "und Ablaufleiste, mit kleinerem Spektrum"),
+    ("video_sharp", "Schärferes Video", "KI-Bilder in 1024×576, schärfer vergrößert und mit etwa doppelter Bitrate; "
+                                        "das Video braucht etwas länger"),
     ("youtube_chapters", "Kapitel in der YouTube-Beschreibung", "0:00 Intro, 0:15 Strophe 1, 0:59 Refrain 1 …"),
 )
 

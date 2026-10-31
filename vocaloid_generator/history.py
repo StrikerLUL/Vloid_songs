@@ -117,6 +117,36 @@ def entries(output_dir: str) -> list:
     return found
 
 
+def for_result(result) -> Optional[Entry]:
+    """
+    1.7.0: der Verlaufseintrag des Songs, der gerade im Ausgabeordner liegt (für Name und Tonart im Video). Zuerst
+    der Eintrag des Ergebnisses. Passt er nicht zur Songkarte im Ordner, weil dort inzwischen ein anderer Song liegt
+    (Hör-Duell, mehrere Fassungen, das Handy), der neueste Eintrag mit Seed und Stil der Songkarte, sonst keiner.
+    """
+    import songkarte
+    known = entries(result.output_dir) if result.output_dir else []
+    own = next((e for e in known if e.audio == result.history), None) if result.history else None
+    found = songkarte.load(os.path.join(result.output_dir, songkarte.FILE)) if result.output_dir else None
+    if found is None or found.seed is None:
+        return own
+
+    def same(e: Entry) -> bool:
+        return e.settings.seed == found.seed and (not found.style or e.settings.style == found.style)
+
+    if own is not None and same(own):
+        return own
+    return next((e for e in known if same(e)), own if found.seed == result.seed else None)
+
+
+def folder_differs(result) -> Optional[int]:
+    """1.7.0: der Seed des Songs im Ausgabeordner, wenn er nicht der gewählte ist; sonst None."""
+    import songkarte
+    found = songkarte.load(os.path.join(result.output_dir, songkarte.FILE)) if result.output_dir else None
+    if found is None or found.seed is None or result.seed is None or found.seed == result.seed:
+        return None
+    return found.seed
+
+
 def set_favorite(entry: Entry, favorite: bool) -> Entry:
     """Favoriten fallen nie aus dem Verlauf."""
     _update(entry.info, favorit=bool(favorite))

@@ -94,10 +94,12 @@ def test_with_the_tension_curve_drums_band_and_mix_follow_the_drawing(tmp_path):
         assert sum(len(notes(on, inst, sec)) for inst in spannung.THIN) <= \
             sum(len(notes(off, inst, sec)) for inst in spannung.THIN)
         assert not notes(on, "brass", sec) and not notes(on, "counter", sec)
-    rides = mixdown.mix_arguments(s, on, str(tmp_path), has_vocals=False)["tension"]
+    # nur die Spannungskurve, ohne den Lautstärke-Bogen aus 1.7.0 (der hat eigene Tests in test_lyric_video_170)
+    alone = s.with_updates(dynamic_arc=False)
+    rides = mixdown.mix_arguments(alone, on, str(tmp_path), has_vocals=False)["tension"]
     assert [(round(a / spb), db) for a, _, db in rides] == [
         (round(by["Chorus#1"].start), 0.6), (round(verse.start), -2.1), (round(by["Bridge#1"].start), -1.2)]
-    assert mixdown.mix_arguments(s.with_updates(tension_curve=False), on, str(tmp_path), has_vocals=False)[
+    assert mixdown.mix_arguments(alone.with_updates(tension_curve=False), on, str(tmp_path), has_vocals=False)[
         "tension"] == []
 
 

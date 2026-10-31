@@ -157,6 +157,7 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
     contexts = {inst: {"vocal": vocal_notes} for inst in PARTS}
     contexts["bass"]["lively"] = lively_bass and dice.label("bass")      # eigener Zufall: aus = wie bisher
     contexts["guitar"]["strums"] = guitar_strums and dice.label("guitar")
+    contexts["counter"]["room"] = "vocal_room" in extras         # 1.7.0: die Gegenstimme eine Oktave unter dem Gesang
     drummer = grooves.for_song(bpm, dice.label("drums")) if real_grooves and swing < GROOVE_SWING_UNTIL else None
     riff = riffs.compose(plan, random.Random(dice.label("melody") + ":riff"), m.drop) if "intro_riff" in extras else None
     drops = []                   # 3/4: (Anfang, Ende, ausfallender Schlag) je Teil der Sektion, für das Schlagzeug
@@ -280,11 +281,13 @@ def _styled_band(band, extras: dict, dice: "Dice", producer=None) -> tuple:
         band = changed(band, parts=style_dna.arranged(band.parts, band.name))
     if "jpop_idol_split" in extras:
         band = style_dna.split(band)
+    if "vocal_room" in extras:                    # 1.7.0: weniger Flächen unter der Stimme
+        band = changed(band, parts=style_dna.room_for_voice(band.parts, band.name))
     character = None
     if "song_character" in extras:
         import song_character
         character = song_character.choose(band.name, dice.label("character"), split="jpop_idol_split" in extras,
-                                          taste=extras.get("taste"))
+                                          taste=extras.get("taste"), arc="dynamic_arc" in extras)
         band = song_character.apply(band, character)
         log.info("Charakter: %s", character.describe())
     if producer and producer.sound:

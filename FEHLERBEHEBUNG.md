@@ -78,6 +78,9 @@ und Systeminfo (keine Songs) und landet in `Dokumente\Vloid Songs\Fehlerberichte
   Text ausschalten. Ein Song von vor 1.5 hat keine `songkarte.json`; dann kennt das Video keine Sektionen und
   Akkorde, und das Bild folgt nur dem Klang des Mixes.
   Ihn einmal neu erzeugen (gleicher Seed) schreibt sie.
+- **„Im Ausgabeordner liegt inzwischen ein anderer Song“.** Alle Songs teilen sich den Ausgabeordner, und das Video
+  nimmt, was dort liegt (laut `songkarte.json`). Im Tab Verlauf deinen Song mit „Wieder öffnen“ zurückholen, dann das
+  Video machen. Steht im Video ein falscher Name, ändere ihn im Verlauf beim Stift („Name und Notiz“).
 - **Keine KI-Bilder im Video.** Sie brauchen „KI-Bilder fürs Video“ aus Einrichten. Ohne NVIDIA-Grafikkarte malt
   der Prozessor, das dauert einige Minuten pro Song. Läuft das Bildmodell nicht, nimmt das Video die gezeichnete
   Szene; die Ausgabe steht in `tools\bilder\letzter_lauf.log` im Programmordner.

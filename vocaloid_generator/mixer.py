@@ -547,6 +547,8 @@ def mische_spuren(
     sound=None,
     living_double: bool = False,
     tension: list = None,
+    vocal_room: list = None,
+    fade_out: tuple = None,
 ) -> Optional["Level"]:
     """
     Mischt die Spuren zu einem Stereo-Master:
@@ -586,6 +588,9 @@ def mische_spuren(
     gemeinsame Klangbild bis 1.3.
     tension: [(Start, Ende in Sekunden, dB)] der gezeichneten Spannungskurve (spannung.rides): die Band wird dort
     leiser oder lauter; mit dem Lautstärke-Verlauf der Vorbilder (sections) bestimmt der.
+    vocal_room: (1.7.0) Platz für die Stimme: [(Start, Ende in Sekunden)] der Refrains. Dort steht die Hauptstimme
+    lauter und Flächen-Stimmen leiser, die Band macht ihr mehr Platz, Band und Hall sind schmaler; None = aus.
+    fade_out: (1.7.0) (Anfang, Ende in Sekunden), über die der ganze Song bis FADE_OUT_DB leiser wird.
     level_of: der Pegel des ganzen Songs (der Rückgabewert seines Mixes); dann ist dieser Mix ein Teil davon
     (Off-Vocal, A-cappella) und geht mit derselben Verstärkung durch den Master, so klingt er so laut wie im Song,
     statt auf target_lufs zu kommen.
@@ -596,6 +601,9 @@ def mische_spuren(
     levels = {**DEFAULT_LEVELS, **(levels or {})}
     levels["double"] = levels["vocals"] + REAL_DOUBLE_DB
     reverb = {**DEFAULT_REVERB, **(reverb or {})}
+    if vocal_room is not None and sound is not None:
+        from dataclasses import replace as changed
+        sound = changed(sound, width=min(sound.width, ROOM_MAX_WIDTH), hall_gain=sound.hall_gain * ROOM_HALL)
     volumes, panning, mutes, solos = volumes or {}, panning or {}, mutes or {}, solos or {}
     paths = [p for p in spur_pfade if os.path.exists(p)]
     if not paths:
@@ -622,6 +630,8 @@ def mische_spuren(
         audio *= 10 ** ((levels.get(key, -22.0) - loud) / 20) * fader
         if key == "choir" and sung_pads:
             audio *= 1.0 - _window_mask(length, sung_pads)
+        if vocal_room and key in ROOM_LEVELS:
+            audio *= _db_curve(length, vocal_room, ROOM_LEVELS[key])
         if key in VOCAL_KEYS:
             audio = _deess(audio)
         if tame and key in TAMED:
@@ -663,7 +673,7 @@ def mische_spuren(
         _match_vocal_level(tracks, vocal_ratio_db)
 
     if movement:
-        _move(tracks, movement, length)
+        _move(tracks, movement, length, narrow=vocal_room is not None)
 
     drums = [a for k, a in tracks.values() if k == "drums"]
     if drums and sidechain_depth > 0:
@@ -673,7 +683,8 @@ def mische_spuren(
                 tracks[path] = (key, audio * duck)
     if band:
         _replace_band(tracks, band, length)
-    room = _seat_vocals(tracks, ride, unmask) if ride or unmask else None
+    room = _seat_vocals(tracks, ride, unmask, ROOM_UNMASK_DB if vocal_room is not None else 0.0) \
+        if ride or unmask else None
 
     mix = np.zeros((2, length), dtype=np.float32)
     send = np.zeros_like(mix)
@@ -714,7 +725,8 @@ def mische_spuren(
         mix += LowpassFilter(9000)(vocal_mix.convolve(HighpassFilter(250)(send, SAMPLE_RATE), room, SAMPLE_RATE)
                                    * np.float32(HALL_GAIN), SAMPLE_RATE)
     elif sound is not None:
-        mix += _hall(sound)(send, SAMPLE_RATE) * np.float32(sound.hall_gain)
+        mix += _hall(sound, ROOM_HALL_WIDTH if vocal_room is not None else 1.0)(send, SAMPLE_RATE) \
+            * np.float32(sound.hall_gain)
     else:
         hall = Pedalboard([HighpassFilter(250), Reverb(room_size=0.78, damping=0.45, wet_level=1.0, dry_level=0.0,
                                                        width=1.0), LowpassFilter(9000)])
@@ -739,6 +751,8 @@ def mische_spuren(
 
     if sound is not None:
         mix = _master_color(mix, sound)
+    if fade_out is not None:
+        mix *= _fade_curve(length, *fade_out)[None, :]
     if buss is not None:
         mix = buss(mix, SAMPLE_RATE)
     master_volume = min(max(volumes.get("master", 1.0), 0.05), 1.0)
@@ -767,12 +781,12 @@ class Level:
     scale: float = 1.0                  # nach dem Limiter, damit keine Spitze über die Grenze kommt
 
 
-def _hall(sound) -> Pedalboard:
+def _hall(sound, width: float = 1.0) -> Pedalboard:
     """Der gemeinsame Hall im Klangbild des Stils: Größe, Dämpfung, Vorverzögerung und Höhen."""
     chain = [HighpassFilter(250)]
     if sound.predelay > 0:
         chain.append(Delay(delay_seconds=sound.predelay, feedback=0.0, mix=1.0))
-    chain += [Reverb(room_size=sound.room, damping=sound.damping, wet_level=1.0, dry_level=0.0, width=1.0),
+    chain += [Reverb(room_size=sound.room, damping=sound.damping, wet_level=1.0, dry_level=0.0, width=width),
               LowpassFilter(sound.hall_lowpass)]
     return Pedalboard(chain)
 
@@ -820,7 +834,7 @@ def _keep_level(audio: np.ndarray, before: np.ndarray) -> np.ndarray:
     return (audio * np.float32(b / a)).astype(np.float32) if a > 1e-9 else audio
 
 
-def _seat_vocals(tracks: dict, ride: bool, unmask: bool) -> Optional[np.ndarray]:
+def _seat_vocals(tracks: dict, ride: bool, unmask: bool, more_db: float = 0.0) -> Optional[np.ndarray]:
     """Der Gesang sitzt vorn: erst wird er auf der Band geritten (ändert die Gesangsspuren), dann macht die Band ihm
     Platz. Rückgabe: was zum trockenen Mix dazukommt, damit die Band leiser wird, wo er laut ist (oder None)."""
     import vocal_mix
@@ -839,19 +853,42 @@ def _seat_vocals(tracks: dict, ride: bool, unmask: bool) -> Optional[np.ndarray]
     if not unmask:
         return None
     vocal = _sum([a for k, a in tracks.values() if k in ("vocals", "double")])
-    log.info("Die Band macht dem Gesang Platz (bis %.0f dB)", vocal_mix.UNMASK_DB)
-    return vocal_mix.unmask(band, vocal, SAMPLE_RATE) - band
+    depth = vocal_mix.UNMASK_DB + more_db
+    log.info("Die Band macht dem Gesang Platz (bis %.0f dB)", depth)
+    return vocal_mix.unmask(band, vocal, SAMPLE_RATE, depth) - band
 
 
 HALL_GAIN = 1.26             # eine eigene Raum-Impulsantwort so laut wie der Algorithmus-Hall (weißes Rauschen)
+# 1.7.0 vocal_room: gemessen stand die Stimme im Ballade-Refrain nur 2 dB über der Musik, die Seite war fast so laut wie
+# die Mitte (-1 bis -2 dB statt etwa -6)
+ROOM_LEVELS = {"vocals": 1.5, "double": 1.5, "harmony": -1.5, "gang": -3.0}     # dB im Refrain
+ROOM_UNMASK_DB = 2.0         # so viel tiefer macht die Band der Stimme Platz
+ROOM_MAX_WIDTH = 1.0         # Stereobreite der Band höchstens wie aufgenommen
+ROOM_HALL = 0.8              # der gemeinsame Hall leiser
+ROOM_HALL_WIDTH = 0.7        # und schmaler
+ROOM_CHORUS_WIDTH = 0.4      # Anteil der Verbreiterung im Refrain (mix_movement.CHORUS_WIDTH)
+
+
+def _db_curve(length: int, windows: list, db: float) -> np.ndarray:
+    """Verstärkung je Sample: db in den Fenstern, sonst 0 dB, mit 0,3 s Übergang; Form (1, n) für Stereo."""
+    return (10 ** (db * _window_mask(length, windows, fade=0.3) / 20)).astype(np.float32)[None, :]
+
+
+def _fade_curve(length: int, start: float, end: float) -> np.ndarray:
+    """1 bis start, dann bis end gleichmäßig in dB auf FADE_OUT_DB, danach so leise."""
+    import mixdown
+    t = np.arange(length, dtype=np.float32) / SAMPLE_RATE
+    share = np.clip((t - start) / max(1e-3, end - start), 0.0, 1.0)
+    return (10 ** (mixdown.FADE_OUT_DB * share / 20)).astype(np.float32)
 MAX_REFERENCE_DB = 6.0       # so weit dürfen die Vorbilder einen Pegel höchstens verschieben
 
 
-def _move(tracks: dict, parts: list, length: int) -> None:
-    """Anlauf vor jedem Refrain und breitere Refrains für die Band (ohne Gesang und Effekte)."""
+def _move(tracks: dict, parts: list, length: int, narrow: bool = False) -> None:
+    """Anlauf vor jedem Refrain und breitere Refrains für die Band (ohne Gesang und Effekte); narrow (vocal_room):
+    die Refrains werden nur ROOM_CHORUS_WIDTH so viel breiter."""
     import mix_movement
     rises = mix_movement.rise_windows(parts)
-    width = mix_movement.width_curve(parts, length)
+    width = mix_movement.width_curve(parts, length, ROOM_CHORUS_WIDTH if narrow else 1.0)
     for path, (key, audio) in tracks.items():
         if key in VOCAL_KEYS or key == "fx":
             continue

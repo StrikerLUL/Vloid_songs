@@ -653,14 +653,18 @@ def counter(pattern: str, sec: Section, plan: SongPlan, rng: random.Random, ctx:
             prev = target
         ctx["counter"] = prev
     elif pattern == "guide":
-        # Terzen und Septimen der Akkorde, schrittweise verbunden, unter dem Gesang
+        # Terzen und Septimen der Akkorde, schrittweise verbunden, unter dem Gesang. 1.7.0 (vocal_room): singt jemand,
+        # eine Oktave tiefer, bis 1.6 lag sie genau in den 14 Halbtönen unter der Stimme
+        low = 12 if ctx.get("room") and vocal else 0
         prev = ctx.get("guide", center - 7)
+        if low and prev > center - 13:
+            prev -= 12
         for slot in sec.chords:
             guide = [slot.chord.pcs[1]] + ([slot.chord.pcs[3]] if len(slot.chord.pcs) > 3 else [slot.chord.fifth_pc])
             halves = [slot.dur] if slot.dur < 4 else [slot.dur / 2, slot.dur / 2]
             t = slot.start
             for h, length in enumerate(halves):
-                options = pitches_in_range([guide[h % len(guide)]], center - 14, center - 1)
+                options = pitches_in_range([guide[h % len(guide)]], center - 14 - low, center - 1 - low)
                 p = min(options, key=lambda q: (abs(q - prev), q))
                 out.append(Ev(t, length * 0.97, p, _vel(sec, 0.66)))
                 prev, t = p, t + length

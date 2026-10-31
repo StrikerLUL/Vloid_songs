@@ -166,9 +166,10 @@ def test_off_pitch_notes_are_pulled_in_and_vibrato_and_glides_stay():
     assert wobble(midi(full[inside])) == pytest.approx(wobble(midi(f0[inside])), rel=0.05), "das Vibrato bleibt"
     edge = (t > 1.0) & (t < 1.0 + voice_fx.GLIDE_ZONE * 0.5)
     assert np.allclose(full[edge], f0[edge], rtol=1e-3), "der Übergang bleibt"
-    # in der App: 0,5 ab Werk, 0 = aus; ohne Änderung bleibt die Aufnahme unberührt
+    # in der App: 0,5 ab Werk, 0 = aus; ohne Änderung (auch ohne das Vibrato auf langen Tönen aus 1.7.0) bleibt die
+    # Aufnahme unberührt
     assert singing.pitch_options(SongSettings())["intonation"] == 0.5
-    off = singing.pitch_options(SongSettings(intonation=0.0, ornaments=0.0))
+    off = singing.pitch_options(SongSettings(intonation=0.0, ornaments=0.0, long_note_vibrato=False))
     assert voice_fx.reshape("fehlt.wav", notes, **off) is False
     assert np.allclose(voice_fx.shape_pitch(f0, FRAME, notes, **{**off, "seed": 0}), f0)
 

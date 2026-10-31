@@ -79,8 +79,9 @@ def rise(audio: np.ndarray, windows: list) -> np.ndarray:
     return out
 
 
-def width_curve(parts: list, length: int) -> np.ndarray:
-    return _curve(parts, {"Chorus": 1.0 + CHORUS_WIDTH}, length)
+def width_curve(parts: list, length: int, share: float = 1.0) -> np.ndarray:
+    """Seitensignal je Sample: im Refrain 1 + CHORUS_WIDTH; share (1.7.0, vocal_room) nimmt davon nur einen Teil."""
+    return _curve(parts, {"Chorus": 1.0 + CHORUS_WIDTH * share}, length)
 
 
 def widen(audio: np.ndarray, curve: np.ndarray) -> np.ndarray:

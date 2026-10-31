@@ -132,6 +132,32 @@ nichts geändert (z. B. nur der Mix), singt NEUTRINO nicht noch einmal.
 **Updates.** Einmal am Tag sieht die App nach, ob es eine neue Version gibt; dann steht oben „Update da“. „Update
 holen“ lädt die neue Setup.exe und startet sie, deine Daten bleiben. Danach zeigt „Was ist neu“, was sich geändert hat.
 
+## Neu in 1.7
+
+1.7 macht gerade, was am Musikvideo, am Gesang und an der Melodie krumm und schief war. Die Fehler sind immer behoben;
+was den Klang oder das Bild ändert, hat einen Schalter (ab Werk an).
+
+**Text im Video.** Die Silben laufen im Takt, auch bei langen Vokalen (ー); die Romaji stehen Wort für Wort
+(„pasuwaado“). Oben steht der Name des Songs: die App sucht ihn über den Seed im Verlauf und fragt einmal „Wie heißt
+der Song?“, wenn er fehlt. Ohne Namen gibt es keine Titelkarte. Tonart und Akkorde im Video und in der
+YouTube-Beschreibung kommen aus dem fertigen Song statt aus den Einstellungen, in b-Tonarten mit ♭ (B♭ statt A#).
+Ein Video aus 1.6 desselben Songs repariert sich beim nächsten Mal von selbst.
+
+**Bild.** Unten links liegt nichts mehr übereinander (die Beat-Punkte sind oben bei der Ablaufleiste), das Spektrum
+hat keine toten Bänder mehr. **Ruhiges, aufgeräumtes Video** (Tab Video): eine Schrift, weiche Zeilen- und
+Bildwechsel, Funkeln lässt den Text frei, Chat-Blasen mit Wörtern aus der Zeile, ruhige Szenen ohne Notenlinie.
+**Schärferes Video** (Tab Video): KI-Bilder in 1024×576 und etwa doppelte Bitrate.
+
+**Gesang und Melodie.** **Platz für die Stimme im Refrain** (Tab Gesang): die Stimme etwas lauter, Chor und Flächen
+leiser, schmaler Hall, die Gegenstimme eine Oktave tiefer. **Vibrato auf langen Tönen** (Tab Gesang): gerade lange
+Töne schwingen sanft aus. **Lage je Sektion** (Tab Song): Strophe tief, Refrain 3 bis 5 Halbtöne höher, die Bridge
+steigt zum letzten Refrain; neue Songs klingen damit anders als derselbe Seed in 1.6. **Leisere Ersatz-Atmer** (Tab
+Gesang): ohne eigene Aufnahmen im Ordner Atmer ist das Atmen leiser und dunkler; System prüfen zeigt, ob welche da
+sind.
+
+**Mix.** **Lautstärke-Bogen** (Tab Mix): Ballade und Lo-Fi fangen leise an, der letzte Refrain ist am größten, und ein
+Song, der ausklingen soll, wird im Outro leiser.
+
 ## Neu in 1.6
 
 1.6 macht die App einfacher und fragt mehr dein Ohr. Ohne Zeichnung, mit der Stimmung in der Mitte und in der
@@ -507,6 +533,10 @@ löscht ihn (neu einrichten geht jederzeit). Darunter: wie groß Songs und aufge
 | Video-Links als Vorbild (1.6, ab Werk aus) | Tab Song, unter den Vorbildern |
 | Einfache Ansicht, Aufgeräumt, Arbeitsdateien außerhalb von OneDrive (1.6) | oben „Einfach“ und „Profi“; Pfade › App |
 | Handy als Fernbedienung (1.6, ab Werk aus) | Hilfe › Handy als Fernbedienung |
+| Ruhiges, aufgeräumtes Video, Schärferes Video (1.7) | Tab Video |
+| Platz für die Stimme im Refrain, Vibrato auf langen Tönen, Leisere Ersatz-Atmer (1.7) | Tab Gesang |
+| Lage je Sektion (1.7) | Tab Song |
+| Lautstärke-Bogen (1.7) | Tab Mix |
 
 ## Wo was liegt
 
@@ -738,6 +768,10 @@ Für die MP3 braucht `pydub` das Programm ffmpeg (`winget install Gyan.FFmpeg`).
 Seit 1.5 ist das Video ein Musikvideo, das dem Song folgt (siehe [Neu in 1.5](#neu-in-15), Einstellungen im Tab
 „Video“). Mit dem Schalter „Musikvideo“ aus (`--ohne-musikvideo`) ist es das Lyric-Video, wie es hier beschrieben ist.
 
+Seit 1.7 nimmt das Video den Song, der im Ausgabeordner liegt (laut `songkarte.json`): Name, Stil, Tonart und Akkorde
+kommen von dort. Liegt dort ein anderer Song als der im Player, warnt die App. Hat der Song im Verlauf keinen Namen,
+fragt sie einmal danach.
+
 „Lyric-Video (MP4)“ unter dem Player (oder `--lyric-video`) macht aus dem Song ein Video in 1920×1080, zum Beispiel für YouTube: der Farbverlauf des Stils (wie beim Titelbild), unten die Wellenform des Songs und in der Mitte der Text, Silbe für Silbe in der Farbe des Stils eingefärbt, darunter schon die nächste Zeile. Ein eigenes Bild als Hintergrund wählst du im Tab „Pfade“ („Hintergrundbild des Lyric-Videos“, `--video-hintergrund BILD`); es wird auf 16:9 zugeschnitten. Mit dem Schalter „Lyric-Video in den Farben des Stils“ aus (`--ohne-stilfarben`) ist es dunkel mit pinkem Text wie bis 1.1. Die Zeiten kommen aus der Gesangsmelodie, der Text steht also genau dann da, wenn er gesungen wird; die Zeilen sind die Zeilen aus dem Tab „Text“. Das Video baut ffmpeg (dasselbe wie für die MP3, die Version von Gyan hat alles dabei) und landet als `lyric_video.mp4` im Ausgabeordner. Ein Song ohne Gesang hat keinen Text zum Mitlesen und damit auch kein Lyric-Video.
 
 ## Die Oberfläche
@@ -935,6 +969,7 @@ uv run vocaloid_generator\main.py --style Rock --bpm 140 --key E --scale minor -
 | `--produzent NAME`, `--erkennungsklang KLANG`, `--akkordwendung WENDUNG` | Produzenten-Profil für diesen Lauf (`--help` zeigt die Klänge und Wendungen) |
 | `--mische STIL`, `--mischanteil 0.3` | zweiter Stil für eine Mischung und sein Anteil (0.1 bis 0.5) |
 | `--ohne-spannungskurve`, `--arbeit-im-ausgabeordner` | 1.6 einzeln abschalten: jede Sektion mit der Energie des Stils; Arbeitsdateien im Ausgabeordner, auch in OneDrive |
+| `--ohne-ruhiges-video`, `--ohne-scharfes-video`, `--ohne-platz-fuer-die-stimme`, `--ohne-vibrato-auf-langen-toenen`, `--ohne-lage-je-sektion`, `--ohne-leise-ersatz-atmer`, `--ohne-lautstaerke-bogen` | 1.7 einzeln abschalten: Video wie bis 1.6 (zwei Schriften, harte Wechsel, Bilder 640×360), Refrain-Mix und Gegenstimme, gerade lange Töne, Lage wie bis 1.6, Ersatz-Atmer laut und hell, kein Lautstärke-Bogen |
 | `--ohne-wohlfuehlbereich`, `--ohne-sanfte-nachbearbeitung`, `--ohne-weiche-gesangskette` | Stimme 1.4 einzeln abschalten: kein Tempo-Hinweis und StyleShift pro Sektion zerlegt immer, jede Phrase ganz neu gerechnet, die Gesangskette mit 6:1 wie bis 1.3 |
 | `-v` | alle Details ausgeben |
 

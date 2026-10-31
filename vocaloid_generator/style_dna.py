@@ -471,9 +471,22 @@ ARRANGEMENT = {
 }
 
 
-def arranged(parts: dict, style: str) -> dict:
+# 1.7.0 vocal_room: im Refrain der Ballade sangen Chor-Fläche, Streicher und Gegenstimme genau in der Lage der
+# Stimme; die Stimme stand dort nur etwa 2 dB über der Musik (in der Strophe 6 dB). Der Keyboard-Chor fällt dort weg.
+VOCAL_ROOM = {
+    "Ballade": {"Chorus": {"choir": None}},
+    "Lo-Fi": {"Chorus": {"choir": None}},
+}
+
+
+def room_for_voice(parts: dict, style: str) -> dict:
+    """parts mit Platz für die Stimme (VOCAL_ROOM, 1.7.0), sonst unverändert."""
+    return arranged(parts, style, VOCAL_ROOM)
+
+
+def arranged(parts: dict, style: str, table: dict = None) -> dict:
     """parts eines StyleProfile mit dem Arrangement des Stils: Instrumente kommen dazu oder fallen weg (None)."""
-    changes = ARRANGEMENT.get(style)
+    changes = (ARRANGEMENT if table is None else table).get(style)
     if not changes:
         return parts
     out = {section: dict(p) for section, p in parts.items()}

@@ -40,18 +40,23 @@ def lines(notes: list, syllables: list, bpm: float, plan=None, line_lengths: Opt
     sie beginnt eine neue Zeile nach einer Pause ab einem Schlag. Jede Sektion beginnt mit einer neuen Zeile.
     line_texts {Sektionsart: [(Zeile wie geschrieben, Übersetzung)]} parallel zu line_lengths (1.5.0 V2): jede Zeile
     bekommt dazu "text" (wie geschrieben, mit Kanji), "romaji" und "de" (die Übersetzung, sonst leer).
+    1.7.0: ein „ー“ aus dem Text (Mora.long) hängt wie jedes Melisma an der Silbe davor, zählt aber in line_lengths
+    mit; bis 1.6 verrutschten deshalb alle folgenden Zeilen der Sektion um eine Silbe pro „ー“. Silben mit „ー“
+    stehen in "weights" (1 + Anzahl ー je Silbe), wenn es welche gibt.
     """
     spb = 60.0 / bpm
     sections = []
     for note, syllable in zip(sorted(notes, key=lambda n: n.start), syllables):
-        if getattr(syllable, "melisma", False) and sections:
+        if getattr(syllable, "melisma", False) and sections and sections[-1][1]:
             sections[-1][1][-1][1] = note.end
+            if getattr(syllable, "long", False):
+                sections[-1][1][-1][4] += 1           # „ー“ steht im Text: die Silbe zählt für zwei
             continue
         sec = plan.section_at(note.start / spb + 1e-6) if plan is not None else None
         key = (sec.index, sec.kind, sec.occurrence) if sec is not None else (0, "", 1)
         if not sections or sections[-1][0] != key:
             sections.append((key, []))
-        sections[-1][1].append([note.start, note.end, str(syllable), bool(getattr(syllable, "word_start", False))])
+        sections[-1][1].append([note.start, note.end, str(syllable), bool(getattr(syllable, "word_start", False)), 0])
     found = []
     for (_, kind, occurrence), sung in sections:
         name = f"{kind}{OCCURRENCE}{occurrence}"
@@ -69,6 +74,8 @@ def lines(notes: list, syllables: list, bpm: float, plan=None, line_lengths: Opt
     for line, written in found:
         entry = {"start": round(line[0][0], 3), "end": round(line[-1][1], 3),
                  "syllables": [[round(s[0], 3), round(s[1], 3), s[2]] for s in line]}
+        if any(_held(s) for s in line):
+            entry["weights"] = [1 + _held(s) for s in line]
         if line_texts is not None:
             entry["romaji"] = romaji(line, written[0] if written else "")
             if written:
@@ -77,12 +84,22 @@ def lines(notes: list, syllables: list, bpm: float, plan=None, line_lengths: Opt
     return out
 
 
+def _held(item) -> int:
+    """Wie viele „ー“ aus dem Text an dieser gesungenen Silbe hängen."""
+    return int(item[4]) if len(item) > 4 else 0
+
+
 def _by_lengths(sung: list, lengths: list) -> list:
-    """Die Silben der Sektion Zeile für Zeile wie im Text; wird der Text wiederholt, beginnen die Zeilen von vorn."""
+    """Die Silben der Sektion Zeile für Zeile wie im Text; wird der Text wiederholt, beginnen die Zeilen von vorn.
+    lengths zählt die Moren wie geschrieben, also auch jedes „ー“: eine Silbe mit „ー“ füllt zwei davon."""
     out, i, k = [], 0, 0
     while i < len(sung):
-        out.append(sung[i:i + lengths[k % len(lengths)]])
-        i += lengths[k % len(lengths)]
+        need, line = lengths[k % len(lengths)], []
+        while i < len(sung) and (not line or need > 0):
+            line.append(sung[i])
+            need -= 1 + _held(sung[i])
+            i += 1
+        out.append(line)
         k += 1
     return out
 
@@ -143,8 +160,13 @@ def romaji(line: list, written: str = "") -> str:
         for item in line:
             if not words or (len(item) > 3 and item[3]):
                 words.append("")
-            words[-1] += item[2]
+            words[-1] += _sung(item)
     return " ".join(w for w in (_kana_romaji(w) for w in words) if w)
+
+
+def _sung(item) -> str:
+    """Die Silbe mit ihren „ー“ aus dem Text: ワ + ー → „waa“ in den Romaji."""
+    return item[2] + "ー" * _held(item)
 
 
 def _words_of(line: list, written: str) -> list:
@@ -155,12 +177,19 @@ def _words_of(line: list, written: str) -> list:
     total = sum(parts)
     if not parts or not total:
         return []
+    # Position jeder Silbe in Moren wie geschrieben: eine Silbe mit „ー“ zählt doppelt (1.7.0)
+    ends, at = [], 0
+    for item in line:
+        at += 1 + _held(item)
+        ends.append(at)
+    sung = ends[-1] if ends else 0
     out, done, taken = [], 0.0, 0
     for n in parts:
         done += n
-        until = len(line) if done >= total else round(done / total * len(line))
+        goal = sung if done >= total else done / total * sung
+        until = len(line) if done >= total else next((j + 1 for j, e in enumerate(ends) if e >= goal - 0.5), len(line))
         if until > taken:
-            out.append("".join(item[2] for item in line[taken:until]))
+            out.append("".join(_sung(item) for item in line[taken:until]))
             taken = until
     return out
 
@@ -188,19 +217,76 @@ def text(line: dict) -> str:
     return "".join(s[2] for s in line["syllables"])
 
 
+VERSION = 2                 # 1.7.0: Zeilen mit „ー“ verrutschen nicht mehr
+
+
 def save(path: str, found: list) -> None:
     with open(path, "w", encoding="utf-8") as f:
-        json.dump({"lines": found}, f, ensure_ascii=False)
+        json.dump({"version": VERSION, "lines": found}, f, ensure_ascii=False)
 
 
-def load(path: str) -> list:
-    """Die Zeilen eines Songs; leer, wenn es keine gibt (Song ohne Gesang oder von einer älteren Version)."""
+def load(path: str, sections: Optional[list] = None) -> list:
+    """Die Zeilen eines Songs; leer, wenn es keine gibt (Song ohne Gesang oder von einer älteren Version).
+    sections [(Anfang, Ende)] in Sekunden (Songkarte): Dateien von 1.6 und älter, in denen Zeilen mit „ー“ verrutscht
+    sind, werden damit beim Laden wieder gerade gerückt (repair)."""
     try:
         with open(path, encoding="utf-8") as f:
-            return json.load(f).get("lines", [])
+            data = json.load(f)
+        found = data.get("lines", [])
     except (OSError, ValueError, AttributeError) as e:
         log.debug("Kein Liedtext zum Mitlesen in %s: %s", path, e)
         return []
+    if sections and data.get("version", 1) < VERSION:
+        found = repair(found, sections)
+    return found
+
+
+def repair(found: list, sections: list) -> list:
+    """Zeilen von 1.6 und älter neu schneiden: dort zählte jedes „ー“ des Texts als eigene Silbe, gesungen hängt es aber
+    an der Silbe davor, also rutschten die Zeilen danach in der Sektion um eine Silbe weiter. Die Silben jeder Sektion
+    werden der Reihe nach wieder auf die Zeilen verteilt, so viele, wie jede Zeile wie geschrieben singt. Zeilen ohne
+    geschriebenen Text und Sektionen ohne „ー“ bleiben, wie sie sind."""
+    from lyrics import syllables as sung_morae
+    out, i = [], 0
+    while i < len(found):
+        here = _section_of(found[i], sections)
+        group = [found[i]]
+        while i + len(group) < len(found) and _section_of(found[i + len(group)], sections) == here:
+            group.append(found[i + len(group)])
+        i += len(group)
+        if not all(line.get("text") for line in group) or not any("ー" in line["text"] for line in group):
+            out += group
+            continue
+        pool = [syl for line in group for syl in line["syllables"]]
+        k = 0
+        for n, line in enumerate(group):
+            morae = sung_morae(line["text"])
+            starts = [m for m in morae if not getattr(m, "melisma", False)]
+            take = len(pool) - k if n == len(group) - 1 else min(len(starts), len(pool) - k)
+            part = pool[k:k + take]
+            k += take
+            if not part:
+                continue
+            weights = []
+            for m in morae:
+                if not getattr(m, "melisma", False):
+                    weights.append(1)
+                elif getattr(m, "long", False) and weights:
+                    weights[-1] += 1
+            fixed = {**line, "start": part[0][0], "end": part[-1][1], "syllables": part}
+            fixed.pop("weights", None)
+            if len(weights) == len(part) and any(w > 1 for w in weights):
+                fixed["weights"] = weights
+            items = [[a, b, t, False, w - 1] for (a, b, t), w in zip(part, fixed.get("weights", [1] * len(part)))]
+            if "romaji" in line:
+                fixed["romaji"] = romaji(items, line["text"])
+            out.append(fixed)
+    return out
+
+
+def _section_of(line: dict, sections: list) -> int:
+    start = line["syllables"][0][0] if line.get("syllables") else line.get("start", 0.0)
+    return next((k for k, (a, b) in enumerate(sections) if a - 1e-3 <= start < b), -1)
 
 
 # ── Lyric-Video ──────────────────────────────────────────────────────────────────

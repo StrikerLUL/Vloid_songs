@@ -28,6 +28,7 @@ SONG_FOLDER = "bilder"
 PROMPTS_FILE = "prompts.json"
 LOG_FILE = "letzter_lauf.log"
 SIZE = (640, 360)               # 16:9, das Video vergrößert; im Hintergrund unter dem Text reicht das
+SHARP_SIZE = (1024, 576)        # 1.7.0 video_sharp: größer als das gemalte Bild (960×540), wird nur verkleinert
 STEPS = 4
 TIMEOUT = 3600                  # beim ersten Mal lädt das Modell etwa 4 GB
 
@@ -134,24 +135,24 @@ def song_prompts(result) -> dict:
                    [m for m, _ in total.most_common()])
 
 
-def for_song(result, progress=None) -> dict:
-    """{Sektionsart: PNG} für das Video; {} ohne Umgebung oder wenn das Modell nicht lief."""
+def for_song(result, progress=None, sharp: bool = False) -> dict:
+    """{Sektionsart: PNG} für das Video; {} ohne Umgebung oder wenn das Modell nicht lief. sharp: in SHARP_SIZE."""
     if not available():
         return {}
     wanted = song_prompts(result)
     if not wanted:
         return {}
     folder = os.path.join(result.output_dir, SONG_FOLDER)
-    return paint(wanted, folder, result.seed, progress)
+    return paint(wanted, folder, result.seed, progress, SHARP_SIZE if sharp else SIZE)
 
 
 def _name(kind: str) -> str:
     return re.sub(r"[^\w-]", "_", kind) + ".png"
 
 
-def paint(wanted: dict, folder: str, seed: int, progress=None) -> dict:
-    """Malt die Bilder, die in folder noch fehlen oder deren Prompt oder Seed sich geändert hat. Alle Songs teilen sich
-    den Ausgabeordner: ohne den Seed bekäme ein neuer Song im selben Stil die Bilder des vorigen."""
+def paint(wanted: dict, folder: str, seed: int, progress=None, size: tuple = SIZE) -> dict:
+    """Malt die Bilder, die in folder noch fehlen oder deren Prompt, Seed oder Größe sich geändert hat. Alle Songs
+    teilen sich den Ausgabeordner: ohne den Seed bekäme ein neuer Song im selben Stil die Bilder des vorigen."""
     os.makedirs(folder, exist_ok=True)
     known_path = os.path.join(folder, PROMPTS_FILE)
     try:
@@ -159,7 +160,8 @@ def paint(wanted: dict, folder: str, seed: int, progress=None) -> dict:
             known = json.load(f)
     except (OSError, ValueError):
         known = {}
-    painted = {kind: f"{int(seed)}|{prompt}" for kind, prompt in wanted.items()}
+    grown = "" if tuple(size) == SIZE else f"{size[0]}x{size[1]}|"
+    painted = {kind: f"{int(seed)}|{grown}{prompt}" for kind, prompt in wanted.items()}
     jobs = []
     for i, (kind, prompt) in enumerate(wanted.items()):
         path = os.path.join(folder, _name(kind))
@@ -168,7 +170,7 @@ def paint(wanted: dict, folder: str, seed: int, progress=None) -> dict:
     if jobs:
         if progress:
             progress(0.03, f"Video: male {len(jobs)} Bilder...")
-        if not _run(jobs, folder):
+        if not _run(jobs, folder, size):
             return {}
         with open(known_path, "w", encoding="utf-8") as f:
             json.dump({**known, **painted}, f, ensure_ascii=False, indent=1)
@@ -176,10 +178,10 @@ def paint(wanted: dict, folder: str, seed: int, progress=None) -> dict:
             if os.path.exists(os.path.join(folder, _name(kind)))}
 
 
-def _run(jobs: list, folder: str) -> bool:
+def _run(jobs: list, folder: str, size: tuple = SIZE) -> bool:
     request = os.path.join(folder, "auftrag.json")
     with open(request, "w", encoding="utf-8") as f:
-        json.dump({"model": MODEL, "width": SIZE[0], "height": SIZE[1], "steps": STEPS, "jobs": jobs}, f)
+        json.dump({"model": MODEL, "width": size[0], "height": size[1], "steps": STEPS, "jobs": jobs}, f)
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     config.hf_without_links(model_folder())
     try:

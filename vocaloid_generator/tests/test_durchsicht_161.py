@@ -113,7 +113,7 @@ def test_a_new_song_in_the_same_folder_gets_its_own_pictures(tmp_path, monkeypat
     Bilder des vorigen, obwohl sein Seed andere malt."""
     painted = []
 
-    def fake_run(jobs, folder):
+    def fake_run(jobs, folder, size=bilder.SIZE):
         painted.append([job["seed"] for job in jobs])
         for job in jobs:
             Image.new("RGB", bilder.SIZE, (job["seed"] % 255, 0, 0)).save(job["path"])

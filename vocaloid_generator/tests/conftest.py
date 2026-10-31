@@ -313,6 +313,16 @@ def new_140(monkeypatch):
 
 
 @pytest.fixture
+def new_170(monkeypatch):
+    """Alle Neuerungen in den Noten an, auch die aus 1.7.0 (Platz für die Stimme, Lagen, Lautstärke-Bogen)."""
+    import pipeline
+    import style_dna
+    monkeypatch.setattr(pipeline, "COMPOSITION_EXTRAS", pipeline.NEW_COMPOSITION + pipeline.NEW_140 + pipeline.NEW_150
+                        + pipeline.NEW_170)
+    monkeypatch.setattr(style_dna, "SOUNDS", style_dna.STYLE_SOUNDS)
+
+
+@pytest.fixture
 def new_150(monkeypatch):
     """Alle Neuerungen in den Noten an, auch die aus 1.5.0 (wichtige Wörter, Ohrwurm, Refrain-Steigerung)."""
     import pipeline

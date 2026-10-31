@@ -2,6 +2,75 @@
 
 Jede Version hat hier einen Abschnitt. Die App zeigt ihn einmal nach einem Update (Hilfe › Was ist neu).
 
+## 1.7.0
+
+Diese Version macht gerade, was am Lyric-Video, am Gesang und an der Melodie krumm und schief war. Grundlage war ein
+Video aus 1.6.1 (Ballade in G): die Silben liefen im Refrain auseinander, die Romaji waren Kauderwelsch, oben stand
+„Ballade“ statt des Namens, die Tonart stimmte nicht, unten links lag alles übereinander, das Spektrum hatte Lücken und
+die Stimme ging im Refrain unter. Fehler sind immer behoben; alles, was den Klang oder das Bild ändert, hat einen
+Schalter (ab Werk an) und lässt sich einzeln ausschalten.
+
+**Text im Video** (immer)
+
+- **Silben im Takt:** Ein langer Vokal (ー wie in パスワード) zählte als eigene Silbe, die Karaoke-Zeilen aber nicht.
+  Danach lief jede Zeile eine Silbe weiter auseinander, im Refrain sichtbar falsch. Jetzt zählt ー zur Silbe davor und
+  verlängert sie. Alte Videos desselben Songs reparieren sich beim nächsten Mal von selbst (karaoke.json Version 2).
+- **Romaji lesbar:** Die Romaji folgen den Wörtern, ー wird zum langen Vokal, Vorsilben und Katakana-Wörter stehen
+  am Stück: „pasuwaado pasuwaado ima kagayaite“ statt „pasuwadopa suwadoima kaga yaitekie“.
+- **Der Songname statt des Stils:** Oben stand der Stil, wenn der Song im Verlauf keinen Namen hatte. Jetzt sucht die
+  App den Namen über den Seed in der Songkarte. Fehlt er, fragt sie einmal „Wie heißt der Song?“ und schreibt ihn in den
+  Verlauf. Ohne Namen gibt es keine Titelkarte, statt „Ballade“ groß in der Mitte.
+- **Die Tonart, die man hört:** Video und YouTube-Beschreibung nahmen die Tonart aus den Einstellungen. Spielten
+  eigene Akkorde oder eine Vorlage etwas anderes (etwa g-Moll-Akkorde bei der Einstellung G-Dur), stand dort das
+  Falsche. Jetzt misst die App die Tonart aus den Akkorden und der Melodie des fertigen Songs und bleibt bei der
+  Einstellung, wenn beide fast gleich gut passen.
+- **B statt A#:** Akkorde in b-Tonarten (F, B♭, E♭, g-Moll …) heißen jetzt B♭, E♭ und A♭; nach einer Rückung gilt die
+  neue Tonart.
+- **Warnung bei fremdem Ordner:** Liegt im Ausgabeordner schon ein anderer Song, sagt die App das, bevor sie ein Video
+  daraus macht.
+
+**Bild** (Fehler immer, Rest mit Schalter)
+
+- **Unten links frei:** Der Titel unten links ist weg (er steht in der Titelkarte), die Beat-Punkte stehen oben neben
+  der Ablaufleiste. Akkord, Titel und Punkte lagen bisher übereinander.
+- **Spektrum ohne Lücken:** Die tiefsten Bänder waren schmaler als die Auflösung und blieben immer leer, und jedes Band
+  wurde für sich auf voll gezogen, das gab eine Wand. Jetzt ist jedes Band mindestens so breit wie ein Messpunkt (60 Hz
+  bis 12 kHz), und alle Bänder werden gemeinsam gemessen, mit einem Ausgleich für die Höhen.
+- **Ruhiges, aufgeräumtes Video** (Schalter, Tab Video): eine Schrift für Text und Romaji, die Zeile blendet weich
+  ein und aus, die Bilder blenden beim Sektionswechsel über, Funkeln und Teilchen lassen das Textband frei, Chat-Blasen
+  zeigen Wörter aus der Zeile statt leerer Striche. In ruhigen Szenen (Ballade, Lo-Fi, City Pop) fallen Notenlinie und
+  Ablaufleiste weg, das Spektrum ist halb so hoch und blasser.
+- **Schärferes Video** (Schalter, Tab Video): KI-Bilder in 1024×576 statt 640×360, Lanczos beim Vergrößern und etwa
+  die doppelte Bitrate. Das Video braucht etwas länger; schon gemalte kleine Bilder werden einmal neu gemalt.
+
+**Gesang und Melodie** (Schalter)
+
+- **Platz für die Stimme im Refrain** (Tab Gesang): Im Refrain steht die Stimme 1,5 dB lauter, gesungene Flächen und
+  der Chor leiser, die Band nimmt in den Mitten etwas mehr Platz weg, Hall und Breite der Stimme sind schmaler. Die
+  Gegenstimme spielt eine Oktave tiefer und kreuzt die Melodie nicht mehr. In Ballade und Lo-Fi fällt der Keyboard-Chor
+  im Refrain weg. Gemessen lag die Stimme im Refrain nur 2 dB über der Band, in der Strophe 6 dB.
+- **Vibrato auf langen Tönen** (Tab Gesang): Ein Ton ab 0,6 s, den die Stimme kerzengerade singt, bekommt nach einer
+  Viertelsekunde ein sanftes Vibrato, das langsam kommt; in Ballade und Lo-Fi etwas mehr. Bisher kam Vibrato nur
+  dazu, wenn der Regler über 1 stand.
+- **Lage je Sektion** (Tab Song): Die Strophe liegt tiefer, der Refrain im Schnitt 3 bis 5 Halbtöne höher und hat
+  den höchsten Ton des Songs, die Bridge beginnt tief und ruhig und steigt zum letzten Refrain, mit weniger
+  Tonwiederholungen. Bisher lag der Refrain im Schnitt nur einen Halbton über der Strophe. Neue Songs klingen damit
+  anders als derselbe Seed in 1.6.
+- **Leisere Ersatz-Atmer** (Tab Gesang): Liegen im Ordner Atmer keine Aufnahmen, atmet die Stimme mit gefiltertem
+  Rauschen. Das ist jetzt 6 dB leiser und dunkler statt eines hellen, breiten Rauschens. Einrichten › System prüfen
+  zeigt neu, ob Atmer-Aufnahmen da sind.
+
+**Mix** (Schalter)
+
+- **Lautstärke-Bogen** (Tab Mix): Ballade und Lo-Fi fangen leise an (Intro 5 dB, erste Strophe 3 dB, erster
+  Pre-Chorus 1,5 dB leiser), der letzte Refrain ist in jedem Stil 1,5 dB größer als die anderen, und ein Ende, das
+  ausklingen soll, wird über das ganze Outro 10 dB leiser. Eine Ballade und ein Lo-Fi-Song klingen jetzt meist aus,
+  statt hart aufzuhören.
+
+**Kommandozeile:** `--ohne-ruhiges-video`, `--ohne-scharfes-video`, `--ohne-platz-fuer-die-stimme`,
+`--ohne-vibrato-auf-langen-toenen`, `--ohne-lage-je-sektion`, `--ohne-leise-ersatz-atmer` und
+`--ohne-lautstaerke-bogen` schalten die Neuerungen einzeln ab.
+
 ## 1.6.1
 
 Fehler behoben, die beim Durchsehen des ganzen Projekts nach 1.6.0 aufgefallen sind. Neue Funktionen gibt es keine, an

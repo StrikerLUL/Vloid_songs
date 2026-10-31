@@ -147,6 +147,19 @@ def check_voicevox(settings, folder: str) -> tuple:
     return (True, f"VOICEVOX singt mit {name}") if _audible(wav) else (False, "VOICEVOX hat nur Stille gesungen")
 
 
+def check_breaths(settings, folder: str) -> tuple:
+    """1.7.0: liegen aufgenommene Atmer im Ordner Atmer? Sonst atmet die Stimme mit gefiltertem Rauschen."""
+    import voice_fx
+    where = os.path.join(config.DATA_DIR, voice_fx.BREATH_FOLDER)
+    if not settings.breaths:
+        return None, "Atmer sind aus"
+    found = voice_fx.breath_samples(48000, where) if settings.recorded_breaths else []
+    if found:
+        return True, f"{len(found)} aufgenommene Atmer in {where}"
+    softly = " (leise und dunkel)" if settings.soft_breaths else ""
+    return None, f"Keine aufgenommenen Atmer in {where}, die Stimme atmet mit Ersatz-Rauschen{softly}"
+
+
 def check_samples(settings, folder: str) -> tuple:
     import pretty_midi
 
@@ -304,6 +317,7 @@ CHECKS = (
     ("video", "Lyric-Video", check_video, False),
     ("neutrino", "NEUTRINO", check_neutrino, False),
     ("voicevox", "VOICEVOX", check_voicevox, False),
+    ("breaths", "Atmer", check_breaths, False),
     ("rating", "Automatische Bewertung", check_rating, False),
     ("demucs", "Mix wie die Vorbilder", check_demucs, False),
     ("accompaniment", "KI-Begleitung", check_accompaniment, True),    # lädt das Modell: nur bei „gründlich“

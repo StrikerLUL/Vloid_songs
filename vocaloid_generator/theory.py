@@ -6,6 +6,10 @@ from typing import Optional
 NOTE_NAMES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
 KEY_OFFSETS = {name: i for i, name in enumerate(NOTE_NAMES)}
 KEY_OFFSETS.update({"Db": 1, "Eb": 3, "Gb": 6, "Ab": 8, "Bb": 10})
+# 1.7.0: in Tonarten mit B-Vorzeichen heißen die Töne E♭ statt D# (Akkorde im Video, Tonart im Titel)
+FLAT_NAMES = ("C", "D♭", "D", "E♭", "E", "F", "G♭", "G", "A♭", "A", "B♭", "B")
+KEY_OFFSETS.update({name: i for i, name in enumerate(FLAT_NAMES)})
+_FLAT_MAJORS = {1, 3, 5, 8, 10}      # D♭, E♭, F, A♭ und B♭ Dur; Moll wie seine Dur-Parallele
 
 SCALES = {
     "major":    (0, 2, 4, 5, 7, 9, 11),
@@ -48,6 +52,23 @@ def key_pc(key: str) -> int:
 
 def scale_pcs(tonic: int, mode: str) -> tuple:
     return tuple((tonic + i) % 12 for i in SCALES.get(mode, SCALES["minor"]))
+
+
+def flat_key(tonic: int, minor: bool) -> bool:
+    """Steht die Tonart mit B-Vorzeichen (F-Dur, g-Moll, B♭-Dur ...)?"""
+    return ((tonic + 3) % 12 if minor else tonic % 12) in _FLAT_MAJORS
+
+
+def key_name(tonic: int, minor: bool) -> str:
+    """Name des Grundtons, wie er in dieser Tonart geschrieben wird: „B♭“ in B♭-Dur, „F#“ in D-Dur."""
+    return (FLAT_NAMES if flat_key(tonic, minor) else NOTE_NAMES)[tonic % 12]
+
+
+def spelled(name: str, flats: bool) -> str:
+    """Akkordname mit ♭ statt # in einer B-Tonart: „A#m7/D#“ wird „B♭m7/E♭“; sonst bleibt er, wie er ist."""
+    if not flats:
+        return name
+    return re.sub(r"([A-G])#", lambda m: FLAT_NAMES[(KEY_OFFSETS[m.group(1)] + 1) % 12], name)
 
 
 def is_minor(mode: str) -> bool:

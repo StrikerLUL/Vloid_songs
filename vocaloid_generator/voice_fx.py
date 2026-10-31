@@ -17,11 +17,18 @@ PHRASE_GAP = 0.25            # ab dieser Pause (Sekunden) beginnt eine neue Phra
 BREATH_MIN, BREATH_MAX = 0.18, 0.5    # Länge eines Atmers in Sekunden
 BREATH_LEAD = 0.06           # so lange vor dem ersten Ton der Phrase ist der Atmer vorbei
 BREATH_DB = -24.0            # Atmer gegen die lauten Stellen des Gesangs
+SOFT_BREATH_DB = -6.0        # 1.7.0 soft_breaths: so viel leiser ist der Ersatz-Atmer ohne Aufnahmen
 THROW_ROOM = 2.0             # Schläge Pause nach einem Phrasenende, damit das Echo Platz hat
 GLIDE_ZONE = 0.1             # Sekunden vor und nach einem Tonwechsel, in denen die Stimme gleitet
 VIBRATO_PERIOD = 0.18        # eine Schwingung eines natürlichen Vibratos (5,5 Hz)
 VIBRATO_DEPTH = 0.3          # Halbtöne, die ein zusätzliches Vibrato auf und ab geht
 NATURAL_VIBRATO = 0.08       # ab dieser Tiefe (Halbtöne) hat die Stimme selbst ein Vibrato
+# 1.7.0 long_note_vibrato: ein Ton ab LONG_VIBRATO_MIN Sekunden ohne eigenes Vibrato blieb bei Vibrato 1,0 kerzengerade
+LONG_VIBRATO_MIN = 0.6       # so lang muss ein Ton sein
+LONG_VIBRATO_DELAY = 0.25    # erst gerade, dann setzt das Vibrato ein (höchstens ein Drittel des Tons)
+LONG_VIBRATO_RISE = 0.3      # so lange wächst es auf volle Tiefe
+LONG_VIBRATO = 0.4           # Anteil von VIBRATO_DEPTH; ruhige Stile (Ballade, Lo-Fi) LONG_VIBRATO_CALM
+LONG_VIBRATO_CALM = 0.55
 FRAME = 0.005                # Rahmen der Tonhöhenanalyse mit WORLD und Praat (Sekunden)
 # Chor aus der eigenen Stimme: (Verstimmung in Cent, Verzögerung in Sekunden, Panorama) je Sänger
 CHOIR_VOICES = ((-14, 0.019, -0.85), (9, 0.027, -0.4), (-7, 0.034, 0.4), (15, 0.042, 0.85))
@@ -170,10 +177,11 @@ def _recorded_breath(samples: list, n: int, rate: int, rng: np.random.Generator)
     return out
 
 
-def add_breaths(path: str, notes: list, seed: int = 0, recorded: bool = True) -> int:
+def add_breaths(path: str, notes: list, seed: int = 0, recorded: bool = True, soft: bool = False) -> int:
     """Vor jeder Phrase, vor der genug Pause ist, ein hörbares Einatmen in die Gesangsspur mischen.
     Längere Phrasen bekommen einen tieferen Atemzug. Mit recorded und Aufnahmen im Ordner Atmer klingen echte
-    Atmer, sonst gefiltertes Rauschen. Rückgabe: Anzahl der Atmer."""
+    Atmer, sonst gefiltertes Rauschen; mit soft (1.7.0) ist das Rauschen leiser und dunkler, bis 1.6 stand es als
+    breiter Streifen bis über 2,5 kHz fast so kräftig wie die Stimme im Spektrum. Rückgabe: Anzahl der Atmer."""
     audio, rate = sf.read(path, dtype="float32", always_2d=True)
     level = _sung_level(audio.mean(axis=1), rate)
     if level <= 0:
@@ -194,23 +202,27 @@ def add_breaths(path: str, notes: list, seed: int = 0, recorded: bool = True) ->
         n = int(dur * rate)
         if a < 0 or a + n > len(track):
             continue
-        gain = level * 10 ** (BREATH_DB / 20) * (0.6 + 0.4 * depth) * rng.uniform(0.85, 1.15)
-        track[a:a + n] += (_recorded_breath(samples, n, rate, rng) if samples else breath(n, rate, rng)) * gain
+        db = BREATH_DB + (SOFT_BREATH_DB if soft and not samples else 0.0)
+        gain = level * 10 ** (db / 20) * (0.6 + 0.4 * depth) * rng.uniform(0.85, 1.15)
+        track[a:a + n] += (_recorded_breath(samples, n, rate, rng) if samples else breath(n, rate, rng, soft)) * gain
         count += 1
     sf.write(path, audio + track[:, None], rate, subtype="FLOAT")
     return count
 
 
-def breath(n: int, rate: int, rng: np.random.Generator) -> np.ndarray:
+def breath(n: int, rate: int, rng: np.random.Generator, soft: bool = False) -> np.ndarray:
     """Ein Einatmen: Rauschen mit einer Betonung um 1–2 kHz (halb offener Mund), langsam lauter, am Ende kurz ab.
-    Effektivwert 1."""
+    soft (1.7.0): dunkler, die Betonung tiefer und über 3 kHz fast nichts. Effektivwert 1."""
     from scipy.signal import butter, sosfilt
     pad = 2048
     noise = rng.standard_normal(n + pad)
-    body = sosfilt(butter(2, [500, 6000], "bandpass", fs=rate, output="sos"), noise)
-    formant = rng.uniform(1100, 1800)
+    body = sosfilt(butter(2, [400, 3000] if soft else [500, 6000], "bandpass", fs=rate, output="sos"), noise)
+    formant = rng.uniform(700, 1200) if soft else rng.uniform(1100, 1800)
     mouth = sosfilt(butter(2, [formant * 0.8, formant * 1.25], "bandpass", fs=rate, output="sos"), noise)
-    x = (body + 1.5 * mouth)[pad:]
+    x = body + 1.5 * mouth
+    if soft:
+        x = sosfilt(butter(4, 2800, "lowpass", fs=rate, output="sos"), x)
+    x = x[pad:]
     t = np.linspace(0.0, 1.0, n)
     env = np.sin(np.pi / 2 * np.clip(t / 0.75, 0, 1)) ** 2 * np.clip((1 - t) / 0.12, 0, 1) ** 1.5
     x *= env
@@ -258,13 +270,16 @@ def throw_windows(notes: list, bpm: float, sections: list = (), room: float = 1.
 
 # ── Vibrato und Übergänge ──────────────────────────────────────────────────────
 def shape_pitch(f0: np.ndarray, frame: float, notes: list, vibrato: float = 1.0, glide: float = 1.0,
-                offset: float = 0.0, intonation: float = 0.0, ornaments: float = 0.0, seed: int = 0) -> np.ndarray:
+                offset: float = 0.0, intonation: float = 0.0, ornaments: float = 0.0, seed: int = 0,
+                long_vibrato: float = 0.0) -> np.ndarray:
     """
     Vibrato und Übergänge einer gesungenen Tonhöhenkurve ändern (Hz je Rahmen, 0 = stimmlos).
     vibrato: 0 = gerade Töne, 1 = wie gesungen, 2 = doppelt so tief; lange Töne ohne eigenes Vibrato bekommen
     über 1 eines dazu. glide: 0 = die Töne springen, 1 = wie gesungen, 2 = doppelt so lange Übergänge.
     offset: Zeit des ersten Rahmens ab Songanfang. intonation: wie stark der ruhige Teil schiefer Töne zur Note gezogen
     wird (G1, 0 bis 1). ornaments: Stärke der Verzierungen (G3, ornament_curve), seed: wo sie sitzen.
+    long_vibrato (1.7.0): Tiefe (Anteil von VIBRATO_DEPTH) eines spät einsetzenden Vibratos auf langen Tönen ohne
+    eigenes, auch bei vibrato 1; 0 = aus.
     """
     f0 = np.asarray(f0, dtype=np.float64)
     voiced = f0 > 0
@@ -279,7 +294,7 @@ def shape_pitch(f0: np.ndarray, frame: float, notes: list, vibrato: float = 1.0,
         base = _intonation(base, t, notes, intonation)
     if abs(glide - 1.0) > 1e-3:
         base = _glides(base, t, notes, glide)
-    out = base + _new_vibrato(vib, natural, t, notes, vibrato)
+    out = base + _new_vibrato(vib, natural, t, notes, vibrato, long_vibrato)
     if ornaments > 0:
         out = out + ornament_curve(t, notes, ornaments, seed)
     return np.where(voiced, 440.0 * 2 ** ((out - 69) / 12), 0.0)
@@ -422,19 +437,37 @@ def _vibrato(midi: np.ndarray, t: np.ndarray, notes: list, frame: float) -> tupl
     return vib, natural
 
 
-def _new_vibrato(vib: np.ndarray, natural: list, t: np.ndarray, notes: list, amount: float) -> np.ndarray:
+def _new_vibrato(vib: np.ndarray, natural: list, t: np.ndarray, notes: list, amount: float,
+                 long_vibrato: float = 0.0) -> np.ndarray:
+    """Das Vibrato der Stimme mal amount; Töne ohne eigenes bekommen über 1 eines dazu. long_vibrato (1.7.0): lange
+    Töne ohne eigenes bekommen auch bei amount 1 eines, das nach LONG_VIBRATO_DELAY sanft einsetzt (wie gesungen:
+    erst gerade, dann schwingt der Ton)."""
     out = vib * min(amount, 1.0)
     for n, own in zip(notes, natural):
         i, j = _interior(t, n)
         if j <= i:
             continue
+        length = n.end - n.start
+        tt = t[i:j] - t[i]
+        tail = np.clip((t[j - 1] - t[i:j]) / 0.05, 0, 1)
         if own:
             out[i:j] = vib[i:j] * amount
-        elif amount > 1.0 and n.end - n.start >= 0.35:
-            tt = t[i:j] - t[i]
-            env = np.clip(tt / 0.2, 0, 1) * np.clip((t[j - 1] - t[i:j]) / 0.05, 0, 1)
+        elif long_vibrato > 0 and amount >= 1.0 - 1e-3 and length >= LONG_VIBRATO_MIN \
+                and long_vibrato >= amount - 1.0:
+            delay = min(LONG_VIBRATO_DELAY, length / 3)
+            env = np.clip((tt - delay) / LONG_VIBRATO_RISE, 0, 1) * tail
+            out[i:j] += long_vibrato * VIBRATO_DEPTH * env * np.sin(2 * np.pi / VIBRATO_PERIOD * (tt - delay))
+        elif amount > 1.0 and length >= 0.35:
+            env = np.clip(tt / 0.2, 0, 1) * tail
             out[i:j] += (amount - 1.0) * VIBRATO_DEPTH * env * np.sin(2 * np.pi / VIBRATO_PERIOD * tt)
     return out
+
+
+def long_vibrato_amount(enabled: bool, style: str) -> float:
+    """1.7.0: wie tief lange gerade Töne schwingen (long_note_vibrato); ruhige Stile etwas mehr."""
+    if not enabled:
+        return 0.0
+    return LONG_VIBRATO_CALM if style in ("Ballade", "Lo-Fi") else LONG_VIBRATO
 
 
 def _glides(base: np.ndarray, t: np.ndarray, notes: list, amount: float) -> np.ndarray:
@@ -455,18 +488,20 @@ def _glides(base: np.ndarray, t: np.ndarray, notes: list, amount: float) -> np.n
 
 
 def reshape(path: str, notes: list, vibrato: float = 1.0, glide: float = 1.0, psola: bool = True,
-            intonation: float = 0.0, ornaments: float = 0.0, seed: int = 0, gentle: bool = False) -> bool:
+            intonation: float = 0.0, ornaments: float = 0.0, seed: int = 0, gentle: bool = False,
+            long_vibrato: float = 0.0) -> bool:
     """Vibrato und Übergänge einer gesungenen Spur ändern, schiefe Töne sanft korrigieren und Verzierungen singen
     (shape_pitch). Gerechnet wird Phrase für Phrase; Phrasen, an denen sich nichts ändert, und die Pausen bleiben
     unberührt. psola: mit Praat-PSOLA (parselmouth), das nur die Tonhöhe verschiebt und den Klang der Stimme lässt;
     ohne, oder wenn parselmouth fehlt, baut der WORLD-Vocoder die Phrase neu (klingt eine Spur rauer).
     gentle: nur die Stellen neu rechnen, an denen sich die Tonhöhe hörbar ändert (1.4.0, repitch).
     False, wenn nichts zu tun war."""
-    if abs(vibrato - 1.0) < 1e-3 and abs(glide - 1.0) < 1e-3 and intonation <= 0 and ornaments <= 0:
+    if abs(vibrato - 1.0) < 1e-3 and abs(glide - 1.0) < 1e-3 and intonation <= 0 and ornaments <= 0 \
+            and long_vibrato <= 0:
         return False
 
     def curve(f0: np.ndarray, frame: float, phrase: list, offset: float) -> np.ndarray:
-        return shape_pitch(f0, frame, phrase, vibrato, glide, offset, intonation, ornaments, seed)
+        return shape_pitch(f0, frame, phrase, vibrato, glide, offset, intonation, ornaments, seed, long_vibrato)
     changed = repitch(path, notes, curve, psola, gentle)
     log.info("Vibrato %.1f, Übergänge %.1f, Tonhöhe geglättet %.0f %%, Verzierungen %.0f %% (%s%s)", vibrato, glide,
              intonation * 100, ornaments * 100, "PSOLA" if psola and psola_available() else "WORLD",

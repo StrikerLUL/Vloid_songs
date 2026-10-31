@@ -625,7 +625,7 @@ async def test_lyric_video_is_made_for_the_current_song(user, fake_generation, m
     made = []
 
     def fake_video(result, path=None, label="", preview=False, progress=None):
-        made.append(result.seed)
+        made.append((result.seed, label))
         path = str(tmp_path / "lyric_video.mp4")
         open(path, "wb").close()
         return path
@@ -635,8 +635,11 @@ async def test_lyric_video_is_made_for_the_current_song(user, fake_generation, m
     user.find(marker="generate").click()
     await user.should_see("Seed 1000", retries=50)
     user.find(marker="video").click()
+    await user.should_see("Wie heißt der Song?", retries=50)          # 1.7.0: ohne Namen fragt die App einmal
+    user.find(marker="video-name").type("Vergessener Schirm")
+    user.find(marker="video-name-ok").click()
     await user.should_see("Lyric-Video gespeichert", retries=50)
-    assert made == [1000]
+    assert made == [(1000, "Vergessener Schirm")]
 
     def no_ffmpeg(result, path=None, label="", preview=False, progress=None):
         raise RuntimeError("Für das Lyric-Video fehlt ffmpeg")

@@ -99,7 +99,8 @@ def make(result, label: str = "", progress: Optional[ProgressFn] = None) -> Pack
     if s is not None and s.music_video:
         import musikvideo
         try:
-            package.video = musikvideo.for_song(result, os.path.join(folder, name + ".mp4"), title,
+            # 1.7.0: die Titelkarte nur mit echtem Namen, nicht mit „Ballade (Seed …)“
+            package.video = musikvideo.for_song(result, os.path.join(folder, name + ".mp4"), label,
                                                 audio=package.audio,
                                                 progress=lambda f, m: report(0.25 + 0.7 * f, m))
         except RuntimeError as e:
@@ -146,11 +147,23 @@ def _mp3(source: str, target: str) -> Optional[str]:
 
 
 def details(result) -> list:
+    """Stil, Tempo und Tonart. 1.7.0: aus der Songkarte neben dem Song, die mit ihm entsteht (die Einstellungen
+    gehören zum gewählten Song, im Ordner kann inzwischen ein anderer liegen), die Tonart so, wie die Akkorde klingen
+    (songkarte.sounding_key), mit ♭ in B-Tonarten."""
     s = result.settings
     if s is None:
         return []
     import gui.labels as labels
-    return [s.style, f"{s.bpm} BPM", f"{s.key} {labels.SCALES.get(s.scale, s.scale)}"]
+    import songkarte
+    import theory
+    found = songkarte.load(os.path.join(result.output_dir, songkarte.FILE)) if result.output_dir else None
+    if found is None:
+        return [s.style, f"{s.bpm} BPM", f"{s.key} {labels.SCALES.get(s.scale, s.scale)}"]
+    tonic, scale = songkarte.sounding_key(found)
+    same = found.seed == result.seed and found.style in ("", s.style)
+    bpm = s.bpm if same else int(round(found.bpm))
+    return [found.style or s.style, f"{bpm} BPM",
+            f"{theory.key_name(tonic, theory.is_minor(scale))} {labels.SCALES.get(scale, scale)}"]
 
 
 def singers(result) -> list:

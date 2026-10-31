@@ -131,6 +131,65 @@ def build(settings, tracks: dict) -> Map:
     return found
 
 
+# Krumhansl-Kessler: wie gut jeder Ton der Tonleiter zu einer Dur- oder Molltonart passt (ab dem Grundton)
+MAJOR_PROFILE = (6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88)
+MINOR_PROFILE = (6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17)
+KEEP_MARGIN = 0.12           # so viel schlechter darf die eingestellte Tonart passen und bleibt trotzdem stehen
+
+
+def sounding_key(found: Map) -> tuple:
+    """
+    1.7.0: (Grundton 0..11, Tonleiter) so, wie der Song klingt: aus Akkorden und Melodie vor der Rückung. Bis 1.6
+    stand im Video die Tonart der Einstellungen. Eigene Akkorde oder ein Vorbild spielen aber in G-Dur eingestellt
+    auch Gm, Cm, E♭ und B♭; dann klingt der Song nach g-Moll, und das steht jetzt da. Passt die eingestellte Tonart
+    fast so gut wie die beste (KEEP_MARGIN), bleibt sie stehen, mit ihrer Tonleiter (auch Dorisch).
+    """
+    import numpy as np
+
+    from theory import is_minor, key_pc, parse_chord_name
+    try:
+        own = key_pc(found.key)
+    except ValueError:
+        own = 0
+    until = found.key_change_at if found.key_change and found.key_change_at is not None else float("inf")
+    weights = np.zeros(12)
+    for start, end, name in found.chords:
+        length = min(end, until) - start
+        if length <= 0:
+            continue
+        try:
+            chord = parse_chord_name(name)
+        except ValueError:
+            continue
+        for pc in chord.pcs:
+            weights[pc] += length
+        weights[chord.root] += 0.5 * length            # der Grundton trägt den Akkord
+    for start, end, pitch in found.melody:
+        if start < until:
+            weights[int(pitch) % 12] += 0.5 * max(0.0, min(end, until) - start)
+    if weights.sum() <= 0 or weights.std() == 0:
+        return own, found.scale
+
+    def fit(tonic: int, minor: bool) -> float:
+        profile = np.roll(np.array(MINOR_PROFILE if minor else MAJOR_PROFILE), tonic)
+        return float(np.corrcoef(weights, profile)[0, 1])
+
+    tonic, minor = max(((t, m) for t in range(12) for m in (False, True)), key=lambda k: fit(*k))
+    if fit(own, is_minor(found.scale)) >= fit(tonic, minor) - KEEP_MARGIN:
+        return own, found.scale
+    log.info("Songkarte: eingestellt %s %s, klingt nach %s %s", found.key, found.scale, tonic,
+             "minor" if minor else "major")
+    return tonic, "minor" if minor else "major"
+
+
+def spelling(found: Map) -> tuple:
+    """(B-Vorzeichen vor der Rückung, danach): ob Akkordnamen mit ♭ geschrieben werden (theory.spelled)."""
+    from theory import flat_key, is_minor
+    tonic, scale = sounding_key(found)
+    minor = is_minor(scale)
+    return flat_key(tonic, minor), flat_key(tonic + found.key_change, minor)
+
+
 def save(path: str, found: Map) -> None:
     with open(path, "w", encoding="utf-8") as f:
         json.dump(found.to_dict(), f, ensure_ascii=False)

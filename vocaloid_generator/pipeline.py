@@ -49,7 +49,9 @@ NEW_140 = ("style_chords", "melody_character", "style_arrangement", "song_charac
 # Neuerungen aus 1.5.0, die die Noten ändern (wichtige Wörter, Ohrwurm, Refrain-Steigerung)
 NEW_150 = ("key_words", "catchy_chorus", "chorus_lift", "jpop_idol_split", "producer_profile", "taste_learning",
            "style_blend")
-COMPOSITION_EXTRAS = NEW_COMPOSITION + NEW_140 + NEW_150     # die Tests schalten sie hier ab (conftest.py)
+# Neuerungen aus 1.7.0, die die Noten ändern (Platz für die Stimme, Lagen je Sektion, Lautstärke-Bogen und Schluss)
+NEW_170 = ("vocal_room", "section_registers", "dynamic_arc")
+COMPOSITION_EXTRAS = NEW_COMPOSITION + NEW_140 + NEW_150 + NEW_170     # die Tests schalten sie ab (conftest.py)
 
 
 @dataclass

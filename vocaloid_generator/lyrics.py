@@ -48,6 +48,7 @@ OCCURRENCE = "#"
 _JAPANESE = re.compile(r"[\u3041-\u30ff\u4e00-\u9fff々〆]")
 _KANJI = re.compile(r"[\u4e00-\u9fff々〆]")
 # Lesung von Hand vorgeben: 君[きみ] oder 君［きみ］
+_KATAKANA_WORD = re.compile(r"[\u30a1-\u30faー]+")
 _FURIGANA = re.compile(r"([\u4e00-\u9fff々〆]+)[\[［]([\u3041-\u30ffー]+)[\]］]")
 _SMALL = set("ゃゅょぁぃぅぇぉゎャュョァィゥェォヮ")
 # Partikel werden anders gesungen als geschrieben
@@ -73,15 +74,17 @@ class Mora(str):
     Eine gesungene Silbe, die sich wie ein normaler String verhält.
     tone: "H" oder "L" im Tonhöhenakzent (None = unbekannt), word_start: erste More eines Worts,
     melisma: keine neue Silbe, sondern der Vokal der vorigen auf einem neuen Ton.
+    long (1.7.0): das Melisma steht als „ー“ im Text (パスワード), zählt also in der Zeile wie geschrieben mit; ein
+    Melisma, das erst die Melodie dazuschreibt, steht nicht im Text.
     """
 
-    def __new__(cls, text: str, tone=None, word_start: bool = False, melisma: bool = False):
+    def __new__(cls, text: str, tone=None, word_start: bool = False, melisma: bool = False, long: bool = False):
         obj = super().__new__(cls, text)
-        obj.tone, obj.word_start, obj.melisma = tone, word_start, melisma
+        obj.tone, obj.word_start, obj.melisma, obj.long = tone, word_start, melisma, long
         return obj
 
     def __reduce__(self):
-        return Mora, (str(self), self.tone, self.word_start, self.melisma)
+        return Mora, (str(self), self.tone, self.word_start, self.melisma, self.long)
 
 
 def normalize_section(name: str) -> str:
@@ -185,7 +188,7 @@ def shown_parts(line: str) -> list:
     tagger = _tagger()
     parts = []
     if tagger is not None and _JAPANESE.search(text):
-        pos = 0
+        pos, before = 0, ""
         for word in tagger(text):
             at = text.find(word.surface, pos)
             if at < 0:
@@ -200,11 +203,15 @@ def shown_parts(line: str) -> list:
             # Hilfsverben, Endungen und て/たら gehören zum Wort davor: wasureta, oikakete, hashitteta
             joined = pos1 in ("助動詞", "接尾辞") or (pos1 == "助詞" and pos2 == "接続助詞") or \
                 (parts and parts[-1][0].endswith(("っ", "ッ")))
+            # 1.7.0: eine Vorsilbe gehört zum Wort danach (既読 → kidoku), Katakana-Wörter hintereinander sind eines
+            # (ログアウト → roguauto)
+            joined = joined or before == "接頭辞" or (_KATAKANA_WORD.fullmatch(word.surface) is not None and
+                                                      bool(parts) and _KATAKANA_WORD.fullmatch(parts[-1][0]) is not None)
             if joined and at == pos and parts and parts[-1][1] > 0:
                 parts[-1] = (parts[-1][0] + word.surface, parts[-1][1] + weight)
             else:
                 parts.append((word.surface, weight))
-            pos = at + len(word.surface)
+            pos, before = at + len(word.surface), pos1
         if pos < len(text):
             parts.append((text[pos:], 0.0))
         if sum(n for _, n in parts) > 0:
@@ -395,16 +402,21 @@ def accented_morae(text: str, smart: bool = False) -> list:
             continue
         if pos1 in _FUNCTION_WORDS:
             level = ("H" if flat_before else "L") if out and out[-1].tone else None
-            out += [Mora(m, level, melisma=_held(m)) for m in ms]
+            out += [Mora(m, level, melisma=_held(m), long=_long(m)) for m in ms]
             continue
         tones = _tones(len(ms), accent) if len(ms) > 1 or accent is not None else [None]
-        out += [Mora(m, t, word_start=i == 0, melisma=_held(m)) for i, (m, t) in enumerate(zip(ms, tones))]
+        out += [Mora(m, t, word_start=i == 0, melisma=_held(m), long=_long(m))
+                for i, (m, t) in enumerate(zip(ms, tones))]
         flat_before = accent == 0
     return out
 
 
 def _held(m) -> bool:
     return bool(getattr(m, "melisma", False))
+
+
+def _long(m) -> bool:
+    return bool(getattr(m, "long", False))
 
 
 def _tones(n: int, accent) -> list:
@@ -435,7 +447,7 @@ def morae(kana: str) -> list:
         elif "\u3041" <= ch <= "\u3096":
             out.append(ch)
         elif ch == "ー" and out and out[-1][-1] in _VOWELS:
-            out.append(Mora(_VOWELS[out[-1][-1]], melisma=True))
+            out.append(Mora(_VOWELS[out[-1][-1]], melisma=True, long=True))
     return out
 
 

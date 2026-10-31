@@ -65,7 +65,7 @@ Schalter (ab Werk an) und lässt sich einzeln ausschalten.
 - **Lautstärke-Bogen** (Tab Mix): Ballade und Lo-Fi fangen leise an (Intro 5 dB, erste Strophe 3 dB, erster
   Pre-Chorus 1,5 dB leiser), der letzte Refrain ist in jedem Stil 1,5 dB größer als die anderen, und ein Ende, das
   ausklingen soll, wird über das ganze Outro 10 dB leiser. Eine Ballade und ein Lo-Fi-Song klingen jetzt meist aus,
-  statt hart aufzuhören.
+  statt hart aufzuhören. Was du in der Spannungskurve gezeichnet hast, bleibt so, wie du es gezeichnet hast.
 
 **Kommandozeile:** `--ohne-ruhiges-video`, `--ohne-scharfes-video`, `--ohne-platz-fuer-die-stimme`,
 `--ohne-vibrato-auf-langen-toenen`, `--ohne-lage-je-sektion`, `--ohne-leise-ersatz-atmer` und

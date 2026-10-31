@@ -1227,7 +1227,7 @@ def mix_panel(s: SongSettings) -> None:
     ui.switch("Lautstärke-Bogen").bind_value(s, "dynamic_arc").mark("switch-dynamic_arc") \
         .tooltip("Ballade und Lo-Fi fangen leise an (Intro 5 dB, erste Strophe 3 dB leiser), der letzte Refrain ist "
                  "in jedem Stil am größten, und ein Ende, das ausklingen soll, wird über das ganze Outro leiser. Eine "
-                 "Ballade klingt meist aus")
+                 "Ballade klingt meist aus. In der Spannungskurve gezeichnete Sektionen bleiben, wie gezeichnet")
     ui.switch("Klangbild je Stil").bind_value(s, "style_sound").mark("switch-style_sound") \
         .tooltip("Jeder Stil hat seinen eigenen Raum und Klang: Ballade großer, weicher Hall, Lo-Fi kleiner dumpfer "
                  "Raum mit warmer Sättigung, Rock kurzer Raum mit Biss in den Mitten, Future Bass riesig und breit, "

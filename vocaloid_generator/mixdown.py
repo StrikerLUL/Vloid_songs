@@ -69,13 +69,17 @@ FADE_OUT_DB = -10.0          # so leise ist der Song am Ende eines Outros, das a
 
 def arc_rides(settings: SongSettings, plan) -> list:
     """[(Start, Ende in Sekunden, dB)] des Lautstärke-Bogens (dynamic_arc): ruhige Stile fangen leise an, in jedem Stil
-    ist der letzte von mehreren Refrains am größten."""
+    ist der letzte von mehreren Refrains am größten. Eine in der Spannungskurve gezeichnete Sektion behält, was du
+    gezeichnet hast; der Bogen kommt dort nicht noch dazu."""
     if not settings.dynamic_arc or plan is None:
         return []
+    drawn = (spannung.extras(settings) or {}).get("drawn", {})
     spb = plan.seconds_per_beat
     choruses = [sec for sec in plan.sections if sec.kind == "Chorus"]
     out = []
     for sec in plan.sections:
+        if spannung.key(sec.kind, sec.occurrence) in drawn:
+            continue
         db = ARC_CALM.get((sec.kind, sec.occurrence), 0.0) if settings.style in ARC_CALM_STYLES else 0.0
         if len(choruses) > 1 and sec is choruses[-1]:
             db = ARC_LAST_CHORUS_DB

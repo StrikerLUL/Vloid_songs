@@ -276,7 +276,7 @@ def test_ai_pictures_are_painted_once_per_section_kind_and_reused(made, tmp_path
     s, _, out = made
     asked = []
 
-    def fake_run(jobs, folder):
+    def fake_run(jobs, folder, size=bilder.SIZE):
         asked.append([job["prompt"] for job in jobs])
         for job in jobs:
             Image.new("RGB", bilder.SIZE, (10, 200, 30)).save(job["path"])

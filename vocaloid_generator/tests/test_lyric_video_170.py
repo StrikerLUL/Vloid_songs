@@ -5,8 +5,6 @@
 # Einstellungen, die Stimme ging im Refrain unter, lange Töne blieben kerzengerade.
 import json
 import os
-import random
-import shutil
 from types import SimpleNamespace
 
 import numpy as np
@@ -337,6 +335,10 @@ def test_calm_songs_start_quiet_grow_to_the_last_chorus_and_fade(new_170, tmp_pa
     assert by_start[round(intro.start * spb, 3)] == -5.0 and by_start[round(verse.start * spb, 3)] == -3.0
     assert by_start[round(last_chorus.start * spb, 3)] == mixdown.ARC_LAST_CHORUS_DB
     assert mixdown.arc_rides(s.with_updates(dynamic_arc=False), plan) == []
+    # was in der Spannungskurve gezeichnet ist, bleibt, wie gezeichnet
+    drawn = s.with_updates(tension_curve=True, tension={"Intro#1": 0.5})
+    starts = {round(start, 3) for start, _, _ in mixdown.arc_rides(drawn, plan)}
+    assert round(intro.start * spb, 3) not in starts and round(verse.start * spb, 3) in starts
     assert all(db > 0 for _, _, db in mixdown.arc_rides(s.with_updates(style="Rock"), plan))
     # eine Ballade klingt meist aus
     fades = sum(song_character.choose("Ballade", str(k), arc=True).ending == "fade" for k in range(200))
@@ -358,4 +360,3 @@ def test_the_switches_are_on_for_new_songs():
     assert all(getattr(s, name) for name in ("video_tidy", "video_sharp", "vocal_room", "long_note_vibrato",
                                              "section_registers", "soft_breaths", "dynamic_arc"))
     assert set(pipeline.NEW_170) == {"vocal_room", "section_registers", "dynamic_arc"}
-    assert random.Random(1).random() == random.Random(1).random() and shutil.which  # Module bleiben benutzt

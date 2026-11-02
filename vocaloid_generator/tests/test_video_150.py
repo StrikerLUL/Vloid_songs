@@ -1,6 +1,7 @@
 # test_video_150.py – Das Musikvideo folgt dem Song (1.5.0 V1 bis V13)
 import json
 import os
+import re
 import shutil
 
 import numpy as np
@@ -186,7 +187,10 @@ def test_each_part_of_the_video_has_its_switch(made):
                               found.length + 2)
     full = text()
     assert ",Romaji," in full and ",Deutsch," in full and ",Chord," in full and ",Title," in full
-    assert "Refrain" in full and "雨の" in full and "ame no machi" in full and "Gesang: X" in full
+    # Karaoke-Steuertags dürfen zwischen sichtbaren Wörtern stehen. Die erste Zeile muss auch ohne
+    # künstliche Textwiederholung korrekt erscheinen; sie ist dann nie ihre eigene Vorschauzeile.
+    visible = re.sub(r"\{[^}]*\}", "", full)
+    assert "Refrain" in visible and "雨の" in visible and "ame no machi" in visible and "Gesang: X" in visible
     assert ",Romaji," not in text(video_romaji=False) and ",Deutsch," not in text(video_german=False)
     assert ",Chord," not in text(video_chords=False)
     assert ",Title," not in text(video_titles=False) and "Gesang: X" not in text(video_titles=False)
@@ -311,3 +315,4 @@ def test_a_picture_replaces_the_drawn_scene_of_its_section(tmp_path):
     green = np.asarray(painter.frame(szenen.Frame(t=3.0, kind="Chorus", chorus=True)), dtype=float)
     drawn = np.asarray(painter.frame(szenen.Frame(t=3.0, kind="Verse")), dtype=float)
     assert green[20:80, 20:200, 1].mean() > 150 and drawn[20:80, 20:200, 1].mean() < 120
+

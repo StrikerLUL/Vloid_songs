@@ -96,7 +96,7 @@ def test_formants_move_and_the_pitch_stays(tmp_path):
 
 
 def test_the_pipeline_applies_the_effects_of_the_style(tmp_path, styles, monkeypatch):
-    s = SongSettings(active_sections=["Verse", "Chorus"], style="Future Bass", seed=4)
+    s = SongSettings(active_sections=["Verse", "Chorus"], style="Future Bass", seed=4, selective_vocals=False)
     tracks, _ = pipeline.compose(s)
     seen = {}
     monkeypatch.setattr(style_fx, "apply", lambda path, notes, sections, bpm, effects: seen.update(effects) or ["x"])

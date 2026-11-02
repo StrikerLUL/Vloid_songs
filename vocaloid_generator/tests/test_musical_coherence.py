@@ -71,6 +71,14 @@ class MusicalCoherenceTests(unittest.TestCase):
         self.assertTrue(all(chunk[0].word_start for chunk in chunks))
         self.assertEqual(sum(map(len, chunks)), len(words))
 
+    def test_dense_lyrics_do_not_lose_syllables_at_long_word_boundaries(self):
+        config = {**SECTION_CONFIG, "Chorus": {"bars": 8, "has_vocals": True}}
+        plan = build_plan(get_style("Rock"), 140, ["Chorus"], "C", "major", config, random.Random(1))
+        words = [Mora("ら", word_start=i % 30 == 0) for i in range(95)]
+        writer = SectionMelodyWriter(plan, plan.sections[0], random.Random(1), extras=("musical_coherence",))
+        notes = writer.write(words)
+        self.assertEqual(sum(not getattr(n.syllable, "melisma", False) for n in notes), 95)
+
     def test_selected_candidates_are_not_changed_after_scoring(self):
         plan = build_plan(get_style("City Pop"), 110, ["Verse", "Chorus", "Chorus"], "A", "minor",
                           SECTION_CONFIG, random.Random(1), spice=0.5, spice_seed="1", own_chords=True)
@@ -122,6 +130,25 @@ class MusicalCoherenceTests(unittest.TestCase):
             self.assertEqual(character, choose(style, "42", coherent=True))
             self.assertEqual(character.voices, palette["voices"])
             self.assertTrue(all(character.programs[k] == v for k, v in palette["programs"].items()))
+
+    def test_all_styles_and_meters_produce_valid_nonoverlapping_phrases(self):
+        import meter
+        config = {**SECTION_CONFIG, "Chorus": {"bars": 4, "has_vocals": True}}
+        for style in STYLES:
+            for name in ("4/4", "3/4", "6/8"):
+                with self.subTest(style=style, meter=name):
+                    timing = meter.get(name)
+                    plan = build_plan(get_style(style), 140, ["Chorus"], "F#", "minor", config,
+                                      random.Random(2), meter=name)
+                    real = timing.plan(plan)
+                    notes = write_vocal_melody(real if timing.native else plan,
+                                              {"Chorus": list("きみのこえがきこえるよ")}, random.Random(2),
+                                              singable=True, extras=("musical_coherence", "melody_character"))
+                    sung = timing.vocal(notes)
+                    self.assertTrue(sung)
+                    self.assertTrue(all(n.dur > 0 and 0 <= n.pitch <= 127 for n in sung))
+                    self.assertTrue(all(n.start >= 0 and n.start + n.dur <= real.total_beats + 1e-6 for n in sung))
+                    self.assertTrue(all(a.start + a.dur <= b.start + 1e-6 for a, b in zip(sung, sung[1:])))
 
     def test_melody_preferences_survive_json_and_transposition(self):
         notes = [MelNote(i, 1, p, "ら") for i, p in enumerate([60, 62, 64, 67])]

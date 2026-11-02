@@ -273,7 +273,8 @@ class SectionMelodyWriter:
         syllables = list(syllables) or ["ら"]
         if "musical_coherence" in self.extras:
             from musicality import split_text
-            return pb, split_text(syllables[:max_syllables(bars, self.bar_steps)], n_phrases)
+            return pb, split_text(syllables[:max_syllables(bars, self.bar_steps)], n_phrases,
+                                 max_size=pb * _per_bar(self.bar_steps))
         seconds = bars * self.sec.bar_beats * self.plan.seconds_per_beat
         comfortable = SYLLABLES_PER_SECOND.get(self.kind, 3.3) * seconds * SINGING_SHARE
         if self.char is not None:

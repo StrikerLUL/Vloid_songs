@@ -91,9 +91,20 @@ def test_voicevox_pitch_callback_accepts_the_same_selective_options():
     assert np.array_equal(shaped, f0)
 
 
+def test_diffsinger_selective_ornaments_do_not_decorate_short_syllables():
+    import diffsinger
+    phrase = [(0, .3, 69, "ら"), (.3, .6, 71, "ら")]
+    times = np.arange(0, .6, .005)
+    plain = diffsinger.pitch_curve(phrase, times, vibrato=0)
+    selected = diffsinger.pitch_curve(phrase, times, vibrato=0, ornaments=1, selective=True)
+    assert np.array_equal(plain, selected)
+
+
 def test_natural_vocals_avoid_automatic_telephone_and_small_formant_shifts(monkeypatch):
     monkeypatch.setattr(style_fx, "STYLES", {"Future Bass": {"telephone": True, "stutter": True, "hard_tune": True},
                                            "Kawaii Chiptune": {"formant": 1.08}})
     natural = SongSettings(selective_vocals=True)
     assert style_fx.effects_for("Future Bass", natural) == {"hard_tune": True}
     assert style_fx.effects_for("Kawaii Chiptune", natural) == {}
+    assert style_fx.effects_for("Future Bass", natural.with_updates(selective_vocals=False)) == {
+        "telephone": True, "stutter": True, "hard_tune": True}

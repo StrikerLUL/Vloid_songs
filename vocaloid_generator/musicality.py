@@ -4,6 +4,7 @@ Alle Zeiten sind Schläge. Keine Audio-Engine und kein Zufall: dieselbe Partitur
 """
 import math
 from dataclasses import replace
+from functools import lru_cache
 
 from theory import scale_pcs
 
@@ -114,26 +115,41 @@ def fit_harmony(plan, notes) -> list:
     return out
 
 
-def split_text(items, count) -> list:
+def split_text(items, count, max_size=None) -> list:
     """Phrasengrenzen an Zeilen und Wörtern; keine künstlichen Textwiederholungen."""
     items = list(items)
     if not items:
         return [[]]
     count = max(1, min(count, len(items)))
-    explicit = [i for i in range(1, len(items)) if getattr(items[i], "line_start", False)]
-    words = [i for i in range(1, len(items)) if getattr(items[i], "word_start", False)]
-    # Ohne Wortanalyse (z. B. einzelne Kana) ist jede Silbengrenze eine mögliche Grenze.
-    boundaries = sorted(set(explicit + words)) or list(range(1, len(items)))
-    cuts, previous = [], 0
-    for p in range(1, count):
-        available = [i for i in boundaries if previous < i < len(items)]
-        if not available:
-            break
-        target = len(items) * p / count
-        cut = min(available, key=lambda i: (abs(i - target) - (1.5 if i in explicit else 0), i))
-        cuts.append(cut)
-        previous = cut
-    return [items[a:b] for a, b in zip([0] + cuts, cuts + [len(items)]) if b > a]
+    explicit = tuple(i for i in range(1, len(items)) if getattr(items[i], "line_start", False))
+    words = tuple(i for i in range(1, len(items)) if getattr(items[i], "word_start", False))
+    capacity = max_size or len(items)
+    count = max(count, math.ceil(len(items) / capacity))
+    cuts = _text_cuts(len(items), count, capacity, explicit, words)
+    return [items[a:b] for a, b in zip((0,) + cuts, cuts + (len(items),)) if b > a]
+
+
+@lru_cache(maxsize=128)
+def _text_cuts(size, count, capacity, explicit, words):
+    """Kapazitätsbegrenzte Aufteilung: Wortgrenzen bevorzugen, ohne am Phrasenende Silben zu verlieren."""
+    boundaries = set(explicit) | set(words)
+    ideal = size / count
+    states = {0: (0.0, ())}
+    for part in range(count):
+        remaining = count - part - 1
+        following = {}
+        for start, (cost, cuts) in states.items():
+            lo = max(start + 1, size - remaining * capacity)
+            hi = min(start + capacity, size - remaining)
+            for end in range(lo, hi + 1):
+                value = cost + ((end - start - ideal) / max(ideal, 1)) ** 2
+                if end < size and boundaries:
+                    value += -0.5 if end in explicit else 0 if end in boundaries else 3.0
+                candidate = (value, cuts + ((end,) if end < size else ()))
+                if end not in following or candidate < following[end]:
+                    following[end] = candidate
+        states = following
+    return states[size][1]
 
 
 def phrase_path(writer, slots, phrase_start, role, previous, reference, words) -> list:

@@ -45,6 +45,8 @@ SUGGESTIONS = ("ref_tempo_key", "ref_style")
 WIRED = ("shimmer", "own_vocal_align")
 # Braucht eine Stimme, Aufnahmen oder ein Werkzeug: der Nachweis steht in diesem Test
 ELSEWHERE = {
+    "musical_coherence": "test_musical_coherence.py::test_selected_candidates_are_not_changed_after_scoring",
+    "selective_vocals": "test_quality_review.py::test_natural_vocals_avoid_automatic_telephone_and_small_formant_shifts",
     "local_cache": "test_speicher_160.py::test_with_local_cache_the_work_moves_out_of_onedrive_and_the_old_history_stays",
     "tension_curve": "test_spannung_160.py::test_with_the_tension_curve_drums_band_and_mix_follow_the_drawing",
     "learned_motifs": "test_motifs.py::test_the_melody_sings_learned_rhythms",

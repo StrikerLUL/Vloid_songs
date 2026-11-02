@@ -901,7 +901,8 @@ def _sing_diffsinger(settings: SongSettings, tracks: dict, out: str, vocals_wav:
     if lead:
         diffsinger.sing(tracks["melody_data"], tracks["silben"], settings.bpm, vocals_wav, folder,
                         vibrato=settings.vibrato, glide=settings.glide, ornaments=pitch["ornaments"],
-                        seed=pitch["seed"], expression=_diffsinger_expression(settings, tracks))
+                        seed=pitch["seed"], expression=_diffsinger_expression(settings, tracks),
+                        selective=settings.selective_vocals)
     if settings.harmonies and tracks.get("harmony_data"):
         try:
             diffsinger.sing(tracks["harmony_data"], tracks["harmony_silben"], settings.bpm,

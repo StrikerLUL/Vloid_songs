@@ -305,7 +305,7 @@ def frames(phones: list, frame: float) -> list:
 
 
 def pitch_curve(phrase: list, times: np.ndarray, vibrato: float = 1.0, glide: float = 1.0, ornaments: float = 0.0,
-                seed: int = 0) -> np.ndarray:
+                seed: int = 0, selective: bool = False) -> np.ndarray:
     """Tonhöhe (MIDI, mit Kommastellen) zu den Zeiten: Töne mit weichen Übergängen und Vibrato auf langen Tönen,
     dazu die Verzierungen (G3, voice_fx.ornament_curve)."""
     starts = np.array([n[0] for n in phrase])
@@ -331,7 +331,13 @@ def pitch_curve(phrase: list, times: np.ndarray, vibrato: float = 1.0, glide: fl
     if ornaments > 0:
         import voice_fx
         notes = [voice_fx.SungNote(start, end, pitch) for start, end, pitch, _ in phrase]
-        curve += voice_fx.ornament_curve(times, notes, ornaments, seed)
+        decoration = voice_fx.ornament_curve(times, notes, ornaments, seed)
+        if selective:
+            last = notes[-1]
+            allowed = last.end - last.start >= 0.7 and (int(last.start * 997) + seed) % 4 == 0
+            decoration = np.where((times >= last.start) & (times < last.end), decoration, 0) if allowed else \
+                np.zeros_like(decoration)
+        curve += decoration
     return curve
 
 
@@ -414,7 +420,7 @@ def _variances(bank: Voicebank, symbols: list, durations: list, midi: np.ndarray
 
 
 def render_phrase(bank: Voicebank, phrase: list, vibrato: float = 1.0, glide: float = 1.0, ornaments: float = 0.0,
-                  seed: int = 0, sections: Optional[list] = None) -> tuple:
+                  seed: int = 0, sections: Optional[list] = None, selective: bool = False) -> tuple:
     """(Audio, Startzeit in Sekunden) einer Phrase. sections: Ausdruck pro Sektion und Ton (G8), None = wie das
     Varianz-Modell ihn vorhersagt."""
     model = bank.acoustic
@@ -425,7 +431,7 @@ def render_phrase(bank: Voicebank, phrase: list, vibrato: float = 1.0, glide: fl
     total = int(sum(durations))
     start = phones[0].start - HEAD_FRAMES * frame
     times = start + np.arange(total) * frame
-    midi = pitch_curve(phrase, times, vibrato, glide, ornaments, seed)
+    midi = pitch_curve(phrase, times, vibrato, glide, ornaments, seed, selective)
     f0 = (440.0 * 2 ** ((midi - 69) / 12)).astype(np.float32)[None]
     inputs = {"tokens": np.array([[model.token(p) for p in symbols]], dtype=np.int64),
               "durations": np.array([durations], dtype=np.int64), "f0": f0, **_speedup_inputs(model.config)}
@@ -455,7 +461,7 @@ def render_phrase(bank: Voicebank, phrase: list, vibrato: float = 1.0, glide: fl
 
 def sing(melody_data: list, silben: list, bpm: float, wav: str, voicebank: str, transpose: int = 0,
          vibrato: float = 1.0, glide: float = 1.0, ornaments: float = 0.0, seed: int = 0,
-         expression: Optional[list] = None) -> str:
+         expression: Optional[list] = None, selective: bool = False) -> str:
     """Singt die Melodie mit der DiffSinger-Stimme im Ordner voicebank in die Datei wav (Beginn = Songanfang).
     expression: [(Start, Ende in Sekunden, Sektionsart)] für den Ausdruck pro Sektion und Ton (G8)."""
     bank = load(voicebank)
@@ -463,7 +469,7 @@ def sing(melody_data: list, silben: list, bpm: float, wav: str, voicebank: str, 
     parts = phrases([(None if p is None else p + transpose, d) for p, d in melody_data], silben, bpm)
     if not parts:
         raise ValueError("keine Töne zum Singen")
-    rendered = [render_phrase(bank, phrase, vibrato, glide, ornaments, seed, expression) for phrase in parts]
+    rendered = [render_phrase(bank, phrase, vibrato, glide, ornaments, seed, expression, selective) for phrase in parts]
     if expression is not None and bank.variance is not None:
         log.info("DiffSinger-Ausdruck: Strophe hauchig, Refrain kräftig, hohe Töne gespannter")
     length = max(int(max(0.0, s) * rate) + len(a) for a, s in rendered)
@@ -476,3 +482,4 @@ def sing(melody_data: list, silben: list, bpm: float, wav: str, voicebank: str, 
     sf.write(wav, out, rate, subtype="FLOAT")
     log.info("DiffSinger (%s): %d Phrasen gesungen", bank.name, len(parts))
     return wav
+

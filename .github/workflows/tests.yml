@@ -20,6 +20,14 @@ jobs:
         run: uv run setup_fluidsynth.py
       - name: Ruff
         run: uv run ruff check .
+      - name: Musikalische Regressionen
+        run: >-
+          uv run pytest -q --maxfail=1
+          vocaloid_generator/tests/test_musical_coherence.py
+          vocaloid_generator/tests/test_quality_review.py
+          vocaloid_generator/tests/test_app_160.py::test_simple_view_can_choose_and_keep_a_hook
+          vocaloid_generator/tests/test_schalter.py::test_every_switch_has_a_proof
+          vocaloid_generator/tests/test_schalter.py::test_tests_named_as_proof_exist_and_use_the_switch
       - name: Tests
         run: uv run pytest -rs --maxfail=5
 

@@ -246,7 +246,8 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
     _spread_stereo(plan, profile, events, instrument_styles)
     if "band_groove" in extras:
         import groove_feel
-        moved = groove_feel.apply(events, plan.total_beats - BEATS_PER_BAR)
+        moved = groove_feel.apply(events, plan.total_beats - BEATS_PER_BAR,
+                                 already_following=("bass",) if "musical_coherence" in extras else ())
         log.info("Band im Groove: %d Töne mit dem Schlagzeuger verschoben", sum(moved.values()))
     tag = produzent.tag_notes(producer, plan.tonic, plan.mode)
     if tag:

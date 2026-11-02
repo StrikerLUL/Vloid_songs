@@ -34,7 +34,7 @@ def pocket(drums: list) -> dict:
     return {k: (sum(offs) / len(offs), vel[0]) for k, (offs, vel) in found.items()}
 
 
-def apply(events: dict, until: float = float("inf")) -> dict:
+def apply(events: dict, until: float = float("inf"), already_following=()) -> dict:
     """Rückt und betont die Töne der Band nach dem Schlagzeug, bis zum Schlag until (der Schlussakkord bleibt).
     Rückgabe: {Instrument: verschobene Töne}."""
     grid = pocket(events.get("drums", []))
@@ -46,6 +46,8 @@ def apply(events: dict, until: float = float("inf")) -> dict:
     mean = {bar: sum(v) / len(v) for bar, v in bars.items()}
     moved = {}
     for inst, amount in FOLLOWERS.items():
+        if inst in already_following:
+            continue
         count = 0
         for e in events.get(inst, ()):
             q = _grid(e.start)
@@ -65,3 +67,4 @@ def apply(events: dict, until: float = float("inf")) -> dict:
             e.vel = max(1, min(127, round(e.vel * (1 + ACCENT[inst] * rel))))
         moved[inst] = count
     return moved
+

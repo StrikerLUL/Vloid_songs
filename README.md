@@ -1,5 +1,8 @@
 # Vloid Songs
 
+Auf dem Entwicklungsstand: [Musikalischer Zusammenhang](MUSIKQUALITAET.md) beschreibt die gemeinsame Prüfung von
+Melodie und Harmonie, die abgestimmte Band, natürliche Stimme und den Ablauf mit Refrainauswahl.
+
 Erzeugt komplette Vocaloid-Songs auf Knopfdruck: Akkorde, Bass, Schlagzeug, Melodie und Begleitung, Gesang mit NEUTRINO oder VOICEVOX (oder einer lokalen Vorschau-Stimme), Mix mit Kompressor und Limiter und am Ende eine fertige MP3.
 
 Läuft unter Windows. Version 1.7.2 (1.7.0 mit reparierten Video-Knöpfen, und das Video bricht nicht mehr mit einem IndexError ab): das Musikvideo läuft im Takt der Silben und zeigt Namen, Tonart und Akkorde des
@@ -168,3 +171,4 @@ uv run pytest -m "not slow"   # ohne den Test, der echtes Audio rendert
 | `lyric_helper.py` | Text-Helfer: Silben gegen Platz, Reime und Lesungen pro Zeile |
 | `laufzeit.py`, `speicher.py` | Restzeit und Meldung, wenn ein Song fertig ist; Platz auf der Festplatte und Arbeitsdateien außerhalb von OneDrive (1.6) |
 | `main.py` | die Kommandozeile |
+

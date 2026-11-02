@@ -253,6 +253,8 @@ def build() -> None:
                     .bind_visibility_from(settings, "show_karaoke")
                 stem_row = ui.row().classes("gap-1 q-mt-sm")
                 compare_row = ui.row().classes("items-center gap-1 q-mt-sm")
+                hook_row = ui.row().classes("items-center gap-1 q-mt-sm").mark("hook-choices")
+                hook_row.set_visibility(False)
             with ui.card().classes("w-full bg-grey-9") as notes_card:
                 with ui.row().classes("w-full items-center gap-1"):
                     ui.label("Noten").classes("text-subtitle1 q-mr-md")
@@ -294,7 +296,6 @@ def build() -> None:
                     hooks_button = ui.button("3 Refrain-Melodien zur Auswahl", icon="queue_music",
                                              on_click=lambda: hooks()).props("outline no-caps dense").mark("hooks") \
                         .tooltip("Drei neue Melodien für den Refrain, kurz zum Anhören; der Rest des Songs bleibt")
-                    hook_row = ui.row().classes("items-center gap-1")
                 with ui.row().classes("w-full items-center gap-1 q-mt-sm"):
                     remix_style = ui.select(list(STYLES), label="Remix als").props("dense outlined dark") \
                         .classes("w-48").mark("remix-style")
@@ -572,6 +573,7 @@ def build() -> None:
         if not choices:
             return
         hook_row.clear()
+        hook_row.set_visibility(True)
         with hook_row:
             for choice in choices:
                 with ui.button_group().props("outline"):
@@ -690,6 +692,7 @@ def build() -> None:
         settings.variations = choice.settings.variations
         settings.taste_snapshot = choice.settings.taste_snapshot
         hook_row.clear()
+        hook_row.set_visibility(False)
         await generate(n=1)
 
     # ── Gesang bearbeiten ─────────────────────────────────────────────────────────
@@ -1025,7 +1028,7 @@ def build() -> None:
         hearing_label.set_visibility(bool(text))
         hearing_label.classes(replace="text-caption " + ("text-warning" if warn else "text-grey-5"))
         import render_status
-        warnings = result.warnings or render_status.warnings(result.wav_files)
+        warnings = getattr(result, "warnings", ()) or render_status.warnings(result.wav_files)
         render_label.set_text(" · ".join(warnings))
         render_label.set_visibility(bool(warnings))
         found = media.stems(result)

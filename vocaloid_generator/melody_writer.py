@@ -821,6 +821,9 @@ def write_vocal_melody(plan: SongPlan, lyrics: dict, rng: random.Random, rerolls
     extras: eingeschaltete Neuerungen aus 1.3.0; "best_melody" schreibt jede Sektionsart mehrmals und nimmt die
     Fassung mit den meisten Punkten (melody_score.py).
     """
+    if "musical_coherence" in extras:
+        extras = dict(extras) if isinstance(extras, dict) else dict.fromkeys(extras, True)
+        extras["singable"] = singable
     seed = rng.getrandbits(64)
     rerolls, imported = rerolls or {}, imported or {}
     written = {}
@@ -889,8 +892,8 @@ def _best_of(plan: SongPlan, sec: Section, rng: random.Random, motifs, words: li
         import style_dna
         targets = style_dna.character(plan.style.name).score or None
     args = (candidates, sec.kind, before, plan.vocal_range[1], sec.bar_beats, targets, tuple(extras))
-    best, points, mean = melody_score.pick(*args, plan=plan, taste=extras.get("taste")) if coherent and \
-        isinstance(extras, dict) else melody_score.pick(*args, plan=plan) if coherent else melody_score.pick(*args)
+    context = {"plan": plan, "taste": extras.get("taste") if isinstance(extras, dict) else None} if coherent else {}
+    best, points, mean = melody_score.pick(*args, **context)
     log.info("Beste Melodie: %s aus %d Fassungen, %.1f Punkte (Schnitt %.1f)", sec.kind, len(candidates), points, mean)
     return candidates[best]
 

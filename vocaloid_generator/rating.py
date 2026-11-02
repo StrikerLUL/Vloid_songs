@@ -198,6 +198,10 @@ def excerpts(audio_path: str, folder: str, seconds: float = 20.0) -> list:
         # Kanalenergie statt Mono-Summe: gegenphasige Stereosignale dürfen nicht als Stille gelten.
         energy = np.square(data[:blocks * rate]).reshape(blocks, rate, data.shape[1]).mean(axis=(1, 2))
         change = np.abs(np.diff(np.log10(energy + 1e-9)))
+        edge = min(len(change) // 3, max(1, int(span / 2)))
+        if len(change) > 2 * edge:
+            change[:edge] = -1
+            change[-edge:] = -1
         transition = max(0.0, min(last, float(np.argmax(change) + 1) - span / 2))
         starts.append(transition)
     os.makedirs(folder, exist_ok=True)

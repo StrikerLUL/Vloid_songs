@@ -20,6 +20,8 @@ log = logging.getLogger("vocaloid")
 # Neuerungen aus 1.3.0: jede lässt sich abschalten (Schalter, Option, Hilfe)
 OFF_130 = (
     ("best_melody", "--ohne-beste-melodie", "jede Sektion nur einmal schreiben, statt die beste von vielen zu nehmen"),
+    ("musical_coherence", "--ohne-zusammenhang", "bisherige Komposition ohne gemeinsame Phrasen- und Bandprüfung"),
+    ("selective_vocals", "--ohne-natuerliche-stimme", "die bisherige vollständige Gesangsnachbearbeitung verwenden"),
     ("melody_pickups", "--ohne-auftakte", "Phrasen beginnen auf der Eins, keine vorgezogenen Töne"),
     ("intro_riff", "--ohne-intro-riff", "Intro und Outro spielen die Refrain-Melodie nach, kein Zwischenspiel"),
     ("kime", "--ohne-kime", "keine gemeinsamen Akzente, Stopps und Läufe der Band"),
@@ -729,3 +731,4 @@ def _from_history(settings: SongSettings, nr: int):
 
 if __name__ == "__main__":
     sys.exit(main())
+

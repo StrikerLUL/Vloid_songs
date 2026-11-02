@@ -271,7 +271,7 @@ def throw_windows(notes: list, bpm: float, sections: list = (), room: float = 1.
 # ── Vibrato und Übergänge ──────────────────────────────────────────────────────
 def shape_pitch(f0: np.ndarray, frame: float, notes: list, vibrato: float = 1.0, glide: float = 1.0,
                 offset: float = 0.0, intonation: float = 0.0, ornaments: float = 0.0, seed: int = 0,
-                long_vibrato: float = 0.0) -> np.ndarray:
+                long_vibrato: float = 0.0, selective: bool = False) -> np.ndarray:
     """
     Vibrato und Übergänge einer gesungenen Tonhöhenkurve ändern (Hz je Rahmen, 0 = stimmlos).
     vibrato: 0 = gerade Töne, 1 = wie gesungen, 2 = doppelt so tief; lange Töne ohne eigenes Vibrato bekommen
@@ -297,7 +297,19 @@ def shape_pitch(f0: np.ndarray, frame: float, notes: list, vibrato: float = 1.0,
     out = base + _new_vibrato(vib, natural, t, notes, vibrato, long_vibrato)
     if ornaments > 0:
         out = out + ornament_curve(t, notes, ornaments, seed)
-    return np.where(voiced, 440.0 * 2 ** ((out - 69) / 12), 0.0)
+    shaped = np.where(voiced, 440.0 * 2 ** ((out - 69) / 12), 0.0)
+    if not selective or abs(vibrato - 1.0) >= 1e-3 or abs(glide - 1.0) >= 1e-3:
+        return shaped
+    errors = intonation_error(f0, frame, notes, offset)
+    ends = {id(group[-1]) for group in phrases(notes)}
+    keep = np.zeros(len(f0), dtype=bool)
+    for note, error in zip(notes, errors):
+        correction = error is not None and 35 <= abs(error) <= INTONATION_MAX and intonation > 0
+        ornament = id(note) in ends and note.end - note.start >= 0.7 and \
+            (int(note.start * 997) + seed) % 4 == 0 and ornaments > 0
+        if correction or ornament:
+            keep |= (t >= note.start + (0.06 if correction else 0)) & (t < note.end)
+    return np.where(keep & voiced, shaped, f0)
 
 
 # ── Tonhöhe sanft korrigieren (1.3.0, G1) ──────────────────────────────────────
@@ -501,20 +513,8 @@ def reshape(path: str, notes: list, vibrato: float = 1.0, glide: float = 1.0, ps
         return False
 
     def curve(f0: np.ndarray, frame: float, phrase: list, offset: float) -> np.ndarray:
-        shaped = shape_pitch(f0, frame, phrase, vibrato, glide, offset, intonation, ornaments, seed, long_vibrato)
-        if not selective or abs(vibrato - 1.0) >= 1e-3 or abs(glide - 1.0) >= 1e-3:
-            return shaped
-        # Gute Engine-Phrasen erhalten ihre ursprüngliche Kurve. Nur stabile, deutlich schiefe Töne
-        # korrigieren; eine seltene Verzierung darf auf dem langen Phrasenschluss stehen.
-        errors = intonation_error(f0, frame, phrase, offset)
-        times = offset + np.arange(len(f0)) * frame
-        keep = np.zeros(len(f0), dtype=bool)
-        for i, (note, error) in enumerate(zip(phrase, errors)):
-            correction = error is not None and 35 <= abs(error) <= INTONATION_MAX and intonation > 0
-            ornament = i == len(phrase) - 1 and note.end - note.start >= 0.7 and seed % 4 == 0 and ornaments > 0
-            if correction or ornament:
-                keep |= (times >= note.start + (0.06 if correction else 0)) & (times < note.end)
-        return np.where(keep & (f0 > 0), shaped, f0)
+        return shape_pitch(f0, frame, phrase, vibrato, glide, offset, intonation, ornaments, seed, long_vibrato,
+                           selective=selective)
     changed = repitch(path, notes, curve, psola, gentle)
     log.info("Vibrato %.1f, Übergänge %.1f, Tonhöhe geglättet %.0f %%, Verzierungen %.0f %% (%s%s)", vibrato, glide,
              intonation * 100, ornaments * 100, "PSOLA" if psola and psola_available() else "WORLD",

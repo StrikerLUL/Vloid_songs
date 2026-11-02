@@ -2,6 +2,16 @@
 
 Jede Version hat hier einen Abschnitt. Die App zeigt ihn einmal nach einem Update (Hilfe › Was ist neu).
 
+## Unveröffentlicht – musikalischer Zusammenhang
+
+- Ganze Phrasen suchen und Kandidaten erst nach Harmonie- und Singbarkeitskorrekturen auswählen.
+- Gehaltene Töne über Akkordwechsel prüfen; Textgrenzen erhalten und kurze Texte nicht künstlich wiederholen.
+- Bass aus dem Schlagzeugrhythmus entwickeln, Begleitung um den Gesang aufräumen und Klangsets gemeinsam wählen.
+- Natürliche Gesangsnachbearbeitung und sichtbare Hinweise bei einfachen Ersatzklängen.
+- Mehrere Songabschnitte automatisch bewerten und tatsächliche Melodieeigenschaften aus Daumen lernen.
+- Refrainauswahl direkt in der einfachen Ansicht. Alte Verlaufseinträge behalten den bisherigen Modus.
+- Reproduzierbarer Kompositionsvergleich und neue Regressionstests; Details in [MUSIKQUALITAET.md](MUSIKQUALITAET.md).
+
 ## 1.7.2
 
 - **„IndexError: index … is out of bounds“ beim Lyric-Video.** Das Video misst vor dem ersten Bild den Klang des
@@ -624,3 +634,4 @@ auf der Kommandozeile.
 - Das Mischen ist schneller.
 
 Jede neue Funktion hat einen Schalter; welcher wo steht, zeigt Hilfe › Erste Schritte.
+

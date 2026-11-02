@@ -11,6 +11,7 @@ from nicegui.testing.user_simulation import user_simulation
 import hoer_duell
 import laufzeit
 import qualitaet
+import pipeline
 from gui import einfach, labels, page
 from settings import SongSettings
 from test_app import fake_generation  # noqa: F401 – das Fixture gilt so auch hier
@@ -119,6 +120,25 @@ async def test_the_simple_view_shows_only_the_essentials_and_profi_shows_everyth
     await until(lambda: not SongSettings.load().simple_view)
     marked(simple_user, "view-toggle")[0].value = True
     await until(lambda: not marked(simple_user, "tab-Song")[0].visible)
+
+
+async def test_simple_view_can_choose_and_keep_a_hook(simple_user, fake_generation, monkeypatch, tmp_path):
+    def choices(settings, count=3, progress=None):
+        path = str(tmp_path / "hook.wav")
+        sf.write(path, np.zeros(800, dtype=np.float32), 8000)
+        return [pipeline.HookChoice(i, settings.with_updates(seed=42, variations={"melody:Chorus": i},
+                                                            taste_snapshot=[[["test"], 1]]), path)
+                for i in range(1, 4)]
+    monkeypatch.setattr(pipeline, "hook_choices", choices)
+    await simple_user.open("/")
+    simple_user.find(marker="simple-hooks").click()
+    await simple_user.should_see(marker="hook-take-2", retries=50)
+    assert marked(simple_user, "hook-choices")[0].visible
+    simple_user.find(marker="hook-take-2").click()
+    await until(lambda: len(fake_generation) == 1)
+    assert fake_generation[0].seed == 42
+    assert fake_generation[0].variations == {"melody:Chorus": 2}
+    assert fake_generation[0].taste_snapshot == [[["test"], 1]]
 
 
 async def test_song_machen_takes_quality_and_length_but_keeps_the_switches(simple_user, fake_generation):  # noqa: F811
@@ -234,3 +254,4 @@ async def test_the_tension_curve_has_a_slider_per_section_and_goes_back_to_the_s
     assert marked(user, "tension-Chorus#2")[0].value == 0.9
     marked(user, "switch-tension_curve")[0].value = False
     await until(lambda: not SongSettings.load().tension_curve)
+

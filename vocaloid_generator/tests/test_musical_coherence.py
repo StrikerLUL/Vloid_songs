@@ -108,6 +108,12 @@ class MusicalCoherenceTests(unittest.TestCase):
         self.assertEqual([n.start for n in events["bells"]], [3])
         self.assertGreater(ensemble.score(events, vocal), before)
 
+    def test_bass_microtiming_is_not_applied_twice(self):
+        import groove_feel
+        events = {"drums": [Ev(0.04, .1, 36, 100)], "bass": [Ev(0.04, .5, 36, 90)]}
+        groove_feel.apply(events, already_following=("bass",))
+        self.assertEqual(events["bass"][0].start, .04)
+
     def test_palettes_are_chosen_atomically_and_reproducibly(self):
         self.assertFalse(set(STYLES) - set(sound_palettes.PALETTES))
         for style in STYLES:

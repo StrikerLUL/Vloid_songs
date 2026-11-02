@@ -11,6 +11,7 @@ import rating
 import render_status
 import style_fx
 import voice_fx
+import singing
 from settings import SongSettings
 
 
@@ -80,6 +81,14 @@ def test_selective_vocals_keep_large_user_changes_and_fix_drift(monkeypatch):
     monkeypatch.setattr(voice_fx, "repitch", lambda path, notes, curve, *args: checked.append(curve(f0, .005, notes, 0)) or .5)
     voice_fx.reshape("unused.wav", [note], intonation=0.5, selective=True)
     assert checked[0][100] < f0[100]
+
+
+def test_voicevox_pitch_callback_accepts_the_same_selective_options():
+    notes = [voice_fx.SungNote(0, 1, 69)]
+    f0 = np.full(200, 440.0)
+    shaped = voice_fx.shape_pitch(f0, .005, notes, **singing.pitch_options(
+        SongSettings(seed=1, selective_vocals=True)))
+    assert np.array_equal(shaped, f0)
 
 
 def test_natural_vocals_avoid_automatic_telephone_and_small_formant_shifts(monkeypatch):

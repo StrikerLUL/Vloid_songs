@@ -27,7 +27,7 @@ HOLD_BEATS = 1.0             # ab dieser Länge muss die Silbe ein Vokal sein, d
 UNHELD = ("ん", "っ")
 HIGH_SHARE = 0.25            # so viel der Zeit darf die Stimme ganz oben (die oberen zwei Halbtöne) singen
 WEIGHTS = {"range": 1.0, "peak": 1.0, "moves": 1.5, "runs": 0.8, "motif": 1.0, "text": 1.0, "recovery": 0.6,
-           "contrast": 1.0, "high": 0.6, "words": 1.2, "catchy": 1.2}
+           "contrast": 1.0, "high": 0.6, "words": 1.2, "catchy": 1.2, "harmony": 2.4, "resolution": 1.2}
 # S2: Gefühlswörter, wie sie gesungen werden (Kana); das Wort darf Partikel dahinter haben (なみだが)
 FEELING_WORDS = ("すき", "だいすき", "なみだ", "さよなら", "あいして", "あいたい", "ごめん", "ありがとう", "こころ", "ゆめ",
                  "なきたい", "わすれない", "いかないで", "さみしい", "かなしい", "うれしい", "えがお", "やくそく",
@@ -39,7 +39,7 @@ FEELING_LONG = 1.5           # so viel länger als der typische Ton klingt das E
 
 
 def score(notes: list, kind: str, below: Optional[list] = None, top: Optional[int] = None,
-          bar_beats: float = 4, targets: Optional[dict] = None, extras=()) -> float:
+          bar_beats: float = 4, targets: Optional[dict] = None, extras=(), plan=None) -> float:
     """
     Punkte einer Sektion (MelNotes), mehr ist besser. below: die schon geschriebenen Töne der Sektionen vor dem
     Refrain (der Refrain soll höher hinaus), top: höchster Ton der Stimme, bar_beats: Schläge pro Takt.
@@ -51,17 +51,22 @@ def score(notes: list, kind: str, below: Optional[list] = None, top: Optional[in
     if targets and "motif_weight" in targets:
         weights["motif"] = targets["motif_weight"]
     return sum(weights[name] * value
-               for name, value in parts(notes, kind, below, top, bar_beats, targets, extras).items())
+               for name, value in parts(notes, kind, below, top, bar_beats, targets, extras, plan).items())
 
 
 def parts(notes: list, kind: str, below: Optional[list] = None, top: Optional[int] = None,
-          bar_beats: float = 4, targets: Optional[dict] = None, extras=()) -> dict:
+          bar_beats: float = 4, targets: Optional[dict] = None, extras=(), plan=None) -> dict:
     """Die einzelnen Punkte (jeweils etwa -1 bis 1), zum Nachsehen und für die Tests."""
     sung = sorted((n for n in notes if not getattr(n.syllable, "melisma", False)), key=lambda n: n.start)
     if len(sung) < 2:
-        return {name: 0.0 for name in WEIGHTS}
+        values = {name: 0.0 for name in WEIGHTS}
+        if plan is not None and sung:
+            from musicality import harmony_scores
+            values.update(harmony_scores(notes, plan))
+        return values
     pitches = [n.pitch for n in sung]
     moves = [b.pitch - a.pitch for a, b in zip(sung, sung[1:]) if b.start - a.start - a.dur < PHRASE_GAP]
+    from musicality import harmony_scores
     return {
         "range": _range(pitches, kind, (targets or {}).get("range")),
         "peak": _peak(sung),
@@ -74,6 +79,7 @@ def parts(notes: list, kind: str, below: Optional[list] = None, top: Optional[in
         "high": _high(sung, top),
         "words": _key_words(notes, kind) if "key_words" in extras else 0.0,
         "catchy": _catchy(sung) if "catchy_chorus" in extras and kind == "Chorus" else 0.0,
+        **(harmony_scores(notes, plan) if plan is not None else {"harmony": 0.0, "resolution": 0.0}),
     }
 
 
@@ -264,8 +270,11 @@ def _catchy(sung: list) -> float:
 
 
 def pick(candidates: list, kind: str, below: Optional[list] = None, top: Optional[int] = None,
-         bar_beats: float = 4, targets: Optional[dict] = None, extras=()) -> tuple:
+         bar_beats: float = 4, targets: Optional[dict] = None, extras=(), plan=None, taste=None) -> tuple:
     """Die beste Fassung: (Index, Punkte, Schnitt aller Fassungen). candidates: Listen von MelNotes."""
-    scores = [score(c, kind, below, top, bar_beats, targets, extras) for c in candidates]
+    from musicality import preference
+    scores = [score(c, kind, below, top, bar_beats, targets, extras, plan) + preference(c, kind, taste)
+              for c in candidates]
     best = max(range(len(scores)), key=lambda i: (scores[i], -i))
     return best, scores[best], sum(scores) / len(scores)
+

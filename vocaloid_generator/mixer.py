@@ -87,7 +87,9 @@ def midi_zu_wav(midi_pfad: str, wav_pfad: str, is_drum: bool = False, instrument
     surge: die eigenen Synths spielen Werks-Klänge von Surge XT (surge_sounds), soweit es einen passenden gibt.
     amp_models: mit amp der Verstärker aus einem NAM-Modell (amp_models), soweit eingerichtet.
     """
+    import render_status
     soundfont_pfad = soundfont_pfad or SOUNDFONT_PFAD
+    reason = ""
     midi = pretty_midi.PrettyMIDI(midi_pfad)
     if is_drum:
         for inst in midi.instruments:
@@ -137,20 +139,26 @@ def midi_zu_wav(midi_pfad: str, wav_pfad: str, is_drum: bool = False, instrument
                 midi.instruments.remove(inst)
     if synths and not any(i.notes for i in midi.instruments):
         _write(wav_pfad, _sum(synths))
+        render_status.record(wav_pfad, "Samples/Synthese")
         return
 
     audio = _render_vst(midi, vst_pfad, vst_state) if vst_pfad else None
+    engine = "VST" if audio is not None else "SoundFont"
     if audio is None and os.path.exists(soundfont_pfad):
         try:
             from renderer import render_midi
             audio = render_midi(midi, soundfont_pfad, library=library)
         except Exception as e:
             log.warning("SoundFont-Rendering fehlgeschlagen (%s), nutze die einfache Klangerzeugung", e)
+            reason = "SoundFont konnte nicht gerendert werden"
     elif audio is None:
         log.warning("SoundFont nicht gefunden: %s, nutze die einfache Klangerzeugung", soundfont_pfad)
+        reason = "SoundFont fehlt"
     if audio is None:
         audio = _basic_synth(midi)
+        engine = "Einfache Synthese"
     _write(wav_pfad, _sum([audio] + synths))
+    render_status.record(wav_pfad, engine, engine == "Einfache Synthese", reason)
 
 
 def _layer(track_name: str) -> str:
@@ -1268,3 +1276,4 @@ def true_peak_db(mix: np.ndarray, chunk: int = 10 * SAMPLE_RATE) -> float:
         if inner.size:
             peak = max(peak, float(np.max(np.abs(inner))))
     return 20 * np.log10(peak) if peak > 0 else float("-inf")
+

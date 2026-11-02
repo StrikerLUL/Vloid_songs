@@ -35,7 +35,7 @@ def voice(notes, length, vibrato=0.0):
 
 
 def test_each_style_gets_its_effects_and_the_switches_take_them_away(styles):
-    s = SongSettings()
+    s = SongSettings(selective_vocals=False)
     assert style_fx.effects_for("Future Bass", s) == {"telephone": True, "stutter": True, "hard_tune": True}
     assert style_fx.effects_for("Ballade", s) == {}
     assert style_fx.effects_for("Kawaii Chiptune", s.with_updates(formant_fx=False, stutter_fx=False)) == \
@@ -115,3 +115,4 @@ def test_apply_runs_on_a_real_track(tmp_path, styles):
                           {"telephone": True, "stutter": True, "hard_tune": True, "formant": 1.05})
     assert done == ["harter Tune im Refrain", "Telefon in der ersten Zeile", "Stutter vor 1 Refrain",
                     "Formanten ×1.05"]
+

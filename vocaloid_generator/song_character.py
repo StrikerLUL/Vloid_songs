@@ -138,6 +138,7 @@ class Character:
     patterns: dict = field(default_factory=dict)     # Sektion → {Instrument: Spielweise}
     intro: str = "full"
     ending: str = "ring"
+    palette: str = ""
 
     def describe(self) -> str:
         def part(inst: str) -> str:
@@ -145,7 +146,7 @@ class Character:
 
         def section(sec: str) -> str:
             return SECTION_NAMES.get(sec, sec)
-        bits = [f"{part(inst)} {SOUND_NAMES.get(program, f'Klang {program}')}"
+        bits = ([f"Klangset {self.palette}"] if self.palette else []) + [f"{part(inst)} {SOUND_NAMES.get(program, f'Klang {program}')}"
                 for inst, program in sorted(self.programs.items())]
         bits += [f"{part(inst)}{f' ({layer})' if layer else ''} {voice}" for inst, layers in sorted(self.voices.items())
                  for layer, voice in sorted(layers.items())]
@@ -156,7 +157,7 @@ class Character:
         return ", ".join(bits)
 
 
-def choose(style: str, seed: str, split: bool = False, taste=None, arc: bool = False) -> Character:
+def choose(style: str, seed: str, split: bool = False, taste=None, arc: bool = False, coherent: bool = False) -> Character:
     """Der Charakter eines Songs in diesem Stil; derselbe Seed gibt denselben Charakter. split: J-Pop Energy und
     Idol-Pop getrennt (SPLIT). taste: der Geschmack aus den Daumen im Verlauf (geschmack.Taste, 1.5.0); was dir
     gefiel, kommt öfter."""
@@ -176,7 +177,14 @@ def choose(style: str, seed: str, split: bool = False, taste=None, arc: bool = F
     intro = rng.choices(INTROS, _tasted(INTRO_WEIGHTS.get(style, DEFAULT_INTRO), INTROS, "intro", taste))[0]
     weights = (ARC_ENDING_WEIGHTS if arc and style in ARC_ENDING_WEIGHTS else ENDING_WEIGHTS).get(style, DEFAULT_ENDING)
     ending = rng.choices(ENDINGS, _tasted(weights, ENDINGS, "ending", taste))[0]
-    return Character(programs, voices, grooves, patterns, intro, ending)
+    palette = None
+    if coherent:
+        import sound_palettes
+        palette = sound_palettes.choose(style, random.Random(f"{seed}:{style}:palette"), taste)
+        if palette:
+            programs.update(palette["programs"])
+            voices = palette["voices"]
+    return Character(programs, voices, grooves, patterns, intro, ending, palette["name"] if palette else "")
 
 
 def _tasted(weights: tuple, options: tuple, what: str, taste) -> tuple:
@@ -242,3 +250,4 @@ def finish(plan, events: dict, character: Character, drum_tracks: tuple) -> str:
                 share = 1.0 - (1.0 - FADE_TO) * min(1.0, (e.start - last.start) / span)
                 e.vel = max(1, int(round(e.vel * share)))
     return "wird leiser"
+

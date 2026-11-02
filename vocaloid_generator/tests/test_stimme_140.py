@@ -125,6 +125,7 @@ def test_gentle_reshape_only_touches_what_changes(tmp_path, monkeypatch, singing
     used = []
     monkeypatch.setattr(voice_fx, "reshape", lambda path, notes, **kw: used.append(kw["gentle"]) or False)
     s = song(tmp_path, root)
+    s = s.with_updates(selective_vocals=False)
     tracks, _ = pipeline.compose(s)
     singing._synthesize_vocals(s, tracks, s.output_dir())
     singing._synthesize_vocals(s.with_updates(gentle_reshape=False), tracks, s.output_dir())
@@ -134,7 +135,7 @@ def test_gentle_reshape_only_touches_what_changes(tmp_path, monkeypatch, singing
 def test_gentle_reshape_drops_formant_shifts_you_hardly_hear(monkeypatch):
     monkeypatch.setattr(style_fx, "STYLES", {"Idol-Pop": {"formant": 1.04}, "Kawaii Chiptune": {"formant": 1.08}})
     monkeypatch.setattr(style_fx, "FORMANT_MIN_SHIFT", 0.06)
-    s = SongSettings()
+    s = SongSettings(selective_vocals=False)
     assert style_fx.effects_for("Idol-Pop", s) == {}
     assert style_fx.effects_for("Kawaii Chiptune", s) == {"formant": 1.08}
     assert style_fx.effects_for("Idol-Pop", s.with_updates(gentle_reshape=False)) == {"formant": 1.04}
@@ -176,3 +177,4 @@ def test_the_soft_chain_lets_the_attacks_through(tmp_path, monkeypatch):
 @pytest.mark.parametrize("name", ["voice_comfort", "gentle_reshape", "soft_vocal_chain"])
 def test_the_voice_switches_are_on_by_default(name):
     assert getattr(SongSettings(), name) is True
+

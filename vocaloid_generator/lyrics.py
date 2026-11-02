@@ -78,13 +78,15 @@ class Mora(str):
     Melisma, das erst die Melodie dazuschreibt, steht nicht im Text.
     """
 
-    def __new__(cls, text: str, tone=None, word_start: bool = False, melisma: bool = False, long: bool = False):
+    def __new__(cls, text: str, tone=None, word_start: bool = False, melisma: bool = False, long: bool = False,
+                line_start: bool = False):
         obj = super().__new__(cls, text)
         obj.tone, obj.word_start, obj.melisma, obj.long = tone, word_start, melisma, long
+        obj.line_start = line_start
         return obj
 
     def __reduce__(self):
-        return Mora, (str(self), self.tone, self.word_start, self.melisma, self.long)
+        return Mora, (str(self), self.tone, self.word_start, self.melisma, self.long, self.line_start)
 
 
 def normalize_section(name: str) -> str:
@@ -131,8 +133,15 @@ def parse_lyrics(text: str, romaji: bool = True, english: bool = False, smart: b
     Text vor der ersten Überschrift wird ignoriert. english: englische Wörter als Katakana singen. smart: Partikel und
     Zahlwörter erkennen, own: eigene Lesungen {Wort: Lesung} (readings.py).
     """
-    return {name: [s for line in lines for s in line]
-            for name, lines in section_lines(text, romaji, english, smart, own).items()}
+    out = {}
+    for name, lines in section_lines(text, romaji, english, smart, own).items():
+        out[name] = []
+        for line in lines:
+            for i, syllable in enumerate(line):
+                out[name].append(Mora(str(syllable), getattr(syllable, "tone", None),
+                                      getattr(syllable, "word_start", False), getattr(syllable, "melisma", False),
+                                      getattr(syllable, "long", False), line_start=i == 0))
+    return out
 
 
 def section_lines(text: str, romaji: bool = True, english: bool = False, smart: bool = False,
@@ -513,3 +522,4 @@ def _tagger():
     except Exception as e:                       # fehlendes Wörterbuch oder fugashi nicht installiert
         log.warning("Kanji können nicht gelesen werden (%s); bitte den Text in Hiragana schreiben", e)
         return None
+

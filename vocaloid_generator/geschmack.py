@@ -81,6 +81,12 @@ def song_keys(character: dict) -> dict:
             keys["groove"].append((what, character[what]))
     for bank, progression in (character.get("chords") or {}).items():
         keys["melodie"].append(("chords", bank, progression))
+    for kind, features in (character.get("melody_features") or {}).items():
+        for feature, value in features.items():
+            if isinstance(value, (str, int, float)):
+                keys["melodie"].append(("melody", kind, feature, value))
+    if character.get("palette"):
+        keys["klang"].append(("palette", character.get("style", ""), character["palette"]))
     return keys
 
 
@@ -162,3 +168,4 @@ def pick(rng, pool: list, taste: Optional[Taste], key) -> object:
     if weights is None:
         return rng.choice(pool)
     return rng.choices(pool, weights)[0]
+

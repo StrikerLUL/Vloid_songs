@@ -2,7 +2,7 @@ name: Tests
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'codex/**']
   pull_request:
 
 jobs:
@@ -22,3 +22,4 @@ jobs:
         run: uv run ruff check .
       - name: Tests
         run: uv run pytest -rs
+

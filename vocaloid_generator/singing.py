@@ -48,7 +48,7 @@ VOCAL_FIELDS = ("bpm", "meter", "seed", "rap_voice", "rap_speaker", "singer", "v
                 "recorded_breaths", "text_expression", "note_swells", "psola_reshape", "own_vocal", "own_vocal_align", "phrase_fixes", "style",
                 "telephone_fx", "stutter_fx", "hard_tune", "formant_fx", "vocal_swing", "breathiness", "shimmer",
                 "intonation", "ornaments", "vocal_pocket", "group_vocals", "diffsinger_expression", "spoken_sound",
-                "voice_comfort", "gentle_reshape", "long_note_vibrato", "soft_breaths")
+                "voice_comfort", "gentle_reshape", "long_note_vibrato", "soft_breaths", "selective_vocals")
 
 
 def _vocal_key(settings: SongSettings, tracks: dict) -> str:
@@ -518,7 +518,7 @@ def _neutrino_lead(settings: SongSettings, data: list, xml: str, wav: str, neutr
             if part.xml != xml:
                 remove_file(part.xml)
     double = os.path.join(os.path.dirname(wav), "vocals_double.wav")
-    gentle = settings.gentle_reshape and voice_fx.GENTLE_CENTS > 0
+    gentle = (settings.gentle_reshape or settings.selective_vocals) and voice_fx.GENTLE_CENTS > 0
     if os.path.exists(double):
         voice_fx.reshape(double, notes, psola=settings.psola_reshape, gentle=gentle, **pitch_options(settings))
     voice_fx.reshape(wav, notes, psola=settings.psola_reshape, gentle=gentle, **pitch_options(settings))
@@ -538,7 +538,8 @@ def pitch_options(settings: SongSettings) -> dict:
     import voice_fx
     return {"vibrato": settings.vibrato, "glide": settings.glide, "intonation": settings.intonation,
             "ornaments": voice_fx.ornament_amount(settings.ornaments, settings.style), "seed": settings.seed or 0,
-            "long_vibrato": voice_fx.long_vibrato_amount(settings.long_note_vibrato, settings.style)}
+            "long_vibrato": voice_fx.long_vibrato_amount(settings.long_note_vibrato, settings.style),
+            "selective": settings.selective_vocals}
 
 
 class _Part(NamedTuple):
@@ -1218,3 +1219,4 @@ def _sing_line(settings: SongSettings, data: list, silben: list, out: str, name:
         return None
     finally:
         remove_file(xml)
+

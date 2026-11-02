@@ -100,6 +100,8 @@ def song_panel(s: SongSettings, pick: PickFn, apply_template: Callable[[SongSett
 
 # Gesang 1.3.0 und 1.4.0, jede Neuerung mit Schalter
 VOICE_SWITCHES = (
+    ("selective_vocals", "Natürliche Hauptstimme", "Gute gesungene Tonverläufe erhalten; nur deutlich schiefe "
+                                               "stabile Töne korrigieren, Verzierungen sparsam am Phrasenschluss"),
     ("resonance_tamer", "Härte zähmen", "Wie das Plugin soothe2: wenn hohe, laute Töne schrill werden, werden nur die "
                                         "Frequenzen leiser, die gerade herausstechen, und nur so lange. Die Stimme "
                                         "bleibt hell und nah"),
@@ -209,6 +211,8 @@ BAND_SWITCHES = (
 
 # Melodie 1.3.0 und 1.4.0, jede Neuerung mit Schalter
 MELODY_SWITCHES = (
+    ("musical_coherence", "Musikalischer Zusammenhang", "Ganze Phrasen suchen, alle klingenden Akkorde prüfen, "
+                                                     "erst nach Korrekturen auswählen; Band und Klangsets abstimmen"),
     ("best_melody", "Beste Melodie suchen", "Jede Sektion wird 30-mal geschrieben; es singt die Fassung mit den meisten "
                                             "Punkten: klarer Höhepunkt, Schritte und Sprünge gemischt, wenige "
                                             "Tonwiederholungen, Motive, die wiederkommen, ein Refrain über der Strophe"),
@@ -1472,3 +1476,4 @@ def upload_button(file_types: tuple, folder: Callable[[], str], done: Callable[[
         .mark(f"{marker}-file")
     ui.button("Hochladen", icon="upload").props("flat dense no-caps").mark(marker) \
         .on("click", js_handler=f"() => getElement({upload.id}).$refs.qRef.pickFiles()")
+

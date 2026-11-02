@@ -489,7 +489,7 @@ def _glides(base: np.ndarray, t: np.ndarray, notes: list, amount: float) -> np.n
 
 def reshape(path: str, notes: list, vibrato: float = 1.0, glide: float = 1.0, psola: bool = True,
             intonation: float = 0.0, ornaments: float = 0.0, seed: int = 0, gentle: bool = False,
-            long_vibrato: float = 0.0) -> bool:
+            long_vibrato: float = 0.0, selective: bool = False) -> bool:
     """Vibrato und Übergänge einer gesungenen Spur ändern, schiefe Töne sanft korrigieren und Verzierungen singen
     (shape_pitch). Gerechnet wird Phrase für Phrase; Phrasen, an denen sich nichts ändert, und die Pausen bleiben
     unberührt. psola: mit Praat-PSOLA (parselmouth), das nur die Tonhöhe verschiebt und den Klang der Stimme lässt;
@@ -501,7 +501,20 @@ def reshape(path: str, notes: list, vibrato: float = 1.0, glide: float = 1.0, ps
         return False
 
     def curve(f0: np.ndarray, frame: float, phrase: list, offset: float) -> np.ndarray:
-        return shape_pitch(f0, frame, phrase, vibrato, glide, offset, intonation, ornaments, seed, long_vibrato)
+        shaped = shape_pitch(f0, frame, phrase, vibrato, glide, offset, intonation, ornaments, seed, long_vibrato)
+        if not selective or abs(vibrato - 1.0) >= 1e-3 or abs(glide - 1.0) >= 1e-3:
+            return shaped
+        # Gute Engine-Phrasen erhalten ihre ursprüngliche Kurve. Nur stabile, deutlich schiefe Töne
+        # korrigieren; eine seltene Verzierung darf auf dem langen Phrasenschluss stehen.
+        errors = intonation_error(f0, frame, phrase, offset)
+        times = offset + np.arange(len(f0)) * frame
+        keep = np.zeros(len(f0), dtype=bool)
+        for i, (note, error) in enumerate(zip(phrase, errors)):
+            correction = error is not None and 35 <= abs(error) <= INTONATION_MAX and intonation > 0
+            ornament = i == len(phrase) - 1 and note.end - note.start >= 0.7 and seed % 4 == 0 and ornaments > 0
+            if correction or ornament:
+                keep |= (times >= note.start + (0.06 if correction else 0)) & (times < note.end)
+        return np.where(keep & (f0 > 0), shaped, f0)
     changed = repitch(path, notes, curve, psola, gentle)
     log.info("Vibrato %.1f, Übergänge %.1f, Tonhöhe geglättet %.0f %%, Verzierungen %.0f %% (%s%s)", vibrato, glide,
              intonation * 100, ornaments * 100, "PSOLA" if psola and psola_available() else "WORLD",
@@ -1133,3 +1146,4 @@ def _place(out: np.ndarray, mono: np.ndarray, start: int, pan: float) -> None:
     angle = (pan + 1) * np.pi / 4
     out[start:end, 0] += mono[:end - start] * np.cos(angle) * np.sqrt(2)
     out[start:end, 1] += mono[:end - start] * np.sin(angle) * np.sqrt(2)
+

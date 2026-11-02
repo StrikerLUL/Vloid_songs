@@ -151,7 +151,8 @@ def choose(tracks: dict, takes: list) -> Optional[list]:
     before = [n for s in plan.sections if s.kind in ("Verse", "PreChorus") and s.occurrence == 1
               for n in composed(tracks, s)]
     top = plan.vocal_range[1]
-    own = melody_score.score(mine, KIND, before, top, sec.bar_beats)
+    context = plan if tracks.get("musical_report") else None
+    own = melody_score.score(mine, KIND, before, top, sec.bar_beats, plan=context)
     best, points = None, own
     for k, notes in enumerate(takes):
         melody = [(b, d, p) for b, d, p in line(notes, plan.seconds_per_beat) if b < sec.beats]
@@ -159,7 +160,7 @@ def choose(tracks: dict, takes: list) -> Optional[list]:
             log.info("KI-Melodie %d: zu wenige Töne (%d)", k + 1, len(melody))
             continue
         fitted = melody_import.fit(melody, plan, sec, syllables)
-        value = melody_score.score(fitted, KIND, before, top, sec.bar_beats)
+        value = melody_score.score(fitted, KIND, before, top, sec.bar_beats, plan=context)
         log.info("KI-Melodie %d: %d Töne, %.1f Punkte (komponiert %.1f)", k + 1, len(melody), value, own)
         if value > points:
             best, points = melody, value
@@ -177,3 +178,4 @@ def for_song(tracks: dict, seed: int, out: str, reuse: bool = True) -> Optional[
     else:
         log.info("KI-Melodie singt im Refrain (%d Töne)", len(melody))
     return melody
+

@@ -178,3 +178,49 @@ def rate(paths: list) -> list:
     ratings = [Rating.from_dict({"enjoyment": r.get("CE"), "usefulness": r.get("CU"), "complexity": r.get("PC"),
                                  "quality": r.get("PQ")}) if isinstance(r, dict) else None for r in found]
     return (ratings + [None] * len(paths))[:len(paths)]
+
+
+def excerpts(audio_path: str, folder: str, seconds: float = 20.0) -> list:
+    """Anfang, mittlere Teile, Schluss und stärkster Energieübergang getrennt bewerten."""
+    try:
+        data, rate = sf.read(audio_path, dtype="float32", always_2d=True)
+    except (RuntimeError, OSError) as exc:
+        log.warning("Bewertung: %s nicht lesbar (%s)", audio_path, exc)
+        return []
+    if not len(data) or rate <= 0:
+        return []
+    duration = len(data) / rate
+    span = min(max(1.0, seconds), duration)
+    last = max(0.0, duration - span)
+    starts = [last * x for x in (0.0, 1 / 3, 2 / 3, 1.0)]
+    blocks = len(data) // rate
+    if blocks > 2:
+        # Kanalenergie statt Mono-Summe: gegenphasige Stereosignale dürfen nicht als Stille gelten.
+        energy = np.square(data[:blocks * rate]).reshape(blocks, rate, data.shape[1]).mean(axis=(1, 2))
+        change = np.abs(np.diff(np.log10(energy + 1e-9)))
+        transition = max(0.0, min(last, float(np.argmax(change) + 1) - span / 2))
+        starts.append(transition)
+    os.makedirs(folder, exist_ok=True)
+    saved, positions = [], []
+    for start in sorted(starts):
+        if any(abs(start - old) < span * 0.45 for old in positions):
+            continue
+        a = int(start * rate)
+        piece = data[a:a + int(span * rate)]
+        if not np.any(np.abs(piece) > 1e-6):
+            continue
+        path = os.path.join(folder, f"abschnitt_{len(saved) + 1}.wav")
+        sf.write(path, piece, rate, subtype="FLOAT")
+        saved.append(path)
+        positions.append(start)
+    return saved
+
+
+def aggregate(ratings: list) -> Optional[Rating]:
+    """Schwache Abschnitte zählen mit; fehlende Modellurteile werden nicht als gute Noten ersetzt."""
+    if not ratings or any(r is None for r in ratings):
+        return None
+    fields = ("enjoyment", "usefulness", "complexity", "quality")
+    return Rating(**{field: 0.75 * sum(getattr(r, field) for r in ratings) / len(ratings)
+                    + 0.25 * min(getattr(r, field) for r in ratings) for field in fields})
+

@@ -52,7 +52,7 @@ NEW_150 = ("key_words", "catchy_chorus", "chorus_lift", "jpop_idol_split", "prod
            "style_blend")
 # Neuerungen aus 1.7.0, die die Noten ändern (Platz für die Stimme, Lagen je Sektion, Lautstärke-Bogen und Schluss)
 NEW_170 = ("vocal_room", "section_registers", "dynamic_arc")
-COMPOSITION_EXTRAS = NEW_COMPOSITION + NEW_140 + NEW_150 + NEW_170     # die Tests schalten sie ab (conftest.py)
+COMPOSITION_EXTRAS = NEW_COMPOSITION + NEW_140 + NEW_150 + NEW_170 + ("musical_coherence",)
 
 
 @dataclass
@@ -73,6 +73,7 @@ class SongResult:
     polished_mp3: Optional[str] = None
     versions: dict = field(default_factory=dict)   # {"offvocal" / "acappella": MP3, ohne ffmpeg WAV} (v6 Nr. 4)
     hearing: list = field(default_factory=list)    # hoercheck.Line je Zeile, wenn der Hör-Check lief (1.5.0 St4)
+    warnings: list = field(default_factory=list)
     share_dir: Optional[str] = None            # 1.7.1: wohin Video und YouTube-Ordner kommen; leer = output_dir
 
     @property
@@ -106,6 +107,8 @@ def composition_extras(settings: SongSettings) -> dict:
     "producer": das Produzenten-Profil (produzent.Profile), wenn eins gilt, und "tension": die Spannungskurve
     (spannung.extras), wenn eine gezeichnet ist oder die Stimmung nicht in der Mitte steht."""
     extras = {name: getattr(settings, name) for name in COMPOSITION_EXTRAS if getattr(settings, name)}
+    if "musical_coherence" in extras:
+        extras["singable"] = settings.singable_melody
     if extras.pop("producer_profile", False):
         import produzent
         found = produzent.profile(settings)
@@ -142,6 +145,9 @@ def song_character(tracks: dict) -> dict:
     if plan is not None:
         out["chords"] = {kind: p for kind, p in plan.progressions.items()
                          if kind in ("Verse", "PreChorus", "Chorus", "Bridge")}
+        out["style"] = plan.style.name
+    if tracks.get("melody_features"):
+        out["melody_features"] = tracks["melody_features"]
     return out
 
 
@@ -317,6 +323,10 @@ def _produce(settings: SongSettings, tracks: dict, out: str, report: ProgressFn,
 
     report(0.55, "Rendere Instrumente...")
     result.wav_files = rendering._render_instruments(settings, tracks, out, report)
+    import render_status
+    result.warnings = render_status.warnings(result.wav_files)
+    for warning in result.warnings:
+        log.warning(warning)
     fx_wav = rendering._render_fx(settings, tracks, out, seed) if result.wav_files else None
     if fx_wav:
         result.wav_files["fx"] = fx_wav
@@ -537,7 +547,9 @@ def generate_variants(settings: SongSettings, count: int, parts: tuple = (),
             results.append(result)
             if judge and result is not None and result.mix_wav:
                 # jetzt ausschneiden: die nächste Fassung überschreibt den Mix
-                clips.append((result, rating.excerpt(result.mix_wav, os.path.join(folder, f"{i + 1}.wav"))))
+                clip = rating.excerpts(result.mix_wav, os.path.join(folder, str(i + 1))) \
+                    if settings.musical_coherence else rating.excerpt(result.mix_wav, os.path.join(folder, f"{i + 1}.wav"))
+                clips.append((result, clip))
         if clips:
             report(0.96, "Bewerte die Fassungen...")
             _rate(clips)
@@ -576,7 +588,10 @@ def _rate(clips: list) -> None:
     import history
     import rating
     ready = [(result, clip) for result, clip in clips if clip]
-    for (result, _), found in zip(ready, rating.rate([clip for _, clip in ready])):
+    paths = [(clip if isinstance(clip, list) else [clip]) for _, clip in ready]
+    scores = iter(rating.rate([path for group in paths for path in group]))
+    for (result, _), group in zip(ready, paths):
+        found = rating.aggregate([next(scores, None) for _ in group])
         result.rating = found
         if found and result.history:
             history.set_rating(result.history, found.to_dict())
@@ -731,6 +746,7 @@ def hook_choices(settings: SongSettings, count: int = 3, progress: Optional[Prog
     kind = hook_kind(settings)
     if settings.melody_midi and settings.melody_midi_section == kind:
         raise ValueError(f"Im {kind} singt deine eigene MIDI-Melodie; dort gibt es nichts zu würfeln.")
+    settings = with_taste(settings)
     if settings.seed is None:
         settings = settings.with_updates(seed=new_seed())
     folder = os.path.join(settings.output_dir(), HOOK_FOLDER)
@@ -862,3 +878,4 @@ def _ai_accompaniment(settings: SongSettings, tracks: dict, out: str, seed: int)
     if not accompaniment.accompany(tracks, out, settings.bpm, seed, sections, reuse=settings.reuse_steps) \
             and not accompaniment.available():
         log.info("KI-Begleitung eingeschaltet, aber nicht eingerichtet (Hilfe › Einrichten); die komponierte bleibt.")
+

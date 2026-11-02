@@ -38,7 +38,7 @@ def run_kind(settings: SongSettings, quality: str) -> str:
 
 
 def simple_panel(s: SongSettings, singers: Callable[[], list], on_generate: Callable, on_duel: Callable,
-                 on_build_text: Callable) -> Callable[[], None]:
+                 on_build_text: Callable, on_hooks: Callable = None) -> Callable[[], None]:
     """Baut die einfache Ansicht; Rückgabe: refresh() für Stimmen, Länge und Zeitschätzung."""
     from gui.panels import favorite_voice, hint
 
@@ -88,10 +88,17 @@ def simple_panel(s: SongSettings, singers: Callable[[], list], on_generate: Call
         ui.textarea(placeholder="[Verse]\n…\n[Chorus]\n…").bind_value(s, "lyrics").props("outlined autogrow") \
             .classes("w-full").style("max-height: 16rem; overflow: auto").mark("simple-lyrics")
         with ui.row().classes("w-full items-center gap-2 q-mt-sm"):
+            if on_hooks is not None:
+                ui.button("1. Refrain auswählen", icon="queue_music", on_click=lambda: on_hooks()) \
+                    .props("unelevated no-caps color=secondary").mark("simple-hooks") \
+                    .tooltip("Drei kurze Melodien mit schlichter Begleitung anhören und eine davon nehmen")
             ui.button("Song machen", icon="auto_awesome", on_click=lambda: on_generate()) \
                 .props("unelevated size=lg no-caps color=secondary").classes("col").mark("simple-generate")
             ui.button("Hör-Duell", icon="hearing", on_click=lambda: on_duel()).props("outline no-caps") \
                 .mark("simple-duel").tooltip("Zwei Fassungen blind vergleichen: die App lernt, was dir gefällt")
+        if on_hooks is not None:
+            hint("Wähle zuerst eine Melodie, die dir gefällt. Mit „nehmen“ baust du den Song darum auf. "
+                 "„Song machen“ erzeugt auch direkt einen Song.")
 
     def refresh() -> None:
         names = sorted(set(singers()) | {s.singer})
@@ -165,3 +172,4 @@ def song_info(host, entry, current: SongSettings, names: dict[str, str]) -> None
         with ui.row().classes("w-full justify-end"):
             ui.button("Schließen", on_click=dialog.close).props("flat").mark("song-info-close")
     dialog.open()
+

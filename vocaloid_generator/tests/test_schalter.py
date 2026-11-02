@@ -270,7 +270,7 @@ def test_switching_off_changes_the_finished_vocal(song, name, monkeypatch, tmp_p
 def test_switching_off_takes_the_style_effect_away(name, monkeypatch):
     import importlib
     monkeypatch.setattr(style_fx, "STYLES", importlib.reload(style_fx).STYLES)    # conftest schaltet sie ab
-    s = SongSettings()
+    s = SongSettings(selective_vocals=False)
     assert style_fx.effects_for(STYLE_FX[name], s.with_updates(**{name: False})) != \
         style_fx.effects_for(STYLE_FX[name], s)
 
@@ -310,3 +310,4 @@ def test_the_own_vocal_gets_its_align_switch(monkeypatch, tmp_path):
         s = SongSettings(own_vocal=str(tmp_path / "eigen.wav"), own_vocal_align=align, final_choir=False)
         singing._place_own_vocal(s, {"melody_data": [], "plan": None}, str(tmp_path), str(tmp_path / "v.wav"), None)
     assert seen == [True, False]
+

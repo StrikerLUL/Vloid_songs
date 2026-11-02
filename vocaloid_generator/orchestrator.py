@@ -166,6 +166,15 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
         seen[sec.kind] = seen.get(sec.kind, 0) + 1
         rngs = {inst: dice.section(inst, sec.kind, seen[sec.kind]) for inst in INSTRUMENTS}
         for piece in _pieces(sec):
+            if "musical_coherence" in extras:
+                import ensemble
+                groove = "halftime" if piece.feel == "halftime" else profile.groove(sec.kind)
+                if "anison_grooves" in extras:
+                    groove = anison.groove_for(piece, profile.name, bpm, groove, dice.label("drums"))
+                rhythm_drums = [] if piece.feel == "breakdown" else drum_section(
+                    piece, groove, rngs["drums"], drummer)
+                shared = ensemble.rhythm(piece, rhythm_drums)
+                contexts["bass"]["rhythm"] = shared
             for inst, part in PARTS.items():
                 pattern = _pattern(profile, piece, inst, instrument_styles)
                 for single in (pattern or "").split("+"):
@@ -187,7 +196,8 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
                 groove = "halftime" if piece.feel == "halftime" else profile.groove(sec.kind)
                 if "anison_grooves" in extras:
                     groove = anison.groove_for(piece, profile.name, bpm, groove, dice.label("drums"))
-                events["drums"] += drum_section(piece, groove, rngs["drums"], drummer)
+                events["drums"] += rhythm_drums if "musical_coherence" in extras else \
+                    drum_section(piece, groove, rngs["drums"], drummer)
                 drops.append((piece.start, piece.end, meters.drum_drop(GROOVES.get(groove, {})) if m.native else None))
 
     if "anison_grooves" in extras:
@@ -222,6 +232,13 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
     if tension["thin"]:
         log.info("Spannungskurve: %d Töne der Schmuck-Instrumente fallen in leisen Sektionen weg",
                  spannung.thin(events, tension["thin"]))
+    musical_report = {}
+    if "musical_coherence" in extras:
+        import ensemble
+        from musicality import harmony_scores
+        musical_report = {**harmony_scores(vocal_notes, plan), **ensemble.arrange(plan, events, vocal_notes)}
+        musical_report["ensemble"] = ensemble.score(events, vocal_notes)
+        log.info("Musikalischer Zusammenhang: %s", musical_report)
     _final_chord(plan, events)
     if character is not None:
         import song_character
@@ -264,6 +281,11 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
     tracks["silben"] = syllables
     tracks["plan"] = real
     tracks["character"] = character          # 1.5.0: der Verlauf merkt ihn sich für die Daumen (geschmack.py)
+    tracks["musical_report"] = musical_report
+    if "musical_coherence" in extras:
+        from musicality import melody_features
+        tracks["melody_features"] = {sec.kind: melody_features([n for n in sung_notes if sec.start <= n.start < sec.end])
+                                    for sec in real.sections if sec.has_vocals and sec.occurrence == 1}
     bars = sum(sec.bars for sec in plan.sections) * m.bars_per_bar
     log.info("Song: %d Takte, %.0f Sekunden", bars, real.total_beats * 60 / bpm)
     return tracks
@@ -287,7 +309,8 @@ def _styled_band(band, extras: dict, dice: "Dice", producer=None) -> tuple:
     if "song_character" in extras:
         import song_character
         character = song_character.choose(band.name, dice.label("character"), split="jpop_idol_split" in extras,
-                                          taste=extras.get("taste"), arc="dynamic_arc" in extras)
+                                          taste=extras.get("taste"), arc="dynamic_arc" in extras,
+                                          coherent="musical_coherence" in extras)
         band = song_character.apply(band, character)
         log.info("Charakter: %s", character.describe())
     if producer and producer.sound:
@@ -569,3 +592,4 @@ def _write_simple_midi(path: str, notes: list, program: int, bpm: float, m=meter
     track.notes = notes
     pm.instruments.append(track)
     pm.write(path)
+

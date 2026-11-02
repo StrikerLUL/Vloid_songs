@@ -271,6 +271,9 @@ class SectionMelodyWriter:
         pb = phrase_bars_for(bars, self.plan.bpm, self.sec.bar_beats)
         n_phrases = max(bars // pb, 1)
         syllables = list(syllables) or ["ら"]
+        if "musical_coherence" in self.extras:
+            from musicality import split_text
+            return pb, split_text(syllables[:max_syllables(bars, self.bar_steps)], n_phrases)
         seconds = bars * self.sec.bar_beats * self.plan.seconds_per_beat
         comfortable = SYLLABLES_PER_SECOND.get(self.kind, 3.3) * seconds * SINGING_SHARE
         if self.char is not None:
@@ -461,6 +464,11 @@ class SectionMelodyWriter:
                        reference: Optional[list] = None, words: Optional[list] = None) -> list:
         """Tonhöhen für alle Einsätze. Mit reference werden Takte übernommen, deren Rhythmus gleich ist.
         words: die Silben der Phrase; ihr Tonhöhenakzent lenkt die Richtung der Melodie."""
+        if "musical_coherence" in self.extras and slots:
+            from musicality import phrase_path
+            found = phrase_path(self, slots, phrase_start, role, prev, reference, words)
+            if found:
+                return found
         accents = accent_moves(words or [])
         accents += [0] * (len(slots) - len(accents))
         special = [str(w) in SPECIAL_MORAE for w in (words or [])] + [False] * len(slots)
@@ -832,6 +840,8 @@ def write_vocal_melody(plan: SongPlan, lyrics: dict, rng: random.Random, rerolls
                     sec_notes = _best_of(plan, sec, kind_rng, motifs, words, extras, before)
                 else:
                     sec_notes = SectionMelodyWriter(plan, sec, kind_rng, motifs, extras).write(words)
+                    if "musical_coherence" in extras:
+                        sec_notes = _finish_section(plan, sec_notes, extras)
                 if sec.kind in ("Rap", "Spoken"):
                     _chant(sec_notes)
             written[sec.kind] = (sec, sec_notes)
@@ -843,8 +853,19 @@ def write_vocal_melody(plan: SongPlan, lyrics: dict, rng: random.Random, rerolls
             if own:
                 sec_notes = fit_text(sec_notes, own)
                 log.info("%s %d singt seinen eigenen Text (%d Silben)", sec.kind, sec.occurrence, len(own))
+            if "musical_coherence" in extras and not imported.get(sec.kind):
+                sec_notes = _finish_section(plan, sec_notes, extras)
+                if sec.kind == "Chorus" and sec.is_last_of_kind and "melody_climax" in extras:
+                    from musicality import final_variation
+                    sec_notes = final_variation(plan, sec, sec_notes,
+                                               [n for n in notes if plan.section_at(n.start).kind == "Verse"],
+                                               finish=lambda ns: _finish_section(plan, ns, extras))
         notes.extend(sec_notes)
     composed = [n for n in notes if not imported.get(plan.section_at(n.start).kind)]
+    if "musical_coherence" in extras:
+        # Die Kandidaten wurden bereits vollständig geprüft. Wiederholungen mit eigenem Text oder anderer
+        # Harmonie werden vor dem Einfügen geprüft; keine nachträgliche globale Umschreibung der Gewinner.
+        return notes
     if "melody_climax" in extras:
         _plan_climax(plan, notes, composed)
     _fit_to_chords(plan, composed)
@@ -860,14 +881,29 @@ def _best_of(plan: SongPlan, sec: Section, rng: random.Random, motifs, words: li
     base = rng.getrandbits(64)
     candidates = [SectionMelodyWriter(plan, sec, random.Random(f"{base}:{i}"), motifs, extras).write(words)
                   for i in range(melody_score.CANDIDATES)]
+    coherent = "musical_coherence" in extras
+    if coherent:
+        candidates = [_finish_section(plan, c, extras) for c in candidates]
     targets = None
     if "melody_character" in extras:
         import style_dna
         targets = style_dna.character(plan.style.name).score or None
-    best, points, mean = melody_score.pick(candidates, sec.kind, before, plan.vocal_range[1], sec.bar_beats, targets,
-                                           tuple(extras))
+    args = (candidates, sec.kind, before, plan.vocal_range[1], sec.bar_beats, targets, tuple(extras))
+    best, points, mean = melody_score.pick(*args, plan=plan, taste=extras.get("taste")) if coherent and \
+        isinstance(extras, dict) else melody_score.pick(*args, plan=plan) if coherent else melody_score.pick(*args)
     log.info("Beste Melodie: %s aus %d Fassungen, %.1f Punkte (Schnitt %.1f)", sec.kind, len(candidates), points, mean)
     return candidates[best]
+
+
+def _finish_section(plan, notes, extras):
+    """Alle Korrekturen VOR der Wertung; Text und bewusst gesetzte Spannungen bleiben erhalten."""
+    from musicality import fit_harmony
+    _fit_to_chords(plan, notes)
+    notes = fit_harmony(plan, notes)
+    if not isinstance(extras, dict) or extras.get("singable", True):
+        make_singable(plan, notes)
+    # Die Sprungkorrektur kann einen Akkordton verlassen; den gesamten Klang erneut prüfen.
+    return fit_harmony(plan, notes)
 
 
 def _plan_climax(plan: SongPlan, notes: list, composed: list) -> None:
@@ -1251,3 +1287,4 @@ def required_bars(n_syllables: int, bar_steps: int = BAR_STEPS) -> int:
     while n_syllables > max_syllables(bars, bar_steps):
         bars *= 2
     return bars
+

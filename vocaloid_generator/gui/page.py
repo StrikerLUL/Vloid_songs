@@ -248,6 +248,7 @@ def build() -> None:
                 player = WavePlayer().classes("w-full").mark("player")
                 sung_label = ui.label().classes("text-caption text-grey-5").mark("sung-by")
                 hearing_label = ui.label().classes("text-caption text-grey-5").mark("hearing-check")
+                render_label = ui.label().classes("text-caption text-warning").mark("render-warning")
                 lyrics_view = Karaoke().classes("w-full").mark("karaoke") \
                     .bind_visibility_from(settings, "show_karaoke")
                 stem_row = ui.row().classes("gap-1 q-mt-sm")
@@ -364,7 +365,7 @@ def build() -> None:
                 with ui.tab_panel("Einfach"):
                     refresh_simple = einfach.simple_panel(settings, lambda: _singers(settings),
                                                           lambda: generate(), lambda: open_duel(),
-                                                          lambda: open_text_builder())
+                                                          lambda: open_text_builder(), lambda: hooks())
                 with ui.tab_panel("Song"):
                     panels.song_panel(settings, picker, lambda new: assign(settings, new))
                 with ui.tab_panel("Text"):
@@ -687,6 +688,7 @@ def build() -> None:
         """Den ganzen Song mit dieser Refrain-Melodie erzeugen."""
         settings.seed = choice.settings.seed
         settings.variations = choice.settings.variations
+        settings.taste_snapshot = choice.settings.taste_snapshot
         hook_row.clear()
         await generate(n=1)
 
@@ -1022,6 +1024,10 @@ def build() -> None:
         hearing_label.set_text(text)
         hearing_label.set_visibility(bool(text))
         hearing_label.classes(replace="text-caption " + ("text-warning" if warn else "text-grey-5"))
+        import render_status
+        warnings = result.warnings or render_status.warnings(result.wav_files)
+        render_label.set_text(" · ".join(warnings))
+        render_label.set_visibility(bool(warnings))
         found = media.stems(result)
         stem_row.clear()
         with stem_row:
@@ -1432,3 +1438,4 @@ def _singers(settings: SongSettings) -> list:
         return installed_singers(settings.neutrino_dir())
     except Exception:  # noqa: BLE001
         return []
+

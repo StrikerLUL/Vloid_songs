@@ -157,6 +157,8 @@ class SongSettings(BaseModel):
     motif_folder: str = ""             # Ordner mit MIDI-Melodien (leer = Motive im Datenordner)
     # Melodie 1.3.0, jedes mit Schalter
     best_melody: bool = True           # M1: jede Sektion vielfach schreiben, die Fassung mit den meisten Punkten singt
+    musical_coherence: bool = True     # Phrasen, Harmonie über Notendauern, gemeinsame Band und geprüfte Klangsets
+    selective_vocals: bool = True      # Stimme möglichst natürlich lassen; zusätzliche Eingriffe nur bei Bedarf
     melody_pickups: bool = True        # M2: Auftakte vor dem Takt und vorgezogene Töne über den Taktstrich (nur 4/4)
     melody_tensions: bool = True       # M3: Vorhalte und lange Refrain-Töne auf None oder großer Septime
     melody_climax: bool = True         # M4: der höchste Ton des Songs kommt einmal, am Ende des letzten Refrains
@@ -602,6 +604,10 @@ class SongSettings(BaseModel):
                 except (OSError, json.JSONDecodeError) as e:
                     log.warning("Einstellungen in %s nicht lesbar (%s), nutze Standardwerte.", candidate, e)
                     return cls()
+                if "verlauf" in data:
+                    # Gespeicherte Songs aus älteren Versionen behalten ihre Kompositions- und Gesangskette.
+                    data.setdefault("musical_coherence", False)
+                    data.setdefault("selective_vocals", False)
                 if "channels" in data:
                     return cls._validate_leniently(data)
                 return cls.from_flat(data)
@@ -632,3 +638,4 @@ def _existing_or_default(configured: str, default: str, label: str) -> str:
     if configured:
         log.warning("%s nicht gefunden: %s. Nutze %s", label, configured, default)
     return default
+

@@ -155,6 +155,9 @@ def piano(pattern: str, sec: Section, plan: SongPlan, rng: random.Random, ctx: d
 
 # ── Bass ─────────────────────────────────────────────────────────────────────────
 def bass(pattern: str, sec: Section, plan: SongPlan, rng: random.Random, ctx: dict) -> list:
+    if ctx.get("rhythm") is not None and pattern != "walking":
+        from ensemble import bass_line
+        return bass_line(pattern, sec, plan, ctx)
     out = []
     prev = ctx.get("bass")
 
@@ -813,3 +816,4 @@ def _solo_ending(sec: Section, start: float, prev: int, lo: int, hi: int) -> lis
 
 PARTS = {"piano": piano, "bass": bass, "guitar": guitar, "strings": strings, "synth": synth, "brass": brass,
          "bells": bells, "choir": choir, "counter": counter, "perc": perc}
+

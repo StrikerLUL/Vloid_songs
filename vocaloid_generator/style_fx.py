@@ -39,6 +39,11 @@ def effects_for(style: str, settings) -> dict:
     switches = {"telephone": settings.telephone_fx, "stutter": settings.stutter_fx,
                 "hard_tune": settings.hard_tune, "formant": settings.formant_fx}
     chosen = {name: value for name, value in wanted.items() if switches.get(name)}
+    if getattr(settings, "selective_vocals", False) and style != "Hyperpop":
+        for name in ("telephone", "stutter"):
+            chosen.pop(name, None)
+        if abs(chosen.get("formant", 1.0) - 1.0) < 0.12:
+            chosen.pop("formant", None)
     if "formant" in chosen and getattr(settings, "gentle_reshape", False) and \
             abs(chosen["formant"] - 1.0) < FORMANT_MIN_SHIFT:
         del chosen["formant"]
@@ -171,3 +176,4 @@ def formant(path: str, ratio: float) -> bool:
         out *= 0.99 / peak
     sf.write(path, np.repeat(out[:, None], audio.shape[1], axis=1).astype(np.float32), rate, subtype="FLOAT")
     return True
+

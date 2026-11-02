@@ -74,7 +74,8 @@ async def test_the_duel_asks_blind_and_takes_the_winners(user, tmp_path, monkeyp
     user.find(marker="duel-count").elements.pop().value = 5
     user.find(marker="duel-start").click()
     for number in range(1, 6):
-        await user.should_see(f"Duell {number} von 5", retries=50)
+        # „Duell 1 von 5 entsteht …“ steht schon da, bevor die Knöpfe kommen; erst der Titel des Duells hat sie
+        await user.should_see(marker="duel-title", content=f"Duell {number} von 5", retries=50)
         user.find(marker="duel-b" if number % 2 else "duel-a").click()      # 1, 3, 5: ohne; 2, 4: mit
     await user.should_see(marker="duel-result", retries=50)
     fields = [field for field, _ in made]
@@ -93,10 +94,10 @@ async def test_the_duel_can_be_stopped_and_inaudible_switches_hide(user, tmp_pat
     await user.should_see(marker="duel-start")
     user.find(marker="duel-groups").elements.pop().value = ["mix"]
     user.find(marker="duel-start").click()
-    await user.should_see("Duell 1 von", retries=50)
+    await user.should_see(marker="duel-title", content="Duell 1 von", retries=50)
     first = hoer_duell.plan(SongSettings(), ["mix"])[0].field
     user.find(marker="duel-gleich").click()
-    await user.should_see("Duell 2 von", retries=50)
+    await user.should_see(marker="duel-title", content="Duell 2 von", retries=50)
     user.find(marker="duel-stop").click()
     await user.should_see(marker="duel-result", retries=50)
     user.find(marker="duel-apply").click()

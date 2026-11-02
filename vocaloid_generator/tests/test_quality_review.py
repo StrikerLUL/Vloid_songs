@@ -15,6 +15,25 @@ import singing
 from settings import SongSettings
 
 
+@pytest.mark.parametrize("style", ["J-Pop Energy", "Ballade", "City Pop", "Rock"])
+@pytest.mark.parametrize("meter", ["4/4", "3/4", "6/8"])
+def test_full_coherent_composition_exports_reproducible_midi(style, meter, tmp_path, monkeypatch):
+    monkeypatch.setattr(pipeline, "COMPOSITION_EXTRAS", pipeline.NEW_COMPOSITION + pipeline.NEW_140 +
+                        pipeline.NEW_150 + pipeline.NEW_170 + ("musical_coherence",))
+    settings = SongSettings(style=style, meter=meter, seed=42, output_ordner=str(tmp_path),
+                            active_sections=["Verse", "Chorus"], section_bars={"Verse": 4, "Chorus": 4},
+                            lyrics="[Verse]\nきみのこえがきこえるよ\n[Chorus]\nほしのひかりをおいかけて")
+    first, _ = pipeline.compose(settings)
+    second, _ = pipeline.compose(settings)
+    snapshot = lambda tracks: [(n.start, n.end, n.pitch) for n in tracks["vocal_melody"]]
+    assert snapshot(first) == snapshot(second)
+    assert first["melody_features"] and first["musical_report"]
+    assert 0 <= first["musical_report"]["ensemble"] <= 1
+    assert first["bass"] and first["drums"]
+    assert (tmp_path / "vocal_melody.mid").exists()
+    assert all(n.end > n.start for n in first["vocal_melody"])
+
+
 def test_review_covers_beginning_middle_end_and_antiphase_stereo(tmp_path):
     rate = 8000
     length = 100

@@ -61,7 +61,8 @@ jobs:
           $broken = Join-Path $env:APPDATA "uv\python\cpython-3.13.0-windows-x86_64-none"
           New-Item -ItemType Directory -Force $broken | Out-Null
           Copy-Item "$env:SystemRoot\System32\where.exe" (Join-Path $broken "python.exe")
-          $out = uv python find --managed-python 2>&1 | Out-String
+          # Explicitly query the broken 3.13, independent of the project's 3.12 pin.
+          $out = uv python find 3.13 --managed-python 2>&1 | Out-String
           $out
           if ($out -notmatch "Failed to (inspect|query) Python interpreter") {
             Write-Error "uv stolpert nicht über das kaputte Python, der Test prüft so nichts"; exit 1

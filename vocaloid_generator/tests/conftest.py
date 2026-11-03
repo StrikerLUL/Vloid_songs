@@ -140,6 +140,13 @@ def isolated_references(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def without_installed_neutrino(tmp_path, monkeypatch):
+    """Unit tests use an explicit fake engine, never an installed multi-GB voice model."""
+    import config
+    monkeypatch.setattr(config, "NEUTRINO_PFAD", str(tmp_path / "neutrino-not-installed"))
+
+
+@pytest.fixture(autouse=True)
 def without_voicevox(monkeypatch):
     """Ein VOICEVOX, das zufällig auf dem Rechner läuft, singt in den Tests nicht mit."""
     import voicevox

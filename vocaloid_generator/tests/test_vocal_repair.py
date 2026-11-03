@@ -283,4 +283,3 @@ def test_project_reopening_recaptures_repair_metadata(tmp_path, singing_neutrino
     assert pipeline.list_vocal_phrases(reopened)
     assert reopened.repair_sources == repair.source_signature(reopened)
     assert vocal_check.read(reopened.output_dir)["engine"] == "NEUTRINO"
-

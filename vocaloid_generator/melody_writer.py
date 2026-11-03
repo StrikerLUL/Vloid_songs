@@ -551,8 +551,11 @@ class SectionMelodyWriter:
             if role in ("H", "A", "P") and reference and same_rhythm:
                 pitches = [p for _, p in reference]       # die Phrase kehrt genau wieder
             else:
+                # Auch bei zusätzlichen Silben/Auftakten bleiben gemeinsame Einsätze der Hook erhalten.
+                # Die Phrasensuche passt sie an den neuen Akkord und die Antwort-Kadenz an.
+                keep_hook = self.kind == "Chorus" and role in ("H", "H2") and "musical_coherence" in self.extras
                 pitches = self.phrase_pitches(slots, phrase_start, role, prev,
-                                              reference if same_rhythm else None, chunk)
+                                              reference if same_rhythm or keep_hook else None, chunk)
                 if role == "H":
                     pitches = self.sequence_bars(slots, pitches, phrase_start)
             written.setdefault(role, list(zip(slots, pitches)))

@@ -255,6 +255,23 @@ def build() -> None:
                 compare_row = ui.row().classes("items-center gap-1 q-mt-sm")
                 hook_row = ui.row().classes("items-center gap-1 q-mt-sm").mark("hook-choices")
                 hook_row.set_visibility(False)
+            with ui.card().classes("w-full bg-grey-9").mark("phrase-repair-card"):
+                ui.label("Eine Gesangsphrase reparieren").classes("text-subtitle1")
+                phrase_select = ui.select({}, label="Phrase", on_change=lambda: select_phrase()) \
+                    .classes("w-full").mark("repair-phrase")
+                phrase_status = ui.label("Erst einen Song mit Gesang erzeugen.") \
+                    .classes("text-caption").mark("repair-status")
+                with ui.row().classes("w-full items-center gap-4"):
+                    repair_voice = ui.select([], label="Stimme").classes("col").mark("repair-voice")
+                    repair_shift = ui.number("StyleShift", value=0, min=-6, max=6, step=1, precision=0) \
+                        .classes("w-32").mark("repair-shift")
+                repair_button = ui.button("Nur diese Phrase neu singen", icon="record_voice_over",
+                                          on_click=lambda: repair_phrase()) \
+                    .props("unelevated no-caps color=secondary").mark("repair-phrase-start")
+                panels.hint("Die ausgewählte Zeile neu singen; Stimme und StyleShift lassen sich mit NEUTRINO "
+                            "ändern. Der bisherige Song bleibt erhalten.")
+                for control in (phrase_select, repair_voice, repair_shift, repair_button):
+                    control.set_enabled(False)
             with ui.card().classes("w-full bg-grey-9") as notes_card:
                 with ui.row().classes("w-full items-center gap-1"):
                     ui.label("Noten").classes("text-subtitle1 q-mr-md")
@@ -696,6 +713,99 @@ def build() -> None:
         await generate(n=1)
 
     # ── Gesang bearbeiten ─────────────────────────────────────────────────────────
+    repair_phrases: list = []
+
+    def select_phrase() -> None:
+        result = state["result"]
+        phrase = next((p for p in repair_phrases if p.index == phrase_select.value), None)
+        ready = phrase is not None and result is not None and not job.running
+        for control in (repair_voice, repair_shift, repair_button):
+            control.set_enabled(ready)
+        if not ready:
+            return
+        source = result.settings
+        if source.draft or source.own_vocal or source.duet_singer or source.group_vocals \
+                or phrase.section in ("Rap", "Spoken"):
+            for control in (repair_voice, repair_shift, repair_button):
+                control.set_enabled(False)
+            phrase_status.set_text("Nur einzelne synthetisierte Gesangsphrasen lassen sich reparieren; "
+                                   "Entwurf, Aufnahme, Duett, Gruppe, Rap und Sprechen sind ausgeschlossen.")
+            return
+        phrase_status.set_text("Phrase auswählen, dann Stimme und Klang einstellen." if source.vocal_engine == "NEUTRINO"
+                               else "Diese Phrase mit derselben Stimme neu singen; Stimmwechsel braucht NEUTRINO.")
+        for control in (repair_voice, repair_shift):
+            control.set_enabled(source.vocal_engine == "NEUTRINO")
+        spb = 60 / source.bpm
+        fix = next((v for k, v in sorted(source.phrase_fixes.items(), key=lambda item: float(item[0]))
+                    if phrase.start - 0.05 <= float(k) * spb <= phrase.end + 0.05), {})
+        singers = sorted(set(_singers(source)) | {source.singer} | {fix.get("singer") or source.singer})
+        repair_voice.set_options(singers, value=fix.get("singer") or source.singer)
+        repair_shift.set_value(fix.get("style_shift", source.style_shift))
+
+    async def show_phrases(result) -> None:
+        nonlocal repair_phrases
+        repair_phrases = []
+        phrase_select.set_options({}, value=None)
+        phrase_select.set_enabled(False)
+        select_phrase()
+        try:
+            found = await run.io_bound(pipeline.list_vocal_phrases, result) or []
+        except ValueError as e:
+            phrase_status.set_text(str(e))
+            return
+        except Exception:
+            log.exception("Gesangsphrasen konnten nicht geladen werden")
+            phrase_status.set_text("Gesangsphrasen konnten nicht geladen werden. Der Song kann weiter angehört werden.")
+            return
+        if state["result"] is not result:
+            return
+        repair_phrases = found
+        options = {p.index: f"{p.index + 1}. {labels.SECTIONS.get(p.section, p.section)} · "
+                   f"{p.start:.1f}–{p.end:.1f} s · {p.text}" for p in repair_phrases}
+        phrase_select.set_options(options, value=repair_phrases[0].index if repair_phrases else None)
+        phrase_select.set_enabled(bool(repair_phrases) and not job.running)
+        phrase_status.set_text("Phrase auswählen, dann Stimme und Klang einstellen." if repair_phrases else
+                               "Für diesen Song sind keine reparierbaren Gesangsphrasen vorhanden.")
+        select_phrase()
+
+    async def repair_phrase() -> None:
+        if job.blocked():
+            return
+        result = state["result"]
+        phrase = next((p for p in repair_phrases if p.index == phrase_select.value), None)
+        if result is None or phrase is None:
+            return
+        source = result.settings
+        if source.draft or source.own_vocal or source.duet_singer or source.group_vocals \
+                or phrase.section in ("Rap", "Spoken"):
+            return
+        fix = {"style_shift": int(repair_shift.value or 0), "singer": repair_voice.value or source.singer}
+        current = source.model_copy(deep=True)
+        if source.vocal_engine == "NEUTRINO":
+            spb = 60 / source.bpm
+            fixes = {k: v for k, v in source.phrase_fixes.items()
+                     if not phrase.start - 0.05 <= float(k) * spb <= phrase.end + 0.05}
+            current.phrase_fixes = {**fixes, edit_key(phrase.start / spb): fix}
+        job.start()
+        set_busy(True)
+        try:
+            repaired = await run.io_bound(pipeline.repair_vocal_phrase, current, result, phrase.index, job.report)
+            if repaired is not None:
+                state["result"] = repaired
+                settings.phrase_fixes = repaired.settings.phrase_fixes
+                await show_result(repaired)
+                show_history()
+                job.report(1.0, "Phrase repariert")
+        except cancel.Cancelled:
+            job.report(job.fraction, CANCELLED)
+            ui.notify("Reparatur abgebrochen. Der bisherige Song bleibt erhalten.", type="warning")
+        except Exception as e:
+            log.exception("Phrase reparieren fehlgeschlagen")
+            ui.notify(f"Phrase konnte nicht repariert werden: {e}", type="negative", multi_line=True)
+        finally:
+            job.running = False
+            set_busy(False)
+
     undo_steps: list = []       # (Änderungen vorher, Längen vorher, der Ton vorher) für Strg+Z
 
     def remember(start: float) -> None:
@@ -748,10 +858,11 @@ def build() -> None:
         if found is None:
             return
         start, end = found
-        spb = 60.0 / result.settings.bpm
-        same = [k for k in settings.phrase_fixes if start - 0.05 <= float(k) * spb <= end + 0.05]
-        before = settings.phrase_fixes.get(same[0], {}) if same else {}
-        singers = sorted(set(_singers(settings)) | {settings.singer})
+        source = result.settings
+        spb = 60.0 / source.bpm
+        same = [k for k in source.phrase_fixes if start - 0.05 <= float(k) * spb <= end + 0.05]
+        before = source.phrase_fixes.get(same[0], {}) if same else {}
+        singers = sorted(set(_singers(source)) | {source.singer} | {before.get("singer") or source.singer})
 
         def keep(fix: Optional[dict]) -> None:
             fixes = {k: v for k, v in settings.phrase_fixes.items() if k not in same}
@@ -762,16 +873,23 @@ def build() -> None:
             show_edits()
 
         async def sing() -> None:
-            keep({"style_shift": int(shift.value), "singer": "" if voice.value == settings.singer else voice.value})
-            await resing()
+            phrase = next((p for p in repair_phrases if p.start - 0.05 <= start <= p.end + 0.05), None)
+            if phrase is None:
+                ui.notify("Für diesen Song ist keine einzelne Gesangsphrase reparierbar.", type="warning")
+                return
+            phrase_select.set_value(phrase.index)
+            repair_voice.set_options(sorted(set(singers) | {voice.value}), value=voice.value)
+            repair_shift.set_value(shift.value)
+            dialog.close()
+            await repair_phrase()
 
         with dialog_host, ui.dialog() as dialog, ui.card().classes("w-96"):
             ui.label(f"Phrase bei {start:.1f} s neu singen").classes("text-h6")
             with ui.row().classes("w-full items-center gap-4"):
                 ui.label("StyleShift").classes("w-24")
-                shift = ui.slider(min=-6, max=6, step=1, value=before.get("style_shift", settings.style_shift)) \
+                shift = ui.slider(min=-6, max=6, step=1, value=before.get("style_shift", source.style_shift)) \
                     .props("label markers").classes("col").mark("phrase-shift")
-            voice = ui.select(singers, value=before.get("singer") or settings.singer, label="Stimme") \
+            voice = ui.select(singers, value=before.get("singer") or source.singer, label="Stimme") \
                 .classes("w-full").mark("phrase-singer")
             panels.hint("Nur diese Phrase singt NEUTRINO neu, der Rest des Gesangs bleibt, wie er ist. Minus = dunkler "
                         "und ruhiger, plus = heller und kräftiger.")
@@ -1016,6 +1134,7 @@ def build() -> None:
                 .props("flat round dense").mark("compare-close")
 
     async def show_result(result) -> None:
+        await show_phrases(result)
         song_label.set_text(("Entwurf · " if result.settings.draft else "") + describe(result.settings))
         full_button.set_visibility(result.settings.draft)
         lyrics_view.show(await run.io_bound(media.lyrics, result) or [])
@@ -1124,6 +1243,11 @@ def build() -> None:
 
     # ── Fortschritt, Protokoll, Speichern ──────────────────────────────────────────
     def set_busy(busy: bool) -> None:
+        phrase_select.set_enabled(not busy and bool(repair_phrases))
+        for control in (repair_voice, repair_shift, repair_button):
+            control.set_enabled(not busy and phrase_select.value is not None)
+        if not busy:
+            select_phrase()
         stop_button.set_visibility(busy)
         stop_button.set_enabled(True)
         if not busy:

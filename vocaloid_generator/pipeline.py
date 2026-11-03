@@ -76,6 +76,9 @@ class SongResult:
     warnings: list = field(default_factory=list)
     share_dir: Optional[str] = None            # 1.7.1: wohin Video und YouTube-Ordner kommen; leer = output_dir
 
+    repair_sources: dict = field(default_factory=dict, repr=False, compare=False)
+    repair_tracks: Optional[dict] = field(default=None, repr=False, compare=False)
+
     @property
     def audio(self) -> Optional[str]:
         """Der fertige Song: die MP3, ohne ffmpeg die WAV."""
@@ -312,6 +315,8 @@ def _produce(settings: SongSettings, tracks: dict, out: str, report: ProgressFn,
         _ai_accompaniment(settings, tracks, out, seed)
     result.midi_files = {inst: os.path.join(out, f"{inst}.mid") for inst in INSTRUMENTS if tracks.get(inst)}
 
+    import copy
+    result.repair_tracks = copy.deepcopy(tracks)
     _write_ust(settings, tracks, out)
     _write_karaoke(settings, tracks, out)
     report(0.30, "Synthetisiere Gesang...")
@@ -378,6 +383,8 @@ def _produce(settings: SongSettings, tracks: dict, out: str, report: ProgressFn,
         if entry:
             import project
             project.keep_map(out, entry.audio)          # 1.7.1: fürs Video aus dem Verlauf (from_history)
+    from vocal_repair import source_signature
+    result.repair_sources = source_signature(result)
     return result
 
 
@@ -879,3 +886,14 @@ def _ai_accompaniment(settings: SongSettings, tracks: dict, out: str, seed: int)
             and not accompaniment.available():
         log.info("KI-Begleitung eingeschaltet, aber nicht eingerichtet (Hilfe › Einrichten); die komponierte bleibt.")
 
+def list_vocal_phrases(result: SongResult) -> list:
+    """Selectable lead phrases; indices are zero based and times are seconds."""
+    from vocal_repair import list_phrases
+    return list_phrases(result)
+
+
+def repair_vocal_phrase(settings: SongSettings, result: SongResult, index: int,
+                        progress: Optional[ProgressFn] = None, keep_history: bool = True) -> SongResult:
+    """Repair one lead phrase without composing or rendering the band. See vocal_repair."""
+    from vocal_repair import repair_phrase
+    return repair_phrase(settings, result, index, progress, keep_history)

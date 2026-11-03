@@ -1,4 +1,16 @@
-# Testliste für Vloid Songs 1.7.2
+# Testliste für Vloid Songs 1.8.0
+
+## Neu in 1.8: gezielte Reparatur und Vergleich
+
+- [ ] Einen kurzen Song mit NEUTRINO erzeugen. Unter dem Player eine Phrase anhand von Text und Zeit auswählen,
+      StyleShift ändern und „Phrase neu singen“ wählen. Die neue Fassung hören; der ursprüngliche Song bleibt im Verlauf.
+- [ ] Die übrigen Gesangsphrasen und die Band mit dem Original vergleichen: keine ungewollten Änderungen.
+- [ ] Während einer Reparatur abbrechen. Das Original muss weiterhin spielen; erneut reparieren muss funktionieren.
+- [ ] Eine Fassung aus dem Verlauf öffnen und erneut eine einzelne Phrase reparieren.
+- [ ] In der einfachen Ansicht einen Song erstellen, dann in die Profi-Ansicht wechseln: Text und Stimme bleiben.
+- [ ] Ersten und letzten Refrain vergleichen. Bei einem Breakdown steigt die volle Band erst nach der Pause ein.
+- [ ] Auf einem Windows ohne vorherige Installation die Setup.exe installieren, starten und deinstallieren;
+      eigene Songs und Einstellungen müssen erhalten bleiben.
 
 Etwa zwei Stunden auf deinem PC, davon viel Warten. 1.1 bis 1.6 sind noch nicht ganz getestet, deshalb stehen
 ihre Punkte (A bis M) weiter hier; neu in 1.7 ist Teil N, und der ist der wichtigste. Wenig Zeit: A, B, C und N.
@@ -10,7 +22,7 @@ genannten Schalter aus erzeugen und im Tab Verlauf mit A und B hin- und herschal
 
 ## A. Installieren (5 Minuten)
 
-- [ ] `VloidSongs-Setup-1.7.2.exe` von der Release-Seite starten, durchklicken. Am Ende startet die App von selbst.
+- [ ] `VloidSongs-Setup-1.8.0.exe` von der Release-Seite starten, durchklicken. Am Ende startet die App von selbst.
 - [ ] Im Startmenü gibt es „Vloid Songs“, und es startet die App.
 - [ ] `Dokumente\Vloid Songs` gibt es, mit `Songs` und `Einstellungen.json`.
 - [ ] Hattest du vorher den entpackten Ordner: In Einrichten unter „Deine Daten“ den alten Ordner wählen,

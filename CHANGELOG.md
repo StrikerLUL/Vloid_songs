@@ -2,7 +2,18 @@
 
 Jede Version hat hier einen Abschnitt. Die App zeigt ihn einmal nach einem Update (Hilfe › Was ist neu).
 
-## Unveröffentlicht – musikalischer Zusammenhang
+## 1.8.0
+
+- **Phrase reparieren:** direkt unter dem Player eine Gesangsphrase mit Zeit und Text auswählen. Nur sie mit
+  anderer NEUTRINO-Stimme oder anderem StyleShift neu singen; die bisherige Fassung bleibt erhalten.
+- **Refrain und einfache Ansicht:** Refrain-Hooks und Steigerung gezielter erhalten; die einfache Ansicht führt
+  direkt zu Text, Stimme und Song, die Detailregler bleiben in der Profi-Ansicht.
+- **Vergleichssongs:** feste Stile und Seeds, optionale WAV-Vorschauen und Messwerte mit Vergleich zu einem
+  gespeicherten Bericht. Das ergänzt die Hörabnahme, ersetzt sie aber nicht.
+- **Installation:** Python 3.12 für den Quellcode-Start festgelegt und die Mindestversion auf 3.11 berichtigt;
+  die gesperrten aktuellen Abhängigkeiten unterstützen 3.10 nicht mehr. Zusätzliche Installationsprüfungen unter Windows.
+
+**Musikalischer Zusammenhang** (bisher unveröffentlicht):
 
 - Ganze Phrasen suchen und Kandidaten erst nach Harmonie- und Singbarkeitskorrekturen auswählen.
 - Gehaltene Töne über Akkordwechsel prüfen; Textgrenzen erhalten und kurze Texte nicht künstlich wiederholen.

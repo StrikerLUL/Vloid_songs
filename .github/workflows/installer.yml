@@ -2,7 +2,7 @@ name: Installer
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'codex/**']
   pull_request:
 
 jobs:
@@ -71,21 +71,37 @@ jobs:
         shell: pwsh
         run: |
           $setup = Get-ChildItem installer/Output/*.exe | Select-Object -First 1
-          $target = Join-Path $env:RUNNER_TEMP "VloidSongs"
+          $target = Join-Path $env:RUNNER_TEMP "Clean Install\Vloid Songs"
+          $env:UV_CACHE_DIR = Join-Path $env:RUNNER_TEMP "installer-empty-cache"
+          $env:VLOID_DATEN = Join-Path $env:RUNNER_TEMP "installer-user-data"
+          $songs = Join-Path $env:VLOID_DATEN "Songs"
+          New-Item -ItemType Directory -Force $songs | Out-Null
+          $sentinel = Join-Path $songs "preserve-user-song.txt"
+          $sentinelContent = "Existing user song: preserve through install and uninstall."
+          [System.IO.File]::WriteAllText($sentinel, $sentinelContent)
+          $log = Join-Path $env:RUNNER_TEMP "installer.log"
           # Wie bei Striker nach 1.2.0: Die automatische Bewertung ist eingerichtet, aber ihr fehlt requests. Das Setup
           # ergänzt sie (setup_bewertung.py --ergaenzen); hier ist sie leer, also lädt es alle ihre Pakete.
           $bewertung = Join-Path $target "tools\bewertung\venv"
           $mitgebracht = (Resolve-Path installer/python/python.exe).Path
           uv venv $bewertung --python $mitgebracht
           if ($LASTEXITCODE -ne 0) { exit 1 }
-          Start-Process $setup.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=$target", "/TASKS=" -Wait
+          $install = Start-Process $setup.FullName -WindowStyle Hidden -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "`"/DIR=$target`"", "/TASKS=", "`"/LOG=$log`"" -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Setup failed: $($install.ExitCode); see $log" }
+          if (-not (Test-Path $sentinel) -or [System.IO.File]::ReadAllText($sentinel) -cne $sentinelContent) {
+            throw "Setup changed the existing user song"
+          }
           foreach ($file in "vocaloid_generator\app.py", "uv\uv.exe", "python\python.exe", "Vloid Songs starten.bat", ".venv\Scripts\python.exe") {
             if (-not (Test-Path (Join-Path $target $file))) { Write-Error "$file fehlt nach dem Installieren"; exit 1 }
           }
           $cfg = Get-Content (Join-Path $target ".venv\pyvenv.cfg") -Raw
           $cfg
           if ($cfg -notmatch [regex]::Escape((Join-Path $target "python"))) { Write-Error "Die Umgebung nimmt nicht das mitgebrachte Python"; exit 1 }
-          & (Join-Path $target ".venv\Scripts\python.exe") -c "import nicegui, pedalboard, pretty_midi; print('Bibliotheken da')"
+          Push-Location $target
+          & (Join-Path $target ".venv\Scripts\python.exe") -I -c "import nicegui, pedalboard, pretty_midi, numpy, scipy, soundfile; print('Bibliotheken da')"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          & (Join-Path $target "uv\uv.exe") pip check --python (Join-Path $target ".venv\Scripts\python.exe")
+          Pop-Location
           if ($LASTEXITCODE -ne 0) { exit 1 }
           # So legen die setup_….py-Skripte die Umgebungen der Modelle an (Demucs, Bewertung, KI-Begleitung)
           $python = & (Join-Path $target ".venv\Scripts\python.exe") -c "import sys; sys.path.insert(0, r'$target\vocaloid_generator'); import config; print(config.venv_python())"
@@ -94,11 +110,26 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit 1 }
           & (Join-Path $bewertung "Scripts\python.exe") -c "import requests, audiobox_aesthetics.infer; print('Bewertung ergaenzt')"
           if ($LASTEXITCODE -ne 0) { Write-Error "Das Setup hat der Bewertung requests nicht nachgeladen"; exit 1 }
-          Start-Process (Join-Path $target "unins000.exe") -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES" -Wait
+          $uninstall = Start-Process (Join-Path $target "unins000.exe") -WindowStyle Hidden -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES" -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0) { throw "Uninstall failed: $($uninstall.ExitCode)" }
+          if (-not (Test-Path $sentinel) -or [System.IO.File]::ReadAllText($sentinel) -cne $sentinelContent) {
+            throw "Uninstall changed the existing user song"
+          }
+          foreach ($file in "vocaloid_generator\app.py", ".venv\Scripts\python.exe") {
+            if (Test-Path (Join-Path $target $file)) { throw "$file remains after uninstall" }
+          }
+      - name: Installationsprotokoll sichern
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-verification-log
+          path: ${{ runner.temp }}/installer.log
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
           name: VloidSongs-Setup-${{ steps.version.outputs.version }}
           path: installer/Output/*.exe
+          if-no-files-found: error
       # Nach einem Merge in main: gibt es zur Version in version.py noch kein Release, entsteht es hier, mit der
       # Setup.exe und dem Abschnitt aus CHANGELOG.md. Danach findet „Nach Update suchen“ in der App die neue Version.
       - name: Release veröffentlichen

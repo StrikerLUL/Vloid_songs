@@ -1,20 +1,18 @@
 # Vloid Songs
 
-Auf dem Entwicklungsstand: [Musikalischer Zusammenhang](MUSIKQUALITAET.md) beschreibt die gemeinsame Prüfung von
+[Musikalischer Zusammenhang](MUSIKQUALITAET.md) beschreibt die gemeinsame Prüfung von
 Melodie und Harmonie, die abgestimmte Band, natürliche Stimme und den Ablauf mit Refrainauswahl.
 
 Erzeugt komplette Vocaloid-Songs auf Knopfdruck: Akkorde, Bass, Schlagzeug, Melodie und Begleitung, Gesang mit NEUTRINO oder VOICEVOX (oder einer lokalen Vorschau-Stimme), Mix mit Kompressor und Limiter und am Ende eine fertige MP3.
 
-Läuft unter Windows. Version 1.7.2 (1.7.0 mit reparierten Video-Knöpfen, und das Video bricht nicht mehr mit einem IndexError ab): das Musikvideo läuft im Takt der Silben und zeigt Namen, Tonart und Akkorde des
-fertigen Songs, das Bild ist ruhiger und schärfer; im Refrain hat die Stimme mehr Platz, lange Töne schwingen, Strophe
-und Refrain liegen in eigener Lage, und ruhige Songs haben einen Lautstärke-Bogen. Was neu ist, steht in der
-[Anleitung › Neu in 1.7](ANLEITUNG.md#neu-in-17), was 1.7.1 und 1.7.2 beheben im [Changelog](CHANGELOG.md).
+Läuft unter Windows. Version 1.8.0: einzelne Gesangsphrasen gezielt reparieren, Refrain-Hooks erhalten und
+Klangänderungen mit festen Vergleichssongs prüfen. Alle Änderungen stehen im [Changelog](CHANGELOG.md).
 
 | Zum Lesen | Was drinsteht |
 | --- | --- |
 | [ANLEITUNG.md](ANLEITUNG.md) | Erste Schritte, was die App kann, jeder Schalter, alle Details und die Kommandozeile (in der App: Hilfe › Erste Schritte) |
 | [FEHLERBEHEBUNG.md](FEHLERBEHEBUNG.md) | wenn etwas nicht klappt (Hilfe › Fehlerbehebung) |
-| [TESTLISTE.md](TESTLISTE.md) | der Praxistest für 1.7.2 (mit den Punkten aus 1.1 bis 1.6) |
+| [TESTLISTE.md](TESTLISTE.md) | der Praxistest einschließlich der neuen Funktionen aus 1.8 |
 | [CHANGELOG.md](CHANGELOG.md) | was in jeder Version neu ist |
 | [CREDITS.md](CREDITS.md) | wessen Arbeit drinsteckt, mit Lizenzen |
 
@@ -35,7 +33,8 @@ uv sync
 
 `uv sync` legt im Projektordner einen eigenen Ordner `.venv` mit allen Bibliotheken an. Die Python-Installation auf dem Rechner und andere Projekte bleiben unberührt.
 
-Ohne uv geht es auch mit pip (Python 3.10 bis 3.12). Auch dann in einer eigenen Umgebung installieren, damit pip keine Versionen anderer Projekte ändert:
+Die Datei `.python-version` wählt Python 3.12. Ohne uv geht es auch mit pip (Python 3.12 empfohlen, mindestens 3.11).
+Auch dann in einer eigenen Umgebung installieren, damit pip keine Versionen anderer Projekte ändert:
 
 ```powershell
 python -m venv .venv

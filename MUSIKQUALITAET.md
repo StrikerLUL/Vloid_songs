@@ -51,6 +51,18 @@ Der Vergleich verwendet vier Stile und fünf Seeds, jeweils mit bisheriger und g
 nachträglich veränderte Gewinner, überlappende Gesangsnoten und die Harmoniewertung über vollständige Notendauern.
 Die Messwerte sind technische Regressionen und ersetzen keinen Hörvergleich.
 
+Für hörbare, reproduzierbare Melodie-Vorschauen und einen Vergleich gegen einen gespeicherten Bericht:
+
+```powershell
+uv run python scripts/benchmark_music.py --seeds 2 --audio-dir output/vergleich-a --output output/vergleich-a.json
+uv run python scripts/benchmark_music.py --seeds 2 --audio-dir output/vergleich-b --baseline output/vergleich-a.json --output output/vergleich-b.json
+```
+
+Die WAV-Dateien verwenden einen festen Synth-Klang und vergleichen die Melodie, nicht die fertige Produktion.
+Der Bericht enthält RMS, Peak, Clipping-Anteil, spektralen Schwerpunkt und Audio-Prüfsummen sowie numerische
+Abweichungen zur Vergleichsfassung. Stile, Seeds und Audio-Optionen müssen übereinstimmen. Gleiche Umgebung und
+Abhängigkeiten verwenden; deren Versionen stehen im Bericht. Die endgültige Stimme und Band weiter separat hören.
+
 Die Kernregressionen laufen auch ohne Audio-Modelle:
 
 ```powershell

@@ -7,7 +7,6 @@
 # Refrain in bis zu zwei Instrumenten und ein Becken zu jedem vierten Takt.
 from drums import CRASH, _vel
 from parts import Ev
-from song_plan import BEATS_PER_BAR
 
 LEAN = ("counter", "bells")              # spielen im ersten Refrain erst ab der Hälfte
 LAYERS = ("strings", "synth", "piano")   # wer im letzten Refrain die Oktave dazu spielt
@@ -28,7 +27,7 @@ def apply(plan, events: dict) -> dict:
     if len(choruses) < 2:
         return done
     first, last = choruses[0], choruses[-1]
-    half = first.start + (first.bars // 2) * BEATS_PER_BAR
+    half = first.start + (first.bars // 2) * first.bar_beats
     removed = 0
     for inst in LEAN:
         evs = events.get(inst)
@@ -44,11 +43,14 @@ def apply(plan, events: dict) -> dict:
             removed += before - len(evs)
     if removed:
         done["lean"] = first.start
+    full_start = last.start
     if last.feel == "breakdown":
-        return done
+        if last.resume is None or last.resume >= last.end:
+            return done
+        full_start = max(last.start, last.resume)
     # der letzte Refrain: Oktave von Anfang an (was buildup.py ab der Hälfte schon dazugibt, bleibt)
     for inst in LAYERS:
-        mine = [e for e in events.get(inst, ()) if _in(e, last.start, last.end) and not e.layer]
+        mine = [e for e in events.get(inst, ()) if _in(e, full_start, last.end) and not e.layer]
         if not mine:
             continue
         have = {(round(e.start, 4), e.pitch) for e in events[inst] if e.layer == "octave"}
@@ -59,8 +61,10 @@ def apply(plan, events: dict) -> dict:
             break
     drums = events.setdefault("drums", [])
     for bar in range(0, last.bars, CRASH_BARS):
-        at = last.start + bar * BEATS_PER_BAR
+        at = full_start + bar * last.bar_beats
+        if at >= last.end - 1e-6:
+            break
         if not any(abs(e.start - at) < 0.05 and e.pitch == CRASH for e in drums):
             drums.append(Ev(at, 1.0, CRASH, _vel(last.energy, 0.8)))
-    done["full"] = last.start
+    done["full"] = full_start
     return done

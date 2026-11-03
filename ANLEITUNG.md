@@ -3,6 +3,17 @@
 In fünf Schritten zum ersten Song. Alles Weitere steht darunter; wenn etwas nicht klappt, hilft
 **Hilfe › Fehlerbehebung**.
 
+## Neu in 1.8: eine Phrase reparieren
+
+Unter dem Player steht **Eine Gesangsphrase reparieren**. Nach einem Song mit NEUTRINO eine Phrase anhand ihres
+Texts und ihrer Zeit auswählen, die Stimme oder Klangfarbe (StyleShift) einstellen und **Phrase neu singen** drücken.
+Die Reparatur legt eine eigene Fassung an. Die bisherige bleibt erhalten; die Instrumente werden übernommen.
+Bei Abbruch oder Fehler bleibt der bisherige Song verfügbar. Für andere Gesangsengines zeigt die App den Grund an,
+wenn eine gezielte Reparatur nicht möglich ist. Die Profi-Ansicht bietet weiterhin die Bearbeitung über die Piano-Roll.
+
+Die einfache Ansicht bündelt Stil, Stimmung, Stimme, Länge, Qualität und Text. In **Profi** stehen die Detailregler;
+beim Umschalten bleiben die Einstellungen erhalten.
+
 ## 1. Installieren
 
 Die Setup.exe von der Release-Seite starten (`VloidSongs-Setup-<Version>.exe`). Sie braucht keine Adminrechte, legt „Vloid Songs“ ins Startmenü (auf Wunsch

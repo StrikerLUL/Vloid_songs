@@ -24,6 +24,13 @@ BPM = 120
 SPB = 60 / BPM
 
 
+def test_funk_keeps_a_late_bass_note_if_there_is_no_room_for_a_ghost_note():
+    note = Ev(1.4, 0.3, 40, 80)
+    bass = [note]
+    assert bass_runs._funk(bass, 0, [note], None) == 0
+    assert bass == [note] and note.dur == pytest.approx(0.3)
+
+
 def _song(tmp_path, extras=(), style="J-Pop Energy", seed=7, structure=STRUCTURE, bpm=BPM):
     seed_everything(seed)
     return orchestrate_song(genre="J-Pop", bpm=bpm, structure=list(structure), key="C", mode="major",

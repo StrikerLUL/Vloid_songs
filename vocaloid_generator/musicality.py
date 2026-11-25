@@ -5,17 +5,19 @@ Alle Zeiten sind Schläge. Keine Audio-Engine und kein Zufall: dieselbe Partitur
 import math
 from dataclasses import replace
 from functools import lru_cache
+from types import SimpleNamespace
 
 from theory import scale_pcs
 
 
 def local_scale(section, chord) -> set:
     pcs = set(scale_pcs(section.tonic, section.mode))
-    for pc in chord.pcs:
+    chord_pcs = set(chord.pcs)
+    for pc in chord_pcs:
         if pc not in pcs:
             pcs -= {(pc - 1) % 12, (pc + 1) % 12}
             pcs.add(pc)
-    return pcs
+    return pcs | chord_pcs
 
 
 def slices(plan, note):
@@ -44,15 +46,24 @@ def tone_cost(pitch, section, chord) -> float:
     return 0.8 if (pc - chord.bass_pc) % 12 in (1, 11) else 0.3
 
 
-def intentional(note, chord, following=None) -> bool:
+def intentional(note, chord, following=None, resolution_chord=None, segment_end=None) -> bool:
     if not getattr(note, "tension", False):
         return False
     degree = (note.pitch - chord.root) % 12
     color = degree in (2, 11) and chord.quality in ("maj", "maj7", "add9", "maj9", "6")
-    resolved = following is not None and abs(following.pitch - note.pitch) <= 2 \
-        and following.pitch % 12 in chord.pcs \
-        and following.start - (note.start + note.dur) < 0.26
+    gap = following.start - (note.start + note.dur) if following is not None else 0.0
+    resolved = following is not None and 0 < abs(following.pitch - note.pitch) <= 2 \
+        and following.pitch % 12 in (resolution_chord or chord).pcs \
+        and -1e-6 <= gap < 0.26 \
+        and (segment_end is None or segment_end >= note.start + note.dur - 1e-6)
     return color or resolved
+
+
+def _resolution_chord(plan, following):
+    if following is None:
+        return None
+    at = following.start + (0.25 if getattr(following, "pushed", False) else 0.0)
+    return plan.chord_at(at)
 
 
 def harmony_scores(notes, plan) -> dict:
@@ -61,14 +72,16 @@ def harmony_scores(notes, plan) -> dict:
     cost, unresolved = 0.0, 0.0
     for i, note in enumerate(ordered):
         following = ordered[i + 1] if i + 1 < len(ordered) else None
+        resolution_chord = _resolution_chord(plan, following)
         for start, end, sec, chord in slices(plan, note):
             value = tone_cost(note.pitch, sec, chord)
-            if intentional(note, chord, following):
+            if intentional(note, chord, following, resolution_chord, end):
                 value *= 0.15
             elif note.dur >= 1 and note.pitch % 12 not in chord.pcs:
                 value += 0.4
             cost += (end - start) * value
-        if getattr(note, "tension", False) and not intentional(note, plan.chord_at(note.start), following):
+        if getattr(note, "tension", False) and not intentional(note, plan.chord_at(note.start), following,
+                                                                resolution_chord):
             unresolved += note.dur
     return {"harmony": 1.0 - cost / total, "resolution": 1.0 - unresolved / total}
 
@@ -81,13 +94,14 @@ def fit_harmony(plan, notes) -> list:
     lo, hi = plan.vocal_range
     for i, note in enumerate(ordered):
         following = ordered[i + 1] if i + 1 < len(ordered) else None
+        resolution_chord = _resolution_chord(plan, following)
         pieces = list(slices(plan, note))
         if not pieces:
             out.append(note)
             continue
         # Erst teilen, wenn die Fortsetzung außerhalb der lokalen Skala liegt oder lange instabil klingt.
         changes = [j for j, (a, b, sec, chord) in enumerate(pieces)
-                   if not intentional(note, chord, following)
+                   if not intentional(note, chord, following, resolution_chord, b)
                    and (tone_cost(note.pitch, sec, chord) >= 1.8
                         or (b - a >= 0.75 and note.pitch % 12 not in chord.pcs))]
         if not changes:
@@ -152,6 +166,14 @@ def _text_cuts(size, count, capacity, explicit, words):
     return states[size][1]
 
 
+def _crossing_cost(pitch, pieces) -> float:
+    distinct = {(tuple(sorted(chord.pcs)), getattr(chord, "bass_pc", None)) for _, _, _, chord in pieces}
+    if len(distinct) < 2:
+        return 0.0
+    return min(1.5, 0.6 * sum((end - start) * tone_cost(pitch, sec, chord)
+                              for start, end, sec, chord in pieces))
+
+
 def phrase_path(writer, slots, phrase_start, role, previous, reference, words) -> list:
     """Begrenzte Suche über ganze Phrasen statt einer unwiderruflichen lokalen Tonwahl."""
     from melody_writer import CONTOURS, STEPS_PER_BEAT, accent_moves
@@ -167,6 +189,9 @@ def phrase_path(writer, slots, phrase_start, role, previous, reference, words) -
     for i, slot in enumerate(slots):
         chord = writer._chord_at_step(phrase_start, slot.step)
         options = writer._candidates(chord, slot.strong)
+        probe = SimpleNamespace(start=phrase_start + slot.step / STEPS_PER_BEAT,
+                                dur=slot.dur / STEPS_PER_BEAT, pushed=False)
+        pieces = list(slices(writer.plan, probe)) if probe.dur >= 1.0 else []
         if slot.last:
             options = [p for p in options if p % 12 in end_pcs] or options
         target = writer.center + (contour(slot.step / total) + offsets[i]) * \
@@ -175,6 +200,8 @@ def phrase_path(writer, slots, phrase_start, role, previous, reference, words) -
         for cost, path, prev, move in beams:
             for pitch in options:
                 value = abs(pitch - target) * 0.28
+                # Nur bei Akkordwechseln: lange Reibungen sanft berücksichtigen, nicht kategorisch verbieten.
+                value += _crossing_cost(pitch, pieces)
                 if prev is not None:
                     delta = pitch - prev
                     value += writer.costs[min(abs(delta), len(writer.costs) - 1)]

@@ -743,6 +743,14 @@ class HookChoice:
     preview: str               # kurze WAV: die Melodie als Synth über den Akkorden
 
 
+def blind_hook_choices(choices: list, rng=None) -> list:
+    """Die Zuordnung zur Entstehungsreihenfolge für den Hörvergleich verdecken."""
+    import random
+    shuffled = list(choices)
+    (rng or random.SystemRandom()).shuffle(shuffled)
+    return shuffled
+
+
 def hook_choices(settings: SongSettings, count: int = 3, progress: Optional[ProgressFn] = None) -> list:
     """
     count neue Refrain-Melodien zum Anhören, der Rest des Songs bleibt. Jede ist eine kurze Vorschau (Melodie
@@ -767,8 +775,28 @@ def hook_choices(settings: SongSettings, count: int = 3, progress: Optional[Prog
         preview = os.path.join(target, "refrain.wav")
         _hook_preview(tracks, kind, preview)
         choices.append(HookChoice(i + 1, settings, preview))
+    _match_hook_loudness(choices)
     report(1.0, "Fertig")
     return choices
+
+
+def _match_hook_loudness(choices: list) -> None:
+    """Refrainvorschauen gemeinsam leiser abgleichen, ohne einzelne Spitzen anzuheben."""
+    import soundfile as sf
+    from hoer_duell import _loudness
+    audio = []
+    for choice in choices:
+        data, rate = sf.read(choice.preview, dtype="float32", always_2d=True)
+        level = _loudness(data, rate)
+        if not np.isfinite(level):
+            log.warning("Refrainvorschau nicht lautheitsangepasst: keine messbare Lautheit")
+            return
+        audio.append((choice.preview, data, rate, level))
+    if not audio:
+        return
+    target = min(item[3] for item in audio)
+    for path, data, rate, level in audio:
+        sf.write(path, data * 10 ** ((target - level) / 20), rate)
 
 
 def hook_kind(settings: SongSettings) -> str:

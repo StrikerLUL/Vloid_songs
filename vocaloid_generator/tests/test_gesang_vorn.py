@@ -49,6 +49,30 @@ def test_the_band_makes_room_where_the_vocal_is_loud():
 def test_without_vocal_the_band_stays_as_it_is():
     band = stereo(noise(2.0))
     assert np.array_equal(vocal_mix.unmask(band, np.zeros_like(band), RATE), band)
+    freqs, gain = vocal_mix.unmask_gain(np.zeros_like(band), RATE)
+    assert gain.shape[0] == len(freqs) and np.all(gain == 0)
+
+
+def test_a_very_short_vocal_does_not_duck_the_band_during_long_silence():
+    vocal = stereo(tone(30.0, 1000.0, on=(15.0, 15.03)))
+    freqs, gain = vocal_mix.unmask_gain(vocal, RATE)
+    near_voice = np.argmin(abs(freqs - 1000))
+    assert gain[near_voice].min() < -0.1
+    assert np.max(np.abs(gain[:, :20])) < 1e-6
+
+
+def test_stereo_phase_does_not_hide_voice_or_band_from_the_mix_controls():
+    voice = tone(4, 1000, on=(0.5, 3.5))
+    backing = noise(4)
+    backing[2 * RATE:] *= 2
+    same_voice, opposite_voice = stereo(voice), np.stack([voice, -voice])
+    same_band, opposite_band = stereo(backing), np.stack([backing, -backing])
+    _, normal = vocal_mix.unmask_gain(same_voice, RATE)
+    _, opposite = vocal_mix.unmask_gain(opposite_voice, RATE)
+    assert np.min(normal) < -0.5
+    np.testing.assert_allclose(opposite, normal, atol=1e-5)
+    expected = vocal_mix.ride_gain(same_voice, same_band, RATE)
+    np.testing.assert_allclose(vocal_mix.ride_gain(opposite_voice, opposite_band, RATE), expected, atol=1e-5)
 
 
 def test_the_vocal_rides_up_where_the_band_gets_much_louder():

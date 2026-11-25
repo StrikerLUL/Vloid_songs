@@ -591,14 +591,16 @@ def build() -> None:
             return
         hook_row.clear()
         hook_row.set_visibility(True)
+        choices = pipeline.blind_hook_choices(choices)
         with hook_row:
-            for choice in choices:
+            for position, choice in enumerate(choices, 1):
+                label = f"Refrain {position}"
                 with ui.button_group().props("outline"):
-                    ui.button(f"Refrain {choice.number}", icon="play_arrow",
-                              on_click=lambda _, c=choice: play(f"Refrain {c.number}", c.preview)) \
-                        .props("outline no-caps dense").mark(f"hook-play-{choice.number}")
+                    ui.button(label, icon="play_arrow",
+                              on_click=lambda _, c=choice, title=label: play(title, c.preview)) \
+                        .props("outline no-caps dense").mark(f"hook-play-{position}")
                     ui.button("nehmen", icon="check", on_click=lambda _, c=choice: take(c)) \
-                        .props("outline no-caps dense color=secondary").mark(f"hook-take-{choice.number}")
+                        .props("outline no-caps dense color=secondary").mark(f"hook-take-{position}")
         await play("Refrain 1", choices[0].preview)
 
     async def make_remix() -> None:
@@ -647,7 +649,8 @@ def build() -> None:
             for a in auditions:
                 with ui.button_group().props("outline"):
                     ui.button(a.singer, icon="play_arrow", on_click=lambda _, a=a: play(a.singer, a.wav)) \
-                        .props("outline no-caps dense").mark(f"cast-play-{a.singer}")
+                        .props("outline no-caps dense").mark(f"cast-play-{a.singer}") \
+                        .tooltip(a.hint or "Stimme anhören")
                     ui.button(icon="favorite", on_click=lambda _, a=a: keep_voice(a.singer)) \
                         .props("outline dense color=secondary").mark(f"cast-keep-{a.singer}") \
                         .tooltip(f"{a.singer} singt ab jetzt {current.style}")

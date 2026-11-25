@@ -62,6 +62,24 @@ def test_casting_without_voices_says_so(tmp_path):
         casting.cast(s)
 
 
+def test_casting_explains_range_and_octave_transposition():
+    assert "nah am oberen Rand" in casting.range_hint("MERROW", [(75, 2.0)])
+    assert "außerhalb" in casting.range_hint("MERROW", [(77, 1.0)])
+    assert "C4" in casting.range_hint("NAKUMO", [(72, 1.0)])
+    assert "keine Angaben" in casting.range_hint("UNBEKANNT", [(72, 1.0)])
+    assert "keine Angaben" in casting.range_hint("MERROW", [(None, 1.0)])
+
+
+def test_key_hint_is_only_a_range_checked_starting_point():
+    high = casting.range_hint("MERROW", [(60, 1), (75, 2)], "C")
+    assert "B statt C" in high and "Neuerzeugen" in high
+    assert "ausprobieren" not in casting.range_hint("MERROW", [(57, 1), (75, 2)], "C")
+    outside = casting.range_hint("MERMER", [(80, 1)], "C")
+    assert "ausprobieren" not in outside
+    impossible = casting.range_hint("MERROW", [(50, 1), (80, 2)], "C")
+    assert "ausprobieren" not in impossible
+
+
 def test_the_favorite_voice_follows_the_style(tmp_path, voices):
     root, _ = voices
     s = SongSettings(neutrino_pfad=str(root), style="Rock", singer="MERROW")

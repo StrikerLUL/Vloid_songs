@@ -21,6 +21,42 @@ BACKING = 0.35
 class Audition:
     singer: str
     wav: str
+    hint: str = ""
+
+
+def range_hint(singer: str, melody: list, key: str = "") -> str:
+    """Erklärt die Hook anhand der hinterlegten Tonlage, ohne eine unbekannte Stimme zu bewerten."""
+    import pretty_midi
+    from vocal_synthesizer import STIMMEN, stimmlage
+    name = (singer or "").upper()
+    notes = [(pitch, duration) for pitch, duration in melody if pitch is not None and duration > 0]
+    if name not in STIMMEN or not notes:
+        return "Für diese Stimme oder Melodie liegen keine Angaben zur Tonlage vor."
+    lo, hi = STIMMEN[name]
+    shift = stimmlage(name)[2]
+    pitches = [pitch + shift for pitch, _ in notes]
+    text = (f"Hook: {pretty_midi.note_number_to_name(min(pitches))}–{pretty_midi.note_number_to_name(max(pitches))}; "
+            f"hinterlegter Bereich: {pretty_midi.note_number_to_name(lo)}–{pretty_midi.note_number_to_name(hi)}.")
+    outside = min(pitches) < lo or max(pitches) > hi
+    high = any(pitch + shift >= hi - 2 and duration >= 1 for pitch, duration in notes)
+    if outside:
+        text += " Einzelne Töne liegen außerhalb des hinterlegten Bereichs."
+    elif high:
+        text += " Ein längerer Ton liegt nah am oberen Rand."
+    else:
+        return text + " Der Tonumfang der Hook liegt im hinterlegten Bereich."
+    from settings import KEYS
+    if key in KEYS:
+        # Nur eine rechnerische Orientierung: Beim Neuschreiben kann die Melodie anders ausfallen.
+        shifts = [step for step in range(-5, 6) if step and lo <= min(pitches) + step
+                  and max(pitches) + step <= hi and (outside or step < 0)]
+        if shifts:
+            step = min(shifts, key=lambda value: (abs(value), value))
+            suggestion = KEYS[(KEYS.index(key) + step) % len(KEYS)]
+            text += (f" Als Ausgangspunkt {suggestion} statt {key} ausprobieren ({step:+d} Halbton); "
+                     "beim Neuerzeugen kann sich die Melodie ändern. Bitte anhören.")
+            return text
+    return text + " Bitte anhören."
 
 
 def singers(neutrino_dir: str) -> list:
@@ -73,7 +109,7 @@ def cast(settings, progress: Optional[Callable] = None) -> list:
         pipeline._hook_preview(tracks, kind, backing, lead=False)
         wav = os.path.join(folder, f"{singer}.wav")
         _mix(vocal, backing, wav)
-        found.append(Audition(singer, wav))
+        found.append(Audition(singer, wav, range_hint(singer, data, s.key)))
     report(1.0, "Fertig")
     if not found:
         raise ValueError("Keine Stimme hat gesungen; das Protokoll sagt, warum.")

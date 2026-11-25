@@ -40,15 +40,22 @@ def _band_edges(rate: int) -> np.ndarray:
 def unmask_gain(vocal: np.ndarray, rate: int, depth_db: float = UNMASK_DB) -> tuple:
     """Absenkung der Band (dB, negativ) je Frequenz und STFT-Rahmen: (Frequenzen, Gain [Frequenz, Rahmen])."""
     from scipy.signal import stft
-    freqs, _, spec = stft(vocal.mean(axis=0).astype(np.float32), rate, nperseg=NFFT, noverlap=NFFT - HOP)
-    power = np.abs(spec) ** 2
+    freqs, _, spec = stft(vocal.astype(np.float32), rate, nperseg=NFFT, noverlap=NFFT - HOP, axis=-1)
+    # Erst die Kanalleistungen mitteln: gegenphasige Stimmen dürfen sich nicht zu Stille auslöschen.
+    power = np.mean(np.abs(spec) ** 2, axis=0)
     edges = _band_edges(rate)
     centers = np.sqrt(edges[:-1] * edges[1:])
     bands = np.stack([power[(freqs >= a) & (freqs < b)].mean(axis=0) if np.any((freqs >= a) & (freqs < b))
                       else np.zeros(power.shape[1]) for a, b in zip(edges, edges[1:])])
     level = _db(bands)
+    # Bei sehr kurzen Einsätzen darf die künstliche dB-Untergrenze nicht zum Referenzpegel werden.
+    audible = bands > 1e-12
+    if not np.any(audible):
+        return freqs, np.zeros_like(power, dtype=np.float32)
     top = np.percentile(level, 99.5)
-    weight = np.clip((level - (top - UNMASK_RANGE_DB)) / UNMASK_RANGE_DB, 0.0, 1.0)
+    if top <= -119.999:
+        top = np.percentile(level[audible], 99.5)
+    weight = np.where(audible, np.clip((level - (top - UNMASK_RANGE_DB)) / UNMASK_RANGE_DB, 0.0, 1.0), 0.0)
     # schnell absenken, langsam zurück
     release = np.exp(-HOP / (UNMASK_RELEASE * rate))
     held = np.empty_like(weight)
@@ -107,8 +114,8 @@ def ride_gain(vocal: np.ndarray, band: np.ndarray, rate: int, max_db: float = RI
     n = vocal.shape[1]
     hop = max(1, int(RIDE_FRAME * rate))
     smooth = max(1, int(RIDE_SMOOTH / RIDE_FRAME))
-    v = _db(_frame_power(_presence(vocal.mean(axis=0), rate), hop, smooth))
-    b = _db(_frame_power(_presence(band.mean(axis=0), rate), hop, smooth))
+    v = _db(np.mean([_frame_power(_presence(channel, rate), hop, smooth) for channel in vocal], axis=0))
+    b = _db(np.mean([_frame_power(_presence(channel, rate), hop, smooth) for channel in band], axis=0))
     if not len(v):
         return np.ones(n, dtype=np.float32)
     active = (v > v.max() - RIDE_GATE_DB) & (b > -100)

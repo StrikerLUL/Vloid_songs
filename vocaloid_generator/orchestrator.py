@@ -274,7 +274,8 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
                        rit)
 
     data, syllables = melody_data(sung_notes)
-    tracks["harmony_data"], tracks["harmony_silben"] = melody_data(harmony_line(real, sung_notes))
+    tracks["harmony_data"], tracks["harmony_silben"] = melody_data(
+        harmony_line(real, sung_notes, coherent="musical_coherence" in extras))
     tracks["vocal_melody"] = vocal_track
     if character is not None or band.voices != get_style(band.name).voices:
         tracks["voices"] = band.voices          # die Synth-Stimmen des Songs (Charakter), für rendering.py

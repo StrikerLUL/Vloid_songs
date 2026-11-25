@@ -130,6 +130,7 @@ async def test_simple_view_can_choose_and_keep_a_hook(simple_user, fake_generati
                                                             taste_snapshot=[[["test"], 1]]), path)
                 for i in range(1, 4)]
     monkeypatch.setattr(pipeline, "hook_choices", choices)
+    monkeypatch.setattr(pipeline, "blind_hook_choices", lambda choices: [choices[1], choices[2], choices[0]])
     await simple_user.open("/")
     simple_user.find(marker="simple-hooks").click()
     await simple_user.should_see(marker="hook-take-2", retries=50)
@@ -137,7 +138,7 @@ async def test_simple_view_can_choose_and_keep_a_hook(simple_user, fake_generati
     simple_user.find(marker="hook-take-2").click()
     await until(lambda: len(fake_generation) == 1)
     assert fake_generation[0].seed == 42
-    assert fake_generation[0].variations == {"melody:Chorus": 2}
+    assert fake_generation[0].variations == {"melody:Chorus": 3}
     assert fake_generation[0].taste_snapshot == [[["test"], 1]]
 
 

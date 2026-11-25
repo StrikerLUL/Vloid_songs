@@ -1,6 +1,7 @@
 # test_begleitstimmen.py – Begleitstimmen wie in Produktionen: Harmonien mit Abwechslung und gedoppelt, gesungene
 # Flächen, Ad-libs im letzten Refrain (backing_vocals.py)
 import os
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -26,6 +27,62 @@ def song():
 
 def in_section(notes, sec):
     return [n for n in notes if sec.start <= n.start < sec.end]
+
+
+def test_held_harmony_can_use_a_chord_tone_shared_across_a_change():
+    from melody_writer import MelNote, _sustained_harmony_pitch
+    c_major = SimpleNamespace(pcs={0, 4, 7})
+    g_major = SimpleNamespace(pcs={7, 11, 2})
+    section = SimpleNamespace(start=0, end=4, chords=[
+        SimpleNamespace(start=0, dur=2, chord=c_major),
+        SimpleNamespace(start=2, dur=2, chord=g_major)])
+    plan = SimpleNamespace(sections=[section])
+    note = MelNote(1, 2, 60, "ら")
+    assert _sustained_harmony_pitch(plan, note, 64, 48, 72) == 67
+    assert _sustained_harmony_pitch(plan, MelNote(0, 1, 60, "ら"), 64, 48, 72) == 64
+    # Wenn es auf der gewählten Seite keinen passenden Ton gibt, bleibt die bisherige Stimme erhalten.
+    assert _sustained_harmony_pitch(plan, note, 57, 58, 72) == 57
+
+
+def test_harmony_line_only_changes_the_held_note_in_coherent_mode():
+    from melody_writer import MelNote, harmony_line
+    from song_plan import ChordSlot, Section, SongPlan
+    from styles import get_style
+    from theory import Chord
+    sec = Section("Chorus", 1, 0, 0, 2, 0, "major", 0.8, True,
+                  [ChordSlot(0, 4, Chord(0, "maj")), ChordSlot(4, 4, Chord(7, "maj"))])
+    plan = SongPlan(120, get_style("Ballade"), 0, "major", [sec], {})
+    note = MelNote(3, 2, 60, "ら")
+    assert harmony_line(plan, [note])[0].pitch == 64
+    changed = harmony_line(plan, [note], coherent=True)[0]
+    assert (changed.pitch, changed.start, changed.dur, changed.syllable) == (67, 3, 2, "ら")
+
+
+@pytest.mark.parametrize("resume", [None, 8.0])
+def test_full_breakdown_keeps_backing_voices_silent(resume):
+    from melody_writer import MelNote, harmony_line
+    from song_plan import ChordSlot, Section, SongPlan
+    from styles import get_style
+    from theory import Chord
+    sec = Section("Chorus", 1, 0, 0, 2, 0, "major", 0.8, True,
+                  [ChordSlot(0, 8, Chord(0, "maj"))], feel="breakdown", resume=resume)
+    plan = SongPlan(120, get_style("Ballade"), 0, "major", [sec], {})
+    assert harmony_line(plan, [MelNote(2, 1, 60, "ら")], coherent=True) == []
+    assert all(not line for line in backing_vocals.pads(plan))
+
+
+def test_coherent_harmony_reduces_a_large_leap_without_crossing_the_melody():
+    from melody_writer import MelNote, harmony_line
+    from song_plan import ChordSlot, Section, SongPlan
+    from styles import get_style
+    from theory import Chord
+    sec = Section("Chorus", 1, 0, 0, 2, 0, "major", 0.8, True, [ChordSlot(0, 8, Chord(0, "maj"))])
+    plan = SongPlan(120, get_style("Ballade"), 0, "major", [sec], {})
+    notes = [MelNote(0, 1, 72, "ら"), MelNote(1, 1, 60, "ら")]
+    assert [n.pitch for n in harmony_line(plan, notes)] == [76, 64]
+    assert [n.pitch for n in harmony_line(plan, notes, coherent=True)] == [76, 67]
+    notes[1].start = 2.0  # eine Phrasenpause erlaubt einen neuen Einsatz
+    assert [n.pitch for n in harmony_line(plan, notes, coherent=True)] == [76, 64]
 
 
 def test_each_chorus_gets_its_own_harmony(song):

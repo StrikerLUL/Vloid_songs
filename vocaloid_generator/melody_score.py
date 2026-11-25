@@ -27,7 +27,8 @@ HOLD_BEATS = 1.0             # ab dieser Länge muss die Silbe ein Vokal sein, d
 UNHELD = ("ん", "っ")
 HIGH_SHARE = 0.25            # so viel der Zeit darf die Stimme ganz oben (die oberen zwei Halbtöne) singen
 WEIGHTS = {"range": 1.0, "peak": 1.0, "moves": 1.5, "runs": 0.8, "motif": 1.0, "text": 1.0, "recovery": 0.6,
-           "contrast": 1.0, "high": 0.6, "words": 1.2, "catchy": 1.2, "harmony": 2.4, "resolution": 1.2}
+           "contrast": 1.0, "high": 0.6, "words": 1.2, "catchy": 1.2, "harmony": 2.4, "resolution": 1.2,
+           "arc": 0.35}
 # S2: Gefühlswörter, wie sie gesungen werden (Kana); das Wort darf Partikel dahinter haben (なみだが)
 FEELING_WORDS = ("すき", "だいすき", "なみだ", "さよなら", "あいして", "あいたい", "ごめん", "ありがとう", "こころ", "ゆめ",
                  "なきたい", "わすれない", "いかないで", "さみしい", "かなしい", "うれしい", "えがお", "やくそく",
@@ -66,19 +67,21 @@ def parts(notes: list, kind: str, below: Optional[list] = None, top: Optional[in
         return values
     pitches = [n.pitch for n in sung]
     moves = [b.pitch - a.pitch for a, b in zip(sung, sung[1:]) if b.start - a.start - a.dur < PHRASE_GAP]
+    phrase_ids = _phrase_ids(notes) if "musical_coherence" in extras else None
     from musicality import harmony_scores
     return {
         "range": _range(pitches, kind, (targets or {}).get("range")),
         "peak": _peak(sung),
         "moves": _moves(moves, targets),
-        "runs": _runs(sung),
+        "runs": _runs(sung, phrase_ids),
         "motif": _motif(sung, bar_beats),
         "text": _text(notes),
-        "recovery": _recovery(moves),
+        "recovery": (_phrase_recovery(sung, phrase_ids) if phrase_ids is not None else _recovery(moves)),
         "contrast": _contrast(sung, kind, below),
         "high": _high(sung, top),
         "words": _key_words(notes, kind) if "key_words" in extras else 0.0,
         "catchy": _catchy(sung) if "catchy_chorus" in extras and kind == "Chorus" else 0.0,
+        "arc": _prepared_peaks(sung, phrase_ids) if phrase_ids is not None else 0.0,
         **(harmony_scores(notes, plan) if plan is not None else {"harmony": 0.0, "resolution": 0.0}),
     }
 
@@ -115,11 +118,23 @@ def _moves(moves: list, targets: Optional[dict] = None) -> float:
         _share_penalty(repeats, targets.get("repeats", REPEAT_SHARE))
 
 
-def _runs(sung: list) -> float:
+def _phrase_ids(notes: list) -> dict:
+    """Auch Haltevokale überbrücken Pausen zwischen den gewerteten Silben."""
+    found, phrase, end = {}, 0, None
+    for n in sorted(notes, key=lambda note: note.start):
+        if end is not None and n.start - end >= PHRASE_GAP:
+            phrase += 1
+        found[id(n)] = phrase
+        end = max(end if end is not None else n.start, n.start + n.dur)
+    return found
+
+
+def _runs(sung: list, phrase_ids: Optional[dict] = None) -> float:
     """Minus für jede Strecke aus LONG_RUN oder mehr gleichen Tönen."""
     penalty, run = 0.0, 1
     for a, b in zip(sung, sung[1:]):
-        run = run + 1 if b.pitch == a.pitch else 1
+        connected = phrase_ids is None or phrase_ids[id(a)] == phrase_ids[id(b)]
+        run = run + 1 if b.pitch == a.pitch and connected else 1
         if run >= LONG_RUN:
             penalty += 0.3
     return 1.0 - penalty
@@ -154,6 +169,42 @@ def _recovery(moves: list) -> float:
     if not jumps:
         return 0.5
     return 1.0 - 0.3 * sum(1 for a, b in jumps if a * b > 0)
+
+
+def _phrase_recovery(sung: list, phrase_ids: dict) -> float:
+    """Sprünge nur mit dem nächsten Ton derselben Phrase vergleichen."""
+    jumps = []
+    for a, b, c in zip(sung, sung[1:], sung[2:]):
+        if phrase_ids[id(a)] != phrase_ids[id(b)] or phrase_ids[id(b)] != phrase_ids[id(c)]:
+            continue
+        first, second = b.pitch - a.pitch, c.pitch - b.pitch
+        if abs(first) >= BIG_LEAP:
+            jumps.append((first, second))
+    if not jumps:
+        return 0.5
+    return 1.0 - 0.3 * sum(1 for a, b in jumps if a * b > 0)
+
+
+def _prepared_peaks(sung: list, phrase_ids: dict) -> float:
+    """Lange oder betonte Phrasenhöhepunkte sanft nach ihrer Vorbereitung bewerten."""
+    grouped = {}
+    for note in sung:
+        grouped.setdefault(phrase_ids[id(note)], []).append(note)
+    values = []
+    for phrase in grouped.values():
+        if len(phrase) < 3:
+            continue
+        top = max(note.pitch for note in phrase)
+        peaks = [i for i, note in enumerate(phrase) if note.pitch == top]
+        if len(peaks) != 1 or peaks[0] == 0:
+            continue
+        index = peaks[0]
+        peak = phrase[index]
+        if not peak.strong and peak.dur < 0.75:
+            continue
+        approach = peak.pitch - phrase[index - 1].pitch
+        values.append(1.0 if 0 < approach <= 2 else 0.0 if approach <= 5 else -1.0)
+    return sum(values) / len(values) if values else 0.0
 
 
 def _contrast(sung: list, kind: str, below: Optional[list]) -> float:
@@ -276,5 +327,18 @@ def pick(candidates: list, kind: str, below: Optional[list] = None, top: Optiona
     scores = [score(c, kind, below, top, bar_beats, targets, extras, plan) + preference(c, kind, taste)
               for c in candidates]
     best = max(range(len(scores)), key=lambda i: (scores[i], -i))
+    if plan is not None and "musical_coherence" in extras:
+        # Der optionale Bogen soll die Akkordpassung der bisherigen Wahl nicht verschlechtern.
+        from musicality import harmony_scores
+        base_scores = []
+        for candidate, total in zip(candidates, scores):
+            sung = sorted((n for n in candidate if not getattr(n.syllable, "melisma", False)),
+                          key=lambda n: n.start)
+            arc = _prepared_peaks(sung, _phrase_ids(candidate)) if len(sung) >= 2 else 0.0
+            base_scores.append(total - WEIGHTS["arc"] * arc)
+        baseline = max(range(len(base_scores)), key=lambda i: (base_scores[i], -i))
+        if harmony_scores(candidates[best], plan)["harmony"] < \
+                harmony_scores(candidates[baseline], plan)["harmony"] - 1e-9:
+            best = baseline
     return best, scores[best], sum(scores) / len(scores)
 

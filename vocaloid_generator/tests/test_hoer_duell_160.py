@@ -63,6 +63,17 @@ def test_a_duel_renders_both_sides_equally_loud_in_random_order(monkeypatch, tmp
     assert sorted(os.listdir(tmp_path)) == ["01_A.wav", "01_B.wav", "lauf"]
 
 
+def test_common_headroom_keeps_both_versions_at_the_same_loudness():
+    t = np.arange(2 * RATE) / RATE
+    quiet = (0.08 * np.sin(2 * np.pi * 440 * t)).astype(np.float32)[:, None]
+    quiet[RATE] = 0.98  # eine kurze Spitze begrenzt das mögliche Anheben
+    loud = (0.8 * np.sin(2 * np.pi * 440 * t)).astype(np.float32)[:, None]
+    target = hoer_duell._common_target(quiet, loud, RATE)
+    a, b = (hoer_duell._match(audio, RATE, target) for audio in (quiet, loud))
+    assert max(np.max(np.abs(a)), np.max(np.abs(b))) <= 0.981
+    assert abs(hoer_duell._loudness(a, RATE) - hoer_duell._loudness(b, RATE)) < 0.05
+
+
 def test_a_switch_that_changes_nothing_is_skipped_and_changes_nothing(monkeypatch, tmp_path):
     fake_render(monkeypatch, {})
     s = SongSettings()

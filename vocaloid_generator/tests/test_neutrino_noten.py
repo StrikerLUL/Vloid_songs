@@ -45,11 +45,59 @@ def test_breath_mark_after_two_bars_of_singing_at_a_short_rest():
     assert not any(n.breath for n in build(melody, ["ら"] * 12, 120, ScoreOptions(breath_marks=False)))
 
 
+def test_breath_waits_for_a_known_word_boundary():
+    melody = [(64, 1.0)] * 8 + [(None, 0.25), (65, 1.0), (None, 0.25), (67, 1.0)]
+    words = [Mora("ら", word_start=i == 0) for i in range(8)] + [Mora("あ"), Mora("ら", word_start=True)]
+    notes = build(melody, words, 120, ON)
+    assert [i for i, n in enumerate(notes) if n.breath] == [8]
+    assert total(notes) == pytest.approx(10.5)
+    assert lyrics_of(notes) == ["ら"] * 8 + ["あ", "ら"]
+    # Unannotated text keeps the previous behavior instead of assuming nonexistent word boundaries.
+    plain = build(melody, [str(s) for s in words], 120, ON)
+    assert [i for i, n in enumerate(plain) if n.breath] == [7]
+    one_boundary = [Mora(str(s), word_start=i == 0) for i, s in enumerate(words)]
+    assert [i for i, n in enumerate(build(melody, one_boundary, 120, ON)) if n.breath] == [7]
+
+
+def test_breath_respects_word_boundaries_from_real_japanese_text():
+    words = syllables("きみのこえがとどく ありがとう ね", True, True)
+    assert len(words) == 15 and words[9].word_start and not words[10].word_start
+    melody = [(64, 1.0)] * 10 + [(None, 0.25)] + [(65, 1.0)] * 4 + [(None, 0.25), (67, 1.0)]
+    notes = build(melody, words, 120, ON)
+    assert not notes[9].breath  # kein Atmer zwischen あ und り in ありがとう
+    assert lyrics_of(notes) == [str(word) for word in words]
+
+
+def test_long_uninterrupted_phrase_waits_for_the_next_known_word():
+    melody = [(64, 1.0)] * 18
+    words = [Mora("ら", word_start=i in (0, 8, 17)) for i in range(18)]
+    notes = build(melody, words, 120, ON)
+    assert [i for i, n in enumerate(notes) if n.breath] == [16]
+    assert total(notes) == pytest.approx(18)
+
+
 def test_a_line_without_any_rest_breathes_on_a_long_note_after_four_bars():
     melody = [(64, 0.5)] * 32 + [(65, 2.0)] + [(64, 0.5)] * 8
     notes = build(melody, ["ら"] * 41, 120, ON)
     breaths = [i for i, n in enumerate(notes) if n.breath]
     assert breaths == [32]
+
+
+@pytest.mark.parametrize("gap, prefix", [(0.25, 8), (0.0, 16)])
+def test_breath_waits_until_a_held_vowel_is_finished(gap, prefix):
+    held = Mora("あ", melisma=True)
+    melody = ([(64, 1.0)] * prefix + ([(None, gap)] if gap else []) + [(65, 1.0)]
+              + ([(None, gap)] if gap else []) + [(67, 1.0)])
+    syllables = ["ら"] * (prefix - 1) + ["か", held, "ら"]
+    notes = build(melody, syllables, 120, ON)
+    sung = [n for n in notes if n.pitch is not None]
+    assert not sung[prefix - 1].breath
+    assert sung[prefix].lyric == "ー"
+    assert sung[prefix].breath
+    assert total(notes) == pytest.approx(prefix + 2 * gap + 2)
+    without_breaths = build(melody, syllables, 120, ScoreOptions(breath_marks=False))
+    assert not any(n.breath for n in without_breaths)
+    assert lyrics_of(without_breaths)[prefix] == "ー"
 
 
 def test_fast_notes_share_a_note_as_diphthong():
@@ -60,6 +108,14 @@ def test_fast_notes_share_a_note_as_diphthong():
     assert total(fast) == pytest.approx(2.0)
     assert lyrics_of(build(melody, silben, 120, ON)) == silben  # bei 120 BPM schafft NEUTRINO die Sechzehntel
     assert lyrics_of(build(melody, silben, 180, ScoreOptions(fast_diphthongs=False))) == silben
+
+
+def test_fast_diphthongs_respect_known_word_boundaries():
+    melody = [(64, 0.25), (65, 0.25)]
+    assert lyrics_of(build(melody, [Mora("か", word_start=True), Mora("い")], 180, ON)) == ["かい"]
+    separate = [Mora("か", word_start=True), Mora("い", word_start=True)]
+    assert lyrics_of(build(melody, separate, 180, ON)) == ["か", "い"]
+    assert total(build(melody, separate, 180, ON)) == pytest.approx(0.5)
 
 
 def test_musicxml_has_breath_marks_and_keeps_its_length(tmp_path):

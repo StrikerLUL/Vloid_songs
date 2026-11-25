@@ -33,6 +33,10 @@ def apply(plan, events: dict) -> dict:
             for inst in SILENT_FIRST:
                 evs = events.get(inst)
                 if evs:
+                    # Aus dem Intro gehaltene Töne dürfen die leise Strophe nicht überdecken.
+                    for e in evs:
+                        if e.start < verse.start and e.start + e.dur > verse.start:
+                            e.dur = verse.start - e.start
                     evs[:] = [e for e in evs if not _in(e, verse.start, enter)]
             drums = events.setdefault("drums", [])
             drums += [Ev(enter - 1.0 + k / 4, 0.2, SNARE, _vel(verse.energy, 0.6 + 0.1 * k)) for k in range(4)]

@@ -80,6 +80,8 @@ def pads(plan) -> list:
     lines = [[] for _ in range(PAD_VOICES)]
     for k, sec in enumerate(found):
         syllable = FINAL_PAD_SYLLABLE if k == len(found) - 1 and len(found) > 1 else PAD_SYLLABLE
+        if sec.feel == "breakdown" and (sec.resume is None or sec.resume >= sec.end):
+            continue
         start = sec.resume if sec.feel == "breakdown" and sec.resume is not None else sec.start
         previous = None
         for slot in sec.chords:
@@ -184,8 +186,9 @@ def add(tracks: dict, settings) -> None:
         return
     notes = notes_of(tracks["melody_data"], tracks.get("silben", []))
     if getattr(settings, "harmony_variety", False):
-        tracks["harmony_data"], tracks["harmony_silben"] = melody_data(harmony_line(plan, notes,
-                                                                                     modes=harmony_modes(plan)))
+        tracks["harmony_data"], tracks["harmony_silben"] = melody_data(
+            harmony_line(plan, notes, modes=harmony_modes(plan),
+                         coherent=getattr(settings, "musical_coherence", False)))
         tracks["octave_data"], tracks["octave_silben"] = melody_data(octave(plan, notes))
     if getattr(settings, "sung_pads", False):
         tracks["pads"] = [melody_data(line) for line in pads(plan) if line]

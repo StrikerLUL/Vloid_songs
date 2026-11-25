@@ -545,6 +545,7 @@ async def test_choosing_one_of_three_chorus_melodies(user, fake_generation, monk
         return choices
 
     monkeypatch.setattr(pipeline, "hook_choices", fake_hooks)
+    monkeypatch.setattr(pipeline, "blind_hook_choices", lambda choices: [choices[1], choices[2], choices[0]])
     await user.open("/")
     user.find(marker="hooks").click()
     await user.should_see(marker="hook-take-3", retries=50)
@@ -554,8 +555,8 @@ async def test_choosing_one_of_three_chorus_melodies(user, fake_generation, monk
     await until(lambda: player.title == "Refrain 2")
     user.find(marker="hook-take-2").click()
     await until(lambda: len(fake_generation) == 1)
-    assert fake_generation[0].seed == 55 and fake_generation[0].variations == {"melody:Chorus": 2}
-    await user.should_see("Melodie (Refrain) 2×", retries=50)
+    assert fake_generation[0].seed == 55 and fake_generation[0].variations == {"melody:Chorus": 3}
+    await user.should_see("Melodie (Refrain) 3×", retries=50)
 
 
 async def test_hooks_that_cannot_be_made_explain_why(user, monkeypatch):

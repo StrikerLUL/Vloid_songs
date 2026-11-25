@@ -43,6 +43,8 @@ class ScoreNote:
     lyric: str = ""
     breath: bool = False             # Atemzeichen am Ende dieses Tons
     held: bool = False               # die Silbe ist der weiterklingende Vokal der Silbe davor (Melisma, ー)
+    word_start: bool = False         # ein neues Wort darf nicht mit dem vorigen verschmelzen
+    word_known: bool = False         # nur bei annotiertem Text sind Wortgrenzen bekannt
 
 
 def options(settings) -> ScoreOptions:
@@ -66,12 +68,17 @@ def build(melody_data: list, syllables: list, bpm: float, opts: Optional[ScoreOp
 
 def _paired(melody_data: list, syllables: list) -> list:
     out, i = [], 0
+    # Ohne Wörterbuch kann die ganze Zeile als ein einziges Wort markiert sein.
+    # Dann reichen die Daten nicht, um Atemstellen anhand von Wortgrenzen zu sperren.
+    word_boundaries_known = sum(bool(getattr(syl, "word_start", False)) for syl in syllables) >= 2
     for pitch, beats in melody_data:
         if pitch is None:
             out.append(ScoreNote(None, float(beats)))
             continue
         syl = syllables[i] if i < len(syllables) else "ら"     # ohne Silbe bricht NEUTRINO ab
-        out.append(ScoreNote(int(pitch), float(beats), str(syl), held=bool(getattr(syl, "melisma", False))))
+        out.append(ScoreNote(int(pitch), float(beats), str(syl), held=bool(getattr(syl, "melisma", False)),
+                             word_start=bool(getattr(syl, "word_start", False)),
+                             word_known=word_boundaries_known and hasattr(syl, "word_start")))
         i += 1
     return out
 
@@ -84,6 +91,7 @@ def _merge_fast(notes: list, bpm: float) -> list:
     for n in notes:
         prev = out[-1] if out else None
         if (prev is not None and prev.pitch is not None and n.pitch is not None and not n.held and not prev.breath
+                and not n.word_start
                 and prev.beats < limit and n.beats < limit and abs(n.pitch - prev.pitch) <= FAST_MAX_STEP
                 and len(prev.lyric) <= 2 and n.lyric in DIPHTHONGS
                 and (vowel(prev.lyric) or "") in DIPHTHONGS[n.lyric]):
@@ -97,13 +105,21 @@ def _merge_fast(notes: list, bpm: float) -> list:
 def _bind_short_rests(notes: list, breaths: bool) -> list:
     """Kurze Pausen der Note davor zuschlagen; mit breaths nach langen Strecken dort ein Atemzeichen setzen."""
     out, sung = [], 0.0                   # sung: Schläge seit der letzten richtigen Pause oder dem letzten Atmer
-    for n in notes:
+    for i, n in enumerate(notes):
         prev = out[-1] if out else None
+        # Ein Haltevokal gehört zur vorigen Silbe. Ein Atmer davor würde ihn neu ansetzen.
+        following = i + 1
+        if (following < len(notes) and notes[following].pitch is None
+                and notes[following].beats <= LEGATO_BIS + 1e-9):
+            following += 1
+        next_note = notes[following] if following < len(notes) else None
+        continues_word = (next_note is not None and next_note.pitch is not None
+                          and (next_note.held or (next_note.word_known and not next_note.word_start)))
         if n.pitch is None:
             if n.beats <= LEGATO_BIS + 1e-9 and prev is not None and prev.pitch is not None:
                 prev.beats += n.beats
                 sung += n.beats
-                if breaths and sung >= BREATH_AFTER_BEATS:
+                if breaths and sung >= BREATH_AFTER_BEATS and not continues_word:
                     prev.breath, sung = True, 0.0
                 continue
             out.append(n)
@@ -111,7 +127,7 @@ def _bind_short_rests(notes: list, breaths: bool) -> list:
             continue
         out.append(n)
         sung += n.beats
-        if breaths and sung >= MAX_PHRASE_BEATS and n.beats >= LONG_NOTE_BEATS:
+        if breaths and sung >= MAX_PHRASE_BEATS and n.beats >= LONG_NOTE_BEATS and not continues_word:
             n.breath, sung = True, 0.0
     return out
 

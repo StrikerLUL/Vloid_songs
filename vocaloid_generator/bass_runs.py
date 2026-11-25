@@ -136,9 +136,10 @@ def _funk(bass: list, bar: float, mine: list, sec) -> int:
             if not held:
                 continue
             root = held[-1]
-            root.dur = min(root.dur, bar + (step - 1) / 4 - root.start - 0.02)
-            if root.dur <= 0.05:
+            shortened = min(root.dur, bar + (step - 1) / 4 - root.start - 0.02)
+            if shortened <= 0.05:
                 continue
+            root.dur = shortened
             pitch = root.pitch + 12 if root.pitch + 12 <= HI else root.pitch
             bass.append(Ev(bar + step / 4, 0.2, pitch, max(1, round(root.vel * 0.9))))
         if step - 1 not in starts:

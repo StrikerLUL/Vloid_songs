@@ -1161,7 +1161,38 @@ PHRASE_END_GAP = 1.0     # Schläge Pause, ab denen ein Ton eine Phrase beendet
 END_NOTES = 2            # so viele Töne am Phrasenende singt die Harmonie „nur auf Phrasenenden“
 
 
-def harmony_line(plan: SongPlan, notes: list, kinds: tuple = ("Chorus",), modes: Optional[dict] = None) -> list:
+def _sustained_harmony_pitch(plan: SongPlan, note: MelNote, preferred: int, lo: int, hi: int) -> int:
+    """Einen gemeinsamen Akkordton wählen, wenn ein langer Ton einen Akkordwechsel überspannt."""
+    from musicality import slices
+    pieces = list(slices(plan, note))
+    if len(pieces) < 2:
+        return preferred
+    common = set.intersection(*(set(chord.pcs) for _, _, _, chord in pieces))
+    above = preferred > note.pitch
+    candidates = [p for p in range(lo - 2, hi + 3) if p % 12 in common
+                  and 3 <= abs(p - note.pitch) <= 9 and (p > note.pitch) == above]
+    return min(candidates, key=lambda p: (abs(p - preferred), p)) if candidates else preferred
+
+
+def _smooth_harmony_pitch(plan: SongPlan, note: MelNote, preferred: int, previous: MelNote, lo: int, hi: int) -> int:
+    """Große Sprünge nur verkleinern, wenn ein geeigneter gemeinsamer Akkordton verfügbar ist."""
+    from musicality import slices
+    if (note.start - previous.start - previous.dur >= PHRASE_END_GAP
+            or abs(preferred - previous.pitch) <= 7):
+        return preferred
+    pieces = list(slices(plan, note))
+    if not pieces:
+        return preferred
+    common = set.intersection(*(set(chord.pcs) for _, _, _, chord in pieces))
+    above = preferred > note.pitch
+    candidates = [p for p in range(lo - 2, hi + 3) if p % 12 in common
+                  and 3 <= abs(p - note.pitch) <= 9 and (p > note.pitch) == above
+                  and abs(p - previous.pitch) + 2 <= abs(preferred - previous.pitch)]
+    return min(candidates, key=lambda p: (abs(p - previous.pitch), abs(p - preferred), p)) if candidates else preferred
+
+
+def harmony_line(plan: SongPlan, notes: list, kinds: tuple = ("Chorus",), modes: Optional[dict] = None,
+                 coherent: bool = False) -> list:
     """
     Zweite Stimme für den Refrain: die Terz über der Melodie aus der Tonleiter; auf langen Tönen ein
     Akkordton. Passt sie nicht mehr in die Stimmlage, singt sie darunter. Im Breakdown schweigt sie.
@@ -1175,9 +1206,9 @@ def harmony_line(plan: SongPlan, notes: list, kinds: tuple = ("Chorus",), modes:
         if k + 1 == len(ordered) or ordered[k + 1].start - (n.start + n.dur) >= PHRASE_END_GAP:
             ends.update(id(m) for m in ordered[max(0, k - END_NOTES + 1):k + 1])
     out = []
-    for n in notes:
+    for n in ordered if coherent else notes:
         sec = plan.section_at(n.start)
-        if sec.kind not in kinds or (sec.feel == "breakdown" and n.start < sec.resume):
+        if sec.kind not in kinds or (sec.feel == "breakdown" and (sec.resume is None or n.start < sec.resume)):
             continue    # im leisen Teil singt die Stimme allein
         mode = (modes or {}).get(sec.start, "above")
         if mode == "ends" and id(n) not in ends:
@@ -1193,6 +1224,10 @@ def harmony_line(plan: SongPlan, notes: list, kinds: tuple = ("Chorus",), modes:
         pitch = above if above <= hi + 2 else below
         if mode == "below" and below >= lo - 2:
             pitch = below
+        if coherent and n.dur >= 1.0:
+            pitch = _sustained_harmony_pitch(plan, n, pitch, lo, hi)
+            if out and plan.section_at(out[-1].start) is sec:
+                pitch = _smooth_harmony_pitch(plan, n, pitch, out[-1], lo, hi)
         out.append(MelNote(n.start, n.dur, max(pitch, lo - 2), n.syllable, n.strong))
     return out
 

@@ -181,6 +181,19 @@ def _match(audio: np.ndarray, rate: int, target: float) -> np.ndarray:
     return out
 
 
+def _common_target(a: np.ndarray, b: np.ndarray, rate: int) -> float:
+    """Gemeinsames Ziel absenken, falls eine Fassung sonst übersteuern würde."""
+    levels = [_loudness(audio, rate) for audio in (a, b)]
+    if not all(np.isfinite(level) for level in levels):
+        return float("-inf")
+    target = sum(levels) / 2
+    for audio, level in zip((a, b), levels):
+        peak = float(np.max(np.abs(audio))) if audio.size else 0.0
+        if peak:
+            target = min(target, level + 20 * np.log10(0.98 / peak))
+    return target
+
+
 def render(settings, folder: str, seed: int, progress: Optional[Callable] = None) -> str:
     """Den Ausschnitt mischen; Rückgabe: final_mix.wav im Ordner. Ohne Verlauf (keep_history=False)."""
     import pipeline
@@ -204,9 +217,11 @@ def prepare(settings, candidate: Candidate, folder: str, seed: int, number: int 
         paths[side] = os.path.join(folder, f"{number:02d}_{side}.wav")
         shutil.copyfile(mix, paths[side])
     with_audio, rate = _read(paths["mit"])
-    without, _ = _read(paths["ohne"])
+    without, other_rate = _read(paths["ohne"])
+    if rate != other_rate or with_audio.shape[1] != without.shape[1]:
+        raise ValueError("Die Fassungen haben unterschiedliche Sampleraten oder Kanalzahlen.")
     identical = bool(same(with_audio, without))
-    target = (_loudness(with_audio, rate) + _loudness(without, rate)) / 2
+    target = _common_target(with_audio, without, rate)
     a_is_on = (rng or random).random() < 0.5
     out = {}
     for name, (audio, side) in {"a": (with_audio, "mit") if a_is_on else (without, "ohne"),

@@ -33,6 +33,11 @@ def plan_with_chords():
 
 
 class MusicalCoherenceTests(unittest.TestCase):
+    def test_chromatic_chord_tones_remain_in_the_local_scale(self):
+        sec = SimpleNamespace(tonic=0, mode="major")
+        chord = SimpleNamespace(pcs={0, 1, 4})
+        self.assertTrue(chord.pcs <= musicality.local_scale(sec, chord))
+
     def test_score_hears_the_harmony_instead_of_only_intervals(self):
         plan = plan_with_chords()
         a = [MelNote(0, 1, 60, "ら"), MelNote(1, 1, 64, "ら"), MelNote(2, 1, 67, "ら")]
@@ -56,6 +61,51 @@ class MusicalCoherenceTests(unittest.TestCase):
         passage = MelNote(1, 0.25, 71, "ら")
         color = MelNote(2, 1.5, 71, "あ", tension=True)
         self.assertEqual([n.pitch for n in musicality.fit_harmony(plan, [passage, color])], [71, 71])
+
+    def test_tension_resolves_into_the_new_chord_across_a_change(self):
+        section = Section("Chorus", 1, 0, 0, 2, 0, "major", 0.8, True,
+                          [ChordSlot(0, 4, Chord(0, "maj")), ChordSlot(4, 4, Chord(2, "min"))])
+        plan = SongPlan(120, get_style("Ballade"), 0, "major", [section], {})
+        tension = MelNote(3.5, 0.5, 63, "あ", tension=True)
+        resolution = MelNote(4, 1, 62, "ら")
+        self.assertEqual(musicality.harmony_scores([tension, resolution], plan)["resolution"], 1.0)
+        self.assertEqual([n.pitch for n in musicality.fit_harmony(plan, [tension, resolution])], [63, 62])
+
+    def test_tension_does_not_resolve_to_a_repeated_or_overlapping_tone(self):
+        chord = Chord(0, "maj")
+        tension = MelNote(0, 1, 64, "あ", tension=True)
+        self.assertFalse(musicality.intentional(tension, chord, MelNote(1, 1, 64, "ら")))
+        overlapping = MelNote(0, 1, 63, "あ", tension=True)
+        self.assertFalse(musicality.intentional(overlapping, chord, MelNote(0.5, 1, 64, "ら")))
+
+    def test_later_resolution_does_not_hide_earlier_chord_conflicts(self):
+        section = Section("Chorus", 1, 0, 0, 3, 0, "major", 0.8, True,
+                          [ChordSlot(0, 4, Chord(0, "maj")), ChordSlot(4, 4, Chord(6, "maj")),
+                           ChordSlot(8, 4, Chord(2, "min"))])
+        plan = SongPlan(120, get_style("Ballade"), 0, "major", [section], {})
+        tension = MelNote(3.5, 4.5, 63, "あ", tension=True)
+        resolution = MelNote(8, 1, 62, "ら")
+        fitted = musicality.fit_harmony(plan, [tension, resolution])
+        self.assertNotEqual(fitted[0].pitch, 63)
+        self.assertEqual(fitted[-2].pitch, 63)
+        self.assertTrue(fitted[-2].syllable.melisma)
+        self.assertEqual(fitted[-1].pitch, 62)
+
+    def test_phrase_search_considers_the_next_chord_under_a_held_note(self):
+        section = Section("Chorus", 1, 0, 0, 2, 0, "major", 0.8, True,
+                          [ChordSlot(0, 4, Chord(0, "maj")), ChordSlot(4, 4, Chord(5, "maj"))])
+        plan = SongPlan(120, get_style("Ballade"), 0, "major", [section], {})
+        writer = SimpleNamespace(plan=plan, center=63, char=None, lo=60, hi=64,
+                                 _gesture_offsets=lambda slots, role: [0],
+                                 _chord_at_step=lambda start, step: plan.chord_at(start + step / 4),
+                                 _ending_pcs=lambda role, chord: {0, 4},
+                                 _candidates=lambda chord, strong: [60, 64])
+        held = [SimpleNamespace(step=12, dur=12, strong=True, last=True)]
+        self.assertEqual(musicality.phrase_path(writer, held, 0, "R", None, None, None), [60])
+        section.chords[1] = ChordSlot(4, 4, Chord(0, "maj"))
+        self.assertEqual(musicality.phrase_path(writer, held, 0, "R", None, None, None), [64])
+        repeated_chord = list(musicality.slices(plan, SimpleNamespace(start=3, dur=3, pushed=False)))
+        self.assertEqual(musicality._crossing_cost(62, repeated_chord), 0.0)
 
     def test_words_and_lines_are_not_repeated_to_fill_a_section(self):
         words = [Mora(c, word_start=i == 0, line_start=i == 0) for i, c in enumerate("きみのこえ")]

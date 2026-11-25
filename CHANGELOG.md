@@ -2,6 +2,15 @@
 
 Jede Version hat hier einen Abschnitt. Die App zeigt ihn einmal nach einem Update (Hilfe › Was ist neu).
 
+## 1.9.0
+
+- **Melodie und Harmonie:** Phrasen und lange Töne berücksichtigen Akkordwechsel; Spannung und Auflösung
+  werden genauer geprüft. Begleitstimmen und Bass stimmen sich besser mit Gesang und Schlagzeug ab.
+- **Gesang und Mix:** Atemzeichen berücksichtigen bekannte Wortgrenzen und gehaltene Vokale. Die Mixautomatik
+  behandelt Stereoanteile und kurze Gesangseinsätze zuverlässiger; das Stimmen-Casting zeigt Hinweise zur Stimmlage.
+- **Refrain und Vergleiche:** Refrainvorschauen werden lautheitsangepasst und gemischt angeordnet. Ein Werkzeug
+  bereitet eigene WAV-Dateien für blinde Hörvergleiche vor; die persönliche Hörabnahme bleibt wichtig.
+
 ## 1.8.0
 
 - **Phrase reparieren:** direkt unter dem Player eine Gesangsphrase mit Zeit und Text auswählen. Nur sie mit
@@ -13,7 +22,7 @@ Jede Version hat hier einen Abschnitt. Die App zeigt ihn einmal nach einem Updat
 - **Installation:** Python 3.12 für den Quellcode-Start festgelegt und die Mindestversion auf 3.11 berichtigt;
   die gesperrten aktuellen Abhängigkeiten unterstützen 3.10 nicht mehr. Zusätzliche Installationsprüfungen unter Windows.
 
-**Musikalischer Zusammenhang** (bisher unveröffentlicht):
+**Musikalischer Zusammenhang:**
 
 - Ganze Phrasen suchen und Kandidaten erst nach Harmonie- und Singbarkeitskorrekturen auswählen.
 - Gehaltene Töne über Akkordwechsel prüfen; Textgrenzen erhalten und kurze Texte nicht künstlich wiederholen.

@@ -4,8 +4,12 @@ from collections import defaultdict
 
 def rhythm(section, drums) -> dict:
     """Die tatsächlich gespielten Kicks, einschließlich des Timings echter Grooves."""
-    kicks = sorted({round(e.start, 6): e.vel for e in drums
-                    if e.pitch in (35, 36) and section.start <= e.start < section.end}.items())
+    strongest = {}
+    for event in drums:
+        if event.pitch in (35, 36) and section.start <= event.start < section.end:
+            start = round(event.start, 6)
+            strongest[start] = max(strongest.get(start, 0), event.vel)
+    kicks = sorted(strongest.items())
     return {"kicks": kicks, "anchors": [s.start for s in section.chords]}
 
 
@@ -31,7 +35,9 @@ def bass_line(pattern, section, plan, context) -> list:
         if end - t < 0.05:
             continue
         octave = 12 if pattern == "octaves" and i % 2 else 0
-        accent = 1.0 if any(abs(t - k) < 0.02 for k in kicks) else 0.75
+        kick_vel = max((velocity for at, velocity in kicks.items() if abs(t - at) < 0.02), default=0)
+        # Leise und starke Kicks führen zu entsprechend abgestuften Bassanschlägen.
+        accent = min(1.1, 0.72 + 0.0028 * kick_vel) if kick_vel else 0.75
         out.append(Ev(t, min(1.9, end - t) * 0.9, pitch + octave, _vel(section, accent * 0.9)))
         prev = pitch
     context["bass"] = prev
@@ -48,7 +54,8 @@ def arrange(plan, events, vocal) -> dict:
     primary = "guitar" if plan.style.name in rocks else "piano"
     trimmed, removed, clashes = 0, 0, 0
     for sec in plan.sections:
-        sung = [n for n in vocal if sec.start <= n.start < sec.end]
+        # Ein Ton kann schon in der vorigen Sektion beginnen und hier noch klingen.
+        sung = [n for n in vocal if n.start < sec.end and n.start + n.dur > sec.start]
         if not sung:
             continue
         active = [key for key in (primary, "piano", "guitar", "synth", "brass")
@@ -58,7 +65,7 @@ def arrange(plan, events, vocal) -> dict:
         for key in ("piano", "guitar", "synth", "brass", "counter", "bells", "strings", "choir", "melody"):
             kept = []
             for event in events.get(key, []):
-                if not sec.start <= event.start < sec.end:
+                if event.start >= sec.end or event.start + event.dur <= sec.start:
                     kept.append(event)
                     continue
                 sounding = _overlap(event, sung)
@@ -81,7 +88,7 @@ def arrange(plan, events, vocal) -> dict:
                         removed += 1
                     clashes += int(collision)
                 else:
-                    if key in ("strings", "choir"):
+                    if key in ("strings", "choir") and event.start >= sec.start:
                         event.vel = max(1, round(event.vel * 0.72))
                     kept.append(event)
             events[key] = kept

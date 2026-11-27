@@ -30,7 +30,7 @@ def apply(plan, events: dict) -> dict:
                                                      for e in events.get(inst, ()))), None)
         if alone is not None:
             enter = verse.start + WAIT_BARS * BEATS_PER_BAR
-            for inst in SILENT_FIRST:
+            for inst in SILENT_FIRST + tuple(inst for inst in ALONE if inst != alone):
                 evs = events.get(inst)
                 if evs:
                     # Aus dem Intro gehaltene Töne dürfen die leise Strophe nicht überdecken.

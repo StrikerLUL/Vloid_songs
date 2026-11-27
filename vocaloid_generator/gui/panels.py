@@ -1083,6 +1083,23 @@ def voice_panel(s: SongSettings, singers: list, pick: PickFn | None = None) -> t
     section_title("Noten für NEUTRINO")
     for attr, text, tip in SCORE_SWITCHES:
         ui.switch(text).bind_value(s, attr).props("dense").tooltip(tip).mark(f"switch-{attr}")
+    section_title("Atmung einstellen")
+    hint("Atemabstand verändert die NEUTRINO-Noten. Die Atmer-Lautstärke steuert hörbare Atemgeräusche "
+         "nach dem Singen. 1 entspricht jeweils der Vorgabe.")
+    for text, attr, minimum, switch in (("Atemabstand", "breath_phrase_scale", 0.5, "breath_marks"),
+                                        ("Atmer-Lautstärke", "breath_volume", 0.0, "breaths")):
+        with ui.row().classes("w-full items-center gap-3"):
+            ui.label(text).classes("w-40")
+            ui.slider(min=minimum, max=2, step=0.1).bind_value(s, attr).props("label") \
+                .classes("col min-w-32").bind_enabled_from(s, switch).mark(f"slider-{attr}") \
+                .tooltip("1 = Vorgabe; kleinere Werte = häufiger" if attr == "breath_phrase_scale" else
+                         "0 = keine hörbaren Atmer; 1 = Vorgabe; 2 = doppelte Lautstärke")
+    def reset_breath_controls() -> None:
+        s.breath_phrase_scale = 1.0
+        s.breath_volume = 1.0
+
+    ui.button("Atmung zurücksetzen", icon="restart_alt", on_click=reset_breath_controls) \
+        .props("flat no-caps").mark("reset-breath-controls")
     section_title("Eigene Gesangsspur")
     with ui.row().classes("w-full items-center no-wrap"):
         ui.input("WAV statt der Hauptstimme", placeholder="leer = die Engine singt") \

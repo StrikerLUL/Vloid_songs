@@ -228,13 +228,18 @@ def duck(wet: np.ndarray, vocal: np.ndarray, rate: int, depth_db: float = DUCK_D
     if not frames:
         return wet
     env = level[:frames * hop].reshape(frames, hop).max(axis=1)
-    top = np.percentile(env, 95) or 1.0
+    top = np.percentile(env, 95)
+    if top <= 1e-8:
+        audible = env[env > 1e-8]
+        if not len(audible):
+            return wet
+        top = np.percentile(audible, 95)
     singing = np.clip(env / (0.25 * top), 0.0, 1.0)
     release = np.exp(-0.01 / DUCK_RELEASE)
     held = singing.copy()
     for i in range(1, frames):
         held[i] = max(singing[i], held[i - 1] * release)
     gain = 10 ** (depth_db * held / 20)
-    gain = lfilter([0.3], [1, -0.7], gain)                    # weich ein- und ausblenden
+    gain, _ = lfilter([0.3], [1, -0.7], gain, zi=[0.7 * gain[0]])  # ohne künstliche Absenkung am Anfang
     curve = np.interp(np.arange(wet.shape[1]), (np.arange(frames) + 0.5) * hop, gain).astype(np.float32)
     return wet * curve[None]

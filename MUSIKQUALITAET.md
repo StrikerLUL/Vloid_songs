@@ -79,6 +79,12 @@ die Gesamtdauer der Noten noch die Ausgabe bei ausgeschalteten Atemzeichen. Eine
 Stimmen und Tempi steht noch aus.
 Sind mehrere Wortanfänge im Text bekannt, wird ein fälliger Atmer außerdem bis zur nächsten geeigneten
 Wortgrenze zurückgestellt. Fehlen ausreichende Wortgrenzen, bleibt das frühere Verhalten erhalten.
+Für NEUTRINO lässt sich der Abstand der Atemzeichen mit `--atem-abstand` zwischen 0.5 und 2 einstellen;
+1 ist die bisherige Vorgabe. Die Option verändert nicht die Notendauer und ist bei ausgeschalteten Atemzeichen
+wirkungslos. Längere Phrasen können mehr Speicher benötigen.
+Die Lautstärke hörbarer Atemgeräusche lässt sich mit `--atmer-lautstaerke` von 0 bis 2 skalieren; 1 entspricht
+der bisherigen Lautstärke. Diese Einstellung betrifft aufgenommene und künstliche Atmer, nicht die Atemzeichen
+der Partitur. Gegenphasige Stereostimmen werden bei der Pegelmessung nicht als Stille behandelt.
 
 Die Melodiebewertung im gemeinsamen Kompositionsmodus zählt Tonwiederholungen und die Fortsetzung von
 Sprüngen nur innerhalb derselben Phrase. Gehaltene Vokale werden beim Erkennen von Pausen mitgezählt.
@@ -101,15 +107,22 @@ Die Mix-Automatik misst die Energie beider Stereokanäle getrennt, damit gegenph
 fälschlich als Stille gelten. Das betrifft Platz für die Stimme und das Nachführen der Gesangslautstärke.
 Sehr kurze Gesangseinsätze nach langer Stille lassen die Band nicht mehr bereits während der Stille leiser
 werden; stille Frequenzbänder zählen nicht als Gesang.
+Das Gesangs-Delay bleibt bei Stille auch direkt am Anfang unverändert. Sehr kurze Einsätze in langen Pausen
+werden für die zeitweilige Delay-Absenkung erkannt; nach dem Einsatz kehrt das Delay sanft zurück.
 Im Stimmen-Casting zeigt der Hinweis am Wiedergabeknopf den Tonumfang der Vorschau und den hinterlegten
 Bereich der Stimme; lange Töne nahe dessen oberem Rand werden genannt. Für unbekannte Stimmen wird keine
 Lage behauptet. Bei Bedarf wird eine benachbarte Tonart als rechnerischer Ausgangspunkt vorgeschlagen;
 beim Neuerzeugen kann sich die Melodie ändern. Die Angabe ersetzt keine persönliche Hörprobe.
 Wenn der Aufbau die erste Strophe bewusst schlank beginnen lässt, enden gehaltene Töne der zunächst
 schweigenden Bandinstrumente am Übergang aus dem Intro.
+Beginnen Klavier und Gitarre gleichzeitig, setzt zunächst nur das ausgewählte Instrument die Strophe fort;
+das andere pausiert bis zum Bandeinsatz. Auch dessen gehaltene Intro-Töne enden am Übergang.
 Die Refrainauswahl gleicht ihre Vorschauen auf ein gemeinsames integriertes Lautheitsziel ab, ohne die
 lauteste Variante weiter anzuheben. Text, Seed, Variationen und Geschmack werden weiterhin für die
 Auswahl übernommen. Die Reihenfolge der Vorschaustücke wird für die Auswahl zufällig gemischt.
+In der einfachen Ansicht gilt die gewählte Qualitätsstufe bereits für die Komposition der Vorschau. Werden
+Einstellungen nach dem Erstellen verändert, verlangt die Auswahl neue Vorschauen, damit der gewählte Refrain
+mit den gehörten Einstellungen erzeugt wird.
 Beim gemeinsamen Bass-Groove zählt bei gleichzeitigen Kick-Schlägen der stärkste Anschlag; seine Stärke
 beeinflusst die Bassbetonung. Das ist deterministisch und lässt Akkordankerpunkte bestehen.
 Spannungstöne werden auch dann als aufgelöst erkannt, wenn der Auflösungston bereits zum nächsten Akkord

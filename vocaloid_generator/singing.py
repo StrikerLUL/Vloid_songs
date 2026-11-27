@@ -40,9 +40,10 @@ NOTE_KEYS = ("melody_data", "silben", "harmony_data", "harmony_silben", "octave_
 VOCAL_CODE = ("singing.py", "vocal_synthesizer.py", "voice_fx.py", "voicevox.py", "neutrino_score.py", "diffsinger.py",
               "meter.py", "rap.py", "spoken.py")
 VOCAL_FIELDS = ("bpm", "meter", "seed", "rap_voice", "rap_speaker", "singer", "vocal_engine", "harmonies", "duet_singer", "support_singer", "style_shift", "vocal_takes",
-                "vibrato", "glide", "breaths", "final_choir", "voicevox_url", "voicevox_singer", "voicevox_dynamics", "diffsinger_voice",
+                "vibrato", "glide", "breaths", "breath_volume", "final_choir", "voicevox_url", "voicevox_singer", "voicevox_dynamics", "diffsinger_voice",
                 "neutrino_pfad",
-                "vocal_comping", "phrase_expression", "long_vowel_mark", "breath_marks", "fast_diphthongs",
+                "vocal_comping", "phrase_expression", "long_vowel_mark", "breath_marks", "breath_phrase_scale",
+                "fast_diphthongs",
                 "english_kana", "section_style", "verse_style_shift", "chorus_style_shift", "even_takes",
                 "harmony_variety", "harmony_double", "sung_pads", "adlibs", "idol_calls", "syllable_dynamics",
                 "recorded_breaths", "text_expression", "note_swells", "psola_reshape", "own_vocal", "own_vocal_align", "phrase_fixes", "style",
@@ -354,7 +355,7 @@ def _liven(settings: SongSettings, tracks: dict, out: str, vocals_wav: str, sung
     if settings.breaths:
         count = voice_fx.add_breaths(vocals_wav, voice_fx.timeline(tracks["melody_data"], settings.bpm),
                                      seed=settings.seed or 0, recorded=settings.recorded_breaths,
-                                     soft=settings.soft_breaths)
+                                     soft=settings.soft_breaths, volume=settings.breath_volume)
         log.info("%d Atmer vor den Phrasen%s", count,
                  " (aufgenommen)" if settings.recorded_breaths and voice_fx.breath_samples(48000) else "")
 

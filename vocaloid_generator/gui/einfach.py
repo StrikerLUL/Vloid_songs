@@ -57,11 +57,14 @@ def simple_panel(s: SongSettings, singers: Callable[[], list], on_generate: Call
             s.active_sections = list(labels.STRUCTURES[value])
 
     with ui.column().classes("w-full gap-3").mark("simple-panel"):
+        ui.label("Dein Song in drei Schritten").classes("text-h6").mark("simple-workflow-title")
+        ui.label("1. Stil und Stimme wählen  ·  2. Text prüfen  ·  3. Refrain wählen oder Song erzeugen") \
+            .classes("text-body2").mark("simple-workflow-steps")
         hint("Hier stellst du nur das Wichtigste ein. Alles andere steht unter „Profi“ oben rechts und bleibt, wie es "
              "dort eingestellt ist.")
         ui.select(list(STYLES), label="Stil").bind_value(s, "style").classes("w-full").mark("simple-style") \
             .on("update:model-value", lambda: ui.timer(0.05, style_changed, once=True))
-        with ui.row().classes("w-full items-center no-wrap gap-3"):
+        with ui.row().classes("w-full items-center flex-wrap gap-3"):
             ui.label("Stimmung").classes("w-24")
             ui.label("ruhig").classes("text-caption text-grey-5")
             ui.slider(min=0, max=1, step=0.05).bind_value(s, "mood").classes("col").mark("simple-mood") \
@@ -69,11 +72,11 @@ def simple_panel(s: SongSettings, singers: Callable[[], list], on_generate: Call
                          "Fills und Becken, alle spielen mit")
             ui.label("wild").classes("text-caption text-grey-5")
         voice = ui.select([s.singer], label="Stimme").bind_value(s, "singer").classes("w-full").mark("simple-singer")
-        with ui.row().classes("w-full items-center no-wrap gap-3"):
+        with ui.row().classes("w-full items-center flex-wrap gap-3"):
             ui.label("Länge").classes("w-24")
             length = ui.toggle(list(labels.STRUCTURES), value=length_of(s.active_sections) or None,
                                on_change=lambda e: length_changed(e.value)).props("no-caps dense").mark("simple-length")
-        with ui.row().classes("w-full items-center no-wrap gap-3"):
+        with ui.row().classes("w-full items-center flex-wrap gap-3"):
             ui.label("Qualität").classes("w-24")
             ui.toggle(list(qualitaet.PRESETS)).bind_value(s, "quality").props("no-caps dense") \
                 .on_value_change(lambda: refresh()).mark("simple-quality")
@@ -87,6 +90,9 @@ def simple_panel(s: SongSettings, singers: Callable[[], list], on_generate: Call
                          "zusammen, ohne KI")
         ui.textarea(placeholder="[Verse]\n…\n[Chorus]\n…").bind_value(s, "lyrics").props("outlined autogrow") \
             .classes("w-full").style("max-height: 16rem; overflow: auto").mark("simple-lyrics")
+        ui.label().bind_text_from(s, "lyrics", backward=lambda text: "Text eingetragen" if (text or "").strip()
+                                  else "Noch kein Text eingetragen") \
+            .classes("text-caption text-grey-5").mark("simple-text-status")
         with ui.row().classes("w-full items-center gap-2 q-mt-sm"):
             if on_hooks is not None:
                 ui.button("1. Refrain auswählen", icon="queue_music", on_click=lambda: on_hooks()) \

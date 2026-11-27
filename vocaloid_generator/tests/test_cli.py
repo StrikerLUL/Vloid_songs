@@ -44,7 +44,7 @@ def test_invalid_option_is_rejected(captured):
 
 
 @pytest.mark.parametrize("args", [["--bpm", "300"], ["--lautheit", "-30"], ["--veredler-staerke", "2"],
-                                  ["--vibrato", "5"]])
+                                  ["--vibrato", "5"], ["--atem-abstand", "2.1"], ["--atmer-lautstaerke", "-0.1"]])
 def test_values_out_of_range_give_a_message_instead_of_a_crash(captured, caplog, args):
     with caplog.at_level("ERROR"):
         assert main.main(args) == 1
@@ -64,6 +64,16 @@ def test_vocal_options(captured):
     s = captured["settings"]
     assert (s.vocal_engine, s.voicevox_singer, s.vocal_takes, s.vibrato, s.glide) == ("VOICEVOX", 3002, 3, 0.0, 1.5)
     assert (s.breaths, s.echo_throws, s.final_choir) == (False, True, False)
+
+
+def test_breath_spacing_can_be_set_from_command_line(captured):
+    assert main.main(["--atem-abstand", "1.5"]) == 0
+    assert captured["settings"].breath_phrase_scale == 1.5
+
+
+def test_breath_volume_can_be_set_from_command_line(captured):
+    assert main.main(["--atmer-lautstaerke", "0.5", "--ohne-atmer"]) == 0
+    assert captured["settings"].breath_volume == 0.5 and not captured["settings"].breaths
 
 
 def test_sound_options(captured):

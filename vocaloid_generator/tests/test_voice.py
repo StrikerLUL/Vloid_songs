@@ -89,6 +89,46 @@ def test_excerpt_keeps_only_the_notes_in_the_window_with_their_syllables():
 
 
 # ── Atmer ──────────────────────────────────────────────────────────────────────
+@pytest.mark.parametrize("recorded", [False, True])
+def test_breath_volume_scales_both_recorded_and_synthetic_breaths(tmp_path, monkeypatch, recorded):
+    notes = [N(1.0, 2.0, 64)]
+    source = sung(notes, 3.0)
+    monkeypatch.setattr(voice_fx, "breath_samples", lambda rate: [(0.2, np.ones(int(0.2 * rate), np.float32))])
+    result = []
+    for volume in (0.0, 0.5, 1.0):
+        path = write(tmp_path / f"breath-{volume}.wav", source)
+        before = (tmp_path / f"breath-{volume}.wav").read_bytes()
+        count = voice_fx.add_breaths(path, notes, seed=1, recorded=recorded, volume=volume)
+        if volume == 0:
+            assert count == 0 and (tmp_path / f"breath-{volume}.wav").read_bytes() == before
+        else:
+            assert count == 1
+        result.append(sf.read(path, dtype="float32")[0] - source)
+    assert np.max(np.abs(result[2])) > 0
+    np.testing.assert_allclose(result[1], result[2] * 0.5, atol=1e-7)
+
+
+def test_breath_level_detects_antiphase_stereo_voice(tmp_path):
+    notes = [N(1.0, 2.0, 64)]
+    source = sung(notes, 3.0)
+    normal = np.column_stack([source, source])
+    opposite = np.column_stack([source, -source])
+    assert voice_fx._sung_level(source, RATE) == pytest.approx(voice_fx._sung_level(opposite, RATE))
+    assert voice_fx._sung_level(normal, RATE) == pytest.approx(voice_fx._sung_level(opposite, RATE))
+    path = write(tmp_path / "opposite.wav", opposite)
+    assert voice_fx.add_breaths(path, notes, seed=1, recorded=False) == 1
+    after, _ = sf.read(path, dtype="float32", always_2d=True)
+    assert np.max(np.abs(after[:RATE] - opposite[:RATE])) > 0
+
+
+def test_breath_volume_defaults_persists_and_invalidates_vocal_cache():
+    settings = SongSettings.model_validate({})
+    assert settings.breath_volume == 1.0
+    changed = settings.with_updates(breath_volume=0.5)
+    assert SongSettings.model_validate_json(changed.model_dump_json()).breath_volume == 0.5
+    assert singing._vocal_key(settings, {}) != singing._vocal_key(changed, {})
+
+
 def test_breaths_come_before_phrases_and_stay_quiet(tmp_path):
     notes = [N(1.0, 2.0, 64), N(2.0, 3.0, 67), N(4.0, 5.5, 65), N(5.55, 6.0, 64)]
     path = write(tmp_path / "vocals.wav", sung(notes, 7.0))

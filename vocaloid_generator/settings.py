@@ -191,6 +191,7 @@ class SongSettings(BaseModel):
     # von Hand neu gesungene Phrasen (E3): {Schlag einer Note der Phrase (edit_key): {"style_shift": int, "singer": str}}
     phrase_fixes: dict[str, dict] = Field(default_factory=dict)
     breaths: bool = True               # hörbares Einatmen vor den Phrasen
+    breath_volume: float = Field(1.0, ge=0.0, le=2.0)  # Lautstärke hörbarer Atmer, 1 = bisher
     recorded_breaths: bool = True      # aufgenommene Atmer aus dem Ordner Atmer statt Rauschen (wenn welche da sind)
     echo_throws: bool = True           # Echo auf dem letzten Wort einer Phrase
     final_choir: bool = True           # im letzten Refrain singt ein Chor mit
@@ -215,6 +216,7 @@ class SongSettings(BaseModel):
     # Gesang 1.1, jedes mit Schalter. Noten, die NEUTRINO gut singen kann (neutrino_score.py):
     long_vowel_mark: bool = True       # lang gezogene Vokale und Melisma als ー statt als neue Silbe
     breath_marks: bool = True          # Atemzeichen in langen Phrasen (NEUTRINO trennt dort, braucht weniger Speicher)
+    breath_phrase_scale: float = Field(1.0, ge=0.5, le=2.0)  # Abstand der Atemzeichen relativ zur Vorgabe
     fast_diphthongs: bool = True       # zwei schnelle Töne mit Doppelvokal (か + い) auf einem Ton
     english_kana: bool = True          # englische Wörter als Katakana singen (love → ラブ)
     singable_melody: bool = True       # Melodie auf Singbarkeit prüfen: Sprünge, Spitzen, Atempausen

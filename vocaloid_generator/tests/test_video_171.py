@@ -110,6 +110,7 @@ async def test_an_unexpected_error_is_shown_and_not_called_done(user, fake_gener
     user.find(marker="video-name-skip").click()
     await user.should_see("Das Lyric-Video ging nicht: ValueError: images do not match", retries=50)
     await until(lambda: marked(user, "step")[0].text.startswith("Video ging nicht"))
+    assert marked(user, "progress")[0].value < 1.0
     assert marked(user, "video")[0].enabled                      # die App bleibt bedienbar
 
 

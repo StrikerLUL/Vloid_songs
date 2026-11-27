@@ -932,6 +932,7 @@ uv run vocaloid_generator\main.py --style Rock --bpm 140 --key E --scale minor -
 | `--noten-zip DATEI` | die Gesangsnoten als ZIP für Tuning-Tools (MusicXML, UST, MIDI) |
 | `--strophe-stil N`, `--refrain-stil N`, `--ohne-sektions-stil` | StyleShift der Strophen und Refrains (Standard −1 und +1), oder überall derselbe |
 | `--ohne-haltezeichen`, `--ohne-atemzeichen`, `--ohne-doppelvokale`, `--ohne-englisch`, `--ohne-singbarkeit` | die Vorbereitung der Noten für NEUTRINO einzeln abschalten |
+| `--atem-abstand 1.5` | NEUTRINO-Atemzeichen seltener setzen: Faktor von 0.5 bis 2; 1 entspricht dem bisherigen Verhalten. Wortgrenzen und gehaltene Vokale bleiben geschützt. Längere Phrasen können mehr Speicher benötigen. |
 | `--ohne-harmonie-wechsel`, `--ohne-doppel-harmonie`, `--ohne-flaechen`, `--ohne-adlibs` | Begleitstimmen wie bis 1.0 |
 | `--ohne-gleiche-fassungen` | Fassungen heller und dunkler singen und nach jeder Abweichung werten |
 | `--ohne-echte-atmer`, `--ohne-silben-lautstaerke`, `--ohne-platz`, `--ohne-nachfuehren` | Atmer aus Rauschen, alle Silben gleich laut, Band ohne Platz für den Gesang, Gesang nicht nachgeführt |
@@ -944,6 +945,7 @@ uv run vocaloid_generator\main.py --style Rock --bpm 140 --key E --scale minor -
 | `--fassungen N` | NEUTRINO singt N-mal (1 bis 3), die sauberste Fassung zählt |
 | `--vibrato X`, `--uebergaenge X` | Vibrato und Übergänge zwischen den Tönen, 0 bis 2 (1 = wie gesungen) |
 | `--ohne-atmer`, `--ohne-echo`, `--ohne-chor` | Atmer, Echo auf dem letzten Wort oder Chor im letzten Refrain abschalten |
+| `--atmer-lautstaerke 0.5` | Lautstärke hörbarer künstlicher und aufgenommener Atmer skalieren: 0 bis 2, Standard 1. Bei 0 werden keine Atmer zugemischt; `--ohne-atmer` schaltet sie unabhängig davon ab. |
 | `--schlagzeug KLANG` | Schlagzeug aus `soundfont`, `808` oder `909` statt wie der Stil |
 | `--ohne-verstaerker`, `--box WAV` | verzerrte Gitarren wie früher aus dem SoundFont, oder über die Box aus dieser Impulsantwort |
 | `--ohne-samples` | Orchester aus dem SoundFont statt aus den echten Aufnahmen |

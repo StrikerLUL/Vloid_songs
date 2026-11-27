@@ -162,6 +162,22 @@ def test_the_delay_steps_back_while_the_vocal_sings():
     assert abs(db(ducked, 3.2, 3.9) - db(wet, 3.2, 3.9)) < 0.5
 
 
+def test_delay_is_unchanged_when_the_vocal_is_silent():
+    wet = stereo(noise(1.0))
+    actual = vocal_mix.duck(wet, np.zeros_like(wet), RATE)
+    np.testing.assert_allclose(actual, wet, atol=1e-7)
+
+
+def test_short_vocal_in_long_silence_ducks_delay_only_at_the_voice():
+    seconds = 10.0
+    vocal = stereo(tone(seconds, 1000.0, on=(5.0, 5.04), level=0.05))
+    wet = stereo(np.ones(int(seconds * RATE), dtype=np.float32))
+    actual = vocal_mix.duck(wet, vocal, RATE)
+    assert np.min(actual[:, :int(4.0 * RATE)]) > 0.999
+    assert np.min(actual[:, int(5.0 * RATE):int(5.1 * RATE)]) < 0.55
+    assert np.min(actual[:, int(7.0 * RATE):]) > 0.99
+
+
 def test_mix_with_plate_and_ducked_delay(tmp_path):
     seconds = 4.0
     paths = []

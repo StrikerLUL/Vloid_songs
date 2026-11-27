@@ -201,6 +201,7 @@ def parse_args(argv=None):
     p.add_argument("--ohne-psola", action="store_true",
                    help="Vibrato und Übergänge mit dem WORLD-Vocoder statt mit Praat-PSOLA ändern")
     p.add_argument("--ohne-atmer", action="store_true", help="kein Einatmen vor den Phrasen")
+    p.add_argument("--atmer-lautstaerke", type=float, help="Lautstärke hörbarer Atmer: 0 bis 2, Standard 1")
     p.add_argument("--ohne-echo", action="store_true", help="kein Echo auf dem letzten Wort")
     p.add_argument("--ohne-chor", action="store_true", help="kein Chor im letzten Refrain")
     p.add_argument("--ohne-comping", action="store_true",
@@ -222,6 +223,7 @@ def parse_args(argv=None):
                    help="[Verse 2], [Chorus 3] übergehen: jede Wiederholung singt den Text der ersten")
     p.add_argument("--ohne-haltezeichen", action="store_true", help="lange Vokale für NEUTRINO nicht als ー schreiben")
     p.add_argument("--ohne-atemzeichen", action="store_true", help="keine Atemzeichen in langen Zeilen")
+    p.add_argument("--atem-abstand", type=float, help="Abstand der NEUTRINO-Atemzeichen: 0.5 bis 2, Standard 1")
     p.add_argument("--ohne-doppelvokale", action="store_true", help="schnelle Töne nicht auf einem Ton zusammenlegen")
     p.add_argument("--ohne-englisch", action="store_true", help="englische Wörter nicht als Katakana singen")
     p.add_argument("--ohne-singbarkeit", action="store_true",
@@ -426,6 +428,7 @@ def main(argv=None) -> int:
                  "vibrato": args.vibrato, "glide": args.uebergaenge,
                  "psola_reshape": False if args.ohne_psola else None,
                  "breaths": False if args.ohne_atmer else None, "echo_throws": False if args.ohne_echo else None,
+                 "breath_volume": args.atmer_lautstaerke,
                  "final_choir": False if args.ohne_chor else None,
                  "vocal_comping": False if args.ohne_comping else None,
                  "phrase_expression": False if args.ohne_ausdruck else None,
@@ -441,6 +444,7 @@ def main(argv=None) -> int:
                  "numbered_lyrics": False if args.ohne_eigene_texte else None,
                  "long_vowel_mark": False if args.ohne_haltezeichen else None,
                  "breath_marks": False if args.ohne_atemzeichen else None,
+                 "breath_phrase_scale": args.atem_abstand,
                  "fast_diphthongs": False if args.ohne_doppelvokale else None,
                  "english_kana": False if args.ohne_englisch else None,
                  "singable_melody": False if args.ohne_singbarkeit else None,

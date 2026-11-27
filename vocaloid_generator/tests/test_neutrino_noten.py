@@ -136,6 +136,47 @@ def test_options_follow_the_settings():
     assert opts == ScoreOptions(long_vowels=True, breath_marks=False, fast_diphthongs=True)
 
 
+def test_breath_spacing_is_configurable_without_changing_words_or_duration():
+    from settings import SongSettings
+    melody = [(64, 1.0)] * 24
+    words = [Mora("ら", word_start=i % 2 == 0) for i in range(24)]
+    shorter = build(melody, words, 120, neutrino_score.options(SongSettings(breath_phrase_scale=0.5)))
+    normal = build(melody, words, 120, neutrino_score.options(SongSettings()))
+    longer = build(melody, words, 120, neutrino_score.options(SongSettings(breath_phrase_scale=2.0)))
+    assert [i for i, note in enumerate(shorter) if note.breath] == [7, 15, 23]
+    assert [i for i, note in enumerate(normal) if note.breath] == [15]
+    assert not any(note.breath for note in longer)
+    assert all(total(notes) == 24 and lyrics_of(notes) == [str(word) for word in words]
+               for notes in (shorter, normal, longer))
+    off = build(melody, words, 120, neutrino_score.options(SongSettings(breath_marks=False,
+                                                                        breath_phrase_scale=0.5)))
+    assert not any(note.breath for note in off)
+
+
+@pytest.mark.parametrize("scale", [0.5, 2.0])
+def test_custom_breath_spacing_respects_word_and_held_vowel_boundaries(scale):
+    count = int(16 * scale)
+    melody = [(64, 1.0)] * count + [(65, 1.0), (67, 1.0)]
+    words = [Mora("ら", word_start=i == 0) for i in range(count - 1)]
+    words += [Mora("か"), Mora("あ", melisma=True), Mora("ら", word_start=True)]
+    notes = build(melody, words, 120, ScoreOptions(breath_phrase_scale=scale))
+    assert not notes[count - 1].breath
+    assert notes[count].lyric == "ー" and notes[count].breath
+    assert total(notes) == count + 2
+
+
+def test_breath_spacing_keeps_old_settings_and_changes_vocal_cache(tmp_path):
+    from settings import SongSettings
+    import singing
+    original = SongSettings.model_validate({})
+    changed = original.with_updates(breath_phrase_scale=1.5)
+    assert neutrino_score.options(original).breath_phrase_scale == 1.0
+    assert singing._vocal_key(original, {}) != singing._vocal_key(changed, {})
+    path = tmp_path / "settings.json"
+    path.write_text(changed.model_dump_json(), encoding="utf-8")
+    assert SongSettings.model_validate_json(path.read_text(encoding="utf-8")).breath_phrase_scale == 1.5
+
+
 @pytest.mark.parametrize("word, kana", [("love", "ラブ"), ("yeah", "イェー"), ("Baby,", "ベイビー"),
                                         ("forever", "フォーエバー")])
 def test_english_words_become_katakana(word, kana):

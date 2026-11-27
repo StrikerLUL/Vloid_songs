@@ -34,6 +34,7 @@ class ScoreOptions:
     breath_marks: bool = True        # A2: Atemzeichen in langen Phrasen
     fast_diphthongs: bool = True     # A4: zwei Moren auf einem schnellen Ton
     meter: str = "4/4"               # Takt der Noten (meter.py)
+    breath_phrase_scale: float = 1.0  # kürzere/längere Phrasen, 1 = bisheriges Verhalten
 
 
 @dataclass
@@ -52,7 +53,8 @@ def options(settings) -> ScoreOptions:
     return ScoreOptions(long_vowels=getattr(settings, "long_vowel_mark", True),
                         breath_marks=getattr(settings, "breath_marks", True),
                         fast_diphthongs=getattr(settings, "fast_diphthongs", True),
-                        meter=getattr(settings, "meter", "4/4"))
+                        meter=getattr(settings, "meter", "4/4"),
+                        breath_phrase_scale=getattr(settings, "breath_phrase_scale", 1.0))
 
 
 def build(melody_data: list, syllables: list, bpm: float, opts: Optional[ScoreOptions] = None) -> list:
@@ -60,7 +62,8 @@ def build(melody_data: list, syllables: list, bpm: float, opts: Optional[ScoreOp
     notes = _paired(melody_data, syllables)
     if opts is not None and opts.fast_diphthongs:
         notes = _merge_fast(notes, bpm)
-    notes = _bind_short_rests(notes, opts is not None and opts.breath_marks)
+    notes = _bind_short_rests(notes, opts is not None and opts.breath_marks,
+                              opts.breath_phrase_scale if opts is not None else 1.0)
     if opts is not None and opts.long_vowels:
         _long_vowels(notes)
     return notes
@@ -102,7 +105,7 @@ def _merge_fast(notes: list, bpm: float) -> list:
     return out
 
 
-def _bind_short_rests(notes: list, breaths: bool) -> list:
+def _bind_short_rests(notes: list, breaths: bool, phrase_scale: float = 1.0) -> list:
     """Kurze Pausen der Note davor zuschlagen; mit breaths nach langen Strecken dort ein Atemzeichen setzen."""
     out, sung = [], 0.0                   # sung: Schläge seit der letzten richtigen Pause oder dem letzten Atmer
     for i, n in enumerate(notes):
@@ -119,7 +122,7 @@ def _bind_short_rests(notes: list, breaths: bool) -> list:
             if n.beats <= LEGATO_BIS + 1e-9 and prev is not None and prev.pitch is not None:
                 prev.beats += n.beats
                 sung += n.beats
-                if breaths and sung >= BREATH_AFTER_BEATS and not continues_word:
+                if breaths and sung >= BREATH_AFTER_BEATS * phrase_scale and not continues_word:
                     prev.breath, sung = True, 0.0
                 continue
             out.append(n)
@@ -127,7 +130,7 @@ def _bind_short_rests(notes: list, breaths: bool) -> list:
             continue
         out.append(n)
         sung += n.beats
-        if breaths and sung >= MAX_PHRASE_BEATS and n.beats >= LONG_NOTE_BEATS and not continues_word:
+        if breaths and sung >= MAX_PHRASE_BEATS * phrase_scale and n.beats >= LONG_NOTE_BEATS and not continues_word:
             n.breath, sung = True, 0.0
     return out
 

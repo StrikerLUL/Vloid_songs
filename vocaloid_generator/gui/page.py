@@ -39,6 +39,8 @@ log = logging.getLogger(__name__)
 FILE_ROUTE = "/datei"
 CANCELLED = "Abgebrochen"
 VIDEO_FAILED = "Video ging nicht"      # 1.7.1: steht dann statt „Fertig“ unter dem Fortschritt
+JOB_FAILED = "Erzeugung fehlgeschlagen"
+JOB_EMPTY = "Kein Song erzeugt"
 COUNTS = {1: "1 Fassung", 2: "2 Fassungen", 3: "3 Fassungen", 5: "5 Fassungen"}
 # Ordner, aus denen der Player Dateien holen darf (Ausgabeordner, auch frühere)
 SERVED_ROOTS: set = set()
@@ -361,7 +363,7 @@ def build() -> None:
                         .props("flat no-caps")
                     folder_button.set_visibility(not remote)          # er ginge am PC auf, nicht auf dem Handy
             with ui.card().classes("w-full bg-grey-9"):
-                progress = ui.linear_progress(value=0, show_value=False).props("rounded color=secondary")
+                progress = ui.linear_progress(value=0, show_value=False).props("rounded color=secondary").mark("progress")
                 step_label = ui.label("Bereit").classes("text-caption").mark("step")
                 steps_box = ui.column().classes("gap-0")
                 with ui.expansion("Protokoll", icon="article").classes("w-full"):
@@ -400,9 +402,9 @@ def build() -> None:
                 with ui.tab_panel("Video"):
                     panels.video_panel(settings, picker)
                 with ui.tab_panel("Verlauf"):
-                    with ui.row().classes("w-full items-center no-wrap gap-2"):
+                    with ui.row().classes("w-full items-center flex-wrap gap-2"):
                         library_search = ui.input(placeholder="Suchen: Name, Notiz, Stil, Seed, Datum") \
-                            .props("dense outlined clearable").classes("col").mark("library-search") \
+                            .props("dense outlined clearable").classes("col min-w-40").mark("library-search") \
                             .on_value_change(lambda: show_history())
                         library_favorites = ui.switch("★", on_change=lambda: show_history()).props("dense") \
                             .mark("library-favorites").tooltip("Nur Favoriten zeigen")
@@ -467,6 +469,7 @@ def build() -> None:
             results = None
         except Exception as e:  # noqa: BLE001 – jeder Fehler gehört ins Protokoll und auf den Schirm
             log.exception("Song fehlgeschlagen: %s", e)
+            job.report(job.fraction, JOB_FAILED)
             ui.notify(f"Fehler: {e}", type="negative", multi_line=True)
             results = None
         finally:
@@ -474,6 +477,9 @@ def build() -> None:
             set_busy(False)
         results = [r for r in results or [] if r is not None]   # None: abgebrochen, weil die App schließt
         if not results:
+            if job.message not in (CANCELLED, JOB_FAILED):
+                job.report(job.fraction, JOB_EMPTY)
+                show_steps()
             return
         job.finish()
         if settings.done_notice:
@@ -539,7 +545,17 @@ def build() -> None:
         try:
             made = await run.io_bound(album.make, current, n, styles, texts, job.report, name)
         except ValueError as e:
+            job.report(job.fraction, JOB_FAILED)
             ui.notify(str(e), type="warning")
+            made = None
+        except cancel.Cancelled:
+            job.report(job.fraction, CANCELLED)
+            ui.notify("Album-Erzeugung abgebrochen.", type="warning")
+            made = None
+        except Exception as e:  # noqa: BLE001 – Fehler der Hintergrundarbeit sichtbar machen
+            log.exception("Album fehlgeschlagen: %s", e)
+            job.report(job.fraction, JOB_FAILED)
+            ui.notify(f"Album konnte nicht erzeugt werden: {e}", type="negative", multi_line=True)
             made = None
         finally:
             job.running = False
@@ -547,6 +563,8 @@ def build() -> None:
         if made is None:
             return
         if not made.results:
+            job.report(job.fraction, JOB_EMPTY)
+            show_steps()
             ui.notify(f"Kein Song fertig geworden: {made.describe()}", type="negative", multi_line=True)
             return
         job.finish()
@@ -564,16 +582,20 @@ def build() -> None:
     async def hooks() -> None:
         if job.blocked():
             return
-        current = settings.model_copy(deep=True)
+        original = settings.model_copy(deep=True)
+        current = original.model_copy(deep=True)
         result = state["result"]
         if result is not None:
             current = current.with_updates(seed=result.seed, variations=result.settings.variations,
                                            taste_snapshot=result.settings.taste_snapshot)
+        if current.simple_view:
+            current = qualitaet.apply(current)
         job.start()
         set_busy(True)
         try:
             choices = await run.io_bound(pipeline.hook_choices, current, 3, job.report)
         except ValueError as e:
+            job.report(job.fraction, JOB_FAILED)
             ui.notify(str(e), type="warning")
             choices = None
         except cancel.Cancelled:
@@ -582,6 +604,7 @@ def build() -> None:
             choices = None
         except Exception as e:  # noqa: BLE001 – jeder Fehler gehört ins Protokoll und auf den Schirm
             log.error("Refrain-Melodien fehlgeschlagen: %s", e)
+            job.report(job.fraction, JOB_FAILED)
             ui.notify(f"Fehler: {e}", type="negative", multi_line=True)
             choices = None
         finally:
@@ -599,7 +622,7 @@ def build() -> None:
                     ui.button(label, icon="play_arrow",
                               on_click=lambda _, c=choice, title=label: play(title, c.preview)) \
                         .props("outline no-caps dense").mark(f"hook-play-{position}")
-                    ui.button("nehmen", icon="check", on_click=lambda _, c=choice: take(c)) \
+                    ui.button("nehmen", icon="check", on_click=lambda _, c=choice, s=original: take(c, s)) \
                         .props("outline no-caps dense color=secondary").mark(f"hook-take-{position}")
         await play("Refrain 1", choices[0].preview)
 
@@ -629,6 +652,7 @@ def build() -> None:
         try:
             auditions = await run.io_bound(casting.cast, current, job.report)
         except ValueError as e:
+            job.report(job.fraction, JOB_FAILED)
             ui.notify(str(e), type="warning")
             auditions = None
         except cancel.Cancelled:
@@ -637,6 +661,7 @@ def build() -> None:
             auditions = None
         except Exception as e:  # noqa: BLE001 – jeder Fehler gehört ins Protokoll und auf den Schirm
             log.error("Stimmen-Casting fehlgeschlagen: %s", e)
+            job.report(job.fraction, JOB_FAILED)
             ui.notify(f"Fehler: {e}", type="negative", multi_line=True)
             auditions = None
         finally:
@@ -706,8 +731,14 @@ def build() -> None:
         ui.notify(f"{singer} singt ab jetzt {settings.style}. Beim Wechsel des Stils wählt die App die gemerkte Stimme.",
                   type="positive")
 
-    async def take(choice) -> None:
+    async def take(choice, original) -> None:
         """Den ganzen Song mit dieser Refrain-Melodie erzeugen."""
+        if settings != original:
+            hook_row.clear()
+            hook_row.set_visibility(False)
+            ui.notify("Die Einstellungen haben sich seit der Vorschau geändert. Bitte die Refrains erneut anhören.",
+                      type="warning", multi_line=True)
+            return
         settings.seed = choice.settings.seed
         settings.variations = choice.settings.variations
         settings.taste_snapshot = choice.settings.taste_snapshot
@@ -804,6 +835,7 @@ def build() -> None:
             ui.notify("Reparatur abgebrochen. Der bisherige Song bleibt erhalten.", type="warning")
         except Exception as e:
             log.exception("Phrase reparieren fehlgeschlagen")
+            job.report(job.fraction, JOB_FAILED)
             ui.notify(f"Phrase konnte nicht repariert werden: {e}", type="negative", multi_line=True)
         finally:
             job.running = False
@@ -1068,7 +1100,7 @@ def build() -> None:
             video_failed("Die Video-Vorschau" if preview else "Das Lyric-Video", e)
             path, done = None, VIDEO_FAILED
         finally:
-            job.report(1.0, done)
+            job.report(1.0 if done == "Fertig" else job.fraction, done)
             job.running = False
             set_busy(False)
         if path and preview:
@@ -1097,13 +1129,16 @@ def build() -> None:
             package = await run.io_bound(youtube.make, result, label, job.report)
         except RuntimeError as e:
             log.warning("YouTube: %s", e)
+            job.report(job.fraction, JOB_FAILED)
             ui.notify(str(e), type="warning", multi_line=True)
             package = None
         except cancel.Cancelled:
+            job.report(job.fraction, CANCELLED)
             ui.notify("Abgebrochen.", type="warning")
             package = None
         except Exception as e:  # noqa: BLE001 – jeder Fehler gehört ins Protokoll und auf den Schirm
             video_failed("Fertig für YouTube", e)
+            job.report(job.fraction, JOB_FAILED)
             package = None
         finally:
             job.running = False
@@ -1269,7 +1304,7 @@ def build() -> None:
             left = job.remaining
             step_label.set_text(f"{job.message} ({job.elapsed:.0f} s{', ' + left if left else ''})")
         elif job.steps:
-            done = job.message if job.message in (CANCELLED, VIDEO_FAILED) else "Fertig"
+            done = job.message if job.message in (CANCELLED, VIDEO_FAILED, JOB_FAILED, JOB_EMPTY) else "Fertig"
             step_label.set_text(f"{done} nach {job.elapsed:.0f} s")
         steps_box.clear()
         with steps_box:
@@ -1314,6 +1349,11 @@ def build() -> None:
         show_history()
 
     # ── Verlauf ──────────────────────────────────────────────────────────────────────
+    def clear_history_filters() -> None:
+        library_search.set_value("")
+        library_favorites.set_value(False)
+        show_history()
+
     def show_history() -> None:
         every = history.entries(settings.output_dir())
         entries = history.find(every, library_search.value or "", bool(library_favorites.value),
@@ -1321,21 +1361,28 @@ def build() -> None:
         history_box.clear()
         with history_box:
             if not every:
-                ui.label("Noch keine Songs im Verlauf.").classes("text-grey-5")
+                ui.label("Noch keine Songs im Verlauf. Erzeuge einen Song, um ihn hier wiederzufinden.") \
+                    .classes("text-grey-5").mark("library-no-songs")
                 return
+            ui.label(f"{len(entries)} von {len(every)} Songs angezeigt").classes("text-caption text-grey-5") \
+                .mark("library-count")
             kept = f"Die {settings.history_keep} neuesten Songs bleiben" if settings.history_keep else "Alle Songs bleiben"
             panels.hint(f"{kept}; mit Stern markierte, benannte und Album-Songs immer. "
                         "✎ gibt einem Song Namen und Notiz, ↺ übernimmt die Einstellungen samt Seed, mit dem Daumen "
                         "lernt die App, welcher Klang, welche Melodie, Stimme und welcher Groove dir gefallen.")
             if not entries:
-                ui.label("Nichts gefunden.").classes("text-grey-5").mark("library-empty")
+                ui.label("Keine Songs für diese Suche oder Filter gefunden.").classes("text-grey-5") \
+                    .mark("library-empty")
+                ui.button("Suche und Filter zurücksetzen", icon="filter_alt_off", on_click=clear_history_filters) \
+                    .props("flat no-caps").mark("library-clear-filters")
                 return
             with ui.scroll_area().classes("w-full").style("height: 60vh"):
                 for nr, entry in enumerate(entries, 1):
-                    with ui.row().classes("w-full items-center no-wrap gap-1"):
+                    with ui.row().classes("w-full items-center flex-wrap gap-1"):
                         ui.button(icon="play_arrow", on_click=lambda _, e=entry: play(_song_name(e), e.audio)) \
-                            .props("flat round dense").mark("history-play")
-                        with ui.column().classes("col gap-0"):
+                            .props('flat round dense aria-label="Song abspielen"').mark("history-play") \
+                            .tooltip("Song abspielen")
+                        with ui.column().classes("col min-w-40 gap-0"):
                             if entry.label:
                                 ui.label(entry.label).classes("text-body2 text-weight-medium").mark("history-name")
                             ui.label(f"{entry.created:%d.%m. %H:%M}  {describe(entry.settings)}") \
@@ -1355,8 +1402,9 @@ def build() -> None:
                             .props("flat round dense color=grey").mark("history-edit") \
                             .tooltip("Name und Notiz")
                         ui.button(icon="star" if entry.favorite else "star_border",
-                                  on_click=lambda _, e=entry: favorite(e)).props("flat round dense color=amber") \
-                            .mark("history-favorite")
+                                  on_click=lambda _, e=entry: favorite(e)) \
+                            .props('flat round dense color=amber aria-label="Favorit umschalten"') \
+                            .mark("history-favorite").tooltip("Favorit umschalten")
                         thumbs_menu(entry, nr)
                         ui.button(icon="movie", on_click=lambda _, e=entry: make_video(entry=e)) \
                             .props("flat round dense color=grey").mark("history-video") \
@@ -1373,7 +1421,8 @@ def build() -> None:
                                 .tooltip("Wieder öffnen: der Gesang bleibt, Band und Mix entstehen neu; danach "
                                          "lässt sich der Song weiter bearbeiten")
                         ui.button(icon="delete", on_click=lambda _, e=entry: remove(e)) \
-                            .props("flat round dense color=grey").mark("history-delete")
+                            .props('flat round dense color=grey aria-label="Song löschen"').mark("history-delete") \
+                            .tooltip("Song löschen")
 
     def song_info(entry) -> None:
         einfach.song_info(dialog_host, entry, settings, einfach.switch_names(ui.context.client))

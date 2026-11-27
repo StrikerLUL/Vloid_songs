@@ -121,14 +121,14 @@ def _mix(vocal: str, backing: str, out: str) -> None:
     from scipy.signal import resample_poly
     v, vr = sf.read(vocal, dtype="float32", always_2d=True)
     b, br = sf.read(backing, dtype="float32", always_2d=True)
-    v = v.mean(axis=1)
     if vr != br:
-        v = resample_poly(v, br, vr).astype(np.float32)
+        v = resample_poly(v, br, vr, axis=0).astype(np.float32)
+    v = v[:, :2] if v.shape[1] > 1 else np.repeat(v, 2, axis=1)
     length = max(len(v), len(b))
     mix = np.zeros((length, 2), dtype=np.float32)
     mix[:len(b)] += b[:, :2] if b.shape[1] > 1 else np.repeat(b, 2, axis=1)
     mix *= BACKING / (float(np.max(np.abs(mix))) or 1.0)
-    mix[:len(v)] += (v * (VOCAL_PEAK / (float(np.max(np.abs(v))) or 1.0)))[:, None]
+    mix[:len(v)] += v * (VOCAL_PEAK / (float(np.max(np.abs(v))) or 1.0))
     sf.write(out, mix * (0.95 / max(1.0, float(np.max(np.abs(mix))))), br)
 
 

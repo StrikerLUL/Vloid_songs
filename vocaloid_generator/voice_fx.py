@@ -177,13 +177,16 @@ def _recorded_breath(samples: list, n: int, rate: int, rng: np.random.Generator)
     return out
 
 
-def add_breaths(path: str, notes: list, seed: int = 0, recorded: bool = True, soft: bool = False) -> int:
+def add_breaths(path: str, notes: list, seed: int = 0, recorded: bool = True, soft: bool = False,
+                volume: float = 1.0) -> int:
     """Vor jeder Phrase, vor der genug Pause ist, ein hörbares Einatmen in die Gesangsspur mischen.
     Längere Phrasen bekommen einen tieferen Atemzug. Mit recorded und Aufnahmen im Ordner Atmer klingen echte
     Atmer, sonst gefiltertes Rauschen; mit soft (1.7.0) ist das Rauschen leiser und dunkler, bis 1.6 stand es als
     breiter Streifen bis über 2,5 kHz fast so kräftig wie die Stimme im Spektrum. Rückgabe: Anzahl der Atmer."""
+    if volume <= 0:
+        return 0
     audio, rate = sf.read(path, dtype="float32", always_2d=True)
-    level = _sung_level(audio.mean(axis=1), rate)
+    level = _sung_level(audio, rate)
     if level <= 0:
         return 0
     rng = np.random.default_rng(seed)
@@ -203,7 +206,7 @@ def add_breaths(path: str, notes: list, seed: int = 0, recorded: bool = True, so
         if a < 0 or a + n > len(track):
             continue
         db = BREATH_DB + (SOFT_BREATH_DB if soft and not samples else 0.0)
-        gain = level * 10 ** (db / 20) * (0.6 + 0.4 * depth) * rng.uniform(0.85, 1.15)
+        gain = volume * level * 10 ** (db / 20) * (0.6 + 0.4 * depth) * rng.uniform(0.85, 1.15)
         track[a:a + n] += (_recorded_breath(samples, n, rate, rng) if samples else breath(n, rate, rng, soft)) * gain
         count += 1
     sf.write(path, audio + track[:, None], rate, subtype="FLOAT")
@@ -229,13 +232,17 @@ def breath(n: int, rate: int, rng: np.random.Generator, soft: bool = False) -> n
     return (x / (np.sqrt(np.mean(x ** 2)) + 1e-12)).astype(np.float32)
 
 
-def _sung_level(mono: np.ndarray, rate: int) -> float:
+def _sung_level(audio: np.ndarray, rate: int) -> float:
     """Effektivwert der lauten Stellen (90. Perzentil der 50-ms-Fenster, in denen gesungen wird)."""
     hop = max(1, int(0.05 * rate))
-    frames = len(mono) // hop
+    frames = len(audio) // hop
     if frames == 0:
         return 0.0
-    rms = np.sqrt(np.mean(mono[:frames * hop].reshape(frames, hop) ** 2, axis=1))
+    samples = audio[:frames * hop].reshape(frames, hop, -1)
+    power = np.zeros(frames, dtype=np.float64)
+    for channel in range(samples.shape[2]):
+        power += np.mean(samples[:, :, channel] ** 2, axis=1, dtype=np.float64)
+    rms = np.sqrt(power / samples.shape[2])
     sung = rms[rms > rms.max() * 10 ** (-40 / 20)] if rms.max() > 0 else rms[:0]
     return float(np.percentile(sung, 90)) if len(sung) else 0.0
 

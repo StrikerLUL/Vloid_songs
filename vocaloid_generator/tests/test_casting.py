@@ -55,6 +55,21 @@ def test_every_installed_voice_sings_the_hook(tmp_path, voices):
     assert any("REINA" in m for m in seen)
 
 
+@pytest.mark.parametrize("channels,voice_rate", [(1, 8000), (2, 12000)])
+def test_casting_mix_preserves_voice_channels_and_resamples(tmp_path, channels, voice_rate):
+    t = np.arange(voice_rate) / voice_rate
+    signal = 0.2 * np.sin(2 * np.pi * 440 * t)
+    voice = signal if channels == 1 else np.column_stack([signal, -signal])
+    vocal, backing, output = (str(tmp_path / name) for name in ("voice.wav", "back.wav", "mix.wav"))
+    sf.write(vocal, voice, voice_rate, subtype="FLOAT")
+    sf.write(backing, np.zeros((8000, 2)), 8000, subtype="FLOAT")
+    casting._mix(vocal, backing, output)
+    result, rate = sf.read(output, always_2d=True)
+    assert rate == 8000 and result.shape == (8000, 2)
+    assert np.max(np.abs(result)) > 0.5 and np.max(np.abs(result)) <= 0.95
+    np.testing.assert_allclose(result[:, 0], result[:, 1] if channels == 1 else -result[:, 1], atol=1e-4)
+
+
 def test_casting_without_voices_says_so(tmp_path):
     s = SongSettings(output_ordner=str(tmp_path / "out"), neutrino_pfad=str(tmp_path / "fehlt"))
     os.makedirs(tmp_path / "fehlt" / "model")

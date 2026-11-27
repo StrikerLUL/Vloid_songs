@@ -122,8 +122,19 @@ async def test_the_simple_view_shows_only_the_essentials_and_profi_shows_everyth
     await until(lambda: not marked(simple_user, "tab-Song")[0].visible)
 
 
+async def test_simple_view_shows_workflow_and_current_text_status(simple_user):
+    await simple_user.open("/")
+    await simple_user.should_see(marker="simple-workflow-steps", content="Stil und Stimme")
+    marked(simple_user, "simple-lyrics")[0].set_value("")
+    await simple_user.should_see(marker="simple-text-status", content="Noch kein Text eingetragen")
+    marked(simple_user, "simple-lyrics")[0].set_value("[Verse]\nHallo")
+    await simple_user.should_see(marker="simple-text-status", content="Text eingetragen")
+
+
 async def test_simple_view_can_choose_and_keep_a_hook(simple_user, fake_generation, monkeypatch, tmp_path):
+    asked = []
     def choices(settings, count=3, progress=None):
+        asked.append(settings)
         path = str(tmp_path / "hook.wav")
         sf.write(path, np.zeros(800, dtype=np.float32), 8000)
         return [pipeline.HookChoice(i, settings.with_updates(seed=42, variations={"melody:Chorus": i},
@@ -140,6 +151,27 @@ async def test_simple_view_can_choose_and_keep_a_hook(simple_user, fake_generati
     assert fake_generation[0].seed == 42
     assert fake_generation[0].variations == {"melody:Chorus": 3}
     assert fake_generation[0].taste_snapshot == [[["test"], 1]]
+    assert asked[0].best_melody == fake_generation[0].best_melody
+    assert asked[0].hearing_check == fake_generation[0].hearing_check
+    assert asked[0].vocal_takes == fake_generation[0].vocal_takes
+
+
+async def test_hook_requires_new_previews_after_settings_change(simple_user, fake_generation, monkeypatch, tmp_path):
+    def choices(settings, count=3, progress=None):
+        path = str(tmp_path / "hook.wav")
+        sf.write(path, np.zeros(800, dtype=np.float32), 8000)
+        return [pipeline.HookChoice(i, settings.with_updates(seed=42), path) for i in range(1, 4)]
+
+    monkeypatch.setattr(pipeline, "hook_choices", choices)
+    await simple_user.open("/")
+    simple_user.find(marker="simple-hooks").click()
+    await simple_user.should_see(marker="hook-take-1", retries=50)
+    marked(simple_user, "simple-mood")[0].value = 0.05
+    await until(lambda: SongSettings.load().mood == 0.05)
+    simple_user.find(marker="hook-take-1").click()
+    await simple_user.should_see("Die Einstellungen haben sich seit der Vorschau geändert", retries=50)
+    assert not fake_generation
+    assert not marked(simple_user, "hook-choices")[0].visible
 
 
 async def test_song_machen_takes_quality_and_length_but_keeps_the_switches(simple_user, fake_generation):  # noqa: F811

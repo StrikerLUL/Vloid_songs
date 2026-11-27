@@ -2,6 +2,17 @@
 
 Jede Version hat hier einen Abschnitt. Die App zeigt ihn einmal nach einem Update (Hilfe › Was ist neu).
 
+## 1.10.0
+
+- **Atmung einstellen:** Abstand der NEUTRINO-Atemzeichen und Lautstärke hörbarer Atmer lassen sich getrennt
+  einstellen. Wortgrenzen und gehaltene Vokale bleiben geschützt; Standardwerte erhalten das bisherige Verhalten.
+- **Gesang und Stimmenvergleich:** Das Casting erhält Stereogesang. Die Atemlautstärke und die Mix-Automatik
+  erkennen auch gegenphasige Stereostimmen; das Delay bleibt bei Stille unverändert und reagiert auf kurze Einsätze.
+- **Bedienung:** Die einfache Ansicht zeigt den Ablauf, der Verlauf erklärt Suchergebnisse und bietet eine
+  Filterrücksetzung. Fehler und leere Ergebnisse werden im Fortschritt als solche angezeigt.
+- **Refrain und Arrangement:** Refrainvorschauen beachten die Qualitätsstufe und werden nach geänderten Einstellungen
+  neu angefordert. Beim schlanken Strophenbeginn pausiert das zweite Akkordinstrument bis zum Bandeinsatz.
+
 ## 1.9.0
 
 - **Melodie und Harmonie:** Phrasen und lange Töne berücksichtigen Akkordwechsel; Spannung und Auflösung

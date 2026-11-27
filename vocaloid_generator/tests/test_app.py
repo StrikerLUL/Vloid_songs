@@ -238,6 +238,20 @@ async def test_library_names_finds_and_deletes_songs(user, tmp_path):
     assert [e.settings.seed for e in history.entries(out)] == [11]
 
 
+async def test_library_explains_empty_filter_and_restores_all_songs(user, tmp_path):
+    out = str(tmp_path / "out")
+    history.record(write_song(str(tmp_path / "a"), 11).mix_wav, SongSettings(style="Rock", seed=11), out)
+    await user.open("/")
+    user.find(marker="tab-Verlauf").click()
+    await user.should_see(marker="library-count", content="1 von 1")
+    user.find(marker="library-search").type("nicht vorhanden")
+    await user.should_see(marker="library-empty")
+    await user.should_see(marker="library-count", content="0 von 1")
+    user.find(marker="library-clear-filters").click()
+    await user.should_see(marker="library-count", content="1 von 1")
+    assert len(history.entries(out)) == 1
+
+
 async def test_thumbs_in_the_library_are_saved(user, tmp_path):
     out = str(tmp_path / "out")
     history.record(write_song(str(tmp_path / "a"), 11).mix_wav, SongSettings(style="Rock", seed=11), out)
@@ -489,6 +503,58 @@ async def test_lively_singing_can_be_switched_and_voicevox_singers_are_listed(us
                          SongSettings.load().vibrato) == (3002, False, 0.4))
 
 
+async def test_breath_controls_save_disable_and_reset(user):
+    await user.open("/")
+    spacing = user.find(marker="slider-breath_phrase_scale").elements.pop()
+    volume = user.find(marker="slider-breath_volume").elements.pop()
+    spacing.set_value(1.5)
+    volume.set_value(0.5)
+    await until(lambda: (SongSettings.load().breath_phrase_scale, SongSettings.load().breath_volume) == (1.5, 0.5))
+    user.find(marker="switch-breath_marks").elements.pop().set_value(False)
+    user.find(marker="switch-breaths").elements.pop().set_value(False)
+    await until(lambda: not spacing.enabled and not volume.enabled)
+    user.find(marker="reset-breath-controls").click()
+    await until(lambda: (SongSettings.load().breath_phrase_scale, SongSettings.load().breath_volume) == (1.0, 1.0))
+    assert not SongSettings.load().breath_marks and not SongSettings.load().breaths
+
+
+async def test_generation_failure_is_not_reported_as_success(user, monkeypatch):
+    def fail(settings, progress=None, *args):
+        progress(0.25, "Gesang vorbereiten")
+        raise RuntimeError("Testfehler beim Gesang")
+
+    monkeypatch.setattr(pipeline, "generate_song", fail)
+    await user.open("/")
+    user.find(marker="generate").click()
+    await user.should_see("Testfehler beim Gesang", retries=50)
+    await user.should_see(marker="step", content="Erzeugung fehlgeschlagen", retries=50)
+
+
+async def test_generation_without_result_is_not_reported_as_success(user, monkeypatch):
+    def no_result(settings, progress=None, *args):
+        progress(0.25, "Gesang vorbereiten")
+        return None
+
+    monkeypatch.setattr(pipeline, "generate_song", no_result)
+    await user.open("/")
+    user.find(marker="generate").click()
+    await user.should_see(marker="step", content="Kein Song erzeugt", retries=50)
+
+
+async def test_album_failure_is_visible_in_progress(user, monkeypatch):
+    import album
+
+    def fail(*args):
+        raise RuntimeError("Album-Testfehler")
+
+    monkeypatch.setattr(album, "make", fail)
+    await user.open("/")
+    user.find(marker="album").click()
+    user.find(marker="album-start").click()
+    await user.should_see("Album-Testfehler", retries=50)
+    await user.should_see(marker="step", content="Erzeugung fehlgeschlagen", retries=50)
+
+
 async def test_without_voicevox_the_app_says_how_to_get_it(user):
     await user.open("/")
     await user.should_see("VOICEVOX läuft nicht. Kostenlos unter voicevox.hiroshiba.jp; App starten, dann neu laden.",
@@ -567,6 +633,7 @@ async def test_hooks_that_cannot_be_made_explain_why(user, monkeypatch):
     await user.open("/")
     user.find(marker="hooks").click()
     await user.should_see("eigene MIDI-Melodie", retries=50)
+    await user.should_see(marker="step", content="Erzeugung fehlgeschlagen", retries=50)
 
 
 async def test_a_finished_song_is_announced_and_remembered_for_the_estimate(user, fake_generation, monkeypatch):

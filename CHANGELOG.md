@@ -2,6 +2,45 @@
 
 Jede Version hat hier einen Abschnitt. Die App zeigt ihn einmal nach einem Update (Hilfe › Was ist neu).
 
+## 1.11.0
+
+Grundlage war ein Lyric-Video aus 1.10.0 (Dark Vocaloid mit dem Text „Mottenlicht“): oben stand „f“ als Titel, alle
+KI-Bilder zeigten dieselbe Gasse ohne Bezug zum Text, das Spektrum war eine graue Wand, der Sprechteil und der vierte
+Refrain wurden still nicht gesungen, und die zweite Strophe ging unter der Band unter.
+
+**Video**
+
+- **Name vorgeschlagen:** Die Frage „Wie heißt der Song?“ hat jetzt einen Vorschlag im Feld, markiert: Enter nimmt
+  ihn, Tippen ersetzt ihn. Er kommt aus einer Zeile „Titel: …“ (oder „# …“) vor der ersten Überschrift im Text, sonst
+  aus dem Hook des Refrains („くるくる くるくる“ → „くるくる“). Im Verlauf lässt sich der Name mit dem Stift ändern.
+- **Bilder aus dem Text:** Laterne, Fenster, Flügel und Motten haben eigene Motive. Bis 1.10 wurden Flügel zu
+  „Blättern im Wind“ und jedes Licht zu Sonnenschein, auch nachts. Jedes Bild nimmt erst das Hauptmotiv des Songs,
+  dann was in seiner Sektion gesungen wird; Widersprüche (Nacht und Sonnenschein) fallen weg, die Sektionen haben
+  keine Tageszeit mehr. Dadurch unterscheiden sich die Bilder der Sektionen. Wo im Text Motten oder Flügelstaub
+  vorkommen, glitzert Staub durchs Bild (nicht hinter dem Text). Bereits gemalte Bilder werden einmal neu gemalt.
+- **Spektrum, das sich bewegt:** wie ein Analyser im Studio in dB mit fester Neigung; Bass steht höher als die Höhen,
+  Schläge und Pausen sind zu sehen, Bänder ohne Ton bleiben unten.
+- **♭ und ♯ sauber:** Akkordnamen zeigen B♭maj7 und G♯7 aus einer Schrift, die die Zeichen hat (Segoe UI Symbol).
+- **Weicher Rand hinter dem Text:** Die Abdunklung hinter den Zeilen läuft weich aus; vor hellem Himmel stand ihre
+  Oberkante bisher als Linie quer durchs Bild.
+
+**Text, der nicht gesungen wird**
+
+- Steht im Text eine Sektion, die der Ablauf nicht hat ([Sprechen] ohne Sprechteil, [Chorus 4] bei drei Refrains),
+  sagt die App das beim Erzeugen und im Text-Helfer. Bis 1.10 fielen diese Zeilen still weg; der Song wird trotzdem
+  erzeugt, am Ablauf ändert die App nichts von selbst.
+
+**Gesang und Band**
+
+- **Gesang gleichmäßiger über der Band:** Das Nachführen gleicht jetzt auch ganze Passagen an (etwa sechs Sekunden):
+  liegt eine ganze Strophe tiefer unter der Band als der Rest, wird sie fast vollständig angehoben (höchstens 4 dB).
+  Kleine Unterschiede bleiben wie bisher stehen.
+- **Die Strophe atmet nach dem Refrain:** Nach einem Refrain, Drop, Solo oder Zwischenspiel schweigen in den ersten
+  zwei Takten der Strophe Flächen und Verzierungen (Streicher, Synth, Bläser, Glocken, Gegenstimme, Chor); Schlagzeug,
+  Bass und das Akkordinstrument spielen weiter. Gehört zu „Aufbau in der Sektion“.
+- **Alle Gesangsregler auf Vorgabe:** Ein Knopf im Tab Gesang stellt StyleShift, Strophe/Refrain, Atmung, Tonhöhe
+  glätten, Verzierungen, Vibrato, Übergänge und Hauchigkeit zurück und sagt, was sich geändert hat.
+
 ## 1.10.0
 
 - **Atmung einstellen:** Abstand der NEUTRINO-Atemzeichen und Lautstärke hörbarer Atmer lassen sich getrennt

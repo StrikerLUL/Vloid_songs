@@ -4,6 +4,10 @@
 # nur mit Klavier oder Gitarre und dem Gesang; nach vier Takten kommen Bass und Schlagzeug dazu (mit kurzem Fill und
 # Becken), dann der Rest. In der zweiten Hälfte jedes Refrains spielt eine Schicht mehr: die Streicher (oder der Synth,
 # oder das Klavier) eine Oktave höher dazu, leiser, und das Schlagzeug setzt dort mit einem Becken ein.
+# 1.11.0: nach einem Refrain (oder Drop, Solo, Zwischenspiel) atmet die nächste Strophe durch: in ihren ersten zwei
+# Takten schweigen Flächen und Verzierungen (Streicher, Synth, Bläser, Glocken, Gegenstimme, Chor), Schlagzeug, Bass und
+# das Akkordinstrument tragen weiter. Bis 1.10 lief die zweite Strophe direkt nach dem Refrain so voll weiter, dass der
+# Gesang darin unterging (FIR-54, FIR-49).
 from drums import CRASH, KICK, SNARE, _vel
 from parts import Ev
 from song_plan import BEATS_PER_BAR
@@ -14,6 +18,9 @@ MIN_BARS = 8                             # kürzere Strophen bauen nicht auf
 SILENT_FIRST = ("bass", "drums", "perc", "synth", "strings", "brass", "bells", "counter", "choir", "melody")
 LAYERS = ("strings", "synth", "piano")   # wer im Refrain die Oktave dazu spielt
 LAYER_VEL = 0.55
+BREATH_BARS = 2                          # 1.11.0: so lange atmet eine Strophe nach dem Höhepunkt durch
+BREATH_QUIET = ("strings", "synth", "brass", "bells", "counter", "choir")
+BREATH_AFTER = ("Chorus", "Drop", "Solo", "Interlude")
 TOP = 100
 
 
@@ -22,8 +29,9 @@ def _in(e, start: float, end: float) -> bool:
 
 
 def apply(plan, events: dict) -> dict:
-    """Rückgabe: {"verse": Anfang der allein begonnenen Strophe oder None, "choruses": [Anfänge der Schicht]}."""
-    done = {"verse": None, "choruses": []}
+    """Rückgabe: {"verse": Anfang der allein begonnenen Strophe oder None, "choruses": [Anfänge der Schicht],
+    "breaths": [Anfänge der Strophen, die nach einem Höhepunkt durchatmen]}."""
+    done = {"verse": None, "choruses": [], "breaths": breathe(plan, events)}
     verse = next((s for s in plan.sections if s.kind == "Verse" and s.occurrence == 1), None)
     if verse is not None and verse.bars >= MIN_BARS and verse.feel != "breakdown":
         alone = next((inst for inst in ALONE if any(_in(e, verse.start, verse.start + BEATS_PER_BAR)
@@ -58,3 +66,25 @@ def apply(plan, events: dict) -> dict:
             done["choruses"].append(half)
             break
     return done
+
+
+def breathe(plan, events: dict) -> list:
+    """1.11.0: Strophen nach einem Höhepunkt beginnen ohne Flächen und Verzierungen (BREATH_BARS Takte); was aus dem
+    Refrain hineinklingt, endet an der Grenze. Rückgabe: die Anfänge dieser Strophen."""
+    out = []
+    sections = list(plan.sections)
+    for k, sec in enumerate(sections):
+        before = sections[k - 1] if k > 0 else None
+        if sec.kind != "Verse" or before is None or before.kind not in BREATH_AFTER or sec.feel == "breakdown"                 or sec.bars < MIN_BARS:
+            continue
+        stop = sec.start + BREATH_BARS * BEATS_PER_BAR
+        for inst in BREATH_QUIET:
+            evs = events.get(inst)
+            if not evs:
+                continue
+            for e in evs:
+                if e.start < sec.start < e.start + e.dur:
+                    e.dur = sec.start - e.start
+            evs[:] = [e for e in evs if not _in(e, sec.start, stop)]
+        out.append(sec.start)
+    return out

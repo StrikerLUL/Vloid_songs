@@ -9,6 +9,7 @@ import bisect
 import logging
 import math
 import os
+import re
 import subprocess
 import tempfile
 from dataclasses import dataclass, field
@@ -27,10 +28,15 @@ SIZE = karaoke.VIDEO_SIZE
 BANDS = 48
 WINDOW = 2048
 LOW_HZ, HIGH_HZ = 60.0, 12000.0        # das Spektrum zeigt diesen Bereich (1.7.0: ab 60 statt 40 Hz)
+SPECTRUM_TILT_DB = 4.5                 # 1.11.0: so viel dB pro Oktave heben die Balken nach oben an (wie ein Analyser)
+SPECTRUM_RANGE_DB = 34.0               # so viele dB unter dem lautesten Wert ist ein Balken leer
+SPECTRUM_CURVE = 1.7                   # > 1: leise Stellen flacher, Spitzen deutlicher
+SPECTRUM_FALL = 0.78                   # pro Bild fällt ein Balken auf diesen Anteil (schnell hoch, sichtbar runter)
 FADE_IN, FADE_OUT = 1.0, 2.5           # Sekunden schwarz → Bild und Bild → schwarz
 TITLE_MIN_GAP = 4.0                    # so lange muss bis zur ersten Zeile Platz sein, sonst kein großer Titel
 CREDITS_SECONDS = 7.0
 PREVIEW_SECONDS = 10.0
+SYMBOL_FONT = "Segoe UI Symbol"        # 1.11.0: hat ♭ und ♯ (Windows), für die Akkordnamen
 LABEL_SECONDS = 3.0                    # so lange steht der Name einer neuen Sektion oben links
 ProgressFn = Callable[[float, str], None]
 
@@ -156,18 +162,34 @@ def analyse(mono: np.ndarray, rate: int, frames: int, fps: int = FPS) -> Sound:
             sel = which == b
             if sel.any():
                 raw[idx, b] = mag[:, sel].mean(axis=1)
-    raw = np.log1p(raw * 10)
-    loud = np.percentile(raw, 99, axis=0)
-    index = np.arange(BANDS)
-    tilt = np.polyval(np.polyfit(index, loud, 2), index)      # der Verlauf über die Bänder, ohne die Zacken
-    top = np.maximum(tilt, 0.25 * float(loud.max())) * 1.08 + 1e-6
-    bands = np.clip(raw / top[None, :], 0, 1)
+    bands = spectrum_scale(raw, edges)
     peak = float(np.percentile(level, 99)) or 1.0
     level = np.clip(level / peak, 0, 1)
-    for i in range(1, frames):                 # Pegel: sofort hoch, langsam runter
-        bands[i] = np.maximum(bands[i], bands[i - 1] * 0.82)
+    for i in range(1, frames):                 # Pegel: sofort hoch, schnell wieder runter
+        bands[i] = np.maximum(bands[i], bands[i - 1] * SPECTRUM_FALL)
         level[i] = max(level[i], level[i - 1] * 0.9)
     return Sound(bands, level, mono, rate)
+
+
+def spectrum_scale(raw: np.ndarray, edges: np.ndarray) -> np.ndarray:
+    """
+    Beträge (Bilder, Bänder) → Balkenhöhen 0..1 wie ein Analyser im Studio: in dB, mit einer festen Neigung von
+    SPECTRUM_TILT_DB pro Oktave (Musik wird nach oben leiser, sonst blieben die Höhen immer unten) und einer
+    gemeinsamen Skala über SPECTRUM_RANGE_DB.
+    1.11.0: bis 1.10 wurde der Betrag mit log1p gestaucht und jedes Band durch seinen eigenen (geglätteten) lautesten
+    Wert geteilt. Damit standen alle Balken fast gleich hoch und bewegten sich kaum: eine graue Wand. Jetzt zeigt der
+    Analyser, wo der Song wirklich Energie hat (Bass höher als Luft), und Schläge, Pausen und Refrains sind zu sehen.
+    """
+    if raw.size == 0:
+        return raw.astype(np.float32)
+    centers = np.sqrt(edges[:-1] * edges[1:])[:raw.shape[1]]
+    db = 20 * np.log10(np.maximum(raw, 1e-9)) + SPECTRUM_TILT_DB * np.log2(centers / 1000.0)[None, :]
+    loud = db[raw.max(axis=1) > 1e-6]
+    if not loud.size:
+        return np.zeros_like(raw, dtype=np.float32)
+    top = float(np.percentile(loud, 99.5))
+    height = np.clip((db - (top - SPECTRUM_RANGE_DB)) / SPECTRUM_RANGE_DB, 0.0, 1.0)
+    return (height ** SPECTRUM_CURVE).astype(np.float32)
 
 
 # ── was der Song in jedem Bild macht ─────────────────────────────────────────
@@ -391,7 +413,8 @@ def ass(lines: list, scene: szenen.Scene, opts: Options, style: str, title: str 
             changed = found.key_change_at if found.key_change and found.key_change_at is not None else float("inf")
 
             def named(at: float, name: str) -> str:
-                return karaoke._clean(spelled(name, flats[1] if at >= changed - 1e-3 else flats[0]))
+                return accidentals(karaoke._clean(spelled(name, flats[1] if at >= changed - 1e-3 else flats[0])),
+                                   look.font)
 
             for k, (start, end, name) in enumerate(found.chords):
                 nxt = found.chords[k + 1] if k + 1 < len(found.chords) else None
@@ -406,6 +429,14 @@ def ass(lines: list, scene: szenen.Scene, opts: Options, style: str, title: str 
             text = "\\N".join(karaoke._clean(c) for c in credits)
             event(begin, length - 0.3, "Sub", f"{{\\fad(600,600)\\pos({width // 2},{int(height * 0.45)})}}" + text, 2)
     return "\n".join(head + events) + "\n"
+
+
+def accidentals(name: str, font: str) -> str:
+    """1.11.0: ♭ und ♯ im Akkordnamen aus einer Schrift, die sie wirklich zeichnet (SYMBOL_FONT). In Meiryo fehlte ♭,
+    Windows setzte ein dünnes Ersatzzeichen mit Lücke ein („B ♭maj7“); Kreuze standen als # da. Jetzt B♭maj7 und
+    G♯7 in derselben Größe."""
+    name = name.replace("#", "♯")
+    return re.sub("([♭♯])", lambda m: f"{{\\fn{SYMBOL_FONT}}}{m.group(1)}{{\\fn{font}}}", name)
 
 
 # ── Rendern ──────────────────────────────────────────────────────────────────

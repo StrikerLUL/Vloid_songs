@@ -538,7 +538,7 @@ def reference_editor(s: SongSettings, pick: PickFn, apply_template: Callable[[So
                     .classes("w-28").tooltip("Gewicht: wie stark dieses Vorbild zählt") \
                     .on("change", lambda: measure())
                 ui.button(icon="close", on_click=lambda _, i=i: remove(i)).props("flat round dense color=grey") \
-                    .mark(f"reference-remove-{i}")
+                    .mark(f"reference-remove-{i}").tooltip("Vorbild entfernen")
         if not s.reference_tracks:
             hint("Kein Vorbild: normales Mastering. Füge einen oder mehrere Lieblingssongs hinzu.")
         library = [f for f in reference.library_files(folder()) if all(r.path != f for r in s.reference_tracks)]
@@ -1147,12 +1147,33 @@ def voice_panel(s: SongSettings, singers: list, pick: PickFn | None = None) -> t
     hint("1 = wie die Stimme singt. Vibrato 0 = gerade Töne, 2 = doppelt so viel; Übergänge 0 = die Töne springen "
          "(wie Autotune), 2 = die Stimme gleitet doppelt so lange. Bei NEUTRINO wird die Aufnahme dafür Phrase für "
          "Phrase umgerechnet, bei 1 und 1 bleibt sie unberührt.")
+    ui.button("Alle Gesangsregler auf Vorgabe", icon="restart_alt",
+              on_click=lambda: ui.notify(reset_voice_sliders(s), type="info", multi_line=True))         .props("flat no-caps").mark("reset-voice-sliders")         .tooltip("StyleShift, Strophe/Refrain, Atmung, Tonhöhe glätten, Verzierungen, Vibrato und Übergänge zurück auf "
+                 "die Werte ab Werk. Schalter, Stimme und Text bleiben.")
     section_title("Vorschau-Stimme (wenn NEUTRINO und VOICEVOX fehlen)")
     with ui.row().classes("w-full items-center gap-4"):
         ui.label("Hauchigkeit").classes("w-28")
         ui.slider(min=0, max=0.2, step=0.002).bind_value(s, "breathiness").props("label").classes("col")
     ui.switch("Schimmer").bind_value(s, "shimmer")
     return singer, duet, support
+
+
+# 1.11.0 (FIR-63): die Regler des Gesangs, die „Alle Gesangsregler auf Vorgabe“ zurückstellt
+VOICE_SLIDER_FIELDS = {"style_shift": "StyleShift", "verse_style_shift": "Strophe", "chorus_style_shift": "Refrain",
+                       "breath_phrase_scale": "Atemabstand", "breath_volume": "Atmer-Lautstärke",
+                       "intonation": "Tonhöhe glätten", "ornaments": "Verzierungen", "vibrato": "Vibrato",
+                       "glide": "Übergänge", "breathiness": "Hauchigkeit"}
+
+
+def reset_voice_sliders(s: SongSettings) -> str:
+    """Stellt VOICE_SLIDER_FIELDS auf die Werte ab Werk und sagt, was sich geändert hat."""
+    changed = []
+    for attr, name in VOICE_SLIDER_FIELDS.items():
+        default = SongSettings.model_fields[attr].default
+        if getattr(s, attr) != default:
+            changed.append(f"{name} {getattr(s, attr):g} → {default:g}")
+            setattr(s, attr, default)
+    return "Gesangsregler zurückgesetzt: " + ", ".join(changed) if changed else "Alle Gesangsregler stehen schon auf "         "der Vorgabe."
 
 
 def rap_editor(s: SongSettings) -> None:

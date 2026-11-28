@@ -19,6 +19,7 @@ import geschmack
 import history
 import hoer_duell
 import laufzeit
+import lyric_helper
 import meter
 import pipeline
 import polish
@@ -448,6 +449,12 @@ def build() -> None:
         tight = speicher.low_space(current.output_dir())
         if tight:
             ui.notify(tight, type="warning", timeout=10000)
+        # 1.11.0: Text, den der Ablauf nicht singt ([Sprechen] ohne Sprechteil, [Chorus 4] bei drei Refrains), fiel bis
+        # 1.10 still weg. Jetzt sagt es die App vor dem Erzeugen; der Song entsteht trotzdem.
+        lost = lyric_helper.unused_notes(current)
+        if lost:
+            ui.notify("Nicht alles aus deinem Text wird gesungen: " + " ".join(lost), type="warning",
+                      multi_line=True, timeout=15000, close_button="OK")
         simple = settings.simple_view
         if simple:
             current = qualitaet.apply(current)      # die Stufe der einfachen Ansicht; die Schalter bleiben
@@ -526,7 +533,7 @@ def build() -> None:
             with ui.row().classes("w-full items-end no-wrap"):
                 texts = ui.input("Ordner mit Liedtexten (eine .txt pro Song, leer = der eingestellte Text)") \
                     .classes("col").mark("album-texts")
-                ui.button(icon="folder_open", on_click=choose_folder).props("flat round dense")
+                ui.button(icon="folder_open", on_click=choose_folder).props("flat round dense").tooltip("Ordner wählen")
             ui.switch("Jeder Song in eigener Tonart und leicht anderem Tempo").bind_value(settings, "album_vary") \
                 .mark("album-vary")
             with ui.row().classes("w-full justify-end"):
@@ -1013,12 +1020,18 @@ def build() -> None:
         asked = state.setdefault("names", {})
         if key in asked:
             return asked[key]
+        # 1.11.0: ein Vorschlag aus dem Text (Zeile „Titel: …“ vor der ersten Überschrift oder der Hook des Refrains)
+        # steht schon im Feld und ist markiert: Enter nimmt ihn, Tippen ersetzt ihn. Bis 1.10 war das Feld leer.
+        used = entry.settings if entry is not None else getattr(result, "settings", None)
+        suggestion = lyric_helper.title_suggestion(getattr(used or settings, "lyrics", "") or "")
         with dialog_host, ui.dialog().props("persistent") as dialog, ui.card().classes("w-96"):
             ui.label("Wie heißt der Song?").classes("text-h6")
-            name = ui.input("Name", value="").props("autofocus").classes("w-full").mark("video-name")
+            name = ui.input("Name", value=suggestion).props("autofocus").classes("w-full").mark("video-name")
+            name.on("focus", js_handler="(e) => e.target.select()")
             name.on("keydown.enter", lambda: dialog.submit((name.value or "").strip()))
-            panels.hint("Der Name steht groß am Anfang des Videos und bleibt im Verlauf. Ohne Namen gibt es keine "
-                        "Titelkarte.")
+            panels.hint(("Vorschlag aus deinem Text: Enter nimmt ihn, Tippen ersetzt ihn. " if suggestion else "")
+                        + "Der Name steht groß am Anfang des Videos und bleibt im Verlauf (dort mit dem Stift "
+                        "änderbar). Ohne Namen gibt es keine Titelkarte.")
             with ui.row().classes("w-full justify-end"):
                 ui.button("Abbrechen", on_click=lambda: dialog.submit(None)).props("flat no-caps") \
                     .mark("video-name-cancel")
@@ -1169,7 +1182,7 @@ def build() -> None:
                     .props("outline dense no-caps").mark(f"compare-{slot}") \
                     .tooltip("Wechselt an derselben Stelle im Song")
             ui.button(icon="close", on_click=lambda: (state["compare"].update(A=None, B=None), show_compare())) \
-                .props("flat round dense").mark("compare-close")
+                .props("flat round dense").mark("compare-close").tooltip("Vergleich schließen")
 
     async def show_result(result) -> None:
         await show_phrases(result)
@@ -1466,9 +1479,10 @@ def build() -> None:
                         ui.label(text).classes("w-20")
                         buttons[aspect] = (
                             ui.button(icon="thumb_up", on_click=lambda _, a=aspect: thumb(a, 1))
-                            .props("flat round dense").mark(f"thumb-up-{aspect}-{nr}"),
+                            .props("flat round dense").mark(f"thumb-up-{aspect}-{nr}").tooltip("gefällt mir"),
                             ui.button(icon="thumb_down", on_click=lambda _, a=aspect: thumb(a, -1))
-                            .props("flat round dense").mark(f"thumb-down-{aspect}-{nr}"))
+                            .props("flat round dense").mark(f"thumb-down-{aspect}-{nr}")
+                            .tooltip("gefällt mir nicht"))
         paint()
 
     def restore(entry) -> None:

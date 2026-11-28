@@ -92,7 +92,7 @@ async def test_the_video_preview_is_enabled_without_edited_notes(user, fake_gene
     assert not marked(user, "preview-edits")[0].enabled          # „Vorschau“ der Notenänderungen: es gibt keine
     user.find(marker="video-preview").click()
     await user.should_see("Wie heißt der Song?", retries=50)
-    user.find(marker="video-name").type("Leuchtturm")
+    user.find(marker="video-name").clear().type("Leuchtturm")
     user.find(marker="video-name").trigger("keydown.enter")        # Enter reicht
     await until(lambda: made == [(1000, "Leuchtturm", True)])
 

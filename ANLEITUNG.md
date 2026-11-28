@@ -151,7 +151,8 @@ was den Klang oder das Bild ändert, hat einen Schalter (ab Werk an).
 
 **Text im Video.** Die Silben laufen im Takt, auch bei langen Vokalen (ー); die Romaji stehen Wort für Wort
 („pasuwaado“). Oben steht der Name des Songs: die App sucht ihn über den Seed im Verlauf und fragt einmal „Wie heißt
-der Song?“, wenn er fehlt. Ohne Namen gibt es keine Titelkarte. Tonart und Akkorde im Video und in der
+der Song?“, wenn er fehlt (ab 1.11.0 mit einem Vorschlag im Feld: eine Zeile „Titel: …“ vor der ersten Überschrift
+deines Texts, sonst der Hook des Refrains; Enter nimmt ihn). Ohne Namen gibt es keine Titelkarte. Tonart und Akkorde im Video und in der
 YouTube-Beschreibung kommen aus dem fertigen Song statt aus den Einstellungen, in b-Tonarten mit ♭ (B♭ statt A#).
 Ein Video aus 1.6 desselben Songs repariert sich beim nächsten Mal von selbst.
 
@@ -284,8 +285,8 @@ Ansicht; ist kein Song geladen (nach dem Start der App), nehmen sie den neuesten
   Diese Zeile wird nicht gesungen.
 - *Im Bild:* der Akkord und der nächste, die Gesangsmelodie als Notenlinie, das Spektrum des Songs, eine
   Ablaufleiste mit den Sektionen, eine Titelkarte, solange das Intro ohne Text läuft, und im Outro der Abspann. Bilder
-  aus deinem Text: Regen bei 雨, Schnee bei 雪, Sterne bei 星, Blüten bei 桜, eine Chat-Blase bei 既読; nur was im
-  Text steht, damit nichts Unpassendes im Bild ist. Jedes davon schaltest du einzeln ab.
+  aus deinem Text: Regen bei 雨, Schnee bei 雪, Sterne bei 星, Blüten bei 桜, eine Chat-Blase bei 既読, glitzernder
+  Staub bei Motten und Flügelstaub (蛾, 鱗粉); nur was im Text steht, damit nichts Unpassendes im Bild ist. Jedes davon schaltest du einzeln ab.
 - *Eigene Figur* (optional): ein PNG mit durchsichtigem Hintergrund, das im Takt hüpft und den Mund öffnet, solange
   gesungen wird; mit einem zweiten Bild (Mund offen) sieht es aus, als sänge sie.
 - *KI-Bild pro Sektion* (optional): unter Hilfe › Einrichten „KI-Bilder fürs Video“ einrichten (etwa 4 GB, mit

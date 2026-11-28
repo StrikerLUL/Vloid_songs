@@ -140,3 +140,19 @@ class Karaoke(Element, component="karaoke.js"):
 
 def add_style() -> None:
     ui.add_css(STYLE)
+
+
+# ── Knöpfe nur mit Symbol (1.11.0, FIR-59) ──────────────────────────────────────
+# Ein Knopf, der nur ein Symbol zeigt (Stift, Film, Ordner …), hatte für Bildschirmleser und Tastaturbedienung keinen
+# Namen, nur einen Tooltip, den erst die Maus zeigt. Jetzt wird der Tooltip auch sein aria-label, wenn der Knopf keinen
+# eigenen Text und kein aria-label hat.
+_plain_tooltip = ui.button.tooltip
+
+
+def _tooltip_names_the_button(self, text: str):
+    if not getattr(self, "text", "") and "aria-label" not in self._props:
+        self._props["aria-label"] = text
+    return _plain_tooltip(self, text)
+
+
+ui.button.tooltip = _tooltip_names_the_button

@@ -71,7 +71,7 @@ def setup_wizard(s: SongSettings, pick: PickFn, on_change: Callable[[], None]) -
                 if path:
                     old.value = path
             if pick.available:
-                ui.button(icon="folder_open", on_click=choose_old).props("flat round dense")
+                ui.button(icon="folder_open", on_click=choose_old).props("flat round dense").tooltip("Ordner wählen")
 
             async def take_over() -> None:
                 if not old.value or not os.path.isdir(old.value):
@@ -101,7 +101,8 @@ def setup_wizard(s: SongSettings, pick: PickFn, on_change: Callable[[], None]) -
                     s.neutrino_pfad = path
                     show()
             if pick.available:
-                ui.button(icon="folder_open", on_click=choose_neutrino).props("flat round dense")
+                ui.button(icon="folder_open", on_click=choose_neutrino).props("flat round dense") \
+                    .tooltip("NEUTRINO-Ordner wählen")
         with ui.row().classes("items-center gap-2"):
             ui.link("NEUTRINO herunterladen (studio-neutrino.com)", "https://studio-neutrino.com", new_tab=True) \
                 .classes("text-caption")

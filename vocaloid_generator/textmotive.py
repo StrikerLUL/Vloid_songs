@@ -17,7 +17,8 @@ WORDS = {
     "stars": ("星", "ほし", "流れ星", "星空", "銀河", "宇宙", "きらきら", "キラキラ", "輝く", "かがやく"),
     "moon": ("月", "つき", "満月", "三日月"),
     "night": ("夜", "よる", "真夜中", "深夜", "闇", "やみ", "暗い", "眠る", "夢", "ゆめ"),
-    "sun": ("太陽", "朝", "あさ", "朝焼け", "夕焼け", "光", "ひかり", "眩しい", "まぶしい", "晴れ", "夏"),
+    # 1.11.0: 光 steht jetzt bei „light“; bis 1.10 machte jedes Licht im Text Sonnenschein, auch nachts
+    "sun": ("太陽", "朝", "あさ", "朝焼け", "夕焼け", "朝日", "日差し", "眩しい", "まぶしい", "晴れ", "夏"),
     "sea": ("海", "うみ", "波", "なみ", "浜", "泳ぐ"),
     "fire": ("火", "炎", "ほのお", "燃える", "もえる", "熱い", "あつい"),
     "tears": ("涙", "なみだ", "泣く", "なく", "雫", "しずく"),
@@ -26,11 +27,17 @@ WORDS = {
     "game": ("ゲーム", "コンティニュー", "コイン", "レベル", "ステージ", "スタート", "セーブ", "プレイヤー",
              "ゲームオーバー"),
     "city": ("街", "まち", "ネオン", "ビル", "駅", "電車", "交差点", "信号"),
-    "wind": ("風", "かぜ", "飛ぶ", "とぶ", "羽", "翼", "つばさ"),
+    # 1.11.0: Flügel (羽, 翼) stehen bei „wings“; bis 1.10 wehten bei jedem Flügel Blätter durchs Bild
+    "wind": ("風", "かぜ", "飛ぶ", "とぶ"),
     "music": ("歌", "うた", "歌う", "うたう", "メロディー", "音", "おと", "声", "こえ"),
+    # 1.11.0: was in vielen Texten vorkommt und bisher kein Bild bekam (Mottenlicht: Laterne, Fenster, Flügelstaub)
+    "light": ("灯", "灯り", "明かり", "あかり", "街灯", "灯火", "ともしび", "ランプ", "電球", "光", "ひかり", "照らす"),
+    "window": ("窓", "まど", "窓辺", "硝子", "ガラス", "カーテン"),
+    "wings": ("羽", "はね", "羽根", "翼", "つばさ", "羽ばたく"),
+    "moth": ("蛾", "鱗粉", "りんぷん", "蝶", "蝶々", "ちょうちょ", "モス"),
 }
 # Was davon als Teilchen durchs Bild fliegt; „night“ und „sun“ färben nur
-PARTICLES = ("rain", "snow", "petals", "stars", "fire", "tears", "hearts", "sea", "wind", "music")
+PARTICLES = ("rain", "snow", "petals", "stars", "fire", "tears", "hearts", "sea", "wind", "music", "moth")
 WEATHER = ("rain", "snow", "petals", "stars")      # höchstens eins davon füllt das ganze Bild
 
 

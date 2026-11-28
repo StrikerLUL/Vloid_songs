@@ -715,6 +715,13 @@ class Painter:
                 x = ((x0 + f.t * 0.3 * sp * speed) % 1.2 - 0.1) * W
                 y = y0 * H
                 draw.line([x, y, x + 30 + 30 * size, y - 3], fill=(255, 255, 255, 70), width=1)
+            elif kind == "moth":                          # 1.11.0: Flügelstaub, der um ein Licht kreist und glitzert
+                angle = f.t * (0.6 + 0.5 * sp) * speed + i * 2.399
+                x = (x0 * W + math.cos(angle) * (20 + 30 * size)) % W
+                y = (y0 * H * 0.9 + math.sin(angle * 1.3) * (12 + 18 * size)) % H
+                glint = 0.45 + 0.55 * max(0.0, math.sin(f.t * 3.0 * sp + i))
+                r = 0.8 + size * 1.6
+                draw.ellipse([x - r, y - r, x + r, y + r], fill=(235, 230, 210, int(70 + 150 * glint * size)))
             elif kind == "music":
                 y = (1.05 - (y0 + f.t * 0.05 * sp) % 1.1) * H
                 x = x0 * W
@@ -730,7 +737,7 @@ class Painter:
     def _line_motifs(self, draw, f: Frame, particles: bool = True, chat: bool = True) -> None:
         """V8: Steht in der laufenden Zeile ein Wort mit Motiv, kommt es dazu: Herzen, Sterne, Tränen, Chat-Blasen."""
         if particles:
-            extra = [m for m in ("hearts", "stars", "tears", "fire", "music", "petals", "snow") if m in f.motifs
+            extra = [m for m in ("moth", "hearts", "stars", "tears", "fire", "music", "petals", "snow") if m in f.motifs
                      and m != self.weather and m != self.scene.particles]
             for motif in extra[:2]:
                 self._particles_of(motif, draw, f, 0.12 if self.tidy else 0.25)

@@ -5,8 +5,8 @@ Melodie und Harmonie, die abgestimmte Band, natürliche Stimme und den Ablauf mi
 
 Erzeugt komplette Vocaloid-Songs auf Knopfdruck: Akkorde, Bass, Schlagzeug, Melodie und Begleitung, Gesang mit NEUTRINO oder VOICEVOX (oder einer lokalen Vorschau-Stimme), Mix mit Kompressor und Limiter und am Ende eine fertige MP3.
 
-Läuft unter Windows. Version 1.10.0 ergänzt einstellbare Atmung, verlässlichere Stimmenvergleiche
-und Verbesserungen für die Bedienung und Fehleranzeige. Alle Änderungen stehen im [Changelog](CHANGELOG.md).
+Läuft unter Windows. Version 1.11.0 macht das Lyric-Video schöner (Bilder aus dem Text, ein Spektrum, das sich
+bewegt, ein Namensvorschlag) und hält den Gesang gleichmäßiger über der Band. Alle Änderungen stehen im [Changelog](CHANGELOG.md).
 
 | Zum Lesen | Was drinsteht |
 | --- | --- |

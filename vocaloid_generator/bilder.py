@@ -13,6 +13,7 @@ import os
 import re
 import subprocess
 import sys
+from collections import Counter
 from typing import Optional
 
 import cancel
@@ -49,15 +50,16 @@ STYLE_PROMPTS = {
     "Hyperpop": "glossy chrome y2k shapes, bubbles, pink and blue, surreal",
 }
 DEFAULT_PROMPT = "dreamy anime landscape, soft gradient sky"
-# Sektion → Stimmung
+# Sektion → Stimmung und Bildausschnitt. 1.11.0: ohne Tageszeit (bis 1.10 stand „early light“ und „twilight“ neben
+# „night“ aus Stil und Text, das Modell malte dann graues Zwielicht); die Tageszeit kommt aus Stil und Text.
 MOODS = {
-    "Intro": "establishing shot, calm, early light",
-    "Verse": "calm, soft light, muted colors",
-    "PreChorus": "rising tension, dramatic sky",
-    "Chorus": "wide shot, vivid and bright, glowing",
-    "Bridge": "different mood, twilight, dreamy",
-    "Interlude": "quiet, empty, gentle light",
-    "Outro": "fading light, peaceful, distant",
+    "Intro": "establishing shot, calm, atmospheric",
+    "Verse": "medium shot, calm, muted colors",
+    "PreChorus": "low angle, rising tension, dramatic",
+    "Chorus": "wide shot, vivid, glowing, dynamic composition",
+    "Bridge": "different mood, dreamy, surreal colors",
+    "Interlude": "quiet, empty, still",
+    "Outro": "fading, peaceful, distant view",
     "Drop": "explosive light, intense colors",
     "Solo": "dramatic light beams",
     "Rap": "close-up details, strong contrast",
@@ -70,7 +72,15 @@ MOTIFS = {
     "moon": "full moon", "night": "night", "sun": "warm sunlight", "sea": "ocean waves", "fire": "embers and flames",
     "tears": "raindrops on glass", "hearts": "soft pink glow", "chat": "glowing phone screens", "game": "arcade lights",
     "city": "city streets", "wind": "wind with flying leaves", "music": "floating music notes",
+    # 1.11.0
+    "light": "a single glowing lamp in the dark", "window": "a softly lit window", "wings": "drifting white feathers",
+    "moth": "pale moths circling a glowing lamp, glittering dust in the air",
 }
+# 1.11.0: was sich in einem Bild widerspricht; das Motiv rechts fällt weg, wenn das links da ist
+CLASHES = (("night", "sun"), ("moth", "light"), ("moth", "wings"), ("snow", "fire"), ("rain", "sun"))
+# 1.11.0: Motive, die in vielen Texten nebenbei vorkommen; was besonders ist (Motten, Schnee, Chat), kommt zuerst
+GENERIC = frozenset(("night", "light", "music", "city", "sun", "hearts", "wind"))
+PER_PICTURE = 3                 # so viele Motive aus dem Text kommen höchstens in ein Bild
 SUFFIX = "scenery, background art, anime style, highly detailed, no humans, no text"
 
 
@@ -103,16 +113,38 @@ def problem() -> str:
 
 
 def prompts(style: str, kinds: list, section_motifs: dict, song_motifs: list) -> dict:
-    """{Sektionsart: Prompt}. section_motifs {Sektionsart: Motive in ihrem Text}; song_motifs: die häufigsten im
-    ganzen Song (höchstens zwei kommen in jedes Bild, damit der Song zusammenpasst)."""
+    """{Sektionsart: Prompt}. section_motifs {Sektionsart: Motive in ihrem Text} (Menge oder Counter); song_motifs: die
+    häufigsten im ganzen Song.
+    1.11.0: zuerst das Hauptmotiv des Songs (das häufigste besondere, GENERIC zählt nach), damit die Bilder
+    zusammenpassen, dann was in der Sektion selbst gesungen wird, damit sie trotzdem verschieden sind. Bis 1.10 kamen die zwei häufigsten Motive des Songs in jedes
+    Bild zuerst, alle Bilder sahen gleich aus (viermal dieselbe Gasse). Widersprüche (Nacht und Sonnenschein) fallen
+    weg (CLASHES)."""
     scene = STYLE_PROMPTS.get(style, DEFAULT_PROMPT)
     out = {}
     for kind in kinds:
-        main = list(song_motifs[:2])
-        found = main + [m for m in sorted(section_motifs.get(kind, ())) if m not in main]
-        extra = ", ".join(MOTIFS[m] for m in found[:4] if m in MOTIFS)
-        out[kind] = ", ".join(p for p in (scene, MOODS.get(kind, ""), extra, SUFFIX) if p)
+        out[kind] = ", ".join(p for p in (scene, MOODS.get(kind, ""), describe(picked(kind, section_motifs,
+                                                                                         song_motifs, scene)),
+                                          SUFFIX) if p)
     return out
+
+
+def picked(kind: str, section_motifs: dict, song_motifs: list, scene: str = "") -> list:
+    """Die Motive für das Bild einer Sektion, höchstens PER_PICTURE, ohne Widersprüche."""
+    own = section_motifs.get(kind, ())
+    counts = dict(own) if hasattr(own, "most_common") else {m: 1 for m in own}
+    ranked = sorted(counts, key=lambda m: (m in GENERIC, -counts[m], m))
+    theme = sorted(song_motifs, key=lambda m: (m in GENERIC, song_motifs.index(m)))[:1]
+    wanted = [m for m in theme + ranked if m in MOTIFS]
+    found = []
+    for motif in dict.fromkeys(wanted):
+        if any(motif == loser and (winner in found or winner in scene) for winner, loser in CLASHES):
+            continue
+        found.append(motif)
+    return found[:PER_PICTURE]
+
+
+def describe(motifs: list) -> str:
+    return ", ".join(MOTIFS[m] for m in motifs if m in MOTIFS)
 
 
 def song_prompts(result) -> dict:
@@ -129,7 +161,7 @@ def song_prompts(result) -> dict:
     for line in lines:
         sec = found.section_at(line["start"])
         if sec is not None:
-            per_kind.setdefault(sec.kind, set()).update(textmotive.find(line.get("text") or ""))
+            per_kind.setdefault(sec.kind, Counter()).update(textmotive.find(line.get("text") or ""))
     total = textmotive.song_motifs(lines)
     return prompts(result.settings.style if result.settings else "", kinds, per_kind,
                    [m for m, _ in total.most_common()])

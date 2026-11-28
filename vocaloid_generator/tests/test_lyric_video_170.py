@@ -107,7 +107,8 @@ def test_the_title_is_the_song_name_and_without_one_there_is_no_card(tmp_path):
                            60.0)
     assert ",Title,,0,0,0,,{\\fad(500,500)}Vergessener Schirm" in named
     assert "\\pos(40,984)" not in named                                    # kein Dauer-Titel unten links (B1)
-    assert "E♭maj7" in named and "B♭" in named and "D#" not in named.split("[Events]")[1]
+    flat = "{\\fnSegoe UI Symbol}♭{\\fn" + scene.look.font + "}"     # 1.11.0: ♭ aus einer Schrift, die es hat
+    assert f"E{flat}maj7" in named and f"B{flat}" in named and "D#" not in named.split("[Events]")[1]
     nameless = musikvideo.ass(lines, scene, musikvideo.Options(), "Ballade", "", "Ballade", (), found, 60.0)
     assert ",Title," not in nameless.split("[Events]")[1] and "Ballade" not in nameless.split("[Events]")[1]
 

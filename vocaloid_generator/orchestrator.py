@@ -211,8 +211,8 @@ def orchestrate_song(genre: str, bpm: float, structure: list, key: str, mode: st
     if "section_buildup" in extras:
         import buildup
         done = buildup.apply(plan, events)
-        log.info("Aufbau: Strophe beginnt allein: %s, Schicht mehr in %d Refrains", done["verse"] is not None,
-                 len(done["choruses"]))
+        log.info("Aufbau: Strophe beginnt allein: %s, Schicht mehr in %d Refrains, %d Strophen atmen nach dem "
+                 "Höhepunkt durch", done["verse"] is not None, len(done["choruses"]), len(done["breaths"]))
     if "chorus_lift" in extras:
         import chorus_lift
         done = chorus_lift.apply(plan, events)

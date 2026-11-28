@@ -27,6 +27,8 @@ RIDE_SMOOTH = 0.4            # Sekunden, über die Pegel gemittelt werden (Silbe
 RIDE_MAX_DB = 4.0
 RIDE_DEAD_DB = 1.5           # so viel darf der Gesang vom üblichen Abstand zur Band abweichen, ohne dass geritten wird
 RIDE_GATE_DB = 30.0          # leiser als die lautesten Stellen minus so viel: dort singt niemand
+RIDE_LONG = 6.0              # 1.11.0: Sekunden für den langen Abstand (etwa eine halbe Strophe)
+RIDE_LONG_DEAD_DB = 0.75     # so viel darf eine ganze Passage abweichen, ohne dass sie angeglichen wird
 
 
 def _db(power: np.ndarray) -> np.ndarray:
@@ -109,6 +111,21 @@ def _presence(mono: np.ndarray, rate: int) -> np.ndarray:
     return sosfilt(sos, mono).astype(np.float32)
 
 
+def phrase_offset(ratio: np.ndarray, active: np.ndarray, window: int, target: float) -> np.ndarray:
+    """Wie weit der Gesang über RIDE_LONG Sekunden (Median der gesungenen Messungen) vom üblichen Abstand zur Band
+    abweicht; positiv = er liegt tiefer als sonst. Wo im Fenster niemand singt: 0."""
+    out = np.zeros(len(ratio))
+    half = window // 2
+    sung = np.flatnonzero(active)
+    if not len(sung):
+        return out
+    for i in range(len(ratio)):
+        lo, hi = np.searchsorted(sung, i - half), np.searchsorted(sung, i + half + 1)
+        if hi - lo >= max(4, window // 4):
+            out[i] = target - float(np.median(ratio[sung[lo:hi]]))
+    return out
+
+
 def ride_gain(vocal: np.ndarray, band: np.ndarray, rate: int, max_db: float = RIDE_MAX_DB) -> np.ndarray:
     """Verstärkung des Gesangs je Sample (linear), damit er gleich weit über der Band steht."""
     n = vocal.shape[1]
@@ -122,8 +139,14 @@ def ride_gain(vocal: np.ndarray, band: np.ndarray, rate: int, max_db: float = RI
     if active.sum() < 4:
         return np.ones(n, dtype=np.float32)
     ratio = v - b
-    off = np.median(ratio[active]) - ratio
-    correction = np.sign(off) * np.clip(np.abs(off) - RIDE_DEAD_DB, 0.0, max_db)
+    target = np.median(ratio[active])
+    # 1.11.0: erst der lange Abstand (eine Strophe, die als Ganzes unter der Band liegt), dann der kurze. Bis 1.10 gab
+    # es nur den kurzen mit 1,5 dB Spielraum: lag eine ganze Strophe 4 dB tiefer als der Rest, hob er sie um 2,5 dB,
+    # und die zweite Strophe von „Mottenlicht“ blieb 5 dB unter der ersten.
+    longer = phrase_offset(ratio, active, max(smooth, int(RIDE_LONG / RIDE_FRAME)), target)
+    long_fix = np.sign(longer) * np.clip(np.abs(longer) - RIDE_LONG_DEAD_DB, 0.0, max_db)
+    off = target - ratio - long_fix
+    correction = np.clip(long_fix + np.sign(off) * np.clip(np.abs(off) - RIDE_DEAD_DB, 0.0, max_db), -max_db, max_db)
     idx = np.flatnonzero(active)
     frames_db = np.interp(np.arange(len(v)), idx, correction[idx])
     frames_db = np.convolve(np.pad(frames_db, (smooth // 2, smooth - 1 - smooth // 2), mode="edge"),

@@ -21,6 +21,8 @@ Refrain wurden still nicht gesungen, und die zweite Strophe ging unter der Band 
 - **Spektrum, das sich bewegt:** wie ein Analyser im Studio in dB mit fester Neigung; Bass steht höher als die Höhen,
   Schläge und Pausen sind zu sehen, Bänder ohne Ton bleiben unten.
 - **♭ und ♯ sauber:** Akkordnamen zeigen B♭maj7 und G♯7 aus einer Schrift, die die Zeichen hat (Segoe UI Symbol).
+- **Weicher Rand hinter dem Text:** Die Abdunklung hinter den Zeilen läuft weich aus; vor hellem Himmel stand ihre
+  Oberkante bisher als Linie quer durchs Bild.
 
 **Text, der nicht gesungen wird**
 

@@ -122,9 +122,9 @@ def prompts(style: str, kinds: list, section_motifs: dict, song_motifs: list) ->
     scene = STYLE_PROMPTS.get(style, DEFAULT_PROMPT)
     out = {}
     for kind in kinds:
-        out[kind] = ", ".join(p for p in (scene, MOODS.get(kind, ""), describe(picked(kind, section_motifs,
-                                                                                         song_motifs, scene)),
-                                          SUFFIX) if p)
+        # was der Text zeigt zuerst: das Modell (vier Schritte) gewichtet den Anfang am stärksten
+        motifs = describe(picked(kind, section_motifs, song_motifs, scene))
+        out[kind] = ", ".join(p for p in (motifs, MOODS.get(kind, ""), scene, SUFFIX) if p)
     return out
 
 

@@ -263,7 +263,10 @@ class Painter:
         """Weiche Abdunklung hinter dem Text (V12)."""
         y = np.linspace(0.0, 1.0, H)
         lo, hi = TEXT_BAND
-        inside = np.clip(np.minimum((y - lo) / 0.06, (hi - y) / 0.06), 0, 1)
+        # 1.11.0: weicher Rand (smoothstep über 0,1 der Bildhöhe statt linear über 0,06); vor hellem Himmel stand die
+        # Oberkante des dunklen Bands bis 1.10 als Linie quer durchs Bild
+        inside = np.clip(np.minimum((y - lo + 0.04) / 0.10, (hi + 0.04 - y) / 0.10), 0, 1)
+        inside = inside * inside * (3 - 2 * inside)
         x = np.linspace(-1, 1, W)
         across = np.clip(1.25 - np.abs(x) ** 3, 0, 1)
         alpha = (inside[:, None] * across[None, :] * 255 * CALM_DARKEN).astype(np.uint8)
